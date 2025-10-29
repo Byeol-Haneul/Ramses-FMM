@@ -643,8 +643,10 @@ subroutine collect_saddle(s)
         xnei(1:ndim)=xcen(1:ndim)+xSnei(1:ndim,j)
         ! Periodic boundary conditions
         do idim=1,ndim
-           if(xnei(idim)<                0.0d0)xnei(idim)=xnei(idim)+m%ckey_max(ilevel+1)
-           if(xnei(idim)>=m%ckey_max(ilevel+1))xnei(idim)=xnei(idim)-m%ckey_max(ilevel+1)
+           if(r%periodic(idim))then
+              if(xnei(idim)< m%box_ckey_min(idim,ilevel+1))xnei(idim)=xnei(idim)-m%box_ckey_min(idim,ilevel+1)+m%box_ckey_max(idim,ilevel+1)
+              if(xnei(idim)>=m%box_ckey_max(idim,ilevel+1))xnei(idim)=xnei(idim)+m%box_ckey_min(idim,ilevel+1)-m%box_ckey_max(idim,ilevel+1)
+           endif
         end do
 
         ! Get neighboring cell at ilevel
@@ -1751,8 +1753,8 @@ subroutine particle_clump_properties(s,p)
         ! In case of periodic boundaries
         r2=0d0
         do idim=1,ndim
-           if(xpart(idim)> r%boxlen*0.5)xpart(idim)=xpart(idim)-r%boxlen
-           if(xpart(idim)<-r%boxlen*0.5)xpart(idim)=xpart(idim)+r%boxlen
+           if(xpart(idim)> r%box_size(idim)*0.5)xpart(idim)=xpart(idim)-r%box_size(idim)
+           if(xpart(idim)<-r%box_size(idim)*0.5)xpart(idim)=xpart(idim)+r%box_size(idim)
            r2=r2+xpart(idim)**2
         end do
         ilevel=c%peak_level(peak_nr)
@@ -1777,8 +1779,10 @@ subroutine particle_clump_properties(s,p)
      c%peak_com(ipeak,1:ndim)=c%peak_com(ipeak,1:ndim)+c%peak_pos(ipeak,1:ndim)
      ! Periodic boundary conditions
      do idim=1,ndim
-        if(c%peak_com(ipeak,idim)<   0.0d0 )c%peak_com(ipeak,idim)=c%peak_com(ipeak,idim)+r%boxlen
-        if(c%peak_com(ipeak,idim)>=r%boxlen)c%peak_com(ipeak,idim)=c%peak_com(ipeak,idim)-r%boxlen
+        if(r%periodic(idim))then
+           if(c%peak_com(ipeak,idim)< 0.0d0           )c%peak_com(ipeak,idim)=c%peak_com(ipeak,idim)+r%box_size(idim)
+           if(c%peak_com(ipeak,idim)>=r%box_size(idim))c%peak_com(ipeak,idim)=c%peak_com(ipeak,idim)-r%box_size(idim)
+        end if
      end do
   end do
 
@@ -1953,8 +1957,8 @@ subroutine particle_potential(s,p)
            dist=0d0
            do idim=1,ndim
               ! In case of periodic boundaries
-              if(xpart(idim)> r%boxlen*0.5)xpart(idim)=xpart(idim)-r%boxlen
-              if(xpart(idim)<-r%boxlen*0.5)xpart(idim)=xpart(idim)+r%boxlen
+              if(xpart(idim)> r%box_size(idim)*0.5)xpart(idim)=xpart(idim)-r%box_size(idim)
+              if(xpart(idim)<-r%box_size(idim)*0.5)xpart(idim)=xpart(idim)+r%box_size(idim)
               dist=dist+xpart(idim)**2
            end do
            dist=sqrt(dist)
@@ -2069,7 +2073,7 @@ subroutine particle_unbind(s,p)
            ! Compute total energy
            bound=total_energy(dble(p%xp(ipart,1:ndim)),c%peak_pos(ipeak,1:ndim), &
                 &             dble(p%vp(ipart,1:ndim)),c%peak_vel(ipeak,1:ndim), &
-                &             c%phi(ipeak,1:nbin),rad,r%boxlen)
+                &             c%phi(ipeak,1:nbin),rad,r%box_size)
            ! If unbound, assign to next peak in hierarchy
            if(bound.GE.0d0.or.c%clump_mass(ipeak).LE.c%mass_threshold)then
               p%workp(i)=c%new_peak(ipeak)
@@ -2199,8 +2203,8 @@ subroutine mass_profile(s,p)
         dist=0d0
         do idim=1,ndim
            ! In case of periodic boundaries
-           if(xpart(idim)> r%boxlen*0.5)xpart(idim)=xpart(idim)-r%boxlen
-           if(xpart(idim)<-r%boxlen*0.5)xpart(idim)=xpart(idim)+r%boxlen
+           if(xpart(idim)> r%box_size(idim)*0.5)xpart(idim)=xpart(idim)-r%box_size(idim)
+           if(xpart(idim)<-r%box_size(idim)*0.5)xpart(idim)=xpart(idim)+r%box_size(idim)
            dist=dist+xpart(idim)**2
         end do
         dist=sqrt(dist)
@@ -2236,10 +2240,11 @@ end subroutine mass_profile
 !################################################################
 !################################################################
 !################################################################
-function cmp_distance(x1,x2,v1,v2,radius,velocity,boxlen)
+function cmp_distance(x1,x2,v1,v2,radius,velocity,box_size)
   use amr_parameters, only: ndim
   real(kind=8),dimension(1:ndim)::x1,x2,v1,v2
-  real(kind=8)::radius,velocity,boxlen
+  real(kind=8)::radius,velocity
+  real(kind=8)::box_size(1:3)
   real(kind=8)::cmp_distance
   !-----------------------------------------------------------
   ! This function computes the phase-space Euclidian distance
@@ -2251,8 +2256,8 @@ function cmp_distance(x1,x2,v1,v2,radius,velocity,boxlen)
   xpart(1:ndim)=x1(1:ndim)-x2(1:ndim)
   ! In case of periodic boundaries
   do idim=1,ndim
-     if(xpart(idim)> boxlen*0.5)xpart(idim)=xpart(idim)-boxlen
-     if(xpart(idim)<-boxlen*0.5)xpart(idim)=xpart(idim)+boxlen
+     if(xpart(idim)> box_size(idim)*0.5)xpart(idim)=xpart(idim)-box_size(idim)
+     if(xpart(idim)<-box_size(idim)*0.5)xpart(idim)=xpart(idim)+box_size(idim)
      xdist=xdist+xpart(idim)**2
   end do
   ! Rescale distance in configuration space
@@ -2271,11 +2276,12 @@ end function cmp_distance
 !################################################################
 !################################################################
 !################################################################
-function total_energy(x1,x2,v1,v2,phi,radius,boxlen)
+function total_energy(x1,x2,v1,v2,phi,radius,box_size)
   use amr_parameters, only: ndim, nbin
   real(kind=8),dimension(1:ndim)::x1,x2,v1,v2
   real(kind=8),dimension(1:nbin)::phi
-  real(kind=8)::radius,boxlen
+  real(kind=8)::radius
+  real(kind=8),dimension(1:3)::box_size
   real(kind=8)::total_energy
   !-----------------------------------------------------------
   ! This function computes the phase-space Euclidian distance
@@ -2286,8 +2292,8 @@ function total_energy(x1,x2,v1,v2,phi,radius,boxlen)
   r2=0d0
   xpart(1:ndim)=x1(1:ndim)-x2(1:ndim)
   do idim=1,ndim  ! In case of periodic boundaries
-     if(xpart(idim)> boxlen*0.5)xpart(idim)=xpart(idim)-boxlen
-     if(xpart(idim)<-boxlen*0.5)xpart(idim)=xpart(idim)+boxlen
+     if(xpart(idim)> box_size(idim)*0.5)xpart(idim)=xpart(idim)-box_size(idim)
+     if(xpart(idim)<-box_size(idim)*0.5)xpart(idim)=xpart(idim)+box_size(idim)
      r2=r2+xpart(idim)**2
   end do
   r=sqrt(r2)

@@ -21,7 +21,7 @@ subroutine gravana(r,g,x,f,dx,ncell)
   real(kind=8)::gmass,emass,xmass,ymass,zmass,rr,rx,ry,rz
 
   ! Multipole expansion for isolated boundary conditions
-  if(r%isolated_boundary)then
+  if(r%gravity_type==0)then
      do i=1,ncell
         rx=0.0d0; ry=0.0d0; rz=0.0d0
         rx=x(i,1)-g%multipole%q(2)/g%multipole%q(1)
@@ -33,7 +33,7 @@ subroutine gravana(r,g,x,f,dx,ncell)
 #endif
         rr=sqrt(rx**2+ry**2+rz**2)
 #if NDIM==1
-        f(i,1)=-g%multipole%q(1)*fourpi/2d0*rx/rr
+        f(i,1)=-g%multipole%q(1)*2d0*ACOS(-1d0)*rx/rr
 #endif
 #if NDIM==2
         f(i,1)=-g%multipole%q(1)*2d0*rx/rr*2
@@ -113,28 +113,26 @@ subroutine phiana(r,g,x,phi,dx,ncell)
 
   fourpi=4.D0*ACOS(-1.0D0)
 
-  if(r%isolated_boundary)then
-     do i=1,ncell
-        rx=0.0d0; ry=0.0d0; rz=0.0d0
-        rx=x(i,1)-g%multipole%q(2)/g%multipole%q(1)
+  do i=1,ncell
+     rx=0.0d0; ry=0.0d0; rz=0.0d0
+     rx=x(i,1)-g%multipole%q(2)/g%multipole%q(1)
 #if NDIM>1
-        ry=x(i,2)-g%multipole%q(3)/g%multipole%q(1)
+     ry=x(i,2)-g%multipole%q(3)/g%multipole%q(1)
 #endif
 #if NDIM>2
-        rz=x(i,3)-g%multipole%q(4)/g%multipole%q(1)
+     rz=x(i,3)-g%multipole%q(4)/g%multipole%q(1)
 #endif
-        rr=sqrt(rx**2+ry**2+rz**2)
+     rr=sqrt(rx**2+ry**2+rz**2)
 #if NDIM==1
-        phi(i)=g%multipole%q(1)*fourpi/2d0*rr
+     phi(i)=g%multipole%q(1)*fourpi/2d0*rr
 #endif
 #if NDIM==2
-        phi(i)=g%multipole%q(1)*2d0*log(rr)
+     phi(i)=g%multipole%q(1)*2d0*log(rr)
 #endif
 #if NDIM==3
-        phi(i)=-g%multipole%q(1)/rr
+     phi(i)=-g%multipole%q(1)/rr
 #endif
-     end do
-  end if
+  end do
 
 end subroutine phiana
 !#########################################################

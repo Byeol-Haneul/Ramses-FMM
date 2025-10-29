@@ -31,14 +31,14 @@ subroutine m_output_frame(pst)
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
 
   do ind_proj=1,LEN(trim(r%proj_axis)) 
-     
+
 #if NDIM > 1
      if(r%imov<1)r%imov=1
      if(r%imov>r%imovout)return
-     
+
      ! Determine the filename, dir, etc
      write(*,*)'Computing and dumping movie frame'
-     
+
      call title(r%imov, istep_str)
      write(temp_string,'(I1)') ind_proj
      moviedir = 'movie'//trim(temp_string)//'/'
@@ -52,10 +52,10 @@ subroutine m_output_frame(pst)
 !         call system(moviecmd)
 ! #endif
      endif
-     
+
      infofile = trim(moviedir)//'info_'//trim(istep_str)//'.txt'
      call output_info(r,g,infofile)
-     
+
      moviefiles(1) = trim(moviedir)//'dens_'//trim(istep_str)//'.map'
      moviefiles(2) = trim(moviedir)//'vx_'//trim(istep_str)//'.map'
      moviefiles(3) = trim(moviedir)//'vy_'//trim(istep_str)//'.map'
@@ -73,7 +73,7 @@ subroutine m_output_frame(pst)
      end do
      moviefiles(NVAR+nrtgrp+1) = trim(moviedir)//'dm_'//trim(istep_str)//'.map'
      moviefiles(NVAR+nrtgrp+2) = trim(moviedir)//'stars_'//trim(istep_str)//'.map'
-          
+
      ! Allocate image
      allocate(data_single(1:r%nw_frame*r%nh_frame))
      allocate(data_frame (1:r%nw_frame*r%nh_frame))
@@ -100,12 +100,12 @@ subroutine m_output_frame(pst)
      endif
 
      if(r%hydro) then
-        
+
         ! Compute column density
         input_array(2)=0
         call r_output_frame(pst,input_array,input_size,output_array,output_size)
         dens=transfer(output_array,dens)
-        
+
         do kk=1,NVAR+nrtgrp
            if(r%movie_vars(kk).eq.1)then
               ! Compute mass-weighted projected quantities
@@ -129,7 +129,7 @@ subroutine m_output_frame(pst)
               close(ilun)
            end if
         end do
-          
+
      endif
 
      deallocate(data_single)
@@ -137,7 +137,7 @@ subroutine m_output_frame(pst)
      deallocate(dens)
      deallocate(input_array)
      deallocate(output_array)
-     
+
      ! Update counter
      if(ind_proj.eq.len(trim(r%proj_axis))) then 
         ! Increase counter and skip frames if timestep is large
@@ -153,7 +153,7 @@ subroutine m_output_frame(pst)
            end do
         end if
      endif
-     
+
 #endif
 
   enddo
@@ -178,7 +178,7 @@ recursive subroutine r_output_frame(pst,input_array,input_size,output_array,outp
   integer,dimension(1:output_size)::output_array
 
   integer,dimension(:),allocatable::next_output_array
-  
+
   integer::ind_proj,ind_var
   real(kind=8),dimension(:),allocatable::map,next_map
   integer::rID
@@ -223,7 +223,7 @@ subroutine output_frame(r,g,m,ind_proj,ind_var,map_size,map)
   type(mesh_t)::m
   integer::ind_proj,map_size,ind_var
   real(kind=8),dimension(1:map_size)::map
-  
+
   ! Local variables
   integer::nlevelmax_frame,nstride
   integer::ilun,ind,ind_map
@@ -248,7 +248,7 @@ subroutine output_frame(r,g,m,ind_proj,ind_var,map_size,map)
   else
      nlevelmax_frame=r%levelmax_frame
   endif
-  
+
   ! Conversion factor from user units to cgs units
   call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
   ! Compute frame centre
@@ -286,9 +286,9 @@ subroutine output_frame(r,g,m,ind_proj,ind_var,map_size,map)
   dy_frame=dely/dble(r%nh_frame)
 
   ! Careful with box boundaries
-  xcen=min(max(xcen,delx/2.0),r%boxlen-delx/2.0)
-  ycen=min(max(ycen,dely/2.0),r%boxlen-dely/2.0)
-  zcen=min(max(zcen,delz/2.0),r%boxlen-delz/2.0)
+  xcen=min(max(xcen,delx/2.0),r%box_size(1)-delx/2.0)
+  ycen=min(max(ycen,dely/2.0),r%box_size(2)-dely/2.0)
+  zcen=min(max(zcen,delz/2.0),r%box_size(3)-delz/2.0)
 
   xleft_frame =xcen-delx/2.0
   xright_frame=xcen+delx/2.0
@@ -296,28 +296,28 @@ subroutine output_frame(r,g,m,ind_proj,ind_var,map_size,map)
   yright_frame=ycen+dely/2.0
   zleft_frame =zcen-delz/2.0
   zright_frame=zcen+delz/2.0
-  
+
   ! Loop over levels
   do ilevel=r%levelmin,nlevelmax_frame
-     
+
      ! Mesh size at level ilevel in coarse cell units
      dx=r%boxlen/2**ilevel
-     
+
      ! Loop over grids by vector sweeps
      do igrid=m%head(ilevel),m%tail(ilevel)
-        
+
         ! Loop over cells
         do ind=1,twotondim
-           
+
            ! Compute cell centre position in code units
            do idim=1,ndim
               nstride=2**(idim-1)
-              xx(idim)=(2*m%grid(igrid)%ckey(idim)+MOD((ind-1)/nstride,2)+0.5d0)*dx
+              xx(idim)=(2*m%grid(igrid)%ckey(idim)+MOD((ind-1)/nstride,2)+0.5d0)*dx-m%skip(idim)
            end do
-           
+
            ! Check if cell is to be considered
            ok=(.NOT.m%grid(igrid)%refined(ind)).or.(ilevel==nlevelmax_frame)
-           
+
            if(ok)then
               ! Check if the cell intersect the domain
 #if NDIM>2                 
@@ -337,7 +337,7 @@ subroutine output_frame(r,g,m,ind_proj,ind_var,map_size,map)
                  yleft =xx(2)-dx/2.0d0
                  yright=xx(2)+dx/2.0d0
               endif
-              
+
               if(r%proj_axis(ind_proj:ind_proj).eq.'x')then
                  zleft =xx(1)-dx/2.
                  zright=xx(1)+dx/2.
@@ -374,7 +374,7 @@ subroutine output_frame(r,g,m,ind_proj,ind_var,map_size,map)
                  jmin=1
               endif
               jmax=min(int((yright-yleft_frame)/dy_frame)+1,r%nh_frame) ! change
-              
+
               ! Fill up map with projected mass
 #if NDIM>2                 
               dz_cell=min(zright_frame,zright)-max(zleft_frame,zleft) ! change
@@ -427,15 +427,15 @@ subroutine output_frame(r,g,m,ind_proj,ind_var,map_size,map)
                  end do
               end do
            end if
-           
+
         end do
         ! End loop over cells
-        
+
      end do
      ! End loop over grids
   end do
   ! End loop over levels
-  
+
 end subroutine output_frame
 !=======================================================================
 !=======================================================================
@@ -470,7 +470,7 @@ subroutine set_movie_vars(r)
   end do
   if(ANY(r%movie_vars_txt=='dm   '))r%movie_vars(NVAR+nrtgrp+1)=1
   if(ANY(r%movie_vars_txt=='stars'))r%movie_vars(NVAR+nrtgrp+2)=1
-  
+
 end subroutine set_movie_vars
 !=======================================================================
 !=======================================================================

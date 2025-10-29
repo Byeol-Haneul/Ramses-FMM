@@ -266,7 +266,7 @@ subroutine gradient_phi(s,ilevel,icount)
         ! Periodic boundary conditions
         do idim=1,ndim
            if(r%periodic(idim))then
-              if(hash_nbor(idim)<m%box_ckey_min(idim,ilevel))hash_nbor(idim)=m%box_ckey_max(idim,ilevel)-1
+              if(hash_nbor(idim)< m%box_ckey_min(idim,ilevel))hash_nbor(idim)=m%box_ckey_max(idim,ilevel)-1
               if(hash_nbor(idim)>=m%box_ckey_max(idim,ilevel))hash_nbor(idim)=m%box_ckey_min(idim,ilevel)
            endif
         enddo

@@ -78,7 +78,7 @@ subroutine get_threetondim_nbor_parent_cell(s,hash_key,hash_dict,grid_nbor,ind_n
        ! Periodic boundary conditions
        do idim=1,ndim
           if(r%periodic(idim))then
-             if(hash_nbor(idim)<m%box_ckey_min(idim,ilevel-1))hash_nbor(idim)=m%box_ckey_max(idim,ilevel-1)-1
+             if(hash_nbor(idim) <m%box_ckey_min(idim,ilevel-1))hash_nbor(idim)=m%box_ckey_max(idim,ilevel-1)-1
              if(hash_nbor(idim)>=m%box_ckey_max(idim,ilevel-1))hash_nbor(idim)=m%box_ckey_min(idim,ilevel-1)
           endif
        enddo
@@ -115,7 +115,7 @@ subroutine get_threetondim_nbor_parent_cell(s,hash_key,hash_dict,grid_nbor,ind_n
              ! Periodic boundary conditions
              do idim=1,ndim
                 if(r%periodic(idim))then
-                   if(hash_nbor(idim)<m%box_ckey_min(idim,ilevel))hash_nbor(idim)=m%box_ckey_max(idim,ilevel)-1
+                   if(hash_nbor(idim) <m%box_ckey_min(idim,ilevel))hash_nbor(idim)=m%box_ckey_max(idim,ilevel)-1
                    if(hash_nbor(idim)>=m%box_ckey_max(idim,ilevel))hash_nbor(idim)=m%box_ckey_min(idim,ilevel)
                 endif
              enddo
@@ -132,7 +132,7 @@ subroutine get_threetondim_nbor_parent_cell(s,hash_key,hash_dict,grid_nbor,ind_n
              ! Periodic boundary conditions
              do idim=1,ndim
                 if(r%periodic(idim))then
-                   if(ii(idim)<m%box_ckey_min(idim,ilevel-1))ii(idim)=ii(idim)+m%box_ckey_max(idim,ilevel-1)
+                   if(ii(idim)<0)ii(idim)=ii(idim)+m%box_ckey_max(idim,ilevel-1)-m%box_ckey_min(idim,ilevel-1)
                 endif
              enddo
              ind=1
@@ -203,7 +203,7 @@ subroutine get_twondim_nbor_parent_cell(s,hash_key,hash_dict,grid_nbor,ind_nbor,
      ! Periodic boundary conditions
      do idim=1,ndim
         if(r%periodic(idim))then
-           if(hash_nbor(idim)<m%box_ckey_min(idim,ilevel))hash_nbor(idim)=m%box_ckey_max(idim,ilevel)-1
+           if(hash_nbor(idim)< m%box_ckey_min(idim,ilevel))hash_nbor(idim)=m%box_ckey_max(idim,ilevel)-1
            if(hash_nbor(idim)>=m%box_ckey_max(idim,ilevel))hash_nbor(idim)=m%box_ckey_min(idim,ilevel)
         endif
      enddo

@@ -849,7 +849,7 @@ subroutine balance_part(s,p,ilevel)
            p%sortp(i)=i
         end do
         ix=0
-        call sort_hilbert(r,g,p,p%headp(ilev),p%tailp(ilev),ix,0,1,ilev-1)
+        call sort_hilbert(r,g,m,p,p%headp(ilev),p%tailp(ilev),ix,0,1,ilev-1)
 
         ! Compute first guess domain decomposition
         bound_key_target(1:nhilbert,0:ncpu)=domain_part(ilev)%b(1:nhilbert,0:ncpu)
@@ -876,7 +876,7 @@ subroutine balance_part(s,p,ilevel)
               ipart=p%sortp(i)
 
               ! Compute Hilbert key of particle parent grid
-              ix_ref(1:ndim)=int(p%xp(ipart,1:ndim)/(2*dx_loc))
+              ix_ref(1:ndim)=int((p%xp(ipart,1:ndim)+m%skip(1:ndim))/(2*dx_loc))
               hk_ref(1:nhilbert)=hilbert_key(ix_ref,ilev-1)
               
               do icpu=1,ncpu
@@ -966,7 +966,7 @@ subroutine balance_part(s,p,ilevel)
      do ipart=p%headp(ilev),p%tailp(ilev)
 
         ! Determine in which cpu particle should sit.
-        ix = int(p%xp(ipart,1:ndim)/(2*dx_loc))
+        ix = int((p%xp(ipart,1:ndim)+m%skip(1:ndim))/(2*dx_loc))
         if(.NOT. ALL(ix.EQ.ix_ref(1:ndim)))then
            ix_ref(1:ndim)=ix(1:ndim)
            grid_cpu=g%myid
@@ -1027,7 +1027,7 @@ subroutine balance_part(s,p,ilevel)
      do ipart=p%headp(ilev),p%tailp(ilev)
 
         ! Determine in which cpu particle should sit.
-        ix = int(p%xp(ipart,1:ndim)/(2*dx_loc))
+        ix = int((p%xp(ipart,1:ndim)+m%skip(1:ndim))/(2*dx_loc))
         if(.NOT. ALL(ix.EQ.ix_ref(1:ndim)))then
            ix_ref(1:ndim)=ix(1:ndim)
            grid_cpu=g%myid

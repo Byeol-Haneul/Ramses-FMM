@@ -63,12 +63,12 @@ subroutine m_rho_fine(pst,ilevel,rtype)
 
         endif
 
-      ! Reset array rho to zero
+        ! Reset array rho to zero
         if(m%noct_tot(i)>0)then
            call r_reset_rho(pst,i,1)
         endif
 
-      ! Mass deposition into array rho using gas pseudo-particles
+        ! Mass deposition into array rho using gas pseudo-particles
         if(r%hydro)then
 
            if(m%noct_tot(i)>0.AND.(rtype==0 .or. rtype==4))then
@@ -557,7 +557,7 @@ subroutine cic_multipole(s,ilevel)
 #endif
         ! Rescale particle position at level ilevel
         do idim=1,ndim
-           x(idim)=x(idim)/dx_loc
+           x(idim)=(x(idim)+m%skip(idim))/dx_loc
         end do
 
         ! CIC at level ilevel (dd: right cloud boundary; dg: left cloud boundary)
@@ -571,8 +571,10 @@ subroutine cic_multipole(s,ilevel)
 
         ! Periodic boundary conditions
         do idim=1,ndim
-           if(ig(idim)<0)ig(idim)=m%ckey_max(ilevel+1)-1
-           if(id(idim)==m%ckey_max(ilevel+1))id(idim)=0
+           if(r%periodic(idim))then
+              if(ig(idim)< m%box_ckey_min(idim,ilevel+1))ig(idim)=m%box_ckey_max(idim,ilevel+1)-1
+              if(id(idim)>=m%box_ckey_max(idim,ilevel+1))id(idim)=m%box_ckey_min(idim,ilevel+1)
+           endif
         enddo
 
         ! Compute cloud volumes
@@ -741,7 +743,7 @@ subroutine cic_part(s,p,ilevel,rtype)
 
      ! Rescale particle position at level ilevel
      do idim=1,ndim
-        x(idim)=p%xp(ipart,idim)/dx_loc
+        x(idim)=(p%xp(ipart,idim)+m%skip(idim))/dx_loc
      end do
 
      ! CIC at level ilevel (dr: right cloud boundary; dl: left cloud boundary)
@@ -755,8 +757,10 @@ subroutine cic_part(s,p,ilevel,rtype)
      
      ! Periodic boundary conditions
      do idim=1,ndim
-        if(il(idim)<0)il(idim)=m%ckey_max(ilevel+1)-1
-        if(ir(idim)==m%ckey_max(ilevel+1))ir(idim)=0
+        if(r%periodic(idim))then
+           if(il(idim)< m%box_ckey_min(idim,ilevel+1))il(idim)=m%box_ckey_max(idim,ilevel+1)-1
+           if(ir(idim)>=m%box_ckey_max(idim,ilevel+1))ir(idim)=m%box_ckey_min(idim,ilevel+1)
+        endif
      enddo
 
      ! Compute cloud volumes
@@ -870,7 +874,7 @@ subroutine tsc_part(s,p,ilevel,rtype)
 
      ! Rescale particle position at level ilevel
      do idim=1,ndim
-        x(idim)=p%xp(ipart,idim)/dx_loc
+        x(idim)=(p%xp(ipart,idim)+m%skip(idim))/dx_loc
      end do
 
      ! TSC at level ilevel; a particle contributes to 3 cells in each direction
@@ -888,8 +892,10 @@ subroutine tsc_part(s,p,ilevel,rtype)
 
      ! Periodic boundary conditions
      do idim=1,ndim
-        if(cl(idim)<0)cl(idim)=m%ckey_max(ilevel+1)-1
-        if(cr(idim)==m%ckey_max(ilevel+1))cr(idim)=0
+        if(r%periodic(idim))then
+           if(cl(idim)< m%box_ckey_min(idim,ilevel+1))cl(idim)=m%box_ckey_max(idim,ilevel+1)-1
+           if(cr(idim)>=m%box_ckey_max(idim,ilevel+1))cr(idim)=m%box_ckey_min(idim,ilevel+1)
+        endif
      enddo
 
      ! Compute cloud volumes
@@ -1003,7 +1009,7 @@ subroutine pcs_part(s,p,ilevel,rtype)
 
      ! Rescale particle position at level ilevel
      do idim=1,ndim
-        x(idim)=p%xp(ipart,idim)/dx_loc
+        x(idim)=(p%xp(ipart,idim)+m%skip(idim))/dx_loc
      end do
 
      ! PCS at level ilevel; a particle contributes to 4 cells in each direction
@@ -1024,10 +1030,12 @@ subroutine pcs_part(s,p,ilevel,rtype)
 
      ! Periodic boundary conditions
      do idim=1,ndim
-        if(cll(idim)<0)cll(idim)=cll(idim)+m%ckey_max(ilevel+1)
-        if(cl (idim)<0)cl (idim)=cl (idim)+m%ckey_max(ilevel+1)
-        if(cr (idim)>=m%ckey_max(ilevel+1))cr (idim)=cr (idim)-m%ckey_max(ilevel+1)
-        if(crr(idim)>=m%ckey_max(ilevel+1))crr(idim)=crr(idim)-m%ckey_max(ilevel+1)
+        if(r%periodic(idim))then
+           if(cll(idim)< m%box_ckey_min(idim,ilevel+1))cll(idim)=cll(idim)-m%box_ckey_min(idim,ilevel+1)+m%box_ckey_max(idim,ilevel+1)
+           if(cl (idim)< m%box_ckey_min(idim,ilevel+1))cl (idim)=cl (idim)-m%box_ckey_min(idim,ilevel+1)+m%box_ckey_max(idim,ilevel+1)
+           if(cr (idim)>=m%box_ckey_max(idim,ilevel+1))cr (idim)=cr (idim)+m%box_ckey_min(idim,ilevel+1)-m%box_ckey_max(idim,ilevel+1)
+           if(crr(idim)>=m%box_ckey_max(idim,ilevel+1))crr(idim)=crr(idim)+m%box_ckey_min(idim,ilevel+1)-m%box_ckey_max(idim,ilevel+1)
+        endif
      enddo
 
      ! Compute cloud volumes
@@ -1276,7 +1284,7 @@ subroutine split_part(s,p,ilevel)
      ipart=p%sortp(i)
 
      ! Acquire grid using read-only cache
-     ix = int(p%xp(ipart,1:ndim)/(2*dx_loc))
+     ix = int((p%xp(ipart,1:ndim)+m%skip(1:ndim))/(2*dx_loc))
      if(.NOT. ALL(ix.EQ.ix_ref))then
         hash_key(1:ndim)=ix(1:ndim)
         call get_grid(s,hash_key,m%grid_dict,gridp,flush_cache=.false.,fetch_cache=.true.)
@@ -1292,7 +1300,7 @@ subroutine split_part(s,p,ilevel)
      else
         ! Rescale particle position at level ilevel
         do idim=1,ndim
-           x(idim)=p%xp(ipart,idim)/dx_loc
+           x(idim)=(p%xp(ipart,idim)+m%skip(idim))/dx_loc
         end do
 
         ! Shift particle position to to 2x2x2 grid corner
@@ -1474,7 +1482,7 @@ recursive subroutine r_broadcast_multipole(pst,multipole,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
      pst%s%g%multipole=multipole
-     pst%s%g%rho_tot=pst%s%g%multipole%q(1)/pst%s%r%boxlen**ndim
+     pst%s%g%rho_tot=pst%s%g%multipole%q(1)/PRODUCT(pst%s%r%box_size(1:ndim))
   endif
 
 end subroutine r_broadcast_multipole
@@ -1901,7 +1909,7 @@ subroutine sort_part(s,p,ilevel)
      p%sortp(i)=i
   end do
   ix=0
-  call sort_hilbert(r,g,p,p%headp(ilevel),p%tailp(r%nlevelmax),ix,0,1,ilevel-1)
+  call sort_hilbert(r,g,m,p,p%headp(ilevel),p%tailp(r%nlevelmax),ix,0,1,ilevel-1)
 
   end associate
 
@@ -1910,15 +1918,16 @@ end subroutine sort_part
 !##############################################################################
 !##############################################################################
 !##############################################################################
-recursive subroutine sort_hilbert(r,g,p,head_part, tail_part, ix_coarse, cstate_coarse, ilevel, final_level)
+recursive subroutine sort_hilbert(r,g,m,p,head_part, tail_part, ix_coarse, cstate_coarse, ilevel, final_level)
   use amr_parameters, only: ndim, twotondim
-  use amr_commons, only: run_t, global_t
+  use amr_commons, only: run_t, global_t, mesh_t
   use pm_commons, only: part_t
   use hilbert, only: next_state_diagram_reverse, one_digit_diagram
   implicit none
   
   type(run_t),intent(in)::r
   type(global_t),intent(in)::g
+  type(mesh_t)::m
   type(part_t)::p
   integer, intent(in) :: ilevel, final_level
   integer, intent(in) :: head_part, tail_part
@@ -2003,7 +2012,7 @@ recursive subroutine sort_hilbert(r,g,p,head_part, tail_part, ix_coarse, cstate_
      ind_part = p%sortp(ipart)
      ind_cart_part = 0
      do idim = 1,ndim
-        ix_part(idim) = int(p%xp(ind_part,idim)*ckey_factor) - ix_ref(idim)
+        ix_part(idim) = int((p%xp(ind_part,idim)+m%skip(idim))*ckey_factor) - ix_ref(idim)
         ind_cart_part = ind_cart_part + ix_part(idim) * 2**(idim-1)
      end do
      ip = ind_hilbert(ind_cart_part)
@@ -2021,7 +2030,7 @@ recursive subroutine sort_hilbert(r,g,p,head_part, tail_part, ix_coarse, cstate_
      ind_part = p%sortp(ipart)
      ind_cart_part = 0
      do idim = 1,ndim
-        ix_part(idim) = int(p%xp(ind_part,idim)*ckey_factor) - ix_ref(idim)
+        ix_part(idim) = int((p%xp(ind_part,idim)+m%skip(idim))*ckey_factor) - ix_ref(idim)
         ind_cart_part = ind_cart_part + ix_part(idim) * 2**(idim-1)
      end do
      ip = ind_hilbert(ind_cart_part)
@@ -2041,7 +2050,7 @@ recursive subroutine sort_hilbert(r,g,p,head_part, tail_part, ix_coarse, cstate_
            tail_fine = offset(ip) + numb_part(ip)
            ix_fine(1:ndim) = ix_child(ip,1:ndim)
            cstate_fine = nstate(ip)
-           call sort_hilbert(r,g,p,head_fine,tail_fine,ix_fine,cstate_fine,ilevel+1,final_level)
+           call sort_hilbert(r,g,m,p,head_fine,tail_fine,ix_fine,cstate_fine,ilevel+1,final_level)
         endif
      end do
   endif

@@ -79,7 +79,7 @@ subroutine multigrid(pst,ilevel,icount)
   ! ---------------------------------------------------------------------
   ! Build Multigrid hierarchy in memory
   ! ---------------------------------------------------------------------
-  do ifine=ilevel,2,-1
+  do ifine=ilevel,pst%s%r%bound_levelmin+1,-1
      if(pst%s%r%verbose) print '(A,I2)','Build MG ',ifine
      call r_build_mg(pst,ifine,1)
   end do
@@ -89,8 +89,8 @@ subroutine multigrid(pst,ilevel,icount)
   ! ---------------------------------------------------------------------
   ! Restrict mask up
   ! ---------------------------------------------------------------------
-  pst%s%g%levelmin_mg=1
-  do ifine=ilevel,2,-1
+  pst%s%g%levelmin_mg=pst%s%r%bound_levelmin
+  do ifine=ilevel,pst%s%r%bound_levelmin+1,-1
      ! Restrict and communicate mask
      call r_restrict_mask(pst,ifine,1,allmasked,1)
      if(allmasked==1) then ! Coarser level is fully masked: stop here
@@ -233,6 +233,7 @@ recursive subroutine recursive_multigrid(pst,ifinelevel, safe)
   in_gauss_seidel_mg%safe=safe
 
   if(ifinelevel<=pst%s%g%levelmin_mg) then
+
      ! Solve 'directly' :
      do i=1,2*ngs_coarse
         in_gauss_seidel_mg%redstep=.true.   ! Red step
@@ -240,6 +241,7 @@ recursive subroutine recursive_multigrid(pst,ifinelevel, safe)
         in_gauss_seidel_mg%redstep=.false.  ! Black step
         call r_gauss_seidel_mg(pst,in_gauss_seidel_mg,storage_size(in_gauss_seidel_mg)/32)
      end do
+
      return
   end if
 
@@ -410,7 +412,7 @@ subroutine build_mg(s,ifinelevel)
        &   -1,-1,+1,+1,-1,+1,-1,+1,+1,+1,+1,+1/),(/3,8/))
   integer(kind=8),dimension(1:nhilbert)::hk
   integer(kind=8),dimension(1:ndim)::ix
-  logical::in_rank
+  logical::in_rank,in_domain
   type(oct),pointer::father,child
   type(msg_small_realdp)::dummy_small_realdp
 
@@ -422,10 +424,10 @@ subroutine build_mg(s,ifinelevel)
 
   hash_father(0)=icoarselevel
 
-  call open_cache(s,table=m%mg_dict,     data_size=storage_size(m%grid(1))/32,&
-                     hilbert=m%domain_mg, pack_size=storage_size(dummy_small_realdp)/32,&
-                     pack=pack_fetch_phi,unpack=unpack_fetch_phi,&
-                     flush=pack_flush_build_mg, combine=unpack_flush_build_mg)
+  call open_cache(s,table=m%mg_dict, data_size=storage_size(m%grid(1))/32,&
+       hilbert=m%domain_mg, pack_size=storage_size(dummy_small_realdp)/32,&
+       pack=pack_fetch_phi, unpack=unpack_fetch_phi,&
+       flush=pack_flush_build_mg, combine=unpack_flush_build_mg)
 
   ! Loop over fine grids
   do igrid=m%head_mg(ifinelevel),m%tail_mg(ifinelevel)
@@ -448,82 +450,97 @@ subroutine build_mg(s,ifinelevel)
 
         ! Periodic boundary conditions
         do idim=1,ndim
-           if(hash_nbor(idim)<0)hash_nbor(idim)=m%ckey_max(ifinelevel)-1
-           if(hash_nbor(idim)==m%ckey_max(ifinelevel))hash_nbor(idim)=0
+           if(r%periodic(idim))then
+              if(hash_nbor(idim)< m%box_ckey_min(idim,ifinelevel))hash_nbor(idim)=m%box_ckey_max(idim,ifinelevel)-1
+              if(hash_nbor(idim)>=m%box_ckey_max(idim,ifinelevel))hash_nbor(idim)=m%box_ckey_min(idim,ifinelevel)
+           endif
         enddo
         hash_father(1:ndim)=hash_nbor(1:ndim)/2
 
-        ! Access hash table
-        call c_f_pointer(hash_getp(m%mg_dict,hash_father),father)
+        ! Check if in computational domain
+        in_domain = .true.
+        do idim = 1, ndim
+           in_domain = in_domain .and. hash_father(idim) .ge. m%box_ckey_min(idim,icoarselevel) &
+                &                .and. hash_father(idim) .lt. m%box_ckey_max(idim,icoarselevel)
+        end do
 
-        ! If grid does not exist, create it in memory
-        if(.not.associated(father))then
+        if(in_domain)then
 
-           ! Compute Cartesian keys of new oct
-           cart_key(1:ndim)=int(hash_father(1:ndim),kind=4)
+           ! Access hash table
+           call c_f_pointer(hash_getp(m%mg_dict,hash_father),father)
 
-           ! Compute Hilbert keys of new octs
-           ix(1:ndim)=cart_key(1:ndim)
-           hk(1:nhilbert)=hilbert_key(ix,icoarselevel-1)
+           ! If grid does not exist, create it in memory
+           if(.not.associated(father))then
 
-           ! Check if grid sits inside processor boundaries
-           in_rank = ge_keys(hk,m%domain_mg(icoarselevel)%b(1:nhilbert,mdl_self(mdl)-1)).and. &
-                &    gt_keys(m%domain_mg(icoarselevel)%b(1:nhilbert,mdl_self(mdl)),hk)
-           if(in_rank)then
+              ! Compute Cartesian keys of new oct
+              cart_key(1:ndim)=int(hash_father(1:ndim),kind=4)
 
-              ! Set grid index to a virtual grid in local main memory
-              ichild=m%ifree
-              child => m%grid(ichild)
-              ! Go to next main memory free line
-              m%ifree=m%ifree+1
-              if(m%ifree.GT.r%ngridmax)then
-                 write(*,*)'No more free memory'
-                 write(*,*)'in multigrid'
-                 write(*,*)'Increase ngridmax'
-                 call mdl_abort(mdl)
-              end if
-              ! Insert new grid in hash table
-              call hash_setp(m%mg_dict,hash_father,child)
+              ! Compute Hilbert keys of new octs
+              ix(1:ndim)=cart_key(1:ndim)
+              hk(1:nhilbert)=hilbert_key(ix,icoarselevel-1)
 
-           else
+              ! Check if grid sits inside processor boundaries
+              in_rank = ge_keys(hk,m%domain_mg(icoarselevel)%b(1:nhilbert,mdl_self(mdl)-1)).and. &
+                   &    gt_keys(m%domain_mg(icoarselevel)%b(1:nhilbert,mdl_self(mdl)),hk)
+              if(in_rank)then
 
-              ! Otherwise, determine parent processor and use the cache
-              grid_cpu = m%domain_mg(icoarselevel)%get_rank(hk)
-              ! If next cache line is occupied, free it.
-              if(m%occupied(m%free_cache))call destage(s,r%ngridmax+m%free_cache,m%mg_dict)
-              ! Set grid index to a virtual grid in local cache memory
-              ichild=r%ngridmax+m%free_cache
-              child => m%grid(ichild)
-              m%occupied(m%free_cache)=.true.
-              m%parent_cpu(m%free_cache)=grid_cpu
-              m%dirty(m%free_cache)=.true.
-              m%ghost_parent_grid(m%free_cache)=0
-              m%ghost_parent_cell(m%free_cache)=0
-              ! Go to next free cache line
-              m%free_cache=m%free_cache+1
-              m%ncache=m%ncache+1
-              if(m%free_cache.GT.r%ncachemax)m%free_cache=1
-              if(m%ncache.GT.r%ncachemax)m%ncache=r%ncachemax
-              ! Insert new grid in hash table
-              call hash_setp(m%mg_dict,hash_father,child)
+                 ! Set grid index to a virtual grid in local main memory
+                 ichild=m%ifree
+                 child => m%grid(ichild)
+                 ! Go to next main memory free line
+                 m%ifree=m%ifree+1
+                 if(m%ifree.GT.r%ngridmax)then
+                    write(*,*)'No more free memory'
+                    write(*,*)'in multigrid'
+                    write(*,*)'Increase ngridmax'
+                    call mdl_abort(mdl)
+                 end if
+                 ! Insert new grid in hash table
+                 call hash_setp(m%mg_dict,hash_father,child)
 
-           endif
+              else
 
-           child%lev=icoarselevel
-           child%ckey(1:ndim)=cart_key(1:ndim)
-           child%hkey(1:nhilbert)=hk(1:nhilbert)
-           child%refined(1:twotondim)=.true.
-           child%flag1(1:twotondim)=0
-           child%flag2(1:twotondim)=0
-           child%superoct=1
+                 ! Otherwise, determine parent processor and use the cache
+                 grid_cpu = m%domain_mg(icoarselevel)%get_rank(hk)
+                 ! If next cache line is occupied, free it.
+                 if(m%occupied(m%free_cache))call destage(s,r%ngridmax+m%free_cache,m%mg_dict)
+                 ! Set grid index to a virtual grid in local cache memory
+                 ichild=r%ngridmax+m%free_cache
+                 child => m%grid(ichild)
+                 m%occupied(m%free_cache)=.true.
+                 m%parent_cpu(m%free_cache)=grid_cpu
+                 m%dirty(m%free_cache)=.true.
+                 m%ghost_parent_grid(m%free_cache)=0
+                 m%ghost_parent_cell(m%free_cache)=0
+                 ! Go to next free cache line
+                 m%free_cache=m%free_cache+1
+                 m%ncache=m%ncache+1
+                 if(m%free_cache.GT.r%ncachemax)m%free_cache=1
+                 if(m%ncache.GT.r%ncachemax)m%ncache=r%ncachemax
+                 ! Insert new grid in hash table
+                 call hash_setp(m%mg_dict,hash_father,child)
 
-           ! Intitialize gravity variables
-           do ind=1,twotondim
-              child%f(ind,1:ndim)=0
-              child%phi(ind)=0
-              child%phi_old(ind)=0
-           enddo
+              endif
+
+              child%lev=icoarselevel
+              child%ckey(1:ndim)=cart_key(1:ndim)
+              child%hkey(1:nhilbert)=hk(1:nhilbert)
+              child%refined(1:twotondim)=.true.
+              child%flag1(1:twotondim)=0
+              child%flag2(1:twotondim)=0
+              child%superoct=1
+
+              ! Intitialize gravity variables
+              do ind=1,twotondim
+                 child%f(ind,1:ndim)=0
+                 child%phi(ind)=0
+                 child%phi_old(ind)=0
+              enddo
+
+           end if
+
         end if
+
      end do
      ! End loop over coarse neighbors
 
@@ -781,7 +798,7 @@ subroutine make_bc_rhs(s,ilevel,icount)
   dx  = r%boxlen/2**ilevel
   oneoverdx2 = 1.0d0/(dx*dx)
   offset = g%rho_tot
-  if(r%isolated_boundary)offset = 0d0
+  if(any(.not. r%periodic(1:ndim)))offset = 0d0
 
   iii(1,1,1:8)=(/1,0,1,0,1,0,1,0/); jjj(1,1,1:8)=(/2,1,4,3,6,5,8,7/)
   iii(1,2,1:8)=(/0,2,0,2,0,2,0,2/); jjj(1,2,1:8)=(/2,1,4,3,6,5,8,7/)
@@ -819,10 +836,9 @@ subroutine make_bc_rhs(s,ilevel,icount)
      tfrac=0.0
   end if
 
-  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-       hilbert=m%domain,pack_size=storage_size(dummy_three_realdp)/32,&
-       pack=pack_fetch_interpol,unpack=unpack_fetch_interpol,&
-       bound=init_bound_phi)
+  call open_cache(s,table=m%grid_dict, data_size=storage_size(m%grid(1))/32,&
+       hilbert=m%domain, pack_size=storage_size(dummy_three_realdp)/32,&
+       pack=pack_fetch_interpol, unpack=unpack_fetch_interpol, bound=init_bound_phi)
 
   hash_nbor(0)=ilevel
 
@@ -844,7 +860,7 @@ subroutine make_bc_rhs(s,ilevel,icount)
         ! Periodic boundary conditions
         do idim=1,ndim
            if(r%periodic(idim))then
-              if(hash_nbor(idim)<m%box_ckey_min(idim,ilevel))hash_nbor(idim)=m%box_ckey_max(idim,ilevel)-1
+              if(hash_nbor(idim)< m%box_ckey_min(idim,ilevel))hash_nbor(idim)=m%box_ckey_max(idim,ilevel)-1
               if(hash_nbor(idim)>=m%box_ckey_max(idim,ilevel))hash_nbor(idim)=m%box_ckey_min(idim,ilevel)
            endif
         enddo

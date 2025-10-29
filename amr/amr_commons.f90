@@ -66,10 +66,6 @@ module amr_commons
      integer::ntracmax=0         ! Maximum number of tracer particles
      integer,dimension(1:MAXLEVEL)::nexpand=1 ! Number of mesh expansion
      real(kind=8)::boxlen=1.0        ! Cell size at level 0 (total box size)
-     real(kind=8)::box_size=0.0      ! Box length of active domain along x direction
-     integer::box_xmin,box_xmax  ! Min and max Cartesian keys at levelmin
-     integer::box_ymin,box_ymax  ! Min and max Cartesian keys at levelmin
-     integer::box_zmin,box_zmax  ! Min and max Cartesian keys at levelmin
           
      ! Poisson solver parameters
      real(kind=8)::epsilon=1.0D-4     ! Convergence criterion for Poisson solvers
@@ -87,7 +83,6 @@ module amr_commons
      integer :: tree_mass_deposition_scheme=1     ! tree mass deposition schemes
      integer :: tree_force_interpolation_scheme=1 ! tree force interpolation schemes
      integer :: trac_interpolation_scheme=1 ! tracer force interpolation schemes
-     logical :: isolated_boundary=.false. ! Set isolated boundary conditions to multipole expansion
 
      ! Movie parameters
      integer::levelmax_frame=0
@@ -233,6 +228,11 @@ module amr_commons
      logical,dimension(1:NDIM)::periodic=.true.
      integer::nbound=0
      logical::no_inflow=.false.
+     integer::bound_levelmin=1   ! AMR level to define boundary geometry
+     real(kind=8),dimension(1:3)::box_size=0.0  ! Box length of active domain along each direction
+     integer::box_xmin,box_xmax  ! Min and max Cartesian keys at levelmin
+     integer::box_ymin,box_ymax  ! Min and max Cartesian keys at levelmin
+     integer::box_zmin,box_zmax  ! Min and max Cartesian keys at levelmin
      integer,dimension(1:MAXBOUND)::bound_type=0
      integer,dimension(1:MAXBOUND)::bound_dir=0
      integer,dimension(1:MAXBOUND)::bound_shift=0
@@ -638,9 +638,11 @@ module amr_commons
      integer(kind=8),allocatable,dimension(:)::noct_tot  ! Total number of octs across cpus
 
      integer(kind=4),allocatable,dimension(:)::ckey_max        ! Max. Cartesian key per level
+     integer(kind=8),allocatable,dimension(:,:)::hkey_max      ! Max. Hilbert key per level
      integer(kind=4),allocatable,dimension(:,:)::box_ckey_min  ! Min. Cartesian key per level for the box
      integer(kind=4),allocatable,dimension(:,:)::box_ckey_max  ! Max. Cartesian key per level for the box
-     integer(kind=8),allocatable,dimension(:,:)::hkey_max      ! Max. Hilbert key per level
+     integer(kind=4),allocatable,dimension(:,:,:)::bound_ckey_min  ! Min. Cartesian key per level for the boundaries
+     integer(kind=4),allocatable,dimension(:,:,:)::bound_ckey_max  ! Max. Cartesian key per level for the boundaries
 
      integer(kind=4),allocatable,dimension(:)::head_cache ! Starting index in the cache for each level
      integer(kind=4),allocatable,dimension(:)::tail_cache ! Final index in the cache for each level

@@ -19,7 +19,7 @@ subroutine write_screen(r,m)
 #endif
   integer::igrid,ind
   logical::leaf
-  real(kind=8)::ekin,emag,erad
+  real(kind=8)::ekin,emag,erad,dx
   
 #ifdef HYDRO
 
@@ -59,13 +59,14 @@ subroutine write_screen(r,m)
      nleaf=0
      do ilevel=r%levelmin,r%nlevelmax
         if(m%noct_tot(ilevel)>0)then
+           dx=r%boxlen/2**ilevel
            do igrid=m%head(ilevel),m%tail(ilevel)
               do ind=1,2
-                 leaf = .not. m%grid(igrid)%refined(ind)
+                 leaf=.not.m%grid(igrid)%refined(ind)
                  if(leaf)then
                     nleaf=nleaf+1
                     ll(nleaf)=m%grid(igrid)%lev
-                    xx(nleaf)=(2*(m%grid(igrid)%ckey(1)-m%box_ckey_min(1,ilevel))+ind-0.5)/(2.*m%ckey_max(ilevel))*r%boxlen
+                    xx(nleaf)=(2*m%grid(igrid)%ckey(1)+ind-0.5)*dx-m%skip(1)
                     dd(nleaf)=m%grid(igrid)%uold(ind,1)
                     uu(nleaf)=m%grid(igrid)%uold(ind,2)/m%grid(igrid)%uold(ind,1)
                     vv(nleaf)=m%grid(igrid)%uold(ind,3)/m%grid(igrid)%uold(ind,1)

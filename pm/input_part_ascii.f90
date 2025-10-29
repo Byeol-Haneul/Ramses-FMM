@@ -37,15 +37,15 @@ subroutine m_input_part_ascii(pst)
            do
 #if NDIM==1
               read(10,*,end=101)xx1,vv1,mm1
-              if(ABS(xx1)<s%r%boxlen/2.0d0)then
+              if(ABS(xx1)<s%r%box_size(1)/2.0d0)then
 #endif
 #if NDIM==2
               read(10,*,end=101)xx1,xx2,vv1,vv2,mm1
-              if(ABS(xx1)<s%r%boxlen/2.0d0.AND.ABS(xx2)<s%r%boxlen/2.0d0)then
+              if(ABS(xx1)<s%r%box_size(1)/2.0d0.AND.ABS(xx2)<s%r%box_size(2)/2.0d0)then
 #endif
 #if NDIM==3
               read(10,*,end=101)xx1,xx2,xx3,vv1,vv2,vv3,mm1
-              if(ABS(xx1)<s%r%boxlen/2.0d0.AND.ABS(xx2)<s%r%boxlen/2.0d0.AND.ABS(xx3)<s%r%boxlen/2.0d0)then
+              if(ABS(xx1)<s%r%box_size(1)/2.0d0.AND.ABS(xx2)<s%r%box_size(2)/2.0d0.AND.ABS(xx3)<s%r%box_size(3)/2.0d0)then
 #endif
                  npart_tot=npart_tot+1
               endif
@@ -86,15 +86,15 @@ subroutine m_input_part_ascii(pst)
            do
 #if NDIM==1
               read(10,*,end=102)xx1,vv1,mm1,zz1,tt1
-              if(ABS(xx1)<s%r%boxlen/2.0d0)then
+              if(ABS(xx1)<s%r%box_size(1)/2.0d0)then
 #endif
 #if NDIM==2
               read(10,*,end=102)xx1,xx2,vv1,vv2,mm1,zz1,tt1
-              if(ABS(xx1)<s%r%boxlen/2.0d0.AND.ABS(xx2)<s%r%boxlen/2.0d0)then
+              if(ABS(xx1)<s%r%box_size(1)/2.0d0.AND.ABS(xx2)<s%r%box_size(2)/2.0d0)then
 #endif
 #if NDIM==3
               read(10,*,end=102)xx1,xx2,xx3,vv1,vv2,vv3,mm1,zz1,tt1
-              if(ABS(xx1)<s%r%boxlen/2.0d0.AND.ABS(xx2)<s%r%boxlen/2.0d0.AND.ABS(xx3)<s%r%boxlen/2.0d0)then
+              if(ABS(xx1)<s%r%box_size(1)/2.0d0.AND.ABS(xx2)<s%r%box_size(2)/2.0d0.AND.ABS(xx3)<s%r%box_size(3)/2.0d0)then
 #endif
                  nstar_tot=nstar_tot+1
                  s%g%mass_star_tot=s%g%mass_star_tot+mm1
@@ -134,8 +134,18 @@ subroutine m_input_part_ascii(pst)
            open(10,file=filename,form='formatted')
            nsink_tot=0
            do
+#if NDIM==1
+              read(10,*,end=103)xx1,vv1,jj1,mm1,tt1
+              if(ABS(xx1)<s%r%box_size(1)/2.0d0)then
+#endif
+#if NDIM==2
+              read(10,*,end=103)xx1,xx2,vv1,vv2,jj1,jj2,mm1,tt1
+              if(ABS(xx1)<s%r%box_size(1)/2.0d0.AND.ABS(xx2)<s%r%box_size(2)/2.0d0)then
+#endif
+#if NDIM==3
               read(10,*,end=103)xx1,xx2,xx3,vv1,vv2,vv3,jj1,jj2,jj3,mm1,tt1
-              if(ABS(xx1)<s%r%boxlen/2.0d0.AND.ABS(xx2)<s%r%boxlen/2.0d0.AND.ABS(xx3)<s%r%boxlen/2.0d0)then
+              if(ABS(xx1)<s%r%box_size(1)/2.0d0.AND.ABS(xx2)<s%r%box_size(2)/2.0d0.AND.ABS(xx3)<s%r%box_size(3)/2.0d0)then
+#endif
                  nsink_tot=nsink_tot+1
                  s%g%mass_sink_tot=s%g%mass_sink_tot+mm1
               endif
@@ -250,15 +260,15 @@ subroutine input_part_ascii(mdl,r,g,p,npart_tot)
   do 
 #if NDIM==1
      read(10,*,end=100)xx1,vv1,mm1
-     if(ABS(xx1)<r%boxlen/2.0d0)then
+     if(ABS(xx1)<r%box_size(1)/2.0d0)then
 #endif
 #if NDIM==2
      read(10,*,end=100)xx1,xx2,vv1,vv2,mm1
-     if(ABS(xx1)<r%boxlen/2.0d0.AND.ABS(xx2)<r%boxlen/2.0d0)then
+     if(ABS(xx1)<r%box_size(1)/2.0d0.AND.ABS(xx2)<r%box_size(2)/2.0d0)then
 #endif
 #if NDIM==3
      read(10,*,end=100)xx1,xx2,xx3,vv1,vv2,vv3,mm1
-     if(ABS(xx1)<r%boxlen/2.0d0.AND.ABS(xx2)<r%boxlen/2.0d0.AND.ABS(xx3)<r%boxlen/2.0d0)then
+     if(ABS(xx1)<r%box_size(1)/2.0d0.AND.ABS(xx2)<r%box_size(2)/2.0d0.AND.ABS(xx3)<r%box_size(3)/2.0d0)then
 #endif
         jpart=jpart+1
         indglob=indglob+1
@@ -270,15 +280,15 @@ subroutine input_part_ascii(mdl,r,g,p,npart_tot)
               call mdl_abort(mdl)
            endif
 #if NDIM>0
-           p%xp(jpart_loc,1)=xx1+r%boxlen/2.0
+           p%xp(jpart_loc,1)=xx1+r%box_size(1)/2.0
            p%vp(jpart_loc,1)=vv1
 #endif
 #if NDIM>1
-           p%xp(jpart_loc,2)=xx2+r%boxlen/2.0
+           p%xp(jpart_loc,2)=xx2+r%box_size(2)/2.0
            p%vp(jpart_loc,2)=vv2
 #endif
 #if NDIM>2
-           p%xp(jpart_loc,3)=xx3+r%boxlen/2.0
+           p%xp(jpart_loc,3)=xx3+r%box_size(3)/2.0
            p%vp(jpart_loc,3)=vv3
 #endif
            p%mp(jpart_loc  )=mm1*r%ic_scale_m
@@ -383,15 +393,15 @@ subroutine input_star_ascii(mdl,r,g,p,npart_tot)
   do
 #if NDIM==1
      read(10,*,end=100)xx1,vv1,mm1,zz1,tt1
-     if(ABS(xx1)<r%boxlen/2.0d0)then
+     if(ABS(xx1)<r%box_size(1)/2.0d0)then
 #endif
 #if NDIM==2
      read(10,*,end=100)xx1,xx2,vv1,vv2,mm1,zz1,tt1
-     if(ABS(xx1)<r%boxlen/2.0d0.AND.ABS(xx2)<r%boxlen/2.0d0)then
+     if(ABS(xx1)<r%box_size(1)/2.0d0.AND.ABS(xx2)<r%box_size(2)/2.0d0)then
 #endif
 #if NDIM==3
      read(10,*,end=100)xx1,xx2,xx3,vv1,vv2,vv3,mm1,zz1,tt1
-     if(ABS(xx1)<r%boxlen/2.0d0.AND.ABS(xx2)<r%boxlen/2.0d0.AND.ABS(xx3)<r%boxlen/2.0d0)then
+     if(ABS(xx1)<r%box_size(1)/2.0d0.AND.ABS(xx2)<r%box_size(2)/2.0d0.AND.ABS(xx3)<r%box_size(3)/2.0d0)then
 #endif
         jpart=jpart+1
         indglob=indglob+1
@@ -403,15 +413,15 @@ subroutine input_star_ascii(mdl,r,g,p,npart_tot)
               call mdl_abort(mdl)
            endif
 #if NDIM>0
-           p%xp(jpart_loc,1)=xx1+r%boxlen/2.0
+           p%xp(jpart_loc,1)=xx1+r%box_size(1)/2.0
            p%vp(jpart_loc,1)=vv1
 #endif
 #if NDIM>1
-           p%xp(jpart_loc,2)=xx2+r%boxlen/2.0
+           p%xp(jpart_loc,2)=xx2+r%box_size(2)/2.0
            p%vp(jpart_loc,2)=vv2
 #endif
 #if NDIM>2
-           p%xp(jpart_loc,3)=xx3+r%boxlen/2.0
+           p%xp(jpart_loc,3)=xx3+r%box_size(3)/2.0
            p%vp(jpart_loc,3)=vv3
 #endif
            p%mp(jpart_loc  )=mm1
@@ -517,8 +527,18 @@ subroutine input_sink_ascii(mdl,r,g,p,npart_tot)
   indglob=0
   jpart_loc=0
   do
+#if NDIM==1
+     read(10,*,end=100)xx1,vv1,jj1,mm1,tt1
+     if(ABS(xx1)<r%box_size(1)/2.0d0)then
+#endif
+#if NDIM==2
+     read(10,*,end=100)xx1,xx2,vv1,vv2,jj1,jj2,mm1,tt1
+     if(ABS(xx1)<r%box_size(1)/2.0d0.AND.ABS(xx2)<r%box_size(2)/2.0d0)then
+#endif
+#if NDIM==3
      read(10,*,end=100)xx1,xx2,xx3,vv1,vv2,vv3,jj1,jj2,jj3,mm1,tt1
-     if(ABS(xx1)<r%boxlen/2.0d0.AND.ABS(xx2)<r%boxlen/2.0d0.AND.ABS(xx3)<r%boxlen/2.0d0)then
+     if(ABS(xx1)<r%box_size(1)/2.0d0.AND.ABS(xx2)<r%box_size(2)/2.0d0.AND.ABS(xx3)<r%box_size(3)/2.0d0)then
+#endif
         jpart=jpart+1
         indglob=indglob+1
         if(jpart >= start_ind(g%myid) .and. jpart < start_ind(g%myid+1))then
@@ -528,15 +548,21 @@ subroutine input_sink_ascii(mdl,r,g,p,npart_tot)
               write(*,*)'nsinkmax should be greater than',start_ind(2)
               call mdl_abort(mdl)
            endif
-           p%xp(jpart_loc,1)=xx1+r%boxlen/2.0
-           p%xp(jpart_loc,2)=xx2+r%boxlen/2.0
-           p%xp(jpart_loc,3)=xx3+r%boxlen/2.0
+#if NDIM>0
+           p%xp(jpart_loc,1)=xx1+r%box_size(1)/2.0
            p%vp(jpart_loc,1)=vv1
-           p%vp(jpart_loc,2)=vv2
-           p%vp(jpart_loc,3)=vv3
            p%jp(jpart_loc,1)=jj1
+#endif
+#if NDIM>1
+           p%xp(jpart_loc,2)=xx2+r%box_size(2)/2.0
+           p%vp(jpart_loc,2)=vv2
            p%jp(jpart_loc,2)=jj2
+#endif
+#if NDIM>2
+           p%xp(jpart_loc,3)=xx3+r%box_size(3)/2.0
+           p%vp(jpart_loc,3)=vv3
            p%jp(jpart_loc,3)=jj3
+#endif
            p%mp(jpart_loc  )=mm1
            p%tp(jpart_loc  )=tt1
            p%idp(jpart_loc )=indglob
