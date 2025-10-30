@@ -73,7 +73,7 @@ subroutine courant_fine(r,g,m,ilevel,mass,ekin,eint,emag,dt)
 #ifdef HYDRO
 
   ! Mesh spacing at that level
-  dx=0.5D0**ilevel*r%boxlen
+  dx=r%boxlen/2**ilevel
   vol=dx**ndim
 
   mass=0.0D0

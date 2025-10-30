@@ -342,7 +342,7 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
            ! Compute the cell length in cm if needed
            dx_SS_H2 = 0.d0
            if (r%isH2_rtz) then
-              dx_SS_H2 = (r%boxlen/(2.d0**ilevel)) * scale_l
+              dx_SS_H2 = r%boxlen/2**ilevel * scale_l
            endif
 
            call rtz_solve_cooling(r, tables, T2, g%aexp, xion, nElement, &

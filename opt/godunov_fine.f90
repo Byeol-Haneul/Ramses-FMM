@@ -292,7 +292,7 @@ subroutine godfine1(s,ind_grid,ilevel,h)
            ! Periodic boundary conditions
            do idim=1,ndim
               if(r%periodic(idim))then
-                 if(hash_nbor(idim)<m%box_ckey_min(idim,ilevel))hash_nbor(idim)=m%box_ckey_max(idim,ilevel)-1
+                 if(hash_nbor(idim)< m%box_ckey_min(idim,ilevel))hash_nbor(idim)=m%box_ckey_max(idim,ilevel)-1
                  if(hash_nbor(idim)>=m%box_ckey_max(idim,ilevel))hash_nbor(idim)=m%box_ckey_min(idim,ilevel)
               endif
            enddo
@@ -1195,7 +1195,7 @@ subroutine make_boundaries(s,ilevel)
      ! Periodic boundary conditions
      do idim=1,ndim
         if(r%periodic(idim))then
-           if(hash_nbor(idim)<m%box_ckey_min(idim,ilevel))hash_nbor(idim)=m%box_ckey_max(idim,ilevel)-1
+           if(hash_nbor(idim)< m%box_ckey_min(idim,ilevel))hash_nbor(idim)=m%box_ckey_max(idim,ilevel)-1
            if(hash_nbor(idim)>=m%box_ckey_max(idim,ilevel))hash_nbor(idim)=m%box_ckey_min(idim,ilevel)
         endif
      enddo
@@ -1347,7 +1347,7 @@ subroutine make_grid_ghost(s,hash_nbor,hash_dict,child,ilevel)
      ! Periodic boundary conditions
      do idim=1,ndim
         if(r%periodic(idim))then
-           if(hash_son_nbor(idim)<m%box_ckey_min(idim,ilevel))hash_son_nbor(idim)=m%box_ckey_max(idim,ilevel)-1
+           if(hash_son_nbor(idim)< m%box_ckey_min(idim,ilevel))hash_son_nbor(idim)=m%box_ckey_max(idim,ilevel)-1
            if(hash_son_nbor(idim)>=m%box_ckey_max(idim,ilevel))hash_son_nbor(idim)=m%box_ckey_min(idim,ilevel)
         endif
      enddo

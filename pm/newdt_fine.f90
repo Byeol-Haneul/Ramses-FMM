@@ -43,7 +43,7 @@ subroutine m_newdt_fine(pst,ilevel)
   g%dtold(ilevel)=g%dtnew(ilevel)
 
   ! Compute local cell spacing
-  dx=r%boxlen/2.0d0**ilevel
+  dx=r%boxlen/2**ilevel
 
   ! Maximum time step
   g%dtnew(ilevel)=dx/r%smallc

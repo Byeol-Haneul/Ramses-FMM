@@ -336,8 +336,10 @@ subroutine cmp_residual_cg(s,ilevel,icount)
 
         ! Periodic boundary conditions
         do idim=1,ndim
-           if(hash_nbor(idim)<0)hash_nbor(idim)=m%ckey_max(ilevel)-1
-           if(hash_nbor(idim)==m%ckey_max(ilevel))hash_nbor(idim)=0
+           if(r%periodic(idim))then
+              if(hash_nbor(idim)< m%box_ckey_min(idim,ilevel))hash_nbor(idim)=m%box_ckey_max(idim,ilevel)-1
+              if(hash_nbor(idim)>=m%box_ckey_max(idim,ilevel))hash_nbor(idim)=m%box_ckey_min(idim,ilevel)
+           endif
         enddo
 
         ! Get neighbouring grid using a read-only cache
@@ -475,8 +477,10 @@ subroutine cmp_Ap_cg(s,ilevel)
 
         ! Periodic boundary conditions
         do idim=1,ndim
-           if(hash_nbor(idim)<0)hash_nbor(idim)=m%ckey_max(ilevel)-1
-           if(hash_nbor(idim)==m%ckey_max(ilevel))hash_nbor(idim)=0
+           if(r%periodic(idim))then
+              if(hash_nbor(idim)< m%box_ckey_min(idim,ilevel))hash_nbor(idim)=m%box_ckey_max(idim,ilevel)-1
+              if(hash_nbor(idim)>=m%box_ckey_max(idim,ilevel))hash_nbor(idim)=m%box_ckey_min(idim,ilevel)
+           endif
         enddo
 
         ! Get neighbouring grid using read-only cache
@@ -609,12 +613,15 @@ subroutine make_initial_phi(s,ilevel,icount)
      tfrac=0.0
   end if
 
-  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-                hilbert=m%domain,pack_size=storage_size(dummy_three_realdp)/32,&
-                pack=pack_fetch_interpol,unpack=unpack_fetch_interpol,&
-                bound=init_bound_phi)
+  call open_cache(s, table=m%grid_dict, data_size=storage_size(m%grid(1))/32,&
+       hilbert=m%domain, pack_size=storage_size(dummy_three_realdp)/32,&
+       pack=pack_fetch_interpol, unpack=unpack_fetch_interpol,&
+       bound=init_bound_phi)
 
   hash_key(0)=ilevel
+
+  ! Mesh size at level ilevel in code units
+  dx=r%boxlen/2**ilevel
 
   ! Loop over grids
   do igrid=m%head(ilevel),m%tail(ilevel)
@@ -632,7 +639,7 @@ subroutine make_initial_phi(s,ilevel,icount)
 
      ! For fine levels, initial phi is interpolated from coarser level
      if(ilevel.GT.r%levelmin)then
-        
+
         hash_key(1:ndim)=m%grid(igrid)%ckey(1:ndim)
         ! Get 3**ndim neghbouring parent cell using read-only cache
         call get_threetondim_nbor_parent_cell(s,hash_key,m%grid_dict,grid_nbor,ind_nbor,flush_cache=.false.,fetch_cache=.true.)
@@ -647,8 +654,8 @@ subroutine make_initial_phi(s,ilevel,icount)
         end do
         ! End loop over cells
 
-     ! For coarse level and for isolated boundary conditions, set multipole potential
-     else if (r%isolated_boundary)then
+     ! For coarse level and for non-periodic boundary conditions, set multipole potential
+     else if (any(.not. r%periodic(1:ndim)))  then
 
         ! Loop over cells
         do ind=1,twotondim

@@ -92,7 +92,7 @@ subroutine input_hydro_gadget(s,ilevel)
 
      ! Rescale particle position at level ilevel
      do idim=1,ndim
-        x(idim)=p%xp(ipart,idim)/dx_loc
+        x(idim)=(p%xp(ipart,idim)+m%skip(idim))/dx_loc
      end do
      
      ! CIC at level ilevel (dd: right cloud boundary; dg: left cloud boundary)
@@ -106,8 +106,10 @@ subroutine input_hydro_gadget(s,ilevel)
      
      ! Periodic boundary conditions
      do idim=1,ndim
-        if(ig(idim)<0)ig(idim)=m%ckey_max(ilevel+1)-1
-        if(id(idim)==m%ckey_max(ilevel+1))id(idim)=0
+        if(r%periodic(idim))then
+           if(ig(idim)< m%box_ckey_min(idim,ilevel+1))ig(idim)=m%box_ckey_max(idim,ilevel+1)-1
+           if(id(idim)>=m%box_ckey_max(idim,ilevel+1))id(idim)=m%box_ckey_min(idim,ilevel+1)
+        endif
      enddo
 
      ! Compute cloud volumes

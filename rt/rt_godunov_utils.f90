@@ -15,8 +15,8 @@ subroutine get_rt_courant_dt(r,g,dt,ilevel)
   real(kind=8)::dt,dx
 !-------------------------------------------------------------------------
   ! Mesh spacing at coarse level
-  dx = 0.5D0**ilevel*r%boxlen
-  dt = r%rt_courant_factor*dx/3d0/g%rt_c(ilevel)
+  dx=r%boxlen/2**ilevel
+  dt=r%rt_courant_factor*dx/3d0/g%rt_c(ilevel)
 end subroutine get_rt_courant_dt
 
 !###########################################################

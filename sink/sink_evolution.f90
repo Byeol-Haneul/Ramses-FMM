@@ -64,7 +64,7 @@ contains
     real(kind=8)::dx_loc,vol_loc
     integer::nBHnei,nBH_fb_nei
     real(kind=8)::jet_angle,tan_theta,lambda_sonic
-    integer::kk,jj,ii,ipart,istep
+    integer::kk,jj,ii,ipart,istep,idim
     real(kind=8),dimension(1:ndim)::x_rel
     real(kind=8)::r_rel,dmacc_loc
     type(msg_large_realdp)::dummy_large_realdp
@@ -208,6 +208,14 @@ contains
           end if
        end if
 
+       ! Periodic box
+       do idim=1,ndim
+          if(r%periodic(idim))then
+             if(p%xp(ipart,idim)< 0.0d0           )p%xp(ipart,idim)=p%xp(ipart,idim)+r%box_size(idim)
+             if(p%xp(ipart,idim)>=r%box_size(idim))p%xp(ipart,idim)=p%xp(ipart,idim)-r%box_size(idim)
+          endif
+       end do
+
     end do ! End loop over ipart
 
     !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -282,7 +290,7 @@ contains
     macc_loc=0d0
 
     ! Black hole position
-    xcen(1:ndim) = p%xp(ipart,1:ndim) / dx_loc
+    xcen(1:ndim) = (p%xp(ipart,1:ndim)+m%skip(idim)) / dx_loc
 
     !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     ! Initialise B-spline interpolation
@@ -720,7 +728,7 @@ contains
     xBH_fb_nei=0d0; ckey_fb_nei=0d0; weight_fb_nei=0d0
 
     ! Black hole position
-    xcen(1:ndim) = p%xp(ipart,1:ndim) / dx_loc
+    xcen(1:ndim) = (p%xp(ipart,1:ndim)+m%skip(idim)) / dx_loc
 
     !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     ! AGN Feedback: Set everything up
@@ -967,10 +975,12 @@ contains
 
     ! Periodic boundary conditions
     do idim=1,ndim
-       if(cll(idim)<0)cll(idim)=cll(idim)+m%ckey_max(ilevel+1)
-       if(cl (idim)<0)cl (idim)=cl (idim)+m%ckey_max(ilevel+1)
-       if(cr (idim)>=m%ckey_max(ilevel+1))cr (idim)=cr (idim)-m%ckey_max(ilevel+1)
-       if(crr(idim)>=m%ckey_max(ilevel+1))crr(idim)=crr(idim)-m%ckey_max(ilevel+1)
+       if(r%periodic(idim))then
+          if(cll(idim)< m%box_ckey_min(idim,ilevel+1))cll(idim)=cll(idim)-m%box_ckey_min(idim,ilevel+1)+m%box_ckey_max(idim,ilevel+1)
+          if(cl (idim)< m%box_ckey_min(idim,ilevel+1))cl (idim)=cl (idim)-m%box_ckey_min(idim,ilevel+1)+m%box_ckey_max(idim,ilevel+1)
+          if(cr (idim)>=m%box_ckey_max(idim,ilevel+1))cr (idim)=cr (idim)+m%box_ckey_min(idim,ilevel+1)-m%box_ckey_max(idim,ilevel+1)
+          if(crr(idim)>=m%box_ckey_max(idim,ilevel+1))crr(idim)=crr(idim)+m%box_ckey_min(idim,ilevel+1)-m%box_ckey_max(idim,ilevel+1)
+       endif
     enddo
 
     ! Compute cloud volumes
@@ -1029,8 +1039,10 @@ contains
 
     ! Periodic boundary conditions
     do idim=1,ndim
-       if(cl(idim)<0)cl(idim)=m%ckey_max(ilevel+1)-1
-       if(cr(idim)==m%ckey_max(ilevel+1))cr(idim)=0
+       if(r%periodic(idim))then
+          if(cl(idim)< m%box_ckey_min(idim,ilevel+1))cl(idim)=m%box_ckey_max(idim,ilevel+1)-1
+          if(cr(idim)>=m%box_ckey_max(idim,ilevel+1))cr(idim)=m%box_ckey_min(idim,ilevel+1)
+       endif
     enddo
 
     ! Compute cloud volumes
@@ -1084,8 +1096,10 @@ contains
 
     ! Periodic boundary conditions
     do idim=1,ndim
-       if(il(idim)<0)il(idim)=m%ckey_max(ilevel+1)-1
-       if(ir(idim)==m%ckey_max(ilevel+1))ir(idim)=0
+       if(r%periodic(idim))then
+          if(il(idim)< m%box_ckey_min(idim,ilevel+1))il(idim)=m%box_ckey_max(idim,ilevel+1)-1
+          if(ir(idim)>=m%box_ckey_max(idim,ilevel+1))ir(idim)=m%box_ckey_min(idim,ilevel+1)
+       endif
     enddo
 
     ! Compute cloud volumes

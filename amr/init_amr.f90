@@ -84,7 +84,7 @@ subroutine init_amr(mdl,r,g,m)
 #ifdef _CUDA
   integer::err_code
 #endif
-  integer::ilevel,icpu,igrid
+  integer::ilevel,icpu,igrid,ibound
   integer(kind=8)::max_key
   character(len=5)::nchar
   character(len=80)::file_params
@@ -152,6 +152,11 @@ subroutine init_amr(mdl,r,g,m)
   allocate(m%box_ckey_min(1:3,1:r%nlevelmax+1))
   allocate(m%box_ckey_max(1:3,1:r%nlevelmax+1))
 
+  if(r%nbound>0)then
+     allocate(m%bound_ckey_min(1:3,1:r%nbound,1:r%nlevelmax+1))
+     allocate(m%bound_ckey_max(1:3,1:r%nbound,1:r%nlevelmax+1))
+  endif
+
   allocate(m%domain(1:r%nlevelmax+1))
   do ilevel=1,r%nlevelmax+1
      m%domain(ilevel)%ncpu=0
@@ -177,54 +182,85 @@ subroutine init_amr(mdl,r,g,m)
      m%hkey_max(1:nhilbert,ilevel)=refine_key(m%hkey_max(1:nhilbert,ilevel-1),ilevel)
   end do
 
-  ! Bounding box for domain boundaries
+  ! Bounding box for computational domain
   ! Examples are: box_xmin=1 box_xmax=-1
   ! Default is:   box_xmin=0 box_xmax=0
   ! This sets the min. and max. Cartesian keys of the box in each direction
-  do ilevel=r%levelmin,r%nlevelmax+1
+  do ilevel=r%bound_levelmin,r%nlevelmax+1
      if(r%box_xmin.GE.0)then
-        m%box_ckey_min(1,ilevel)=r%box_xmin*2**(ilevel-r%levelmin)
+        m%box_ckey_min(1,ilevel)=r%box_xmin*2**(ilevel-r%bound_levelmin)
      else
-        m%box_ckey_min(1,ilevel)=(m%ckey_max(r%levelmin)+r%box_xmin)*2**(ilevel-r%levelmin)
+        m%box_ckey_min(1,ilevel)=(m%ckey_max(r%bound_levelmin)+r%box_xmin)*2**(ilevel-r%bound_levelmin)
      endif
      if(r%box_xmax.LE.0)then
-        m%box_ckey_max(1,ilevel)=(m%ckey_max(r%levelmin)+r%box_xmax)*2**(ilevel-r%levelmin)
+        m%box_ckey_max(1,ilevel)=(m%ckey_max(r%bound_levelmin)+r%box_xmax)*2**(ilevel-r%bound_levelmin)
      else
-        m%box_ckey_max(1,ilevel)=r%box_xmax*2**(ilevel-r%levelmin)
+        m%box_ckey_max(1,ilevel)=r%box_xmax*2**(ilevel-r%bound_levelmin)
      endif
 #if NDIM>1
-       if(r%box_ymin.GE.0)then
-        m%box_ckey_min(2,ilevel)=r%box_ymin*2**(ilevel-r%levelmin)
+     if(r%box_ymin.GE.0)then
+        m%box_ckey_min(2,ilevel)=r%box_ymin*2**(ilevel-r%bound_levelmin)
      else
-        m%box_ckey_min(2,ilevel)=(m%ckey_max(r%levelmin)+r%box_ymin)*2**(ilevel-r%levelmin)
+        m%box_ckey_min(2,ilevel)=(m%ckey_max(r%bound_levelmin)+r%box_ymin)*2**(ilevel-r%bound_levelmin)
      endif
      if(r%box_ymax.LE.0)then
-        m%box_ckey_max(2,ilevel)=(m%ckey_max(r%levelmin)+r%box_ymax)*2**(ilevel-r%levelmin)
+        m%box_ckey_max(2,ilevel)=(m%ckey_max(r%bound_levelmin)+r%box_ymax)*2**(ilevel-r%bound_levelmin)
      else
-        m%box_ckey_max(2,ilevel)=r%box_ymax*2**(ilevel-r%levelmin)
+        m%box_ckey_max(2,ilevel)=r%box_ymax*2**(ilevel-r%bound_levelmin)
      endif
 #endif
 #if NDIM>2
-       if(r%box_zmin.GE.0)then
-        m%box_ckey_min(3,ilevel)=r%box_zmin*2**(ilevel-r%levelmin)
+     if(r%box_zmin.GE.0)then
+        m%box_ckey_min(3,ilevel)=r%box_zmin*2**(ilevel-r%bound_levelmin)
      else
-        m%box_ckey_min(3,ilevel)=(m%ckey_max(r%levelmin)+r%box_zmin)*2**(ilevel-r%levelmin)
+        m%box_ckey_min(3,ilevel)=(m%ckey_max(r%bound_levelmin)+r%box_zmin)*2**(ilevel-r%bound_levelmin)
      endif
      if(r%box_zmax.LE.0)then
-        m%box_ckey_max(3,ilevel)=(m%ckey_max(r%levelmin)+r%box_zmax)*2**(ilevel-r%levelmin)
+        m%box_ckey_max(3,ilevel)=(m%ckey_max(r%bound_levelmin)+r%box_zmax)*2**(ilevel-r%bound_levelmin)
      else
-        m%box_ckey_max(3,ilevel)=r%box_zmax*2**(ilevel-r%levelmin)
+        m%box_ckey_max(3,ilevel)=r%box_zmax*2**(ilevel-r%bound_levelmin)
      endif
 #endif
   end do
 
-  ! This sets the min. and max. Cartesian keys of the box for coarse levels.
-  ! This is required for the Multigrid solver
-  do ilevel=r%levelmin-1,1,-1
-     m%box_ckey_min(1:3,ilevel)=m%box_ckey_min(1:3,ilevel+1)/2
-     m%box_ckey_max(1,ilevel)=m%ckey_max(ilevel)-(m%ckey_max(ilevel+1)-m%box_ckey_max(1,ilevel+1))/2
-     m%box_ckey_max(2,ilevel)=m%ckey_max(ilevel)-(m%ckey_max(ilevel+1)-m%box_ckey_max(2,ilevel+1))/2
-     m%box_ckey_max(3,ilevel)=m%ckey_max(ilevel)-(m%ckey_max(ilevel+1)-m%box_ckey_max(3,ilevel+1))/2
+  ! Bounding box for boundary regions
+  do ibound=1,r%nbound
+     do ilevel=r%bound_levelmin,r%nlevelmax+1
+        if(r%bound_xmin(ibound).GE.0)then
+           m%bound_ckey_min(1,ibound,ilevel)=r%bound_xmin(ibound)*2**(ilevel-r%bound_levelmin)
+        else
+           m%bound_ckey_min(1,ibound,ilevel)=(m%ckey_max(r%bound_levelmin)+r%bound_xmin(ibound))*2**(ilevel-r%bound_levelmin)
+        endif
+        if(r%bound_xmax(ibound).LE.0)then
+           m%bound_ckey_max(1,ibound,ilevel)=(m%ckey_max(r%bound_levelmin)+r%bound_xmax(ibound))*2**(ilevel-r%bound_levelmin)
+        else
+           m%bound_ckey_max(1,ibound,ilevel)=r%bound_xmax(ibound)*2**(ilevel-r%bound_levelmin)
+        endif
+#if NDIM>1
+        if(r%bound_ymin(ibound).GE.0)then
+           m%bound_ckey_min(2,ibound,ilevel)=r%bound_ymin(ibound)*2**(ilevel-r%bound_levelmin)
+        else
+           m%bound_ckey_min(2,ibound,ilevel)=(m%ckey_max(r%bound_levelmin)+r%bound_ymin(ibound))*2**(ilevel-r%bound_levelmin)
+        endif
+        if(r%bound_ymax(ibound).LE.0)then
+           m%bound_ckey_max(2,ibound,ilevel)=(m%ckey_max(r%bound_levelmin)+r%bound_ymax(ibound))*2**(ilevel-r%bound_levelmin)
+        else
+           m%bound_ckey_max(2,ibound,ilevel)=r%bound_ymax(ibound)*2**(ilevel-r%bound_levelmin)
+        endif
+#endif
+#if NDIM>2
+        if(r%bound_zmin(ibound).GE.0)then
+           m%bound_ckey_min(3,ibound,ilevel)=r%bound_zmin(ibound)*2**(ilevel-r%bound_levelmin)
+        else
+           m%bound_ckey_min(3,ibound,ilevel)=(m%ckey_max(r%bound_levelmin)+r%bound_zmin(ibound))*2**(ilevel-r%bound_levelmin)
+        endif
+        if(r%bound_zmax(ibound).LE.0)then
+           m%bound_ckey_max(3,ibound,ilevel)=(m%ckey_max(r%bound_levelmin)+r%bound_zmax(ibound))*2**(ilevel-r%bound_levelmin)
+        else
+           m%bound_ckey_max(3,ibound,ilevel)=r%bound_zmax(ibound)*2**(ilevel-r%bound_levelmin)
+        endif
+#endif
+     end do
   end do
 
   ! Number of octs across the grid at levelmin
@@ -238,11 +274,14 @@ subroutine init_amr(mdl,r,g,m)
 #endif
 
   ! Size of the box in code units in the x-direction
-  if(r%box_size>0)then
-     r%boxlen = r%box_size/dble(m%nx)*m%ckey_max(r%levelmin)
+  if(r%box_size(1)>0)then
+     r%boxlen = r%box_size(1)/dble(m%nx)*m%ckey_max(r%levelmin)
   else
-     r%box_size = r%boxlen*dble(m%nx)/m%ckey_max(r%levelmin)
+     r%box_size(1) = r%boxlen*dble(m%nx)/m%ckey_max(r%levelmin)
   endif
+  ! Size of the box in code units in the y- and z-directions
+  r%box_size(2) = r%box_size(1)/dble(m%nx)*dble(m%ny)
+  r%box_size(3) = r%box_size(1)/dble(m%nx)*dble(m%nz)
 
   ! Coordinates of lower left corner of the box
   allocate(m%skip(1:ndim))

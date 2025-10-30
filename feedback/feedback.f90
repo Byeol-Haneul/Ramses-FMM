@@ -113,7 +113,7 @@ subroutine thermal_feedback(s,p,ilevel,msn_loc)
 
      ! Find parent cell at level ilevel
      do idim=1,ndim
-        ckey(idim)=int(p%xp(ipart,idim)/dx_loc)
+        ckey(idim)=int((p%xp(ipart,idim)+m%skip(idim))/dx_loc)
      end do
 
      ! Cell volume at level ilevel
@@ -129,7 +129,7 @@ subroutine thermal_feedback(s,p,ilevel,msn_loc)
 
         ! NGP at level ilevel-1
         do idim=1,ndim
-           ckey(idim)=int(p%xp(ipart,idim)/dx_loc/2)
+           ckey(idim)=int((p%xp(ipart,idim)+m%skip(idim))/dx_loc/2)
         end do
 
         ! Cell volume at level ilevel-1
@@ -393,7 +393,7 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
 
      ! Find parent cell at level ilevel
      do idim=1,ndim
-        ckey(idim)=int(p%xp(ipart,idim)/dx_loc)
+        ckey(idim)=int((p%xp(ipart,idim)+m%skip(idim))/dx_loc)
         xcen(idim)=ckey(idim)+0.5
      end do
 
@@ -410,7 +410,7 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
 
         ! NGP at level ilevel-1
         do idim=1,ndim
-           ckey(idim)=int(p%xp(ipart,idim)/dx_loc/2)
+           ckey(idim)=int((p%xp(ipart,idim)+m%skip(idim))/dx_loc/2)
            xcen(idim)=ckey(idim)+0.5
         end do
 
@@ -470,8 +470,10 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
         xnei(1:ndim)=xcen(1:ndim)+xSNnei(1:ndim,j)
         ! Periodic boundary conditions
         do idim=1,ndim
-           if(xnei(idim)<                    0.0d0)xnei(idim)=xnei(idim)+m%ckey_max(hash_cell(0))
-           if(xnei(idim)>=m%ckey_max(hash_cell(0)))xnei(idim)=xnei(idim)-m%ckey_max(hash_cell(0))
+           if(r%periodic(idim))then
+              if(xnei(idim)< m%box_ckey_min(idim,hash_cell(0)))xnei(idim)=xnei(idim)-m%box_ckey_min(idim,hash_cell(0))+m%box_ckey_max(idim,hash_cell(0))
+              if(xnei(idim)>=m%box_ckey_max(idim,hash_cell(0)))xnei(idim)=xnei(idim)+m%box_ckey_min(idim,hash_cell(0))-m%box_ckey_max(idim,hash_cell(0))
+           endif
         end do
 
         ! Get neighboring cell at current level

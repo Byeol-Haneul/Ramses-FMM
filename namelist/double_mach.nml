@@ -17,14 +17,15 @@ nsuperoct=0
 levelmin=6
 levelmax=12
 ngridmax=800000
+/
+
+&BOUNDARY_PARAMS
+bound_levelmin=6
 box_size=4.0
 box_xmin=4
 box_ymin=13
 box_xmax=-4
 box_ymax=-13
-/
-
-&BOUNDARY_PARAMS
 nbound=5
 periodic=.false.,.false.
 bound_dir=   1,  1,  2,  2,  2

@@ -78,8 +78,8 @@ subroutine star_rt_feedback(s, p, ilevel)
   associate(r=>s%r, g=>s%g, m=>s%m)
 
   ! Mesh spacing in that level
-  dx_loc = r%boxlen / 2**ilevel 
-  vol_loc = dx_loc**ndim
+  dx_loc=r%boxlen/2**ilevel
+  vol_loc=dx_loc**ndim
 
   ! Conversion factor from user units to cgs units
   call units(r, g, scale_l, scale_t, scale_d, scale_v, scale_nH, scale_T2)
@@ -111,7 +111,7 @@ subroutine star_rt_feedback(s, p, ilevel)
 
      ! Find parent cell at level ilevel
      do idim=1,ndim
-        ckey(idim)=int(p%xp(ipart,idim)/dx_loc)
+        ckey(idim)=int((p%xp(ipart,idim)+m%skip(idim))/dx_loc)
      end do
 
      scale_inp_cell=scale_inp/dt_Gyr
@@ -126,7 +126,7 @@ subroutine star_rt_feedback(s, p, ilevel)
 
         ! NGP at level ilevel-1
         do idim=1,ndim
-           ckey(idim)=int(p%xp(ipart,idim)/dx_loc/2)
+           ckey(idim)=int((p%xp(ipart,idim)+m%skip(idim))/dx_loc/2)
         end do
 
         ! Account for larger volume in coarser cell

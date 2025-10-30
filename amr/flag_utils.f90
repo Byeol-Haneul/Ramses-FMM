@@ -428,7 +428,6 @@ subroutine sink_flag(s,p,ilevel)
    use cache_commons
    use cache
    use marshal, only: pack_fetch_flag, unpack_fetch_flag
-   !use flag_utils, only: init_flush_initflag, pack_flush_initflag, unpack_flush_initflag
    use hilbert
    implicit none
    type(ramses_t)::s
@@ -447,15 +446,15 @@ subroutine sink_flag(s,p,ilevel)
    real(kind=8),dimension(1:3)::xcen,xnei
    type(oct),pointer::gridp,gridn
    type(msg_int4)::dummy_int4
- 
+
 #ifdef HYDRO
 #if NDIM==3
    associate(r=>s%r,g=>s%g,m=>s%m)
- 
+
    ! Mesh spacing in that level
-   dx_loc = r%boxlen / 2**ilevel 
-   vol_loc = dx_loc**ndim
- 
+   dx_loc=r%boxlen/2**ilevel
+   vol_loc=dx_loc**ndim
+
    ! Compute number of cells within sink sphere
    nrad = r%sink_b_spline_order
    rrad = dble(nrad)
@@ -489,49 +488,54 @@ subroutine sink_flag(s,p,ilevel)
          enddo
       enddo
    enddo
- 
+
    ! Open cache for array uold (fetch) and unew (flush)
    call open_cache(s, table=m%grid_dict, data_size=storage_size(m%grid(1))/32, &
                  hilbert=m%domain, pack_size=storage_size(dummy_int4)/32, &
                  pack=pack_fetch_flag, unpack=unpack_fetch_flag, &
                  init=init_flush_initflag, flush=pack_flush_initflag, combine=unpack_flush_initflag)
- 
+
    ! Loop over sink particles at current level and finer levels
    hash_nbor(0) = ilevel+1
    do ipart = p%headp(ilevel), p%npart
- 
+
       ! Sink sphere center in units of current level Cartesian coordinates
-      xcen(1:ndim) = p%xp(ipart,1:ndim) / dx_loc
- 
+      xcen(1:ndim) = (p%xp(ipart,1:ndim)+m%skip(idim)) / dx_loc
+
       ! Collect sink sphere sampling points
       do i_nei = 1, n_nei
- 
+
          ! Compute neighboring cell coordinates
          xnei(1:ndim) = xcen(1:ndim) + x_nei(1:ndim, i_nei)
+
          ! Periodic boundary conditions
          do idim=1,ndim
-            if(xnei(idim)<                0.0d0)xnei(idim)=xnei(idim)+m%ckey_max(ilevel+1)
-            if(xnei(idim)>=m%ckey_max(ilevel+1))xnei(idim)=xnei(idim)-m%ckey_max(ilevel+1)
+            if(r%periodic(idim))then
+               if(xnei(idim)< m%box_ckey_min(idim,ilevel+1))xnei(idim)=xnei(idim)-m%box_ckey_min(idim,ilevel+1)+m%box_ckey_max(idim,ilevel+1)
+               if(xnei(idim)>=m%box_ckey_max(idim,ilevel+1))xnei(idim)=xnei(idim)+m%box_ckey_min(idim,ilevel+1)-m%box_ckey_max(idim,ilevel+1)
+            endif
          end do
+
          ! Get neighboring cell at current level
          hash_nbor(1:ndim) = int(xnei(1:ndim))
          call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.true.,fetch_cache=.false.)
+
          ! If missing, then cycle. This should never happens if sink_refine=.true.
          if(.not.associated(gridn))cycle
- 
+
          ! Set refinement map flag1 to 1
          gridn%flag1(icelln)=1
- 
+
       end do
       ! End loop over sink sphere sampling points
- 
+
    end do
    ! End loop over particles
- 
+
    call close_cache(s,m%grid_dict)
- 
+
    deallocate(x_nei)
- 
+
    end associate
 #endif
 #endif

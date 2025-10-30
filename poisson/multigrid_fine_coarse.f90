@@ -82,17 +82,17 @@ subroutine restrict_mask(s,ifinelevel,allmasked)
   
   hash_key(0)=ifinelevel
   
-  call open_cache(s,table=m%mg_dict,     data_size=storage_size(m%grid(1))/32,&
-                     hilbert=m%domain_mg, pack_size=storage_size(dummy_small_realdp)/32,&
-                     pack=pack_fetch_phi,unpack=unpack_fetch_phi,&
-                     init=init_flush_restrict_mask,&
-                     flush=pack_flush_restrict_mask, combine=unpack_flush_restrict_mask)
+  call open_cache(s,table=m%mg_dict, data_size=storage_size(m%grid(1))/32,&
+       hilbert=m%domain_mg, pack_size=storage_size(dummy_small_realdp)/32,&
+       pack=pack_fetch_phi, unpack=unpack_fetch_phi,&
+       init=init_flush_restrict_mask,&
+       flush=pack_flush_restrict_mask, combine=unpack_flush_restrict_mask)
   
   ! Loop over grids
   do ichild=m%head_mg(ifinelevel),m%tail_mg(ifinelevel)
 
      ! Loop over cells
-     do ind=1,twotondim        
+     do ind=1,twotondim
 
         hash_key(1:ndim)=m%grid(ichild)%ckey(1:ndim)
 
@@ -235,6 +235,7 @@ subroutine cmp_residual_mg(s,hash_dict, ilevel)
   use cache
   use hilbert
   use hash
+  use boundaries, only: init_bound_mg
   implicit none
   type(ramses_t)::s
   integer, intent(in) :: ilevel
@@ -266,9 +267,9 @@ subroutine cmp_residual_mg(s,hash_dict, ilevel)
   iii(3,1,1:8)=(/5,5,5,5,0,0,0,0/); jjj(3,1,1:8)=(/5,6,7,8,1,2,3,4/)
   iii(3,2,1:8)=(/0,0,0,0,6,6,6,6/); jjj(3,2,1:8)=(/5,6,7,8,1,2,3,4/)
   
-  call open_cache(s,table=hash_dict,     data_size=storage_size(m%grid(1))/32,&
-                     hilbert=m%domain_mg, pack_size=storage_size(dummy_twin_realdp)/32,&
-                     pack=pack_fetch_mg,unpack=unpack_fetch_mg)
+  call open_cache(s,table=hash_dict, data_size=storage_size(m%grid(1))/32,&
+       hilbert=m%domain_mg, pack_size=storage_size(dummy_twin_realdp)/32,&
+       pack=pack_fetch_mg, unpack=unpack_fetch_mg, bound=init_bound_mg)
 
   hash_nbor(0)=ilevel
 
@@ -289,8 +290,10 @@ subroutine cmp_residual_mg(s,hash_dict, ilevel)
 
         ! Periodic boundary conditions
         do idim=1,ndim
-           if(hash_nbor(idim)<0)hash_nbor(idim)=m%ckey_max(ilevel)-1
-           if(hash_nbor(idim)==m%ckey_max(ilevel))hash_nbor(idim)=0
+           if(r%periodic(idim))then
+              if(hash_nbor(idim)< m%box_ckey_min(idim,ilevel))hash_nbor(idim)=m%box_ckey_max(idim,ilevel)-1
+              if(hash_nbor(idim)>=m%box_ckey_max(idim,ilevel))hash_nbor(idim)=m%box_ckey_min(idim,ilevel)
+           endif
         enddo
 
         ! Get neighbouring grid using read-only cache
@@ -463,6 +466,7 @@ subroutine gauss_seidel_mg(s,hash_dict,ilevel,safe,redstep)
   use cache
   use hilbert
   use hash
+  use boundaries, only: init_bound_mg
   implicit none
   type(ramses_t)::s
   integer, intent(in) :: ilevel
@@ -501,15 +505,15 @@ subroutine gauss_seidel_mg(s,hash_dict,ilevel,safe,redstep)
   iii(3,1,1:8)=(/5,5,5,5,0,0,0,0/); jjj(3,1,1:8)=(/5,6,7,8,1,2,3,4/)
   iii(3,2,1:8)=(/0,0,0,0,6,6,6,6/); jjj(3,2,1:8)=(/5,6,7,8,1,2,3,4/)
   
-  call open_cache(s,table=hash_dict,     data_size=storage_size(m%grid(1))/32,&
-                     hilbert=m%domain_mg, pack_size=storage_size(dummy_twin_realdp)/32,&
-                     pack=pack_fetch_mg,unpack=unpack_fetch_mg)
+  call open_cache(s,table=hash_dict, data_size=storage_size(m%grid(1))/32,&
+       hilbert=m%domain_mg, pack_size=storage_size(dummy_twin_realdp)/32,&
+       pack=pack_fetch_mg, unpack=unpack_fetch_mg, bound=init_bound_mg)
 
   hash_nbor(0)=ilevel
 
   ! Loop over grids
   do igrid=m%head_mg(ilevel),m%tail_mg(ilevel)
-     
+
      ! Get central oct potential and distance
      do ind=1,twotondim
         phi_nbor(ind,0)=m%grid(igrid)%phi(ind)
@@ -524,8 +528,10 @@ subroutine gauss_seidel_mg(s,hash_dict,ilevel,safe,redstep)
 
         ! Periodic boundary conditions
         do idim=1,ndim
-           if(hash_nbor(idim)<0)hash_nbor(idim)=m%ckey_max(ilevel)-1
-           if(hash_nbor(idim)==m%ckey_max(ilevel))hash_nbor(idim)=0
+           if(r%periodic(idim))then
+              if(hash_nbor(idim)< m%box_ckey_min(idim,ilevel))hash_nbor(idim)=m%box_ckey_max(idim,ilevel)-1
+              if(hash_nbor(idim)>=m%box_ckey_max(idim,ilevel))hash_nbor(idim)=m%box_ckey_min(idim,ilevel)
+           endif
         enddo
 
         ! Get neighbouring grid using read-only cache
@@ -707,12 +713,12 @@ subroutine restrict_residual(s,ifinelevel)
 
   hash_key(0)=ifinelevel
 
-  call open_cache(s,table=m%mg_dict,     data_size=storage_size(m%grid(1))/32,&
-                     hilbert=m%domain_mg, pack_size=storage_size(dummy_small_realdp)/32,&
-                     pack=pack_fetch_restrict_res,unpack=unpack_fetch_restrict_res,&
-                     init=init_flush_restrict_res,&
-                     flush=pack_flush_restrict_res, combine=unpack_flush_restrict_res)
-  
+  call open_cache(s,table=m%mg_dict, data_size=storage_size(m%grid(1))/32,&
+       hilbert=m%domain_mg, pack_size=storage_size(dummy_small_realdp)/32,&
+       pack=pack_fetch_restrict_res, unpack=unpack_fetch_restrict_res,&
+       init=init_flush_restrict_res, flush=pack_flush_restrict_res,&
+       combine=unpack_flush_restrict_res)
+
   ! Loop over grids
   do ichild=m%head_mg(ifinelevel),m%tail_mg(ifinelevel)
      
@@ -885,13 +891,14 @@ subroutine interpolate_and_correct(s,ifinelevel)
   use cache
   use hilbert
   use hash
+  use boundaries, only: init_bound_mg
   implicit none
   type(ramses_t)::s
   integer, intent(in) :: ifinelevel
-  
+
   ! Interpolate the solution of the coarse level (stored in grid(igrid)%phi(icell))
-  ! and corrct the solutionn of the fine level (stored in grid(ichild)%phi(ind))
-  
+  ! and correct the solution of the fine level (stored in grid(ichild)%phi(ind))
+
   integer(kind=8),dimension(0:ndim) :: hash_key
   integer,dimension(1:threetondim) :: igrid_nbor,ind_nbor
   type(nbor),dimension(1:threetondim) :: grid_nbor
@@ -904,7 +911,7 @@ subroutine interpolate_and_correct(s,ifinelevel)
   real(kind=8),dimension(1:twotondim)::corr
   type(oct),pointer::gridp
   type(msg_small_realdp)::dummy_small_realdp
-  
+
   associate(r=>s%r,g=>s%g,m=>s%m)
 
   ! Local constants
@@ -913,7 +920,7 @@ subroutine interpolate_and_correct(s,ifinelevel)
   cc = 9.0D0*aa
   dd = 27.D0*aa 
   bbb(:)  =(/aa ,bb ,bb ,cc ,bb ,cc ,cc ,dd/)
-  
+
   ccc(:,1)=(/1 ,2 ,4 ,5 ,10,11,13,14/)
   ccc(:,2)=(/3 ,2 ,6 ,5 ,12,11,15,14/)
   ccc(:,3)=(/7 ,8 ,4 ,5 ,16,17,13,14/)
@@ -922,10 +929,10 @@ subroutine interpolate_and_correct(s,ifinelevel)
   ccc(:,6)=(/21,20,24,23,12,11,15,14/)
   ccc(:,7)=(/25,26,22,23,16,17,13,14/)
   ccc(:,8)=(/27,26,24,23,18,17,15,14/)
-  
-  call open_cache(s,table=m%mg_dict,     data_size=storage_size(m%grid(1))/32,&
-                     hilbert=m%domain_mg, pack_size=storage_size(dummy_small_realdp)/32,&
-                     pack=pack_fetch_phi,unpack=unpack_fetch_phi)
+
+  call open_cache(s,table=m%mg_dict, data_size=storage_size(m%grid(1))/32,&
+       hilbert=m%domain_mg, pack_size=storage_size(dummy_small_realdp)/32,&
+       pack=pack_fetch_phi, unpack=unpack_fetch_phi, bound=init_bound_mg)
 
   hash_key(0)=ifinelevel
 
@@ -934,10 +941,10 @@ subroutine interpolate_and_correct(s,ifinelevel)
 
      ! For fine level, correction is interpolated from coarser level solution
      hash_key(1:ndim)=m%grid(ichild)%ckey(1:ndim)
-     
+
      ! Get 3**ndim neighbouring parent cell using a read-only cache
      call get_threetondim_nbor_parent_cell(s,hash_key,m%mg_dict,grid_nbor,ind_nbor,flush_cache=.false.,fetch_cache=.true.)
-     
+
      ! Loop over cells
      do ind=1,twotondim
 
@@ -1118,6 +1125,7 @@ subroutine set_scan_flag(s,hash_dict,ilevel)
   use cache
   use hilbert
   use hash
+  use boundaries, only: init_bound_mg
   implicit none
   type(ramses_t)::s
   integer, intent(in) :: ilevel
@@ -1132,7 +1140,7 @@ subroutine set_scan_flag(s,hash_dict,ilevel)
   real(kind=8)::dis_c
   type(oct),pointer::gridp
   type(msg_small_realdp)::dummy_small_realdp
-  
+
   associate(r=>s%r,g=>s%g,m=>s%m)
 
   iii(1,1,1:8)=(/1,0,1,0,1,0,1,0/); jjj(1,1,1:8)=(/2,1,4,3,6,5,8,7/)
@@ -1141,10 +1149,10 @@ subroutine set_scan_flag(s,hash_dict,ilevel)
   iii(2,2,1:8)=(/0,0,4,4,0,0,4,4/); jjj(2,2,1:8)=(/3,4,1,2,7,8,5,6/)
   iii(3,1,1:8)=(/5,5,5,5,0,0,0,0/); jjj(3,1,1:8)=(/5,6,7,8,1,2,3,4/)
   iii(3,2,1:8)=(/0,0,0,0,6,6,6,6/); jjj(3,2,1:8)=(/5,6,7,8,1,2,3,4/)
-  
-  call open_cache(s,table=hash_dict,     data_size=storage_size(m%grid(1))/32,&
-                     hilbert=m%domain_mg, pack_size=storage_size(dummy_small_realdp)/32,&
-                     pack=pack_fetch_scan,unpack=unpack_fetch_scan)
+
+  call open_cache(s,table=hash_dict, data_size=storage_size(m%grid(1))/32,&
+       hilbert=m%domain_mg, pack_size=storage_size(dummy_small_realdp)/32,&
+       pack=pack_fetch_scan, unpack=unpack_fetch_scan, bound=init_bound_mg)
 
   hash_nbor(0)=ilevel
 
@@ -1164,8 +1172,10 @@ subroutine set_scan_flag(s,hash_dict,ilevel)
 
         ! Periodic boundary conditions
         do idim=1,ndim
-           if(hash_nbor(idim)<0)hash_nbor(idim)=m%ckey_max(ilevel)-1
-           if(hash_nbor(idim)==m%ckey_max(ilevel))hash_nbor(idim)=0
+           if(r%periodic(idim))then
+              if(hash_nbor(idim)< m%box_ckey_min(idim,ilevel))hash_nbor(idim)=m%box_ckey_max(idim,ilevel)-1
+              if(hash_nbor(idim)>=m%box_ckey_max(idim,ilevel))hash_nbor(idim)=m%box_ckey_min(idim,ilevel)
+           endif
         enddo
 
         ! Get neighbouring grid using read-only cache
@@ -1222,7 +1232,7 @@ subroutine set_scan_flag(s,hash_dict,ilevel)
   call close_cache(s,hash_dict)
 
   end associate
-  
+
 end subroutine set_scan_flag
 
 subroutine pack_fetch_scan(grid,msg_size,msg_array)
@@ -1261,7 +1271,7 @@ subroutine unpack_fetch_scan(grid,msg_size,msg_array,hash_key)
   grid%lev=hash_key(0)
   grid%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
-  
+
 #ifdef GRAV
   do ind=1,twotondim
      grid%f(ind,3)=msg%realdp(ind)
