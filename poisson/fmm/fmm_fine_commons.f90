@@ -319,7 +319,7 @@ integer, dimension(twotondim, ndim), parameter :: displacement_list = reshape( &
   ! Runtime-allocated arrays depending on g%level_fmm_to_amr
   ! =====================================================
   real(kind=8), allocatable :: D0_list(:,:,:,:), D1_list(:,:,:,:), D2_list(:,:,:,:)
-  real(kind=8), allocatable :: intermediate_diff_list(:,:,:,:,:)
+  real(kind=8), allocatable :: intermediate_diff_list(:,:,:,:,:), cell_diff_list(:,:,:,:)
   real(kind=8), allocatable :: far_diff_list(:,:,:)
   integer, allocatable :: fmm_grid_center_offset(:,:)
   logical, allocatable :: direct_neighbor_list(:,:,:)
@@ -355,6 +355,7 @@ integer, dimension(twotondim, ndim), parameter :: displacement_list = reshape( &
   allocate(far_diff_list(nbox, twotondim, ndim))
   allocate(fmm_grid_center_offset(nbox, ndim))
   allocate(direct_neighbor_list(threetondim, twotondim, nbox)) ! we can reduce this if we really need to
+  allocate(cell_diff_list(threetondim, twotondim, nbox, ndim))
 
   ! Precalculate differences
   do igrid=1, nbox
@@ -379,7 +380,7 @@ integer, dimension(twotondim, ndim), parameter :: displacement_list = reshape( &
       do igrid=1,nbox
         cc_icell = (fmm_grid_center_offset(igrid, :) + nfine/2)/(nfine/2) ! respect to grid left corner / fmm cell unit
         cycle_flag = .true.
-        !cell_diff_list(ind, jcell, igrid, :) = cc_icell - cc_jcell
+        cell_diff_list(ind, jcell, igrid, :) = cc_icell - cc_jcell
         do idim=1, ndim
           if (abs(cc_icell(idim) - cc_jcell(idim)) > 1) cycle_flag = .false.
         end do
@@ -440,21 +441,16 @@ integer, dimension(twotondim, ndim), parameter :: displacement_list = reshape( &
 
         do jcell = 1, twotondim
           ! Wrap-around offsets
-          offset = offset_list(ind,:)
           cycle_flag = .false.
-          hash_nbor_periodic(1:ndim) = hash_fmm_grid(1:ndim) + offset
+          cc_jcell_periodic = hash_fmm_cell(1:ndim) + cell_diff_list(ind, jcell, igrid,:)
           do idim = 1, ndim
-            nstride = 2**(idim-1)
-            cc_jcell_periodic(idim) = 2*hash_nbor_periodic(idim) + MOD((jcell-1)/nstride, 2)
             if ((cc_jcell_periodic(idim) < m%box_ckey_min(idim, ilevel)) .or. &
                 (cc_jcell_periodic(idim) >= m%box_ckey_max(idim, ilevel))) then
               cycle_flag = .true.
             end if
           end do
-          if (direct_neighbor_list(ind, jcell, igrid)) then
-            cycle_flag = .true.
-          end if
-          if (cycle_flag) cycle
+
+          if (cycle_flag .or. direct_neighbor_list(ind, jcell, igrid)) cycle
 
           multipole = gridp_nbor%multipole(jcell, 1:multipole_size)
           diff  = intermediate_diff_list(ind, jcell, igrid, icell, :)
@@ -469,7 +465,7 @@ integer, dimension(twotondim, ndim), parameter :: displacement_list = reshape( &
     end do
   end do
 
-  deallocate(D0_list, D1_list, D2_list, intermediate_diff_list, far_diff_list, direct_neighbor_list)
+  deallocate(D0_list, D1_list, D2_list, intermediate_diff_list, far_diff_list, direct_neighbor_list, cell_diff_list)
   call close_cache(s, m%mg_dict)
   end associate
 end subroutine fmm_amr_intermediate
