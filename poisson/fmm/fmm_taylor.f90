@@ -118,12 +118,13 @@ end subroutine calc_taylor_from_multipole
 !################################################################
 !################################################################
 !################################################################
-subroutine calc_phi_from_multipole(R, multipoles, phi_out)
+subroutine calc_phi_from_multipole(R, D0, D1, D2, multipoles, phi_out)
   use amr_parameters, only: ndim, multipole_size, taylor_size
   implicit none
 
   integer :: nq, no, i, j, k, idxC2, idxC3
   real(kind=8), intent(in)  :: R(ndim)
+  real(kind=8), intent(in)  :: D0,D1,D2
   real(kind=8), intent(in)  :: multipoles(1:multipole_size)
   real(kind=8), intent(out) :: phi_out
 
@@ -132,25 +133,8 @@ subroutine calc_phi_from_multipole(R, multipoles, phi_out)
   real(kind=8) :: M1(ndim)
   real(kind=8) :: M2(ndim,ndim)
 
-  ! Displacement
-  real(kind=8) :: dist
-
   ! Precompute
   real(kind=8) :: trM, S, MR(ndim), RdotM1
-  real(kind=8) :: D0,D1,D2,D3
-
-  !------------------------------------------------------------------
-  ! Compute displacement and distance
-  !------------------------------------------------------------------
-  dist = sqrt(sum(R(:)**2))
-  if (dist == 0.0D0) dist = 1.0D-12
-
-  !------------------------------------------------------------------
-  ! Derivatives for g(r) = 1/r
-  !------------------------------------------------------------------
-  D0 = 1.0D0 / dist
-  D1 = -1.0D0 / dist**3
-  D2 = 3.0D0 / dist**5
 
   !------------------------------------------------------------------
   ! Reconstruct multipoles from 1D array

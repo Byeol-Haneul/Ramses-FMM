@@ -305,7 +305,7 @@ subroutine fmm_amr_intermediate(s, ilevel)
   real(kind=8), dimension(taylor_size) :: temp_taylor, parent_taylor
   logical :: cycle_flag, neighbors_cached
 
-  real(kind=8) :: dist
+  real(kind=8) :: dist, D0, D1, D2
   real(kind=8), dimension(threetondim, ndim) :: offset_list
 
 integer, dimension(twotondim, ndim), parameter :: displacement_list = reshape( &
@@ -318,7 +318,7 @@ integer, dimension(twotondim, ndim), parameter :: displacement_list = reshape( &
   ! =====================================================
   ! Runtime-allocated arrays depending on g%level_fmm_to_amr
   ! =====================================================
-  real(kind=8), allocatable :: D0(:,:,:,:), D1(:,:,:,:), D2(:,:,:,:), D3(:,:,:,:)
+  real(kind=8), allocatable :: D0_list(:,:,:,:), D1_list(:,:,:,:), D2_list(:,:,:,:)
   real(kind=8), allocatable :: intermediate_diff_list(:,:,:,:,:)
   real(kind=8), allocatable :: far_diff_list(:,:,:)
 
@@ -345,10 +345,9 @@ integer, dimension(twotondim, ndim), parameter :: displacement_list = reshape( &
   ! nbox is the number of cells at the target AMR level
   nbox = nfine ** ndim
 
-  allocate(D0(threetondim, twotondim, nbox, twotondim))
-  allocate(D1(threetondim, twotondim, nbox, twotondim))
-  allocate(D2(threetondim, twotondim, nbox, twotondim))
-  allocate(D3(threetondim, twotondim, nbox, twotondim))
+  allocate(D0_list(threetondim, twotondim, nbox, twotondim))
+  allocate(D1_list(threetondim, twotondim, nbox, twotondim))
+  allocate(D2_list(threetondim, twotondim, nbox, twotondim))
 
   allocate(intermediate_diff_list(threetondim, twotondim, nbox, twotondim, ndim))
   allocate(far_diff_list(nbox, twotondim, ndim))
@@ -378,10 +377,9 @@ integer, dimension(twotondim, ndim), parameter :: displacement_list = reshape( &
           intermediate_diff_list(ind, jcell, igrid, icell, :) = diff
           dist = sqrt(sum(diff(:)**2))
           if (dist == 0.0D0) dist = 1.0D-12
-          D0(ind, jcell, igrid, icell) = 1.0D0 / dist
-          D1(ind, jcell, igrid, icell) = -1.0D0 / dist**3
-          D2(ind, jcell, igrid, icell) = 3.0D0 / dist**5
-          D3(ind, jcell, igrid, icell) = -15.0D0 / dist**7
+          D0_list(ind, jcell, igrid, icell) = 1.0D0 / dist
+          D1_list(ind, jcell, igrid, icell) = -1.0D0 / dist**3
+          D2_list(ind, jcell, igrid, icell) = 3.0D0 / dist**5
         end do
       end do
     end do
@@ -407,7 +405,6 @@ integer, dimension(twotondim, ndim), parameter :: displacement_list = reshape( &
         end do
       end if
 
-      call get_grid_pos(hash_fmm_grid, r%boxlen, xx_pgrid)
       call get_grid(s, hash_fmm_grid, m%mg_dict, gridp_parent, flush_cache=.false., fetch_cache=.true.)
       parent_taylor = gridp_parent%taylor_coeff
 
@@ -416,19 +413,10 @@ integer, dimension(twotondim, ndim), parameter :: displacement_list = reshape( &
       prev_hash_fmm_grid = hash_fmm_grid
     end if
 
-    ! --- Precompute AMR cell positions ---
-    do icell = 1, twotondim
-      call get_cell_pos(hash_key, icell, r%boxlen, xx_icell_list(icell, :), cc_icell_list(icell, :))
-    end do
-
     ! Loop over AMR cells
     do icell = 1, twotondim
-      xx_icell = xx_icell_list(icell, :)
-      cc_icell = cc_icell_list(icell, :)
-
       ! Far field
       phi = 0.0D0
-      !call calc_phi(parent_taylor, xx_icell - xx_pgrid, phi)
       diff = far_diff_list(igrid, icell, :)
       call calc_phi(parent_taylor, diff, phi)
 
@@ -439,21 +427,9 @@ integer, dimension(twotondim, ndim), parameter :: displacement_list = reshape( &
         gridp_nbor => grid_nbor(ind)%p
         hash_nbor(1:ndim) = gridp_nbor%ckey(1:ndim)
 
-        ! Precompute neighbor cell positions
         do jcell = 1, twotondim
-          call get_cell_pos(hash_nbor, jcell, r%boxlen, xx_jcell_list(jcell, :), cc_jcell_list(jcell, :))
-        end do
-
-        do jcell = 1, twotondim
-          xx_jcell = xx_jcell_list(jcell, :)
-          cc_jcell = cc_jcell_list(jcell, :)
-
-          ! Skip direct neighbor
-          if (is_direct_neighbor(hash_fmm_cell(1:ndim), cc_jcell, ilevel - g%level_fmm_to_amr)) cycle
-
           ! Wrap-around offsets
           offset = offset_list(ind,:)
-
           cycle_flag = .false.
           hash_nbor_periodic(1:ndim) = hash_fmm_grid(1:ndim) + offset
           do idim = 1, ndim
@@ -465,12 +441,17 @@ integer, dimension(twotondim, ndim), parameter :: displacement_list = reshape( &
               cycle_flag = .true.
             end if
           end do
+          if (is_direct_neighbor(hash_fmm_cell(1:ndim), cc_jcell_periodic, ilevel - g%level_fmm_to_amr)) then
+            cycle_flag = .true.
+          end if
           if (cycle_flag) cycle
 
           multipole = gridp_nbor%multipole(jcell, 1:multipole_size)
-
           diff  = intermediate_diff_list(ind, jcell, igrid, icell, :)
-          call calc_phi_from_multipole(diff, multipole, phi_out)
+          D0 = D0_list(ind, jcell, igrid, icell)
+          D1 = D1_list(ind, jcell, igrid, icell)
+          D2 = D2_list(ind, jcell, igrid, icell)
+          call calc_phi_from_multipole(diff, D0, D1, D2, multipole, phi_out)
           phi = phi + phi_out
         end do
       end do
@@ -478,7 +459,7 @@ integer, dimension(twotondim, ndim), parameter :: displacement_list = reshape( &
     end do
   end do
 
-  deallocate(D0, D1, D2, D3, intermediate_diff_list, far_diff_list)
+  deallocate(D0_list, D1_list, D2_list, intermediate_diff_list, far_diff_list)
   call close_cache(s, m%mg_dict)
   end associate
 end subroutine fmm_amr_intermediate

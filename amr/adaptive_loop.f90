@@ -131,7 +131,7 @@ subroutine adaptive_loop(pst)
 
      call getmem(core_mem)
      call writemem(core_mem)
-     
+     STOP !!! Jun-Young for testing!!
   end do
 
   call m_output_timer(pst,.false.,'dummy')
