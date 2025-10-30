@@ -466,7 +466,11 @@ subroutine input_part_ramses(r,g,p,ncpu_file,npart_file,mpart_loc)
   p%tailp=p%npart
   p%headp(r%levelmin)=1
   p%tailp(r%levelmin)=p%npart
-        
+  if(ANY(.not.r%periodic(1:ndim)))then
+     p%headp(r%levelmin-1)=1
+     p%tailp(r%levelmin-1)=0
+  endif
+
 end subroutine input_part_ramses
 !#########################################################################
 !#########################################################################

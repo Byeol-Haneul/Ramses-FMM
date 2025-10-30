@@ -296,6 +296,10 @@ subroutine input_part_zoom(r,g,p,m)
   p%tailp=p%npart
   p%headp(r%levelmin)=1
   p%tailp(r%levelmin)=p%npart
+  if(ANY(.not.r%periodic(1:ndim)))then
+     p%headp(r%levelmin-1)=1
+     p%tailp(r%levelmin-1)=0
+  endif
 
 #endif
   
