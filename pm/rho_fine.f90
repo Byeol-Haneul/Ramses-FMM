@@ -86,6 +86,12 @@ subroutine m_rho_fine(pst,ilevel,rtype)
   ! Compute particle contribution to density field
   !-------------------------------------------------------
   if(r%pic)then
+
+     ! For non periodic BC, split particles that left the box
+     if(ilevel==r%levelmin.AND.ANY(.not.r%periodic(1:ndim)))then
+        call r_split_part(pst,ilevel-1,1)
+     endif
+
      ! Loop over all finer levels from coarse to fine
      do i=ilevel,r%nlevelmax
 

@@ -149,10 +149,10 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
   end if
 
   ! Deal with particles that left the computational domain
-  if(ilevel==r%levelmin-1)then
+  if(ilevel==r%levelmin.and.ANY(.not.r%periodic(1:ndim)))then
 
-     ! Loop over particles
-     do ipart=p%headp(ilevel),p%tailp(ilevel)
+     ! Loop over particles outside the box
+     do ipart=p%headp(ilevel-1),p%tailp(ilevel-1)
 
         ! Get particle position
         do idim=1,ndim
@@ -168,10 +168,10 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
         if(action_part==action_kick_drift)then
 
            ! Update velocity (use levelmin time step)
-           p%vp(ipart,1:ndim)=p%vp(ipart,1:ndim)+ff(1:ndim)*0.5d0*g%dtnew(ilevel+1)
+           p%vp(ipart,1:ndim)=p%vp(ipart,1:ndim)+ff(1:ndim)*0.5d0*g%dtnew(ilevel)
 
            ! Update position (use levelmin time step)
-           p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel+1)
+           p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
 
         else if(action_part.EQ.action_kick_only)then
 
@@ -179,7 +179,7 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
            dteff=g%dtnew(p%levelp(ipart))
 
            ! Update level to levelmin
-           p%levelp(ipart)=ilevel+1
+           p%levelp(ipart)=ilevel
 
            ! Update velocity
            p%vp(ipart,1:ndim)=p%vp(ipart,1:ndim)+ff(1:ndim)*0.5d0*dteff
@@ -187,7 +187,8 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
         endif
 
      end do
-     return
+     ! End loop over particles
+
   endif
 
   ! Mesh spacing in that level
@@ -292,11 +293,17 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
      ! Gather 3-force
      ff(1:ndim)=0.0
      if(ok_level)then
-        do ind=1,twotondim
 #ifdef GRAV
+        do ind=1,twotondim
            ff(1:ndim)=ff(1:ndim)+gridp(ind)%p%f(icell(ind),1:ndim)*vol(ind)
-#endif
         end do
+#ifdef OUTPUT_PARTICLE_POTENTIAL
+        p%phip(ipart)=0.0
+        do ind=1,twotondim
+           p%phip(ipart)=p%phip(ipart)+gridp(ind)%p%phi(icell(ind))*vol(ind)
+        end do
+#endif
+#endif
      endif
 
      ! Perform kick, or drift, or both
