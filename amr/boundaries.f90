@@ -398,12 +398,12 @@ subroutine init_bound_refine(r,g,m,grid,grid_ref,ibound)
         xx(1,idim)=(2*grid%ckey(idim)+MOD((ind-1)/nstride,2)+0.5)*dx-m%skip(idim)
      end do
      ! Call analytical acceleration routine
-     call gravana(r,g,xx,ff,dx,1)
+     call gravana(r,g,xx,ff,1)
      do idim=1,ndim
         grid%f(ind,idim)=ff(1,idim)
      end do
      ! Call analytical potential routine
-     call phiana(r,g,xx,phi,dx,1)
+     call phiana(r,g,xx,phi,1)
      grid%phi(ind)=phi(1)
      grid%phi_old(ind)=phi(1)
   end do
@@ -440,7 +440,7 @@ subroutine init_bound_phi(r,g,m,grid,grid_ref,ibound)
         xx(1,idim)=(2*grid%ckey(idim)+MOD((ind-1)/nstride,2)+0.5)*dx-m%skip(idim)
      end do
      ! Call analytical potential routine
-     call phiana(r,g,xx,pp,dx,1)
+     call phiana(r,g,xx,pp,1)
      grid%phi(ind)=pp(1)
      grid%phi_old(ind)=pp(1)
      ! Set mask to -1
@@ -502,7 +502,7 @@ subroutine init_bound_grav(r,g,m,grid,grid_ref,ibound)
         xx(1,idim)=(2*grid%ckey(idim)+MOD((ind-1)/nstride,2)+0.5)*dx-m%skip(idim)
      end do
      ! Call analytical acceleration routine
-     call gravana(r,g,xx,ff,dx,1)
+     call gravana(r,g,xx,ff,1)
      do idim=1,ndim
         grid%f(ind,idim)=ff(1,idim)
      end do

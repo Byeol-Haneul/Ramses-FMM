@@ -183,7 +183,7 @@ subroutine multipole_leaf_cells(r,g,m,ilevel)
   logical::leaf_cell
 
   ! Mesh spacing in that level
-  dx_loc=r%boxlen/2**ilevel 
+  dx_loc=r%boxlen/2**ilevel
   vol_loc=dx_loc**ndim
 
 #ifdef HYDRO
@@ -517,7 +517,7 @@ subroutine cic_multipole(s,ilevel)
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
     
   ! Mesh spacing in that level
-  dx_loc=r%boxlen/2**ilevel 
+  dx_loc=r%boxlen/2**ilevel
   vol_loc=dx_loc**ndim
 
   ! Use hash table directly for cells (not for grids)
@@ -705,7 +705,7 @@ subroutine cic_part(s,p,ilevel,rtype)
   associate(r=>s%r,g=>s%g,m=>s%m)
 
   ! Mesh spacing in that level
-  dx_loc=r%boxlen/2**ilevel 
+  dx_loc=r%boxlen/2**ilevel
   vol_loc=dx_loc**ndim
 
   ! Are particles dark matter, stars or sinks?
@@ -1264,73 +1264,99 @@ subroutine split_part(s,p,ilevel)
   integer(i8b)::idp_tmp
   type(oct),pointer::gridp
   type(msg_int4)::dummy_int4
+  logical::in_domain
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
-  ! Mesh spacing in that level
-  dx_loc=r%boxlen/2**ilevel 
-  vol_loc=dx_loc**ndim
+  if(ilevel==r%levelmin-1)then
 
-  ! Open read-only cache for array refined
-  hash_key(0)=ilevel
-  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-                hilbert=m%domain,pack_size=storage_size(dummy_int4)/32,&
-                pack=pack_fetch_split,unpack=unpack_fetch_split)
-
-  ! Loop over particles
-  ix_ref=-1
-  npart_coarse=0
-  do i=p%headp(ilevel),p%tailp(r%nlevelmax)
-     ipart=p%sortp(i)
-
-     ! Acquire grid using read-only cache
-     ix = int((p%xp(ipart,1:ndim)+m%skip(1:ndim))/(2*dx_loc))
-     if(.NOT. ALL(ix.EQ.ix_ref))then
-        hash_key(1:ndim)=ix(1:ndim)
-        call get_grid(s,hash_key,m%grid_dict,gridp,flush_cache=.false.,fetch_cache=.true.)
-        ix_ref=ix
-     endif
-
-     ! If particle sits outside current level,
-     ! then it is clearly not in a refined cell.
-     ! This can happen during second adaptive step
-     if(.not.associated(gridp))then
-        npart_coarse=npart_coarse+1
-        p%levelp(ipart)=-p%levelp(ipart)
-     else
-        ! Rescale particle position at level ilevel
+     ! Loop over particles
+     npart_coarse=0
+     do i=p%headp(ilevel),p%tailp(r%nlevelmax)
+        p%sortp(i)=i
+        in_domain=.true.
         do idim=1,ndim
-           x(idim)=(p%xp(ipart,idim)+m%skip(idim))/dx_loc
+           if(.not. r%periodic(idim))then
+              if(p%xp(ipart,idim)<0.0d0.or.p%xp(ipart,idim)>=r%box_size(idim))in_domain=.false.
+           endif
         end do
-
-        ! Shift particle position to to 2x2x2 grid corner
-        do idim=1,ndim
-           ii(idim)=int(x(idim)-2*ix_ref(idim))
-        end do
-
-        ! Compute parent cell index
-#if NDIM==1
-        icell=1+ii(1)
-#endif
-#if NDIM==2
-        icell=1+ii(1)+2*ii(2)
-#endif
-#if NDIM==3
-        icell=1+ii(1)+2*ii(2)+4*ii(3)
-#endif
-        ! Increase counter if cell is not refined
-        if(.NOT.gridp%refined(icell))then
+        if(.not. in_domain)then
            npart_coarse=npart_coarse+1
            p%levelp(ipart)=-p%levelp(ipart)
         else
            p%sortp(i)=-p%sortp(i)
         endif
-     endif
+     end do
+     ! End loop over particles
 
-  end do
-  ! End loop over particles
+  else
 
-  call close_cache(s,m%grid_dict)
+     ! Mesh spacing in that level
+     dx_loc=r%boxlen/2**ilevel
+     vol_loc=dx_loc**ndim
+
+     ! Open read-only cache for array refined
+     hash_key(0)=ilevel
+     call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+          hilbert=m%domain,pack_size=storage_size(dummy_int4)/32,&
+          pack=pack_fetch_split,unpack=unpack_fetch_split)
+
+     ! Loop over particles
+     ix_ref=-1
+     npart_coarse=0
+     do i=p%headp(ilevel),p%tailp(r%nlevelmax)
+        ipart=p%sortp(i)
+
+        ! Acquire grid using read-only cache
+        ix = int((p%xp(ipart,1:ndim)+m%skip(1:ndim))/(2*dx_loc))
+        if(.NOT. ALL(ix.EQ.ix_ref))then
+           hash_key(1:ndim)=ix(1:ndim)
+           call get_grid(s,hash_key,m%grid_dict,gridp,flush_cache=.false.,fetch_cache=.true.)
+           ix_ref=ix
+        endif
+
+        ! If particle sits outside current level,
+        ! then it is clearly not in a refined cell.
+        ! This can happen during second adaptive step
+        if(.not.associated(gridp))then
+           npart_coarse=npart_coarse+1
+           p%levelp(ipart)=-p%levelp(ipart)
+        else
+           ! Rescale particle position at level ilevel
+           do idim=1,ndim
+              x(idim)=(p%xp(ipart,idim)+m%skip(idim))/dx_loc
+           end do
+
+           ! Shift particle position to to 2x2x2 grid corner
+           do idim=1,ndim
+              ii(idim)=int(x(idim)-2*ix_ref(idim))
+           end do
+
+           ! Compute parent cell index
+#if NDIM==1
+           icell=1+ii(1)
+#endif
+#if NDIM==2
+           icell=1+ii(1)+2*ii(2)
+#endif
+#if NDIM==3
+           icell=1+ii(1)+2*ii(2)+4*ii(3)
+#endif
+           ! Increase counter if cell is not refined
+           if(.NOT.gridp%refined(icell))then
+              npart_coarse=npart_coarse+1
+              p%levelp(ipart)=-p%levelp(ipart)
+           else
+              p%sortp(i)=-p%sortp(i)
+           endif
+        endif
+
+     end do
+     ! End loop over particles
+
+     call close_cache(s,m%grid_dict)
+
+  endif
 
   p%tailp(ilevel)=p%headp(ilevel)+npart_coarse-1
   do ilev=ilevel+1,r%nlevelmax
@@ -1924,7 +1950,7 @@ recursive subroutine sort_hilbert(r,g,m,p,head_part, tail_part, ix_coarse, cstat
   use pm_commons, only: part_t
   use hilbert, only: next_state_diagram_reverse, one_digit_diagram
   implicit none
-  
+
   type(run_t),intent(in)::r
   type(global_t),intent(in)::g
   type(mesh_t)::m
@@ -1933,24 +1959,24 @@ recursive subroutine sort_hilbert(r,g,m,p,head_part, tail_part, ix_coarse, cstat
   integer, intent(in) :: head_part, tail_part
   integer, dimension(1:ndim), intent(in) :: ix_coarse
   integer, intent(in) :: cstate_coarse
-  
+
   ! Description:
   ! This subroutine sort particles along the Hilbert key at the resolution
   ! set by final_level. It should be called first with ilevel=levelmin.
-  
+
   ! Iputs: 
   ! - Head_part and tail_part are head and tail of particle distribution to work on.
   ! - Array sortp must be initialized with sortp(i)=i between head_part and tail_part.
   ! - Cartesian key of coarse cell in which these particles are contained.
   ! - State of the coarse cell for Hilbert ordering
   ! - Current and final level
-  
+
   ! Example: 
   ! ix=(/0,0,0/)
   ! call sort_hilbert(1, npart, ix, 0, 1, nlevelmax) 
   ! will sort all particles according to their Hilbert key at levelmax.
   ! On output, array sortp is modified.
-  
+
   ! Local variables
   integer :: ip, ind_part, idim, ipart, new_ipart
   integer :: ckey_max, cstate_fine, ind_cart_part, head_fine, tail_fine
@@ -1959,38 +1985,38 @@ recursive subroutine sort_hilbert(r,g,m,p,head_part, tail_part, ix_coarse, cstat
   integer, dimension(0:twotondim-1) :: nstate, sdigit, ind, ind_cart, ind_hilbert
   integer, dimension(0:twotondim-1) :: numb_part, offset
   real(kind=8) :: ckey_factor
-  
+
   ! Compute particle position to cartesian key factor
   ckey_max = 2**ilevel
   ckey_factor = 2.0**ilevel / r%boxlen
-  
+
   ! Initial Cartesian offset for fine cells
   do idim = 1, ndim
      ix_ref(idim) = ISHFT(ix_coarse(idim),1)
   end do
-  
+
   ! Compute the Hilbert index for fine cells
   do ip = 0, twotondim-1
      sdigit(ip) = ip
   end do
-  
+
   ! Compute lookup index in state diagrams
   do ip = 0, twotondim-1
      ind(ip) = cstate_coarse * twotondim + sdigit(ip)
   end do
-  
+
   ! Save next state
   do ip = 0, twotondim-1
      nstate(ip) = next_state_diagram_reverse(ind(ip))
   end do
-  
+
   ! Add one integer key digit each
   do idim = 1, ndim
      do ip = 0, twotondim-1
         ix(ip, idim) = one_digit_diagram(ind(ip), idim)
      end do
   end do
-  
+
   ! Compute Cartesian index for children cells
   ind_cart = 0
   do idim = 1, ndim
@@ -1999,13 +2025,13 @@ recursive subroutine sort_hilbert(r,g,m,p,head_part, tail_part, ix_coarse, cstat
         ind_cart(ip) = ind_cart(ip) + ix(ip, idim) * 2**(idim-1)
      end do
   end do
-  
+
   ! Compute mapping from Cartesian to Hilbert order
   ind_hilbert = 0
   do ip = 0, twotondim-1
      ind_hilbert(ind_cart(ip))=ip
   end do
-  
+
   ! Count particles per children cell
   numb_part = 0
   do ipart = head_part, tail_part
@@ -2018,12 +2044,12 @@ recursive subroutine sort_hilbert(r,g,m,p,head_part, tail_part, ix_coarse, cstat
      ip = ind_hilbert(ind_cart_part)
      numb_part(ip) = numb_part(ip) + 1
   end do
-  
+
   offset = head_part-1
   do ip = 1, twotondim-1
      offset(ip) = offset(ip-1) + numb_part(ip-1)
   end do
-  
+
   ! Compute new sortp array
   numb_part = 0
   do ipart = head_part, tail_part
@@ -2041,7 +2067,7 @@ recursive subroutine sort_hilbert(r,g,m,p,head_part, tail_part, ix_coarse, cstat
   do ipart = head_part,tail_part
      p%sortp(ipart) = p%workp(ipart)
   end do
-  
+
   ! Recursive call
   if(ilevel < final_level)then
      do ip = 0, twotondim-1
@@ -2054,7 +2080,7 @@ recursive subroutine sort_hilbert(r,g,m,p,head_part, tail_part, ix_coarse, cstat
         endif
      end do
   endif
-  
+
 end subroutine sort_hilbert
 !###############################################
 !###############################################

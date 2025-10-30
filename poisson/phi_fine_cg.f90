@@ -664,7 +664,7 @@ subroutine make_initial_phi(s,ilevel,icount)
               xx(1,idim)=(2*m%grid(igrid)%ckey(idim)+MOD((ind-1)/nstride,2)+0.5)*dx-m%skip(idim)
            end do
            ! Call analytical potential routine
-           call phiana(r,g,xx,pp,dx,1)
+           call phiana(r,g,xx,pp,1)
            m%grid(igrid)%phi(ind)=pp(1)
         end do
         ! End loop over cells

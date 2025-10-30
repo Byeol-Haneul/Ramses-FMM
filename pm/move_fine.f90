@@ -107,7 +107,7 @@ end subroutine r_kick_drift_part
 !################################################################
 !################################################################
 subroutine cic_kick_drift_part(s,p,ilevel,action_part)
-  use amr_parameters, only: ndim, twotondim
+  use amr_parameters, only: ndim, twotondim, nvector
   use pm_parameters
   use pm_commons, only: part_t
   use amr_commons, only: nbor
@@ -133,6 +133,8 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
   real(kind=8)::gamma,norm2,fnorm,delta
   real(kind=8),dimension(1:ndim)::ff
   logical::ok_level
+  real(kind=8),dimension(1:nvector,1:ndim)::xana
+  real(kind=8),dimension(1:nvector,1:ndim)::fana
   type(nbor),dimension(1:twotondim)::gridp
   type(msg_three_realdp)::dummy_three_realdp
 
@@ -140,22 +142,62 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
 
   if(p%static)then
      ! We still need to set the particle levels correctly, even if they are not moved
-     ! Loop over particles
      do ipart=p%headp(ilevel),p%tailp(ilevel)
-        ! Update level
         p%levelp(ipart)=ilevel
      end do
      return
   end if
+
+  ! Deal with particles that left the computational domain
+  if(ilevel==r%levelmin-1)then
+
+     ! Loop over particles
+     do ipart=p%headp(ilevel),p%tailp(ilevel)
+
+        ! Get particle position
+        do idim=1,ndim
+           x(idim)=p%xp(ipart,idim)
+        end do
+
+        ! Call analytical acceleration routine
+        xana(1,1:ndim)=x(1:ndim)
+        call gravana(r,g,xana,fana,1)
+        ff(1:ndim)=fana(1,1:ndim)
+
+        ! Perform kick, or drift, or both
+        if(action_part==action_kick_drift)then
+
+           ! Update velocity (use levelmin time step)
+           p%vp(ipart,1:ndim)=p%vp(ipart,1:ndim)+ff(1:ndim)*0.5d0*g%dtnew(ilevel+1)
+
+           ! Update position (use levelmin time step)
+           p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel+1)
+
+        else if(action_part.EQ.action_kick_only)then
+
+           ! Compute proper time step for second kick
+           dteff=g%dtnew(p%levelp(ipart))
+
+           ! Update level to levelmin
+           p%levelp(ipart)=ilevel+1
+
+           ! Update velocity
+           p%vp(ipart,1:ndim)=p%vp(ipart,1:ndim)+ff(1:ndim)*0.5d0*dteff
+
+        endif
+
+     end do
+     return
+  endif
 
   ! Mesh spacing in that level
   dx_loc=r%boxlen/2**ilevel 
   vol_loc=dx_loc**ndim
 
   ! Open read-only cache
-  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-                     hilbert=m%domain, pack_size=storage_size(dummy_three_realdp)/32,&
-                     pack=pack_fetch_kick,unpack=unpack_fetch_kick)
+  call open_cache(s,table=m%grid_dict, data_size=storage_size(m%grid(1))/32,&
+       hilbert=m%domain, pack_size=storage_size(dummy_three_realdp)/32,&
+       pack=pack_fetch_kick, unpack=unpack_fetch_kick)
 
   ! Loop over particles
   do ipart=p%headp(ilevel),p%tailp(ilevel)
@@ -374,9 +416,7 @@ subroutine tsc_kick_drift_part(s,p,ilevel,action_part)
 
   if(p%static)then
      ! We still need to set the particle levels correctly, even if they are not moved
-     ! Loop over particles
      do ipart=p%headp(ilevel),p%tailp(ilevel)
-        ! Update level
         p%levelp(ipart)=ilevel
      end do
      return
@@ -557,9 +597,7 @@ subroutine pcs_kick_drift_part(s,p,ilevel,action_part)
 
   if(p%static)then
      ! We still need to set the particle levels correctly, even if they are not moved
-     ! Loop over particles
      do ipart=p%headp(ilevel),p%tailp(ilevel)
-        ! Update level
         p%levelp(ipart)=ilevel
      end do
      return
