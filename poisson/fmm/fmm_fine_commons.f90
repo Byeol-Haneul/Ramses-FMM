@@ -444,8 +444,8 @@ integer, dimension(twotondim, ndim), parameter :: displacement_list = reshape( &
           cycle_flag = .false.
           cc_jcell_periodic = hash_fmm_cell(1:ndim) + cell_diff_list(ind, jcell, igrid,:)
           do idim = 1, ndim
-            if ((cc_jcell_periodic(idim) < m%box_ckey_min(idim, ilevel)) .or. &
-                (cc_jcell_periodic(idim) >= m%box_ckey_max(idim, ilevel))) then
+            if ((cc_jcell_periodic(idim) < m%box_ckey_min(idim, ilevel - g%level_fmm_to_amr + 1)) .or. &
+                (cc_jcell_periodic(idim) >= m%box_ckey_max(idim, ilevel - g%level_fmm_to_amr + 1))) then
               cycle_flag = .true.
             end if
           end do
