@@ -321,6 +321,8 @@ integer, dimension(twotondim, ndim), parameter :: displacement_list = reshape( &
   real(kind=8), allocatable :: D0_list(:,:,:,:), D1_list(:,:,:,:), D2_list(:,:,:,:)
   real(kind=8), allocatable :: intermediate_diff_list(:,:,:,:,:)
   real(kind=8), allocatable :: far_diff_list(:,:,:)
+  integer, allocatable :: fmm_grid_center_offset(:,:)
+  logical, allocatable :: direct_neighbor_list(:,:,:)
 
   associate(r=>s%r, g=>s%g, m=>s%m)
   fourpi = 4.D0*ACOS(-1.0D0)
@@ -351,15 +353,17 @@ integer, dimension(twotondim, ndim), parameter :: displacement_list = reshape( &
 
   allocate(intermediate_diff_list(threetondim, twotondim, nbox, twotondim, ndim))
   allocate(far_diff_list(nbox, twotondim, ndim))
+  allocate(fmm_grid_center_offset(nbox, ndim))
+  allocate(direct_neighbor_list(threetondim, twotondim, nbox)) ! we can reduce this if we really need to
 
   ! Precalculate differences
   do igrid=1, nbox
     do idim = 1,ndim
       nstride = nfine**(idim-1)
-      offset(idim) = MOD((igrid-1)/nstride, nfine) - (nfine/2) ! offset by how many amr octs from fmm grid center
+      fmm_grid_center_offset(igrid, idim) = MOD((igrid-1)/nstride, nfine) - (nfine/2) ! offset by how many amr octs from fmm grid center
     end do 
     do icell = 1, twotondim
-      far_diff_list(igrid, icell, :) = (2 * offset + displacement_list(icell,:) + 0.5) * dx_loc
+      far_diff_list(igrid, icell, :) = (2 * fmm_grid_center_offset(igrid, :) + displacement_list(icell,:) + 0.5) * dx_loc
     end do
   end do 
 
@@ -370,13 +374,20 @@ integer, dimension(twotondim, ndim), parameter :: displacement_list = reshape( &
       offset_list(ind, idim) = MOD((ind-1)/3**(idim-1), 3) - 1 ! offset by how many fmm grids
     end do
     do jcell = 1, twotondim
-      offset = (2 * offset_list(ind,:) + displacement_list(jcell,:) + 0.5) * nfine ! offset by how many amr cells
+      cc_jcell = 2 * offset_list(ind,:) + displacement_list(jcell,:) ! respect to grid left corner / fmm cell unit
+      offset = (cc_jcell+ 0.5) * nfine ! offset by how many amr cells
       do igrid=1,nbox
+        cc_icell = (fmm_grid_center_offset(igrid, :) + nfine/2)/(nfine/2) ! respect to grid left corner / fmm cell unit
+        cycle_flag = .true.
+        !cell_diff_list(ind, jcell, igrid, :) = cc_icell - cc_jcell
+        do idim=1, ndim
+          if (abs(cc_icell(idim) - cc_jcell(idim)) > 1) cycle_flag = .false.
+        end do
+        direct_neighbor_list(ind, jcell, igrid) = cycle_flag
         do icell=1, twotondim
           diff = far_diff_list(igrid, icell, :) + (- offset(:) + nfine) * dx_loc
           intermediate_diff_list(ind, jcell, igrid, icell, :) = diff
           dist = sqrt(sum(diff(:)**2))
-          if (dist == 0.0D0) dist = 1.0D-12
           D0_list(ind, jcell, igrid, icell) = 1.0D0 / dist
           D1_list(ind, jcell, igrid, icell) = -1.0D0 / dist**3
           D2_list(ind, jcell, igrid, icell) = 3.0D0 / dist**5
@@ -435,13 +446,12 @@ integer, dimension(twotondim, ndim), parameter :: displacement_list = reshape( &
           do idim = 1, ndim
             nstride = 2**(idim-1)
             cc_jcell_periodic(idim) = 2*hash_nbor_periodic(idim) + MOD((jcell-1)/nstride, 2)
-            xx_jcell_periodic(idim) = (cc_jcell_periodic(idim) + 0.5d0) * (dx_loc*nfine)
             if ((cc_jcell_periodic(idim) < m%box_ckey_min(idim, ilevel)) .or. &
                 (cc_jcell_periodic(idim) >= m%box_ckey_max(idim, ilevel))) then
               cycle_flag = .true.
             end if
           end do
-          if (is_direct_neighbor(hash_fmm_cell(1:ndim), cc_jcell_periodic, ilevel - g%level_fmm_to_amr)) then
+          if (direct_neighbor_list(ind, jcell, igrid)) then
             cycle_flag = .true.
           end if
           if (cycle_flag) cycle
@@ -459,7 +469,7 @@ integer, dimension(twotondim, ndim), parameter :: displacement_list = reshape( &
     end do
   end do
 
-  deallocate(D0_list, D1_list, D2_list, intermediate_diff_list, far_diff_list)
+  deallocate(D0_list, D1_list, D2_list, intermediate_diff_list, far_diff_list, direct_neighbor_list)
   call close_cache(s, m%mg_dict)
   end associate
 end subroutine fmm_amr_intermediate
