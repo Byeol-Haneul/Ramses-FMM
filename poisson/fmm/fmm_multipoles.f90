@@ -169,7 +169,7 @@ subroutine fmm_multipole_amr2fmm(s,ilevel)
            end do
 
            ! Gas mass contribution
-           mmm = (m%grid(ioct)%rho(ind) - g%rho_tot) * vol_loc
+           mmm = m%grid(ioct)%rho(ind) * vol_loc
            monopole = monopole + mmm
            dipole   = dipole   + mmm * xx
 

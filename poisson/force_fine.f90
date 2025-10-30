@@ -483,7 +483,7 @@ subroutine dump_phi(r, g, m, ilevel)
   ! open debug file
   unit_debug = 99
 #ifdef FMM
-  open(unit_debug, file="./out_fmm/single_fmm.out", status="replace")
+  open(unit_debug, file="./out_fmm/single_test_fmm.out", status="replace")
 #else
   open(unit_debug, file="./out_mg/single_mg.out", status="replace")
 #endif
