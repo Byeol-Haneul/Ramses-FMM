@@ -223,6 +223,16 @@ subroutine output_part(s,p,filename)
      write(ilun)ii8
   endif
 
+  ! Write tracking identity
+  if(allocated(p%idt))then
+     do i=1,p%npart
+        ii8(i)=p%idt(i)
+     end do
+     ivar=ivar+1
+     write(ilun,POS=nskip(ivar))
+     write(ilun)ii8
+  endif
+
   deallocate(ii8)
 
   call close_part_file(s,p,filename,nskip,ilun)
@@ -360,6 +370,14 @@ subroutine backup_part(r,g,p,filename)
   if(allocated(p%idm))then
      do i=1,p%npart
         ii8(i)=p%idm(i)
+     end do
+     write(ilun)ii8
+  endif
+
+  ! Write tracking identity
+  if(allocated(p%idt))then
+     do i=1,p%npart
+        ii8(i)=p%idt(i)
      end do
      write(ilun)ii8
   endif

@@ -418,6 +418,11 @@ subroutine open_part_file(s,p,filename,nskip,ilun)
         ivar=ivar+1
         nskip(ivar+1)=nskip(ivar)+i8b*npart
      endif
+     ! Tracking identities
+     if(allocated(p%idt))then
+        ivar=ivar+1
+        nskip(ivar+1)=nskip(ivar)+i8b*npart
+     endif
 
   elseif(g%myid.GT.istart(ifile))then
 
@@ -541,6 +546,11 @@ subroutine close_part_file(s,p,filename,nskip,ilun)
      nskip(ivar)=nskip(ivar)+i8b*p%npart
      ! Merging identities
      if(allocated(p%idm))then
+        ivar=ivar+1
+        nskip(ivar)=nskip(ivar)+i8b*p%npart
+     endif
+     ! Tracking identities
+     if(allocated(p%idt))then
         ivar=ivar+1
         nskip(ivar)=nskip(ivar)+i8b*p%npart
      endif

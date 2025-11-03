@@ -28,6 +28,7 @@ module pm_commons
      integer ,allocatable,dimension(:)     ::levelp   ! Current level of particle
      integer(i8b),allocatable,dimension(:) ::idp      ! Particle unique identifier
      integer(i8b),allocatable,dimension(:) ::idm      ! Merging particle id
+     integer ,allocatable,dimension(:)     ::idt      ! Particle tracking (peak) id
      integer ,allocatable,dimension(:)     ::sortp    ! Sorted index
      integer ,allocatable,dimension(:)     ::workp    ! Work space
      integer ,allocatable,dimension(:)     ::pid      ! Peak ID
