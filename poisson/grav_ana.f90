@@ -2,14 +2,13 @@
 !#########################################################
 !#########################################################
 !#########################################################
-subroutine gravana(r,g,x,f,dx,ncell)
+subroutine gravana(r,g,x,f,ncell)
   use amr_parameters, only: ndim, nvector
   use amr_commons, only: run_t, global_t
   implicit none
   type(run_t)::r
   type(global_t)::g
   integer::ncell                              ! Size of input arrays
-  real(kind=8)::dx                            ! Cell size
   real(kind=8),dimension(1:nvector,1:ndim)::f ! Gravitational acceleration
   real(kind=8),dimension(1:nvector,1:ndim)::x ! Cell center position.
   !================================================================
@@ -93,14 +92,13 @@ end subroutine gravana
 !#########################################################
 !#########################################################
 !#########################################################
-subroutine phiana(r,g,x,phi,dx,ncell)
+subroutine phiana(r,g,x,phi,ncell)
   use amr_parameters, only: ndim, nvector
   use amr_commons, only: run_t, global_t
   implicit none
   type(run_t)::r
   type(global_t)::g
   integer::ncell                              ! Size of input arrays
-  real(kind=8)::dx                            ! Cell size
   real(kind=8),dimension(1:nvector)::phi      ! Gravitational potential
   real(kind=8),dimension(1:nvector,1:ndim)::x ! Cell center position.
   !================================================================

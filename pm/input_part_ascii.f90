@@ -211,6 +211,7 @@ end subroutine r_input_part_ascii
 !#########################################################################
 subroutine input_part_ascii(mdl,r,g,p,npart_tot)
   use mdl_module
+  use amr_parameters, only: ndim
   use amr_commons, only: run_t,global_t
   use pm_commons, only: part_t
   implicit none
@@ -307,6 +308,10 @@ subroutine input_part_ascii(mdl,r,g,p,npart_tot)
   p%tailp=p%npart
   p%headp(r%levelmin)=1
   p%tailp(r%levelmin)=p%npart
+  if(ANY(.not.r%periodic(1:ndim)))then
+     p%headp(r%levelmin-1)=1
+     p%tailp(r%levelmin-1)=0
+  endif
 
 end subroutine input_part_ascii
 !#########################################################################
@@ -344,6 +349,7 @@ end subroutine r_input_star_ascii
 !#########################################################################
 subroutine input_star_ascii(mdl,r,g,p,npart_tot)
   use mdl_module
+  use amr_parameters, only: ndim
   use amr_commons, only: run_t,global_t
   use pm_commons, only: part_t
   implicit none
@@ -442,9 +448,12 @@ subroutine input_star_ascii(mdl,r,g,p,npart_tot)
   p%tailp=p%npart
   p%headp(r%levelmin)=1
   p%tailp(r%levelmin)=p%npart
+  if(ANY(.not.r%periodic(1:ndim)))then
+     p%headp(r%levelmin-1)=1
+     p%tailp(r%levelmin-1)=0
+  endif
 
 end subroutine input_star_ascii
-
 !#########################################################################
 !#########################################################################
 !#########################################################################
@@ -480,6 +489,7 @@ end subroutine r_input_sink_ascii
 !#########################################################################
 subroutine input_sink_ascii(mdl,r,g,p,npart_tot)
   use mdl_module
+  use amr_parameters, only: ndim
   use amr_commons, only: run_t,global_t
   use pm_commons, only: part_t
   implicit none
@@ -580,9 +590,12 @@ subroutine input_sink_ascii(mdl,r,g,p,npart_tot)
   p%tailp=p%npart
   p%headp(r%levelmin)=1
   p%tailp(r%levelmin)=p%npart
+  if(ANY(.not.r%periodic(1:ndim)))then
+     p%headp(r%levelmin-1)=1
+     p%tailp(r%levelmin-1)=0
+  endif
 
 end subroutine input_sink_ascii
-
 !#########################################################################
 !#########################################################################
 !#########################################################################

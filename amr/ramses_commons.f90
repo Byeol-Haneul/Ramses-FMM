@@ -374,6 +374,11 @@ subroutine open_part_file(s,p,filename,nskip,ilun)
      ! Masses
      ivar=2*ndim+1
      nskip(ivar+1)=nskip(ivar)+4*npart
+#ifdef OUTPUT_PARTICLE_POTENTIAL
+     ! Potentials
+     ivar=ivar+1
+     nskip(ivar+1)=nskip(ivar)+4*npart
+#endif
      ! Metallicities
      if(allocated(p%zp))then
         ivar=ivar+1
@@ -414,11 +419,6 @@ subroutine open_part_file(s,p,filename,nskip,ilun)
         ivar=ivar+1
         nskip(ivar+1)=nskip(ivar)+i8b*npart
      endif
-#ifdef OUTPUT_PARTICLE_POTENTIAL
-     ! Potentials
-     ivar=ivar+1
-     nskip(ivar+1)=nskip(ivar)+4*npart
-#endif
 
   elseif(g%myid.GT.istart(ifile))then
 
@@ -500,6 +500,11 @@ subroutine close_part_file(s,p,filename,nskip,ilun)
      ! Masses
      ivar=2*ndim+1
      nskip(ivar)=nskip(ivar)+4*p%npart
+#ifdef OUTPUT_PARTICLE_POTENTIAL
+     ! Potentials
+     ivar=ivar+1
+     nskip(ivar)=nskip(ivar)+4*p%npart
+#endif
      ! Metallicities
      if(allocated(p%zp))then
         ivar=ivar+1
@@ -540,11 +545,6 @@ subroutine close_part_file(s,p,filename,nskip,ilun)
         ivar=ivar+1
         nskip(ivar)=nskip(ivar)+i8b*p%npart
      endif
-#ifdef OUTPUT_PARTICLE_POTENTIAL
-     ! Potentials
-     ivar=ivar+1
-     nskip(ivar)=nskip(ivar)+4*p%npart
-#endif
 
 #ifndef WITHOUTMPI
      call MPI_ISEND(nskip,p%nvaralloc+1,MPI_INTEGER8,g%myid,tag2,MPI_COMM_WORLD,reqsend,info)

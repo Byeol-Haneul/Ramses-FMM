@@ -624,6 +624,7 @@ end subroutine trim_box
 !#########################################################################
 !#########################################################################
 subroutine init_levelmin(r,p)
+  use amr_parameters, only: ndim
   use amr_commons, only: run_t
   use pm_commons, only: part_t
   type(run_t)::r
@@ -633,6 +634,10 @@ subroutine init_levelmin(r,p)
   p%tailp=p%npart
   p%headp(r%levelmin)=1
   p%tailp(r%levelmin)=p%npart  
+  if(ANY(.not.r%periodic(1:ndim)))then
+     p%headp(r%levelmin-1)=1
+     p%tailp(r%levelmin-1)=0
+  endif
 end subroutine init_levelmin
 !#########################################################################
 !#########################################################################

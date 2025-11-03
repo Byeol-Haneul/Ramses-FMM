@@ -125,6 +125,16 @@ subroutine output_part(s,p,filename)
   write(ilun,POS=nskip(ivar))
   write(ilun)xsp
 
+#ifdef OUTPUT_PARTICLE_POTENTIAL
+  ! Write potential (optional)
+  do i=1,p%npart
+     xsp(i)=p%phip(i)
+  end do
+  ivar=ivar+1
+  write(ilun,POS=nskip(ivar))
+  write(ilun)xsp
+#endif
+
   ! Write metallicity
   if(allocated(p%zp))then
      do i=1,p%npart
@@ -214,18 +224,6 @@ subroutine output_part(s,p,filename)
   endif
 
   deallocate(ii8)
-
-#ifdef OUTPUT_PARTICLE_POTENTIAL
-  ! Write potential (optional)
-  allocate(xsp(1:p%npart))
-  do i=1,p%npart
-     xsp(i)=p%phip(i)
-  end do
-  ivar=ivar+1
-  write(ilun,POS=nskip(ivar))
-  write(ilun)xsp
-  deallocate(xsp)
-#endif
 
   call close_part_file(s,p,filename,nskip,ilun)
 

@@ -669,6 +669,9 @@ subroutine output_header(r,g,p,filename)
   ! Keep track of what particle fields are present
   write(ilun,*)'Particle fields'
   write(ilun,'(a)',advance='no')'pos vel mass '
+#ifdef OUTPUT_PARTICLE_POTENTIAL
+  write(ilun,'(a)',advance='no')'phi '
+#endif
   if(allocated(p%zp))then
      write(ilun,'(a)',advance='no')'metallicity '
   endif
@@ -688,9 +691,6 @@ subroutine output_header(r,g,p,filename)
   if(allocated(p%idm))then
      write(ilun,'(a)',advance='no')'merging_id '
   endif
-#ifdef OUTPUT_PARTICLE_POTENTIAL
-  write(ilun,'(a)',advance='no')'phi '
-#endif
   close(ilun)
 
 end subroutine output_header
