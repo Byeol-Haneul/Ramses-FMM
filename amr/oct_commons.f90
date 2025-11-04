@@ -30,7 +30,7 @@ module oct_commons
 #endif
 #ifdef FMM
      real(dp),dimension(1:twotondim,1:multipole_size)::multipole
-     real(dp),dimension(1:taylor_size)::taylor_coeff
+     real(dp),dimension(1:twotondim, 1:taylor_size)::taylor_coeff
 #endif 
      integer(kind=8),dimension(1:nhilbert)::hkey
      integer(kind=4),dimension(1:twotondim)::flag1

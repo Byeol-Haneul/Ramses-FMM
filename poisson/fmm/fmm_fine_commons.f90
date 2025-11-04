@@ -158,9 +158,15 @@ subroutine fmm_downward(s, ilevel)
   type(oct), pointer :: gridp_nbor, gridp_parent
   type(msg_large_realdp)::dummy_realdp
   real(kind=8), dimension(1:multipole_size) :: multipole, multipole_shifted
-  real(kind=8), dimension(taylor_size) :: temp_taylor, accum_taylor, parent_taylor
+  real(kind=8), dimension(taylor_size) :: temp_taylor, parent_taylor
+  real(kind=8), dimension(twotondim, taylor_size) :: accum_taylor
   logical::cycle_flag
-
+  integer, dimension(twotondim, ndim), parameter :: displacement_list = reshape( &
+      [ &
+        0, 1, 0, 1, 0, 1, 0, 1,  &
+        0, 0, 1, 1, 0, 0, 1, 1,  &
+        0, 0, 0, 0, 1, 1, 1, 1   &
+      ], [twotondim, ndim] )
   associate(r=>s%r, g=>s%g, m=>s%m)
 
   ! Open cache for multipoles
@@ -177,27 +183,30 @@ subroutine fmm_downward(s, ilevel)
 
   ! Loop over octs at this level
   do ioct = m%head_mg(ilevel), m%tail_mg(ilevel)
-     accum_taylor(:) = 0.0D0
+     accum_taylor(:, :) = 0.0D0
      hash_key(1:ndim) = m%grid(ioct)%ckey(1:ndim)
 
-    ! Multipole Shifting
+    call get_parent_cell(s, hash_key, m%mg_dict, gridp_parent, pcell, flush_cache=.false., fetch_cache=.true.)
+    parent_taylor = gridp_parent%taylor_coeff(pcell, :)
+    hash_parent(1:ndim) = gridp_parent%ckey(1:ndim)
+
     do icell = 1, twotondim
+      ! Multipole Shifting
       call get_cell_pos(hash_key, icell, r%boxlen, xx_icell, cc_icell)
       multipole = m%grid(ioct)%multipole(icell, :)
       call shift_multipole(multipole, xx_icell, multipole_shifted)
       m%grid(ioct)%multipole(icell, :) = multipole_shifted
-    end do
 
-     ! Far Field Calculation
-     call get_parent_cell(s, hash_key, m%mg_dict, gridp_parent, pcell, flush_cache=.false., fetch_cache=.true.)
-     parent_taylor = gridp_parent%taylor_coeff
-     hash_parent(1:ndim) = gridp_parent%ckey(1:ndim)
+      ! Far Field Calculation
+      do idim =1,ndim
+        dx(idim) = (displacement_list(icell, idim) - 0.5) * dx_loc
+      end do 
+      call shift_taylor(parent_taylor, dx, temp_taylor)
+      accum_taylor(icell,:) = accum_taylor(icell,:) + temp_taylor
+    end do
+     
      call get_grid_pos(hash_key, r%boxlen, xx_igrid)
      call get_grid_pos(hash_parent, r%boxlen, xx_pgrid)
-
-     call get_displacement(xx_igrid, xx_pgrid, r%boxlen, dx)
-     call shift_taylor(parent_taylor, dx, temp_taylor)
-     accum_taylor = accum_taylor + temp_taylor
 
      ! Get neighboring parent grids (returns 3^n parent level grids)
      call get_intermediate_nbor_grid(s, hash_key, m%mg_dict, grid_nbor, flush_cache=.false., fetch_cache=.true.)
@@ -230,9 +239,11 @@ subroutine fmm_downward(s, ilevel)
           ! Shift multipole from origin -> source center (Need to use grid position)
           multipole = gridp_nbor%multipole(jcell,:)
           ! Get taylor coeffs from local
-          dx = (hash_key(1:ndim) - cc_jcell_periodic) * r%boxlen / 2**(ilevel-1)
-          call calc_taylor_from_multipole(dx, multipole, temp_taylor)
-          accum_taylor = accum_taylor + temp_taylor
+          do icell=1, twotondim
+            dx = (hash_key(1:ndim) - cc_jcell_periodic) * r%boxlen / 2**(ilevel-1) + (displacement_list(icell, :) - 0.5) * dx_loc
+            call calc_taylor_from_multipole(dx, multipole, temp_taylor)
+            accum_taylor(icell, :) = accum_taylor(icell, :) + temp_taylor
+          end do
        end do ! over neighboring grid's cells 2^n
      end do ! over neighboring grids 3^n 
      ! Add taylor coefficients from intermediate fields
@@ -287,7 +298,7 @@ subroutine fmm_amr_intermediate(s, ilevel)
   type(ramses_t) :: s
   integer :: ilevel
 
-  integer :: ioct, idim, ind, icell, jcell, nstride, nfine, igrid, nbox
+  integer :: ioct, idim, ind, icell, jcell, nstride, nfine, igrid, nbox, pcell
   real(kind=8) :: phi, phi_out, fourpi, dx_loc
   integer(kind=8), dimension(ndim) :: cc_icell, cc_jcell, cc_jcell_periodic, offset
   real(kind=8), dimension(ndim) :: xx_icell, xx_jcell, xx_pgrid, xx_jcell_periodic, diff, diff2
@@ -321,7 +332,7 @@ subroutine fmm_amr_intermediate(s, ilevel)
   real(kind=8), allocatable :: D0_list(:,:,:,:), D1_list(:,:,:,:), D2_list(:,:,:,:)
   real(kind=8), allocatable :: intermediate_diff_list(:,:,:,:,:), cell_diff_list(:,:,:,:)
   real(kind=8), allocatable :: far_diff_list(:,:,:)
-  integer, allocatable :: fmm_grid_center_offset(:,:)
+  integer, allocatable :: fmm_grid_center_offset(:,:), fmm_cell_center_offset(:,:)
   logical, allocatable :: direct_neighbor_list(:,:,:)
 
   associate(r=>s%r, g=>s%g, m=>s%m)
@@ -354,6 +365,7 @@ subroutine fmm_amr_intermediate(s, ilevel)
   allocate(intermediate_diff_list(threetondim, twotondim, nbox, twotondim, ndim))
   allocate(far_diff_list(nbox, twotondim, ndim))
   allocate(fmm_grid_center_offset(nbox, ndim))
+  allocate(fmm_cell_center_offset(nbox, ndim))
   allocate(direct_neighbor_list(threetondim, twotondim, nbox)) ! we can reduce this if we really need to
   allocate(cell_diff_list(threetondim, twotondim, nbox, ndim))
 
@@ -362,9 +374,12 @@ subroutine fmm_amr_intermediate(s, ilevel)
     do idim = 1,ndim
       nstride = nfine**(idim-1)
       fmm_grid_center_offset(igrid, idim) = MOD((igrid-1)/nstride, nfine) - (nfine/2) ! offset by how many amr octs from fmm grid center
+      nstride = (nfine/2)**(idim-1)
+      fmm_cell_center_offset(igrid, idim) = 2 * MOD(fmm_grid_center_offset(igrid, idim)+(nfine/2), nfine/2) - (nfine/2) ! offset by how many amr cells from fmm cell center
     end do 
+    print *, fmm_cell_center_offset(igrid, :), nfine
     do icell = 1, twotondim
-      far_diff_list(igrid, icell, :) = (2 * fmm_grid_center_offset(igrid, :) + displacement_list(icell,:) + 0.5) * dx_loc
+      far_diff_list(igrid, icell, :) = (fmm_cell_center_offset(igrid, :) + displacement_list(icell,:) + 0.5) * dx_loc
     end do
   end do 
 
@@ -386,7 +401,7 @@ subroutine fmm_amr_intermediate(s, ilevel)
         end do
         direct_neighbor_list(ind, jcell, igrid) = cycle_flag
         do icell=1, twotondim
-          diff = far_diff_list(igrid, icell, :) + (- offset(:) + nfine) * dx_loc
+          diff = (2 * fmm_grid_center_offset(igrid, :) + displacement_list(icell,:) + 0.5) * dx_loc + (- offset(:) + nfine) * dx_loc
           intermediate_diff_list(ind, jcell, igrid, icell, :) = diff
           dist = sqrt(sum(diff(:)**2))
           D0_list(ind, jcell, igrid, icell) = 1.0D0 / dist
@@ -418,12 +433,19 @@ subroutine fmm_amr_intermediate(s, ilevel)
       end if
 
       call get_grid(s, hash_fmm_grid, m%mg_dict, gridp_parent, flush_cache=.false., fetch_cache=.true.)
-      parent_taylor = gridp_parent%taylor_coeff
 
       call get_intermediate_nbor_grid(s, hash_fmm_cell, m%mg_dict, grid_nbor, flush_cache=.false., fetch_cache=.true.)
       neighbors_cached = .true.
       prev_hash_fmm_grid = hash_fmm_grid
     end if
+
+    pcell = 1
+    do idim=1,ndim
+      nstride = 2**(idim-1)
+      pcell = pcell + nstride * MOD(hash_fmm_cell(idim), 2)
+    end do
+
+    parent_taylor = gridp_parent%taylor_coeff(pcell, :)
 
     ! Loop over AMR cells
     do icell = 1, twotondim
@@ -465,7 +487,7 @@ subroutine fmm_amr_intermediate(s, ilevel)
     end do
   end do
 
-  deallocate(D0_list, D1_list, D2_list, intermediate_diff_list, far_diff_list, direct_neighbor_list, cell_diff_list)
+  deallocate(D0_list, D1_list, D2_list, intermediate_diff_list, far_diff_list, direct_neighbor_list, cell_diff_list, fmm_grid_center_offset, fmm_cell_center_offset)
   call close_cache(s, m%mg_dict)
   end associate
 end subroutine fmm_amr_intermediate
@@ -782,7 +804,7 @@ end subroutine init_flush_taylor
 !################################################################
 !################################################################
 subroutine pack_flush_taylor(grid,msg_size,msg_array)
-  use amr_parameters, only: ndim,twotondim
+  use amr_parameters, only: ndim,twotondim,taylor_size
   use amr_commons, only: oct
   use cache_commons, only: msg_large_realdp
   type(oct)::grid
@@ -791,8 +813,10 @@ subroutine pack_flush_taylor(grid,msg_size,msg_array)
 
   integer::ind,ivar
   type(msg_large_realdp)::msg
-  do ivar=0,ndim+ int(ndim * (ndim+1)/2)
-    msg%realdp_fmm_taylor(ivar)=grid%taylor_coeff(ivar)
+  do ind=1,twotondim
+    do ivar=1,taylor_size
+      msg%realdp_fmm_taylor(ind, ivar)=grid%taylor_coeff(ind, ivar)
+    end do
   end do
   msg_array=transfer(msg,msg_array)
 end subroutine pack_flush_taylor
@@ -816,8 +840,10 @@ subroutine unpack_flush_taylor(grid,msg_size,msg_array,hash_key)
   grid%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
   
-  do ivar=1,taylor_size
-    grid%taylor_coeff(ivar)=grid%taylor_coeff(ivar)+msg%realdp_fmm_taylor(ivar)
+  do ind=1,twotondim
+    do ivar=1,taylor_size
+      grid%taylor_coeff(ind,ivar)=grid%taylor_coeff(ind,ivar)+msg%realdp_fmm_taylor(ind,ivar)
+    end do
   end do
 end subroutine unpack_flush_taylor
 !################################################################
