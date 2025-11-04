@@ -9,11 +9,6 @@ module oct_commons
      real(dp),dimension(1:twotondim,1:nvar)::uold
      real(dp),dimension(1:twotondim,1:nvar)::unew
 #endif
-#if defined(HYDRO) && defined(GRADVPART)
-     ! Per-cell PLM velocity slopes (dq) for (u,v,w) along (x,y,z)
-     ! gradv(icell, ivel, idim) with ivel=1..NDIM, idim=1..NDIM
-     real(dp),dimension(1:twotondim,1:ndim,1:ndim)::gradv
-#endif
 #ifdef MHD
      real(dp),dimension(1:twotondim,1:6)::bold
      real(dp),dimension(1:twotondim,1:6)::bnew

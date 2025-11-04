@@ -642,13 +642,9 @@ subroutine godfine1(s,ind_grid,ilevel,h)
   ! Compute flux using second-order Godunov method
   !-----------------------------------------------
   call unsplit(h%uloc,h%gloc,h%qloc,h%cloc,&
-       & h%flux,h%tmp,&
-       & h%dq,h%qm,h%qp,h%fx,h%tx,h%divu,&
+       & h%flux,h%tmp,h%dq,h%qm,h%qp,h%fx,h%tx,h%divu,&
 #ifdef MHD
        & h%bloc,h%emfx,h%emfy,h%emfz,h%bf,h%dbf,h%Ex,h%Ey,h%Ez,h%qRT,h%qRB,h%qLT,h%qLB,&
-#endif
-#ifdef GRADVPART
-       & h%plm_slopes,&
 #endif
        & dx,g%dtnew(ilevel),&
        & h%iu1,h%iu2,h%ju1,h%ju2,h%ku1,h%ku2,&
@@ -764,18 +760,6 @@ subroutine godfine1(s,ind_grid,ilevel,h)
                                & (h%flux(i3   ,j3   ,k3   ,ivar,idim) &
                                & -h%flux(i3+i0,j3+j0,k3+k0,ivar,idim))
                        end do
-#if defined(HYDRO) && defined(GRADVPART)
-                       ! Store full 3x3 PLM slopes per cell: gradv(icell,ivel,idim)
-                       childp%gradv(ind_son,1,1)=h%plm_slopes(i3   ,j3   ,k3   ,1,1)
-                       childp%gradv(ind_son,1,2)=h%plm_slopes(i3   ,j3   ,k3   ,1,2)
-                       childp%gradv(ind_son,1,3)=h%plm_slopes(i3   ,j3   ,k3   ,1,3)
-                       childp%gradv(ind_son,2,1)=h%plm_slopes(i3   ,j3   ,k3   ,2,1)
-                       childp%gradv(ind_son,2,2)=h%plm_slopes(i3   ,j3   ,k3   ,2,2)
-                       childp%gradv(ind_son,2,3)=h%plm_slopes(i3   ,j3   ,k3   ,2,3)
-                       childp%gradv(ind_son,3,1)=h%plm_slopes(i3   ,j3   ,k3   ,3,1)
-                       childp%gradv(ind_son,3,2)=h%plm_slopes(i3   ,j3   ,k3   ,3,2)
-                       childp%gradv(ind_son,3,3)=h%plm_slopes(i3   ,j3   ,k3   ,3,3)
-#endif
 #if NVAR>5
                        do ivar=6,nvar
                           childp%unew(ind_son,ivar)=childp%unew(ind_son,ivar)+ &
@@ -947,18 +931,6 @@ subroutine godfine1(s,ind_grid,ilevel,h)
                              gridp%unew(icell,ivar)=gridp%unew(icell,ivar) &
                                   & -h%flux(i3,j3,k3,ivar,idim)*oneontwotondim
                           end do
-#if defined(HYDRO) && defined(GRADVPART)
-                          ! Store full PLM slopes into parent cell (left boundary cells)
-                          gridp%gradv(icell,1,1)= h%plm_slopes(i3,j3,k3,1,1)
-                          gridp%gradv(icell,1,2)= h%plm_slopes(i3,j3,k3,1,2)
-                          gridp%gradv(icell,1,3)= h%plm_slopes(i3,j3,k3,1,3)
-                          gridp%gradv(icell,2,1)= h%plm_slopes(i3,j3,k3,2,1)
-                          gridp%gradv(icell,2,2)= h%plm_slopes(i3,j3,k3,2,2)
-                          gridp%gradv(icell,2,3)= h%plm_slopes(i3,j3,k3,2,3)
-                          gridp%gradv(icell,3,1)= h%plm_slopes(i3,j3,k3,3,1)
-                          gridp%gradv(icell,3,2)= h%plm_slopes(i3,j3,k3,3,2)
-                          gridp%gradv(icell,3,3)= h%plm_slopes(i3,j3,k3,3,3)
-#endif
 #if NVAR>5
                           do ivar=6,nvar
                              gridp%unew(icell,ivar)=gridp%unew(icell,ivar) &
@@ -1026,19 +998,6 @@ subroutine godfine1(s,ind_grid,ilevel,h)
                              gridp%unew(icell,ivar)=gridp%unew(icell,ivar) &
                                   & +h%flux(i3+i0,j3+j0,k3+k0,ivar,idim)*oneontwotondim
                           end do
-#if defined(HYDRO) && defined(GRADVPART)
-                          ! Store full PLM slopes into parent cell (right boundary cells)
-                          ! plm_slopes are cell-centered; use local indices (i3,j3,k3)
-                          gridp%gradv(icell,1,1)= h%plm_slopes(i3,j3,k3,1,1)
-                          gridp%gradv(icell,1,2)= h%plm_slopes(i3,j3,k3,1,2)
-                          gridp%gradv(icell,1,3)= h%plm_slopes(i3,j3,k3,1,3)
-                          gridp%gradv(icell,2,1)= h%plm_slopes(i3,j3,k3,2,1)
-                          gridp%gradv(icell,2,2)= h%plm_slopes(i3,j3,k3,2,2)
-                          gridp%gradv(icell,2,3)= h%plm_slopes(i3,j3,k3,2,3)
-                          gridp%gradv(icell,3,1)= h%plm_slopes(i3,j3,k3,3,1)
-                          gridp%gradv(icell,3,2)= h%plm_slopes(i3,j3,k3,3,2)
-                          gridp%gradv(icell,3,3)= h%plm_slopes(i3,j3,k3,3,3)
-#endif
 #if NVAR>5
                           do ivar=6,nvar
                              gridp%unew(icell,ivar)=gridp%unew(icell,ivar) &

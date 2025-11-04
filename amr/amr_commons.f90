@@ -76,6 +76,7 @@ module amr_commons
      real(kind=8)::grain_size_parameter=0.0d0   ! Dust particle size parameter (dimensionless)
      real(kind=8)::grain_charge_parameter=0.0d0  ! Dust particle charge-to-mass ratio (dimensionless)
      real(kind=8)::dust_gyro_factor=0.1d0  ! Fraction of gyro period allowed per step
+     logical :: analytic_dust_force = .false. ! If true use analytic drag+Lorentz
      integer,dimension(1:MAXLEVEL)::nexpand=1 ! Number of mesh expansion
      real(kind=8)::boxlen=1.0        ! Cell size at level 0 (total box size)
      real(kind=8)::box_size=0.0      ! Box length of active domain along x direction

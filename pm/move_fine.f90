@@ -1,7 +1,9 @@
 module move_fine_module
   use rho_fine_module, only: cic_weight, cic_index, tsc_weight, tsc_index, pcs_weight, pcs_index
+#ifdef MHD
+  logical, save :: lorentz_not_implemented_warned = .false.
+#endif
 contains
-! (expokit_matvec will be defined as an internal procedure where used)
 !################################################################
 !################################################################
 !################################################################
@@ -92,22 +94,16 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
         endif
      endif
      if(pst%s%r%trac)then
-        if(pst%s%r%trac_interpolation_scheme==4)then
-           call pli_trace_gas_part(pst%s,pst%s%trac,ilevel,action_part)
-        elseif(pst%s%r%trac_interpolation_scheme==1)then
+        if(pst%s%r%trac_interpolation_scheme==1)then
            call cic_trace_gas_part(pst%s,pst%s%trac,ilevel,action_part)
         elseif(pst%s%r%trac_interpolation_scheme==2)then
            call tsc_trace_gas_part(pst%s,pst%s%trac,ilevel,action_part)
         elseif(pst%s%r%trac_interpolation_scheme==3)then
            call pcs_trace_gas_part(pst%s,pst%s%trac,ilevel,action_part)
-        elseif(pst%s%r%trac_interpolation_scheme==0)then
-           call ngp_trace_gas_part(pst%s,pst%s%trac,ilevel,action_part)
         endif
      endif
      if(pst%s%r%dust)then
-        if(pst%s%r%dust_force_interpolation_scheme==0)then
-           call pli_kick_drift_dust(pst%s,pst%s%dust,ilevel,action_part)
-        elseif(pst%s%r%dust_force_interpolation_scheme==1)then
+        if(pst%s%r%dust_force_interpolation_scheme==1)then
            call cic_kick_drift_dust(pst%s,pst%s%dust,ilevel,action_part)
         elseif(pst%s%r%dust_force_interpolation_scheme==2)then
            call tsc_kick_drift_dust(pst%s,pst%s%dust,ilevel,action_part)
@@ -774,24 +770,19 @@ subroutine pack_fetch_kick_trac(grid,msg_size,msg_array)
   use amr_parameters, only: twotondim, ndim
   use hydro_parameters, only: nvar
   use amr_commons, only: oct
-  use cache_commons, only: msg_large_realdp
+  use cache_commons, only: msg_nvar_realdp
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
 
   integer::ind,ivar
-  type(msg_large_realdp)::msg
+  type(msg_nvar_realdp)::msg
 
 #ifdef HYDRO
   do ivar=1,nvar
      do ind=1,twotondim
         msg%realdp_hydro(ind,ivar)=grid%uold(ind,ivar)
      end do
-  end do
-#endif
-#ifdef GRADVPART
-  do ind=1,twotondim
-     msg%realdp_gradv(ind,1:ndim,1:ndim)=grid%gradv(ind,1:ndim,1:ndim)
   end do
 #endif
 
@@ -804,13 +795,13 @@ subroutine unpack_fetch_kick_trac(grid,msg_size,msg_array,hash_key)
   use amr_parameters, only: ndim,twotondim
   use hydro_parameters, only: nvar
   use amr_commons, only: oct
-  use cache_commons, only: msg_large_realdp
+  use cache_commons, only: msg_nvar_realdp
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
   integer(kind=8),dimension(0:ndim)::hash_key
   integer::ind,ivar
-  type(msg_large_realdp)::msg
+  type(msg_nvar_realdp)::msg
 
   grid%lev=hash_key(0)
   grid%ckey(1:ndim)=hash_key(1:ndim)
@@ -821,11 +812,6 @@ subroutine unpack_fetch_kick_trac(grid,msg_size,msg_array,hash_key)
      do ind=1,twotondim
         grid%uold(ind,ivar)=msg%realdp_hydro(ind,ivar)
      end do
-  end do
-#endif
-#ifdef GRADVPART
-  do ind=1,twotondim
-     grid%gradv(ind,1:ndim,1:ndim)=msg%realdp_gradv(ind,1:ndim,1:ndim)
   end do
 #endif
 
@@ -924,194 +910,6 @@ subroutine unpack_fetch_kick_dust(grid,msg_size,msg_array,hash_key)
 #endif
 
 end subroutine unpack_fetch_kick_dust
-!#########################################################################
-!#########################################################################
-!#########################################################################
-!#########################################################################
-subroutine pli_trace_gas_part(s,p,ilevel,action_part)
-  use amr_parameters, only: ndim, twotondim
-  use pm_parameters
-  use pm_commons, only: part_t
-  use oct_commons, only: oct
-  use ramses_commons, only: ramses_t
-  use nbors_utils
-  use cache_commons
-  use cache
-  implicit none
-  type(ramses_t)::s
-  type(part_t)::p
-  integer::ilevel
-  integer::action_part
-  real(kind=8),dimension(1:ndim)::x,x_mid
-  integer,dimension(1:ndim)::cc,cc2
-  real(kind=8),dimension(1:ndim)::frac,frac2
-  integer(kind=8),dimension(0:ndim)::hash_nbor
-  integer::ipart,idim,ind,icell,icell2
-  real(kind=8)::dx_loc
-  real(kind=8),dimension(1:ndim)::ff,v_pred
-  type(oct),pointer :: gridp
-  real(kind=8),dimension(1:ndim)::x_samp
-  integer :: itry, lvl_try
-#ifdef GRADVPART
-  type(msg_large_realdp)::dummy_large_realdp
-#else
-  type(msg_nvar_realdp)::dummy_nvar_realdp
-#endif
-  integer :: ii
-  character(LEN=80)::filename,fileloc
-  character(LEN=5)::nchar
-
-  associate(r=>s%r,g=>s%g,m=>s%m)
-  if(p%static)return
-  if (p%type/=TRAC_TYPE) return
-
-  dx_loc=r%boxlen/2**ilevel
-
-#ifdef GRADVPART
-  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-                     hilbert=m%domain, pack_size=storage_size(dummy_large_realdp)/32,&
-                     pack=pack_fetch_kick_trac,unpack=unpack_fetch_kick_trac)
-#else
-  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-                     hilbert=m%domain, pack_size=storage_size(dummy_nvar_realdp)/32,&
-                     pack=pack_fetch_kick_trac,unpack=unpack_fetch_kick_trac)
-#endif
-
-  do ipart=p%headp(ilevel),p%tailp(ilevel)
-     do idim=1,ndim
-        x(idim)=p%xp(ipart,idim)/dx_loc
-     end do
-     do idim=1,ndim
-        if(x(idim)<0d0)x(idim)=x(idim)+dble(m%ckey_max(ilevel+1))
-        if(x(idim)>=dble(m%ckey_max(ilevel+1)))x(idim)=x(idim)-dble(m%ckey_max(ilevel+1))
-     end do
-
-     do idim=1,ndim
-        cc(idim)=int(x(idim))
-        frac(idim)=x(idim)-dble(cc(idim))
-     end do
-
-     hash_nbor(0)=ilevel+1
-     hash_nbor(1:ndim)=cc(1:ndim)
-     call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
-
-     if(action_part==action_kick_only)then
-        p%levelp(ipart)=ilevel
-#ifdef GRADVPART
-        if(associated(gridp))then
-           ! Reconstruct cell-centered velocity
-           ff(1:ndim)=gridp%uold(icell,2:ndim+1)/max(gridp%uold(icell,1), r%smallr)
-        else
-           ff(1:ndim)=0.0d0
-        end if
-#else
-        if(associated(gridp))then
-           ff(1:ndim)=gridp%uold(icell,2:ndim+1)/max(gridp%uold(icell,1), r%smallr)
-        else
-           ff(1:ndim)=0.0d0
-        end if
-#endif
-        p%vp(ipart,1:ndim)=ff(1:ndim)
-
-     else if(action_part==action_kick_drift)then
-        ! Leapfrog: first step predicts midpoint, thereafter sample at current x
-        v_pred(1:ndim)=p%vp(ipart,1:ndim)
-        if (g%nstep==0) then
-           do idim=1,ndim
-              x_mid(idim)=x(idim)+0.5d0*g%dtnew(ilevel)*v_pred(idim)/dx_loc
-           end do
-        else
-           do idim=1,ndim
-              x_mid(idim)=x(idim)
-           end do
-        endif
-        do idim=1,ndim
-           if(x_mid(idim)<0d0)x_mid(idim)=x_mid(idim)+dble(m%ckey_max(ilevel+1))
-           if(x_mid(idim)>=dble(m%ckey_max(ilevel+1)))x_mid(idim)=x_mid(idim)-dble(m%ckey_max(ilevel+1))
-        end do
-
-#ifdef GRADVPART
-        ! Use linear advection in locally linear field
-        hash_nbor(0)=ilevel+1
-        do idim=1,ndim
-          cc2(idim)=int(x_mid(idim))
-        end do
-        hash_nbor(1:ndim)=cc2(1:ndim)
-        call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
-        if(associated(gridp))then
-          ! vcell at center
-          ff(1:ndim)=gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)
-          ! gradv tensor (ivel,idim)
-          ! Map particle position to cell-centered coords [-1/2,1/2]
-          do idim=1,ndim
-             x_samp(idim)=x_mid(idim)-dble(cc2(idim))-0.5d0
-          end do
-          call advect_linear(g%dtnew(ilevel), gridp%gradv(icell2,1:ndim,1:ndim), ff(1:ndim), x_samp(1:ndim), x_mid(1:ndim))
-          ! Convert xf back to absolute cell units
-          do idim=1,ndim
-             x_mid(idim)=dble(cc2(idim))+0.5d0 + x_mid(idim)
-          end do
-          ! New velocity at new position: v = vcell + gradv*(xf-rel_center)
-          ff(1:ndim)=gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)
-          do idim=1,ndim
-             do ind=1,ndim
-                ff(idim)=ff(idim)+gridp%gradv(icell2,idim,ind)*(x_mid(ind)-dble(cc2(ind))-0.5d0)
-             end do
-          end do
-        else
-          ff(1:ndim)=0.0d0
-        end if
-#else
-        hash_nbor(0)=ilevel+1
-        do idim=1,ndim
-          cc2(idim)=int(x_mid(idim))
-        end do
-        hash_nbor(1:ndim)=cc2(1:ndim)
-        call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
-        if(associated(gridp))then
-          ff(1:ndim)=gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)
-        else
-          ff(1:ndim)=0.0d0
-        end if
-#endif
-
-        p%vp(ipart,1:ndim)=ff(1:ndim)
-        p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
-
-        ! Trajectory output for selected tracer particles (PLI)
-        if(s%r%ntrajectories>0)then
-          do ii=1,s%r%ntrajectories
-            if(s%r%trajectories(ii)==p%idp(ipart))then
-              call title(g%myid,nchar)
-              filename='trajectory.dat'
-              fileloc=TRIM(filename)//TRIM(nchar)
-              open(25+g%myid,file=fileloc,status='unknown',access='append')
-              write(25+g%myid,'(1PE15.7,1X,I12,1X,8(1PE15.7,1X))') &
-                   g%t, p%idp(ipart), &
-                   p%xp(ipart,1),p%xp(ipart,2),p%xp(ipart,3), &
-                   p%vp(ipart,1),p%vp(ipart,2),p%vp(ipart,3), &
-                   0.0d0,0.0d0
-              close(25+g%myid)
-              exit
-            endif
-          end do
-        endif
-     end if
-  end do
-
-  call close_cache(s,m%grid_dict)
-
-  if(action_part==action_kick_drift)then
-     do ipart=p%headp(ilevel),p%tailp(ilevel)
-        do idim=1,ndim
-           if(p%xp(ipart,idim)<0.0d0)p%xp(ipart,idim)=p%xp(ipart,idim)+r%boxlen
-           if(p%xp(ipart,idim)>=r%boxlen)p%xp(ipart,idim)=p%xp(ipart,idim)-r%boxlen
-        end do
-     end do
-  end if
-
-  end associate
-end subroutine pli_trace_gas_part
 !#########################################################################
 !#########################################################################
 !#########################################################################
@@ -1454,102 +1252,6 @@ subroutine tsc_trace_gas_part(s,p,ilevel,action_part)
   end associate
 end subroutine tsc_trace_gas_part
 
-subroutine ngp_trace_gas_part(s,p,ilevel,action_part)
-  use amr_parameters, only: ndim
-  use pm_parameters
-  use pm_commons, only: part_t
-  use oct_commons, only: oct
-  use ramses_commons, only: ramses_t
-  use nbors_utils
-  use cache_commons
-  use cache
-  implicit none
-  type(ramses_t)::s
-  type(part_t)::p
-  integer::ilevel
-  integer::action_part
-  real(kind=8),dimension(1:ndim)::x,x_mid
-  integer,dimension(1:ndim)::cc
-  integer(kind=8),dimension(0:ndim)::hash_nbor
-  integer::ipart,idim,icell
-  real(kind=8)::dx_loc
-  real(kind=8),dimension(1:ndim)::ff,v_pred
-  type(oct),pointer :: gridp
-  type(msg_nvar_realdp)::dummy_nvar_realdp
-
-  associate(r=>s%r,g=>s%g,m=>s%m)
-  if(p%static)return
-  if (p%type/=TRAC_TYPE) return
-
-  dx_loc=r%boxlen/2**ilevel
-  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-                     hilbert=m%domain, pack_size=storage_size(dummy_nvar_realdp)/32,&
-                     pack=pack_fetch_kick_trac,unpack=unpack_fetch_kick_trac)
-
-  do ipart=p%headp(ilevel),p%tailp(ilevel)
-     do idim=1,ndim
-        x(idim)=p%xp(ipart,idim)/dx_loc
-     end do
-     do idim=1,ndim
-        if(x(idim)<0d0)x(idim)=x(idim)+dble(m%ckey_max(ilevel+1))
-        if(x(idim)>=dble(m%ckey_max(ilevel+1)))x(idim)=x(idim)-dble(m%ckey_max(ilevel+1))
-     end do
-     do idim=1,ndim
-        cc(idim)=int(x(idim))
-     end do
-
-     hash_nbor(0)=ilevel+1
-     hash_nbor(1:ndim)=cc(1:ndim)
-     call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
-
-     if(action_part==action_kick_only)then
-        p%levelp(ipart)=ilevel
-        if(associated(gridp))then
-           ff(1:ndim)=gridp%uold(icell,2:ndim+1)/max(gridp%uold(icell,1), r%smallr)
-        else
-           ff(1:ndim)=0.0d0
-        end if
-        p%vp(ipart,1:ndim)=ff(1:ndim)
-
-     else if(action_part==action_kick_drift)then
-        v_pred(1:ndim)=p%vp(ipart,1:ndim)
-        if (g%nstep==0) then
-           do idim=1,ndim
-              x_mid(idim)=x(idim)+0.5d0*g%dtnew(ilevel)*v_pred(idim)/dx_loc
-           end do
-           do idim=1,ndim
-              if(x_mid(idim)<0d0)x_mid(idim)=x_mid(idim)+dble(m%ckey_max(ilevel+1))
-              if(x_mid(idim)>=dble(m%ckey_max(ilevel+1)))x_mid(idim)=x_mid(idim)-dble(m%ckey_max(ilevel+1))
-           end do
-           do idim=1,ndim
-              cc(idim)=int(x_mid(idim))
-           end do
-           hash_nbor(0)=ilevel+1
-           hash_nbor(1:ndim)=cc(1:ndim)
-           call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
-        end if
-        if(associated(gridp))then
-           ff(1:ndim)=gridp%uold(icell,2:ndim+1)/max(gridp%uold(icell,1), r%smallr)
-        else
-           ff(1:ndim)=0.0d0
-        end if
-        p%vp(ipart,1:ndim)=ff(1:ndim)
-        p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
-     end if
-  end do
-
-  call close_cache(s,m%grid_dict)
-  if(action_part==action_kick_drift)then
-     do ipart=p%headp(ilevel),p%tailp(ilevel)
-        do idim=1,ndim
-           if(p%xp(ipart,idim)<0.0d0)p%xp(ipart,idim)=p%xp(ipart,idim)+r%boxlen
-           if(p%xp(ipart,idim)>=r%boxlen)p%xp(ipart,idim)=p%xp(ipart,idim)-r%boxlen
-        end do
-     end do
-  end if
-  end associate
-end subroutine ngp_trace_gas_part
-
 subroutine pcs_trace_gas_part(s,p,ilevel,action_part)
   use amr_parameters, only: ndim, fourtondim
   use pm_parameters
@@ -1694,49 +1396,6 @@ subroutine pcs_trace_gas_part(s,p,ilevel,action_part)
   end if
   end associate
 end subroutine pcs_trace_gas_part
-
-!#########################################################################
-!#########################################################################
-! Picewise linear interpolation instead of cloud in cell methods
-! (optionally using Riemann fluxes)
-!#########################################################################
-!#########################################################################
-subroutine pli_kick_drift_dust(s,p,ilevel,action_part)
-   use amr_parameters, only: ndim, twotondim
-   use hydro_parameters, only: nener
-   use pm_parameters
-   use pm_commons, only: part_t
-   use oct_commons, only: oct
-   use ramses_commons, only: ramses_t
-   use nbors_utils
-   use cache_commons
-   use cache
-   implicit none
-   ! Intrinsic functions for drag calculations
-   intrinsic :: sinh, cosh
-   type(ramses_t)::s
-   type(part_t)::p
-   integer::ilevel
-   integer::action_part
-   real(kind=8),dimension(1:ndim)::x,x_mid,dr,dl,dr2,dl2
-   integer,dimension(1:ndim)::ir,il
-   integer,dimension(1:ndim)::ir2,il2
-   real(kind=8),dimension(1:twotondim)::vol,vol2
-   integer,dimension(1:ndim,1:twotondim)::ckey,ckey2
-   integer::icell,icell2
-   integer(kind=8),dimension(0:ndim)::hash_nbor
-   integer::ipart,ind,idim,irad
-   real(kind=8)::dx_loc,vol_loc
-   real(kind=8),dimension(1:ndim)::ff,v_pred
-   real(kind=8),dimension(1:ndim)::uu
-   real(kind=8)::rho_gas,c_sound,eint,coeff,wdrift2
-   real(kind=8)::nu_stop,dens,etot,ekin,erad,cs2,pi=4.0d0*atan(1.0d0)
-   real(kind=8),dimension(1:ndim)::what,wdrift ! drift velocity unit vector
-   type(oct),pointer :: gridp
-   logical :: ok_level
-   type(msg_large_realdp)::dummy_large_realdp
-
-end subroutine pli_kick_drift_dust
 !#########################################################################
 !#########################################################################
 !#########################################################################
@@ -1769,6 +1428,10 @@ subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
   real(kind=8)::dx_loc,vol_loc
   real(kind=8),dimension(1:ndim)::ff,v_pred
   real(kind=8),dimension(1:ndim)::uu
+#ifdef MHD
+  real(kind=8),dimension(1:3)::bb
+  real(kind=8)::emag
+#endif
   real(kind=8)::rho_gas,c_sound,eint,coeff,wdrift2
   real(kind=8)::nu_stop,dens,etot,ekin,erad,cs2,pi=4.0d0*atan(1.0d0)
   real(kind=8),dimension(1:ndim)::what,wdrift ! drift velocity unit vector
@@ -1812,31 +1475,22 @@ subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
      ckey = cic_index(il,ir)
      vol = cic_weight(dl,dr)
 
-     ! Gas velocity estimate at x for v_pred fallback
-     hash_nbor(0)=ilevel+1
-     ff(1:ndim)=0.0
-     do ind=1,twotondim
-        hash_nbor(1:ndim)=ckey(1:ndim,ind)
-        call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
-#ifdef HYDRO
-        if(associated(gridp))then
-           ff(1:ndim)=ff(1:ndim)+gridp%uold(icell,2:ndim+1)/max(gridp%uold(icell,1), r%smallr)*vol(ind)
-        end if
-#endif
-     end do
+
 
      if(action_part==action_kick_only)then
         p%levelp(ipart)=ilevel
      else if(action_part==action_kick_drift)then
-        ! Midpoint prediction
-        if (g%nstep>0) then
-           v_pred(1:ndim)=p%vp(ipart,1:ndim)
+        ! Leapfrog-style sampling: half-step shift only on the first coarse step
+        v_pred(1:ndim)=p%vp(ipart,1:ndim)
+        if (g%nstep==0) then
+           do idim=1,ndim
+              x_mid(idim)=x(idim)+0.5d0*g%dtnew(ilevel)*v_pred(idim)/dx_loc
+           end do
         else
-           v_pred(1:ndim)=ff(1:ndim)
+           do idim=1,ndim
+              x_mid(idim)=x(idim)
+           end do
         endif
-        do idim=1,ndim
-           x_mid(idim)=x(idim)+0.5d0*g%dtnew(ilevel)*v_pred(idim)/dx_loc
-        end do
         do idim=1,ndim
            if(x_mid(idim)<0d0)x_mid(idim)=x_mid(idim)+dble(m%ckey_max(ilevel+1))
            if(x_mid(idim)>=dble(m%ckey_max(ilevel+1)))x_mid(idim)=x_mid(idim)-dble(m%ckey_max(ilevel+1))
@@ -1857,18 +1511,29 @@ subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
         ckey2 = cic_index(il2,ir2)
         vol2 = cic_weight(dl2,dr2)
 
-        ! Gather hydro at x_mid
+        ! Gather hydro and forces at x_mid
+        ff(1:ndim)=0.0
         uu(1:ndim)=0.0
         rho_gas = 0.0
         eint = 0.0
+#ifdef MHD
+        bb(1:3)=0.0
+        emag=0.0d0
+#endif
         hash_nbor(0)=ilevel+1
         do ind=1,twotondim
            hash_nbor(1:ndim)=ckey2(1:ndim,ind)
            call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
 #ifdef HYDRO
            if(associated(gridp))then
+#ifdef GRAV
+              ff(1:ndim)=ff(1:ndim)+gridp%f(icell2,1:ndim)*vol2(ind)
+#endif
               rho_gas = rho_gas + gridp%uold(icell2,1)*vol2(ind)
               uu(1:ndim)=uu(1:ndim)+gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)*vol2(ind)
+#ifdef MHD
+              bb(1:3)=bb(1:3)+0.5d0*(gridp%bold(icell2,1:3)+gridp%bold(icell2,4:6))*vol2(ind)
+#endif
               dens = max(dble(gridp%uold(icell2,1)), r%smallr)
               etot = gridp%uold(icell2,5)
               ekin = 0.0d0
@@ -1881,7 +1546,13 @@ subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
                  erad = erad + gridp%uold(icell2,5+irad)
               end do
 #endif
-              eint = eint + (etot - ekin - erad) * vol2(ind)
+#ifdef MHD
+              do idim=1,3
+                 emag = emag + 0.125d0*(gridp%bold(icell2,idim)+gridp%bold(icell2,ndim+idim))**2*vol2(ind)
+              end do
+              eint = eint - emag*vol2(ind)
+#endif
+              eint = eint + (etot - ekin - erad)*vol2(ind)
            end if
 #endif
         end do
@@ -1890,17 +1561,31 @@ subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
         c_sound = max(sqrt(cs2), r%smallc)
         nu_stop = coeff*c_sound*rho_gas/p%size(ipart)
         wdrift(1:ndim)= v_pred(1:ndim) - uu(1:ndim)
-        wdrift2 = dot_product(wdrift(1:ndim),wdrift(1:ndim))
-        if(wdrift2>0.0d0)then
-           what(1:ndim)=wdrift(1:ndim)/max(1.0d-30, sqrt(wdrift2))
+
+        ! Operator-split: drag(half) -> forces -> drag(half)
+        call compute_drag_step(wdrift, c_sound, 0.5d0*g%dtnew(ilevel), nu_stop, coeff, r%analytic_dust_force)
+#ifdef GRAV
+        wdrift(1:ndim)=wdrift(1:ndim)+ff(1:ndim)*0.5d0*g%dtnew(ilevel)
+#endif
+#ifdef MHD
+        if (ndim==3) then
+        call compute_lorentz_step(wdrift, bb(1:ndim), g%dtnew(ilevel), p%charge(ipart), r%analytic_dust_force)
         else
-           what(1:ndim)=0.0d0
+           if(.not.lorentz_not_implemented_warned)then
+              if(g%myid==1 .and. g%nstep==0)then
+                 write(*,*) 'Warning: Lorentz force not implemented for NDIM != 3; proceeding without it.'
+              endif
+              lorentz_not_implemented_warned=.true.
+           endif
         endif
-        wdrift(1:ndim) = c_sound * what(1:ndim) * &
-        & exact_drag(g%dtnew(ilevel), nu_stop, coeff, sqrt(wdrift2)/c_sound)
+#endif
+#ifdef GRAV
+        wdrift(1:ndim)=wdrift(1:ndim)+ff(1:ndim)*0.5d0*g%dtnew(ilevel)
+#endif
+        call compute_drag_step(wdrift, c_sound, 0.5d0*g%dtnew(ilevel), nu_stop, coeff, r%analytic_dust_force)
 
         p%vp(ipart,1:ndim)=uu(1:ndim)+wdrift(1:ndim)
-        p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+0.5d0*(p%vp(ipart,1:ndim)+v_pred(1:ndim))*g%dtnew(ilevel)
+        p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
      endif
   end do
   call close_cache(s,m%grid_dict)
@@ -1933,7 +1618,10 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
   integer::ipart,icell,icell2,ind,idim,irad
   real(kind=8)::xl,xc,xr
   real(kind=8)::dx_loc
-  real(kind=8),dimension(1:ndim)::ff,uu,bb,v_pred,wdrift
+  real(kind=8),dimension(1:ndim)::ff,uu,v_pred,wdrift
+#ifdef MHD
+  real(kind=8),dimension(1:3)::bb
+#endif
   real(kind=8)::rho_gas,c_sound,eint,coeff
   real(kind=8)::nu_stop,dens,etot,ekin,erad,emag,cs2,pi
   integer :: ii
@@ -2019,7 +1707,9 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
 #endif
               rho_gas = rho_gas + gridp%uold(icell2,1)*vol2(ind)
               uu(1:ndim)=uu(1:ndim)+gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)*vol2(ind)
+#ifdef MHD
               bb(1:3)=bb(1:3)+0.5d0*(gridp%bold(icell2,1:3)+gridp%bold(icell2,4:6))*vol2(ind)
+#endif
               dens = max(dble(gridp%uold(icell2,1)), r%smallr)
               etot = gridp%uold(icell2,5)
               ekin = 0.0d0
@@ -2050,14 +1740,23 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
         ! There will also be an if(gyro_pic) gate, since everything must be computed very differently
         ! in the gyro case.
 
-        call compute_drag(wdrift, c_sound, 0.5*g%dtnew(ilevel), nu_stop, coeff)
+        call compute_drag_step(wdrift, c_sound, 0.5*g%dtnew(ilevel), nu_stop, coeff, r%analytic_dust_force)
         ! Gather ff, and apply to either side of the Lorentz force as a half-step
         wdrift(1:ndim)=wdrift(1:ndim)+ff(1:ndim)*0.5d0*g%dtnew(ilevel) ! External force half-step (includes gravity)
 #ifdef MHD 
-        call compute_lorentz_analytic(wdrift, bb, g%dtnew(ilevel), p%charge(ipart)) !Somehow introducing nonphysical oscillations.
+        if (ndim==3) then
+           call compute_lorentz_step(wdrift, bb(1:ndim), g%dtnew(ilevel), p%charge(ipart), r%analytic_dust_force) !Somehow introducing nonphysical oscillations.
+        else
+           if(.not.lorentz_not_implemented_warned)then
+              if(g%myid==1 .and. g%nstep==0)then
+                 write(*,*) 'Warning: Lorentz force not implemented for NDIM != 3; proceeding without it.'
+              endif
+              lorentz_not_implemented_warned=.true.
+           endif
+        endif
 #endif
         wdrift(1:ndim)=wdrift(1:ndim)+ff(1:ndim)*0.5d0*g%dtnew(ilevel) ! Second external force half-step
-        call compute_drag(wdrift, c_sound, 0.5*g%dtnew(ilevel), nu_stop, coeff)
+        call compute_drag_step(wdrift, c_sound, 0.5*g%dtnew(ilevel), nu_stop, coeff, r%analytic_dust_force)
         ! Routine will return an intermediate drift velocity.
         p%vp(ipart,1:ndim)=uu(1:ndim)+wdrift(1:ndim)
         ! Leapfrog drift: advance positions using time-centered velocity
@@ -2121,6 +1820,10 @@ subroutine pcs_kick_drift_dust(s,p,ilevel,action_part)
   real(kind=8)::xll,xl,xr,xrr
   real(kind=8)::dx_loc
   real(kind=8),dimension(1:ndim)::ff,v_pred,uu,what,wdrift
+#ifdef MHD
+  real(kind=8),dimension(1:3)::bb
+  real(kind=8)::emag
+#endif
   real(kind=8)::rho_gas,c_sound,eint,coeff,wdrift2
   real(kind=8)::nu_stop,dens,etot,ekin,erad,cs2,pi
   integer::irad
@@ -2219,16 +1922,27 @@ subroutine pcs_kick_drift_dust(s,p,ilevel,action_part)
        ckey2 = pcs_index(cll2,cl2,cr2,crr2)
        vol2 = pcs_weight(wll2,wl2,wr2,wrr2)
        hash_nbor(0)=ilevel+1
+       ff(1:ndim)=0.0
        uu(1:ndim)=0.0
        rho_gas=0.0d0
        eint=0.0d0
+#ifdef MHD
+       bb(1:3)=0.0d0
+       emag=0.0d0
+#endif
        do ind=1,fourtondim
           hash_nbor(1:ndim)=ckey2(1:ndim,ind)
           call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
 #ifdef HYDRO
           if(associated(gridp))then
+#ifdef GRAV
+             ff(1:ndim)=ff(1:ndim)+gridp%f(icell2,1:ndim)*vol2(ind)
+#endif
              rho_gas = rho_gas + gridp%uold(icell2,1)*vol2(ind)
              uu(1:ndim)=uu(1:ndim)+gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)*vol2(ind)
+#ifdef MHD
+             bb(1:3)=bb(1:3)+0.5d0*(gridp%bold(icell2,1:3)+gridp%bold(icell2,4:6))*vol2(ind)
+#endif
              dens = max(dble(gridp%uold(icell2,1)), r%smallr)
              etot = gridp%uold(icell2,5)
              ekin = 0.0d0
@@ -2241,6 +1955,12 @@ subroutine pcs_kick_drift_dust(s,p,ilevel,action_part)
                 erad = erad + gridp%uold(icell2,5+irad)
              end do
 #endif
+#ifdef MHD
+             do idim=1,3
+                emag = emag + 0.125d0*(gridp%bold(icell2,idim)+gridp%bold(icell2,ndim+idim))**2*vol2(ind)
+             end do
+             eint = eint - emag*vol2(ind)
+#endif
              eint = eint + (etot - ekin - erad) * vol2(ind)
           end if
 #endif
@@ -2249,14 +1969,27 @@ subroutine pcs_kick_drift_dust(s,p,ilevel,action_part)
        c_sound = max(sqrt(cs2), r%smallc)
        nu_stop = coeff*c_sound*rho_gas/p%size(ipart)
        wdrift(1:ndim)= v_pred(1:ndim) - uu(1:ndim)
-       wdrift2 = dot_product(wdrift(1:ndim),wdrift(1:ndim))
-       if(wdrift2>0.0d0)then
-         what(1:ndim)=wdrift(1:ndim)/sqrt(wdrift2)
-         wdrift(1:ndim) = c_sound * what(1:ndim) * &
-         & exact_drag(g%dtnew(ilevel), nu_stop, coeff, sqrt(wdrift2)/c_sound)
+       ! Operator-split: drag(half) -> forces -> drag(half)
+       call compute_drag_step(wdrift, c_sound, 0.5d0*g%dtnew(ilevel), nu_stop, coeff, r%analytic_dust_force)
+#ifdef GRAV
+       wdrift(1:ndim)=wdrift(1:ndim)+ff(1:ndim)*0.5d0*g%dtnew(ilevel)
+#endif
+#ifdef MHD
+       if (ndim==3) then
+       call compute_lorentz_step(wdrift, bb(1:ndim), g%dtnew(ilevel), p%charge(ipart), r%analytic_dust_force)
        else
-         wdrift(1:ndim)=0.0d0
-       end if
+          if(.not.lorentz_not_implemented_warned)then
+             if(g%myid==1 .and. g%nstep==0)then
+                write(*,*) 'Warning: Lorentz force not implemented for NDIM != 3; proceeding without it.'
+             endif
+             lorentz_not_implemented_warned=.true.
+          endif
+       endif
+#endif
+#ifdef GRAV
+       wdrift(1:ndim)=wdrift(1:ndim)+ff(1:ndim)*0.5d0*g%dtnew(ilevel)
+#endif
+       call compute_drag_step(wdrift, c_sound, 0.5d0*g%dtnew(ilevel), nu_stop, coeff, r%analytic_dust_force)
        p%vp(ipart,1:ndim)=uu(1:ndim)+wdrift(1:ndim)
        p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
     endif
@@ -2277,24 +2010,30 @@ end subroutine pcs_kick_drift_dust
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine compute_drag(wdrift, c_sound, dt, nu_stop, coeff)
+subroutine compute_drag_step(wdrift, c_sound, dt, nu_stop, coeff, analytic_dust_force)
   use amr_parameters, only: ndim
   implicit none
   real(kind=8), intent(inout) :: wdrift(1:ndim)
   real(kind=8), intent(in)    :: c_sound, dt, nu_stop, coeff
+  logical, intent(in)         :: analytic_dust_force
   real(kind=8) :: wdrift2
   real(kind=8) :: what(1:ndim)
 
   wdrift2 = dot_product(wdrift(1:ndim), wdrift(1:ndim))
   if (wdrift2 > 0.0d0) then
      what(1:ndim) = wdrift(1:ndim) / sqrt(wdrift2)
-     wdrift(1:ndim) = c_sound * what(1:ndim) * &
-     & fully_implicit_drag(dt, nu_stop, coeff, sqrt(wdrift2)/c_sound)
+     if (analytic_dust_force) then
+        wdrift(1:ndim) = c_sound * what(1:ndim) * &
+        & exact_drag(dt, nu_stop, coeff, sqrt(wdrift2)/c_sound)
+     else
+        wdrift(1:ndim) = c_sound * what(1:ndim) * &
+        & fully_implicit_drag(dt, nu_stop, coeff, sqrt(wdrift2)/c_sound)
+     end if
   else
      wdrift(1:ndim) = 0.0d0
   end if
 
-end subroutine compute_drag
+end subroutine compute_drag_step
 
 function exact_drag(dt, nu, eta, w0) result(drag_value)
   ! Computes drag coefficient based on the analytic solution for Epstein-Baines drag:
@@ -2369,7 +2108,7 @@ subroutine compute_lorentz(driftvel, bfield, dt, charge_parameter)
   real(kind=8) :: v1_new, v2_new, v3_new
   real(kind=8), dimension(1:3,1:3) :: matrix
   
-  dteff = dt * charge_parameter
+  dteff = -1.0d0 * dt * charge_parameter ! Accidentally flipped sign in the original code.
   bsquared = dot_product(bfield(1:ndim), bfield(1:ndim))
 
   det = 1 + 0.25d0 * bsquared * dteff**2
@@ -2407,6 +2146,27 @@ end subroutine compute_lorentz
 !#########################################################################
 !#########################################################################
 !#########################################################################
+subroutine compute_lorentz_step(driftvel, bfield, dt, charge_parameter, analytic_dust_force)
+  use amr_parameters, only: ndim
+  implicit none
+  real(kind=8), dimension(1:ndim), intent(inout) :: driftvel
+  real(kind=8), dimension(1:ndim), intent(in)    :: bfield
+  real(kind=8), intent(in)                       :: dt
+  real(kind=8), intent(in)                       :: charge_parameter
+  logical, intent(in)                            :: analytic_dust_force
+#ifdef MHD
+  if (ndim/=3) return
+  if (.not. analytic_dust_force) then
+     call compute_lorentz(driftvel, bfield, dt, charge_parameter)
+  else
+     call compute_lorentz_analytic(driftvel, bfield, dt, charge_parameter)
+  end if
+#else
+  ! No MHD compiled; nothing to do
+#endif
+end subroutine compute_lorentz_step
+!#########################################################################
+!#########################################################################
 subroutine compute_lorentz_analytic(driftvel, bfield, dt, charge_parameter)
   use amr_parameters, only: ndim
   implicit none
@@ -2417,15 +2177,6 @@ subroutine compute_lorentz_analytic(driftvel, bfield, dt, charge_parameter)
   real(kind=8) :: dteff, bsquared, bnorm, theta, costh, sinth, vdotb, t2
   real(kind=8), dimension(1:ndim) :: bhat, v, kxv
 
-#ifdef HAVE_SINCOS
-  interface
-     subroutine sincos_c(x, s, c) bind(C, name="__sincos")
-       use iso_c_binding
-       real(c_double), value :: x
-       real(c_double)        :: s, c
-     end subroutine
-  end interface
-#endif
 
   dteff = dt * charge_parameter
   if (dteff == 0.0d0) return
@@ -2443,12 +2194,8 @@ subroutine compute_lorentz_analytic(driftvel, bfield, dt, charge_parameter)
      costh = 1.0d0 + t2*(-0.5d0 + t2*( 1.0d0/24.0d0 + t2*( -1.0d0/720.0d0 )))
      sinth = theta * (1.0d0 + t2*( -1.0d0/6.0d0 + t2*( 1.0d0/120.0d0 + t2*( -1.0d0/5040.0d0 ))))
   else
-#ifdef HAVE_SINCOS
-     call sincos_c(theta, sinth, costh)
-#else
      costh = cos(theta)
      sinth = sin(theta)
-#endif
   end if
 
   v(1:ndim) = driftvel(1:ndim)
@@ -2469,271 +2216,6 @@ end subroutine compute_lorentz_analytic
 
 !#########################################################################
 !#########################################################################
-subroutine advect_linear(deltat, gradv, vcell, xi, xf)
-   implicit none
-   !---------------------------------------------------------------------
-   ! Solves x'(t) = gradv * x + ucell,   x(0) = xi
-   ! using the block-matrix exponential approach.
-   !
-   ! Inputs:
-   !   gradv(3,3) : velocity gradient tensor (nabla_j v_i)
-   !   ucell(3)   : constant velocity offset (u_c)
-   !   xi(3)      : initial position (r0)
-   !   deltat     : time increment (t)
-   !
-   ! Output:
-   !   xf(3)      : position after deltat (r(t))
-   !
-   ! Dependencies:
-   !   EXPOKIT’s DGEXPM or equivalent matrix-exponential routine
-   !---------------------------------------------------------------------
-   double precision, intent(in)  :: gradv(3,3), vcell(3), xi(3), deltat
-   double precision, intent(out) :: xf(3)
-   double precision :: C(4,4), E(4,4), w0(4), w(4)
-   integer :: info
-#ifdef USE_EXPOKIT
-   ! EXPOKIT DGPHIV path (Krylov) for w' = gradv*w + vcell, w(0)=xi
-   integer :: n, m, lwsp, liwsp, itrace, iflag
-   double precision :: tol, anorm
-   double precision :: u(3), v(3), wv(3)
-   double precision, allocatable :: wsp(:)
-   integer, allocatable :: iwsp(:)
-   external DGPHIV
-  double precision :: expokit_gradv(3,3)
-#endif
- 
-#ifdef USE_EXPOKIT
-  n = 3
-  m = 16
-  tol = 1.0d-12
-  ! simple 1-norm estimate for gradv
-  anorm = 0.0d0
-  do info=1,3
-     w0(1) = abs(gradv(1,info)) + abs(gradv(2,info)) + abs(gradv(3,info))
-     if (w0(1) > anorm) anorm = w0(1)
-  end do
-  lwsp = n*(m+1)+n+(m+3)*(m+3)+4*(m+3)*(m+3)+6+1
-  liwsp = m+3
-  allocate(wsp(lwsp), iwsp(liwsp))
-  u(1:3)=vcell(1:3)
-  v(1:3)=xi(1:3)
-  expokit_gradv(1:3,1:3)=gradv(1:3,1:3)
-  itrace=0
-  call DGPHIV(n, m, deltat, u, v, wv, tol, anorm, wsp, lwsp, iwsp, liwsp, expokit_matvec, itrace, iflag)
-  if (iflag /= 0) then
-     goto 1001
-  end if
-  xf(1:3)=wv(1:3)
-  deallocate(wsp, iwsp)
-  return
-1001 continue
-#endif
-   ! Fallback: block-matrix exponential with DGEXPM
-   C = 0.0d0
-   C(1:3,1:3) = gradv
-   C(1:3,4)   = vcell
-   call DGEXPM(4, deltat, C, 4, E, info)
-   w0(1:3) = xi
-   w0(4)   = 1.0d0
-   w = matmul(E, w0)
-  xf = w(1:3)
-
-#ifdef USE_EXPOKIT
-contains
-  subroutine expokit_matvec(x, y)
-    implicit none
-    double precision x(*), y(*)
-    integer :: i, j
-    do i=1,3
-       y(i)=0.0d0
-       do j=1,3
-          y(i)=y(i)+expokit_gradv(i,j)*x(j)
-       end do
-    end do
-  end subroutine expokit_matvec
-#endif
- end subroutine advect_linear
- 
 !#########################################################################
 !#########################################################################
-subroutine DGEXPM(n, t, A, lda, E, info)
-  implicit none
-  integer, intent(in) :: n, lda
-  double precision, intent(in) :: t
-  double precision, intent(in) :: A(lda, *)
-  double precision, intent(out) :: E(lda, *)
-  integer, intent(out) :: info
-
-  double precision :: normA
-  integer :: iDG, jDG
-  integer, allocatable :: ipiv(:)
-
-#ifdef USE_EXPOKIT
-  ! EXPOKIT path: use DGPADM to compute E = exp(t*A)
-  integer :: ideg, lwsp, iexp, ns, iflag
-  double precision :: Hmat(n,n)
-  double precision, allocatable :: wsp(:)
-  external dgpadm
-
-  Hmat(1:n,1:n) = A(1:n,1:n)
-  ideg = 6
-  lwsp = 4*n*n + 4*n + ideg + 1
-  allocate(wsp(lwsp), ipiv(n))
-  call dgpadm(ideg, n, t, Hmat, n, wsp, lwsp, ipiv, iexp, ns, iflag)
-  info = iflag
-  if (info == 0) then
-     ! Copy result from wsp(iexp:iexp+n*n-1) into E (column-major)
-     do jDG=1,n
-        do iDG=1,n
-           E(iDG,jDG) = wsp(iexp + (jDG-1)*n + iDG - 1)
-        end do
-     end do
-  end if
-  deallocate(wsp, ipiv)
-  return
-#else
-  double precision :: B(n,n), I(n,n), A2(n,n), A4(n,n), A6(n,n)
-  double precision :: U(n,n), V(n,n), Mmat(n,n), Nmat(n,n)
-  double precision :: W(n,n), T1(n,n), T2(n,n), Awork(n,n), Bwork(n,n)
-  double precision :: theta13, log2val
-  double precision, parameter :: one=1.0d0, zero=0.0d0
-  integer :: kDG, s
-  external dgemm, dgesv
-
-  double precision, parameter :: c0  = 64764752532480000.0d0
-  double precision, parameter :: c1  = 32382376266240000.0d0
-  double precision, parameter :: c2  = 7771770303897600.0d0
-  double precision, parameter :: c3  = 1187353796428800.0d0
-  double precision, parameter :: c4  = 129060195264000.0d0
-  double precision, parameter :: c5  = 10559470521600.0d0
-  double precision, parameter :: c6  = 670442572800.0d0
-  double precision, parameter :: c7  = 33522128640.0d0
-  double precision, parameter :: c8  = 1323241920.0d0
-  double precision, parameter :: c9  = 40840800.0d0
-  double precision, parameter :: c10 = 960960.0d0
-  double precision, parameter :: c11 = 16380.0d0
-  double precision, parameter :: c12 = 182.0d0
-  double precision, parameter :: c13 = 1.0d0
-
-  info = 0
-  if (n <= 0) then
-     return
-  end if
-
-  ! B = t * A(1:n,1:n)
-  do jDG=1,n
-     do iDG=1,n
-        B(iDG,jDG) = t * A(iDG,jDG)
-     end do
-  end do
-
-  ! Identity matrix
-  do jDG=1,n
-     do iDG=1,n
-        if (iDG==jDG) then
-           I(iDG,jDG) = 1.0d0
-        else
-           I(iDG,jDG) = 0.0d0
-        end if
-     end do
-  end do
-
-  ! 1-norm of B (max column sum)
-  normA = 0.0d0
-  do jDG=1,n
-     W(1,1) = 0.0d0
-     do iDG=1,n
-        W(1,1) = W(1,1) + abs(B(iDG,jDG))
-     end do
-     if (W(1,1) > normA) normA = W(1,1)
-  end do
-
-  ! Higham's theta_13 threshold
-  theta13 = 5.371920351148152d0
-
-  ! Scaling: find s such that ||B||/2^s <= theta13
-  if (normA <= 0.0d0) then
-     ! exp(0) = I
-     do jDG=1,n
-        do iDG=1,n
-           E(iDG,jDG) = I(iDG,jDG)
-        end do
-     end do
-     return
-  end if
-
-  log2val = log(normA/theta13)/log(2.0d0)
-  if (log2val > 0.0d0) then
-     s = ceiling(log2val)
-  else
-     s = 0
-  end if
-  if (s < 0) s = 0
-
-  if (s > 0) then
-     do jDG=1,n
-        do iDG=1,n
-           B(iDG,jDG) = B(iDG,jDG) / (2.0d0**s)
-        end do
-     end do
-  end if
-
-  ! Pade(13) approximation for exp(B)
-  ! Compute A2 = B*B, A4 = A2*A2, A6 = A4*A2
-  call dgemm('N','N', n, n, n, one, B, n, B, n, zero, A2, n)
-  call dgemm('N','N', n, n, n, one, A2, n, A2, n, zero, A4, n)
-  call dgemm('N','N', n, n, n, one, A4, n, A2, n, zero, A6, n)
-
-  ! T1 = A6*(c13*A6 + c11*A4 + c9*A2) + c7*A6 + c5*A4 + c3*A2 + c1*I
-  do jDG=1,n
-     do iDG=1,n
-        T2(iDG,jDG) = c13*A6(iDG,jDG) + c11*A4(iDG,jDG) + c9*A2(iDG,jDG)
-     end do
-  end do
-  call dgemm('N','N', n, n, n, one, A6, n, T2, n, zero, T1, n)
-  do jDG=1,n
-     do iDG=1,n
-        T1(iDG,jDG) = T1(iDG,jDG) + c7*A6(iDG,jDG) + c5*A4(iDG,jDG) + c3*A2(iDG,jDG) + c1*I(iDG,jDG)
-     end do
-  end do
-  call dgemm('N','N', n, n, n, one, B, n, T1, n, zero, U, n)
-
-  ! V = A6*(c12*A6 + c10*A4 + c8*A2) + c6*A6 + c4*A4 + c2*A2 + c0*I
-  do jDG=1,n
-     do iDG=1,n
-        T2(iDG,jDG) = c12*A6(iDG,jDG) + c10*A4(iDG,jDG) + c8*A2(iDG,jDG)
-     end do
-  end do
-  call dgemm('N','N', n, n, n, one, A6, n, T2, n, zero, V, n)
-  do jDG=1,n
-     do iDG=1,n
-        V(iDG,jDG) = V(iDG,jDG) + c6*A6(iDG,jDG) + c4*A4(iDG,jDG) + c2*A2(iDG,jDG) + c0*I(iDG,jDG)
-     end do
-  end do
-
-  ! Solve (V - U) * X = (V + U) using LAPACK dgesv with multiple RHS
-  do jDG=1,n
-     do iDG=1,n
-        Mmat(iDG,jDG) = V(iDG,jDG) - U(iDG,jDG)
-        Nmat(iDG,jDG) = V(iDG,jDG) + U(iDG,jDG)
-     end do
-  end do
-  Awork(1:n,1:n) = Mmat(1:n,1:n)
-  Bwork(1:n,1:n) = Nmat(1:n,1:n)
-  if (.not. allocated(ipiv)) allocate(ipiv(n))
-  call dgesv(n, n, Awork, n, ipiv, Bwork, n, info)
-  if (info /= 0) then
-     return
-  end if
-  E(1:n,1:n) = Bwork(1:n,1:n)
-
-  ! Squaring: E = E^(2^s)
-  do kDG=1,s
-     call dgemm('N','N', n, n, n, one, E, n, E, n, zero, W, n)
-     E(1:n,1:n) = W(1:n,1:n)
-  end do
-
-  return
-#endif
-end subroutine DGEXPM
 end module move_fine_module
