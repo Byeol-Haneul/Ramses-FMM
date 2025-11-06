@@ -24,11 +24,8 @@ output_[0-9][0-9][0-9][0-9][0-9]/
 *.out
 out*
 time*.txt
-**single**
 **eight**
-run.sh
-analyze/
 
 nfw/
 ics_ramses/
-namelist/isolated_halo.nml
+analyze/fig**/

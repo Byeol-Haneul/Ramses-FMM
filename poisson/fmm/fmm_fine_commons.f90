@@ -335,7 +335,6 @@ subroutine fmm_amr_intermediate(s, ilevel)
   integer(kind=8), dimension(0:ndim) :: hash_key, hash_fmm_grid, hash_fmm_cell, &
                                         hash_nbor, hash_nbor_periodic, prev_hash_fmm_grid, prev_hash_fmm_cell
 
-  ! --- Precomputed lists to avoid repeated get_cell_pos calls ---
   real(kind=8), dimension(twotondim, ndim) :: xx_icell_list, xx_jcell_list
   integer(kind=8), dimension(twotondim, ndim) :: cc_icell_list, cc_jcell_list
 
