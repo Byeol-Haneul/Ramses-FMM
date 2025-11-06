@@ -615,7 +615,7 @@ module amr_commons
      integer :: levelmin_mg
 
 #ifdef FMM
-     integer :: level_fmm_to_amr = 2 !Jun-Young: relative level to the amr levelmin. 
+     integer :: level_fmm_to_amr = 1 !Jun-Young: relative level to the amr levelmin. 
 #endif 
 
      ! Multigrid safety switch
