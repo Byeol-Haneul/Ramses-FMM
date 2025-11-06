@@ -131,6 +131,11 @@ subroutine adaptive_loop(pst)
 
      call getmem(core_mem)
      call writemem(core_mem)
+#ifdef FMM
+     call m_output_timer(pst,.true.,'time_fmm.txt')
+#else
+     call m_output_timer(pst,.true.,'time_mg.txt')
+#endif
      STOP !!! Jun-Young for testing!!
   end do
 

@@ -72,7 +72,6 @@ subroutine fmm(pst,ilevel,icount)
      call r_cleanup_fmm(pst)
    if(pst%s%r%verbose) print '(A)','FMM cleanup done '
   endif
-  call m_output_timer(pst,.true.,'time.txt')
 end subroutine fmm
 
 ! ########################################################################
@@ -248,15 +247,10 @@ subroutine fmm_downward(s, ilevel)
          offset(idim) = MOD((inbor-1)/3**(idim-1), 3) - 1
        end do
 
-       ! get actual positions
        gridp_nbor => grid_nbor(inbor)%p
-       hash_nbor(1:ndim) = gridp_nbor%ckey(1:ndim)
-
-       ! get periodic positions for the nbor
        hash_nbor_periodic(1:ndim) = hash_parent(1:ndim) + offset
 
        do jcell = 1, twotondim
-          call get_cell_pos(hash_nbor, jcell, r%boxlen, xx_jcell, cc_jcell)
           cycle_flag = .false.
           do idim=1,ndim
             nstride = 2**(idim-1)
@@ -482,43 +476,36 @@ subroutine fmm_amr_intermediate(s, ilevel)
 
     parent_taylor = gridp_parent%taylor_coeff(pcell, :)
 
-    ! Loop over AMR cells
+    ! Far field
     do icell = 1, twotondim
-      ! Far field
-      phi = 0.0D0
       diff = far_diff_list(igrid, icell, :)
       call calc_phi(parent_taylor, diff, phi)
+      m%grid(ioct)%phi(icell) = m%grid(ioct)%phi(icell) + phi
+    end do
 
-      ! Intermediate field
-      temp_taylor = 0.0D0
-      hash_nbor(0) = ilevel - g%level_fmm_to_amr
-      do ind = 1, threetondim
-        gridp_nbor => grid_nbor(ind)%p
-        hash_nbor(1:ndim) = gridp_nbor%ckey(1:ndim)
-
-        do jcell = 1, twotondim
-          ! Wrap-around offsets
-          cycle_flag = .false.
-          cc_jcell_periodic = hash_fmm_cell(1:ndim) + cell_diff_list(ind, jcell, igrid,:)
-          do idim = 1, ndim
-            if ((cc_jcell_periodic(idim) < m%box_ckey_min(idim, ilevel - g%level_fmm_to_amr + 1)) .or. &
-                (cc_jcell_periodic(idim) >= m%box_ckey_max(idim, ilevel - g%level_fmm_to_amr + 1))) then
-              cycle_flag = .true.
-            end if
-          end do
-
-          if (cycle_flag .or. direct_neighbor_list(ind, jcell, igrid)) cycle
-
-          multipole = gridp_nbor%multipole(jcell, 1:multipole_size)
+    ! Intermediate field
+    do ind = 1, threetondim
+      gridp_nbor => grid_nbor(ind)%p
+      do jcell = 1, twotondim
+        cycle_flag = .false.
+        cc_jcell_periodic = hash_fmm_cell(1:ndim) + cell_diff_list(ind, jcell, igrid,:)
+        do idim = 1, ndim
+          if ((cc_jcell_periodic(idim) < m%box_ckey_min(idim, ilevel - g%level_fmm_to_amr + 1)) .or. &
+              (cc_jcell_periodic(idim) >= m%box_ckey_max(idim, ilevel - g%level_fmm_to_amr + 1))) then
+            cycle_flag = .true.
+          end if
+        end do
+        if (cycle_flag .or. direct_neighbor_list(ind, jcell, igrid)) cycle
+        multipole = gridp_nbor%multipole(jcell, 1:multipole_size)
+        do icell=1, twotondim
           diff  = intermediate_diff_list(ind, jcell, igrid, icell, :)
           D0 = D0_list(ind, jcell, igrid, icell)
           D1 = D1_list(ind, jcell, igrid, icell)
           D2 = D2_list(ind, jcell, igrid, icell)
           call calc_phi_from_multipole(diff, D0, D1, D2, multipole, phi_out)
-          phi = phi + phi_out
+          m%grid(ioct)%phi(icell) = m%grid(ioct)%phi(icell) + phi_out
         end do
       end do
-      m%grid(ioct)%phi(icell) = m%grid(ioct)%phi(icell) + phi
     end do
   end do
 
