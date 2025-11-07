@@ -1731,9 +1731,6 @@ subroutine balance_part(s,p,ilevel)
 
   endif
 
-
-
-
   deallocate(l_recv_buf,l_send_buf)
 
   !----------------------------
