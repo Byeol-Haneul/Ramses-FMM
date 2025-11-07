@@ -13,6 +13,7 @@ module mdl_parameters
      enumerator::MDL_INIT_PART
      enumerator::MDL_INPUT_PART_GRAFIC
      enumerator::MDL_INPUT_TRAC_GRAFIC
+     enumerator::MDL_INPUT_DUST_GRAFIC
      enumerator::MDL_INPUT_PART_ZOOM
      enumerator::MDL_INPUT_PART_ASCII
      enumerator::MDL_INPUT_STAR_ASCII
@@ -88,6 +89,7 @@ module mdl_parameters
      enumerator::MDL_SINK_EVOLUTION
      enumerator::MDL_NEWDT_PART
      enumerator::MDL_BROADCAST_DT
+     enumerator::MDL_MAX_B_AND_Q
      enumerator::MDL_MAKE_INITIAL_PHI
      enumerator::MDL_RECURRENCE_ON_P
      enumerator::MDL_RECURRENCE_X_AND_R
