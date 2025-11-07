@@ -1,8 +1,5 @@
 module move_fine_module
   use rho_fine_module, only: cic_weight, cic_index, tsc_weight, tsc_index, pcs_weight, pcs_index
-#ifdef MHD
-  logical, save :: lorentz_not_implemented_warned = .false.
-#endif
 contains
 !################################################################
 !################################################################
@@ -1569,14 +1566,11 @@ subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
 #endif
 #ifdef MHD
         if (ndim==3) then
-        call compute_lorentz_step(wdrift, bb(1:ndim), g%dtnew(ilevel), p%charge(ipart), r%analytic_dust_force)
+            call compute_lorentz_step(wdrift, bb(1:ndim), g%dtnew(ilevel), p%charge(ipart), r%analytic_dust_force)
         else
-           if(.not.lorentz_not_implemented_warned)then
-              if(g%myid==1 .and. g%nstep==0)then
-                 write(*,*) 'Warning: Lorentz force not implemented for NDIM != 3; proceeding without it.'
-              endif
-              lorentz_not_implemented_warned=.true.
-           endif
+            if(g%myid==1 .and. g%nstep==0)then
+               write(*,*) 'Warning: Lorentz force not implemented for NDIM != 3; proceeding without it.'
+            endif
         endif
 #endif
 #ifdef GRAV
@@ -1747,11 +1741,8 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
         if (ndim==3) then
            call compute_lorentz_step(wdrift, bb(1:ndim), g%dtnew(ilevel), p%charge(ipart), r%analytic_dust_force) !Somehow introducing nonphysical oscillations.
         else
-           if(.not.lorentz_not_implemented_warned)then
-              if(g%myid==1 .and. g%nstep==0)then
-                 write(*,*) 'Warning: Lorentz force not implemented for NDIM != 3; proceeding without it.'
-              endif
-              lorentz_not_implemented_warned=.true.
+           if(g%myid==1 .and. g%nstep==0)then
+              write(*,*) 'Warning: Lorentz force not implemented for NDIM != 3; proceeding without it.'
            endif
         endif
 #endif
@@ -1976,14 +1967,11 @@ subroutine pcs_kick_drift_dust(s,p,ilevel,action_part)
 #endif
 #ifdef MHD
        if (ndim==3) then
-       call compute_lorentz_step(wdrift, bb(1:ndim), g%dtnew(ilevel), p%charge(ipart), r%analytic_dust_force)
+           call compute_lorentz_step(wdrift, bb(1:ndim), g%dtnew(ilevel), p%charge(ipart), r%analytic_dust_force)
        else
-          if(.not.lorentz_not_implemented_warned)then
-             if(g%myid==1 .and. g%nstep==0)then
-                write(*,*) 'Warning: Lorentz force not implemented for NDIM != 3; proceeding without it.'
-             endif
-             lorentz_not_implemented_warned=.true.
-          endif
+           if(g%myid==1 .and. g%nstep==0)then
+              write(*,*) 'Warning: Lorentz force not implemented for NDIM != 3; proceeding without it.'
+           endif
        endif
 #endif
 #ifdef GRAV
