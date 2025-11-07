@@ -727,8 +727,11 @@ recursive subroutine r_balance_part(pst,ilevel,input_size,output_array,output_si
         call balance_part(pst%s,pst%s%tree,ilevel)
      endif
      if(pst%s%r%trac)then
-      call balance_part(pst%s,pst%s%trac,ilevel)
-   endif
+        call balance_part(pst%s,pst%s%trac,ilevel)
+     endif
+     if(pst%s%r%dust)then
+        call balance_part(pst%s,pst%s%dust,ilevel)
+     endif
 #endif
   endif
 
@@ -849,7 +852,7 @@ subroutine balance_part(s,p,ilevel)
            p%sortp(i)=i
         end do
         ix=0
-        call sort_hilbert(r,g,m,p,p%headp(ilev),p%tailp(ilev),ix,0,1,ilev-1)
+        call sort_hilbert(r,g,p,p%headp(ilev),p%tailp(ilev),ix,0,1,ilev-1)
 
         ! Compute first guess domain decomposition
         bound_key_target(1:nhilbert,0:ncpu)=domain_part(ilev)%b(1:nhilbert,0:ncpu)
@@ -876,7 +879,7 @@ subroutine balance_part(s,p,ilevel)
               ipart=p%sortp(i)
 
               ! Compute Hilbert key of particle parent grid
-              ix_ref(1:ndim)=int((p%xp(ipart,1:ndim)+m%skip(1:ndim))/(2*dx_loc))
+              ix_ref(1:ndim)=int(p%xp(ipart,1:ndim)/(2*dx_loc))
               hk_ref(1:nhilbert)=hilbert_key(ix_ref,ilev-1)
               
               do icpu=1,ncpu
@@ -966,7 +969,7 @@ subroutine balance_part(s,p,ilevel)
      do ipart=p%headp(ilev),p%tailp(ilev)
 
         ! Determine in which cpu particle should sit.
-        ix = int((p%xp(ipart,1:ndim)+m%skip(1:ndim))/(2*dx_loc))
+        ix = int(p%xp(ipart,1:ndim)/(2*dx_loc))
         if(.NOT. ALL(ix.EQ.ix_ref(1:ndim)))then
            ix_ref(1:ndim)=ix(1:ndim)
            grid_cpu=g%myid
@@ -1027,7 +1030,7 @@ subroutine balance_part(s,p,ilevel)
      do ipart=p%headp(ilev),p%tailp(ilev)
 
         ! Determine in which cpu particle should sit.
-        ix = int((p%xp(ipart,1:ndim)+m%skip(1:ndim))/(2*dx_loc))
+        ix = int(p%xp(ipart,1:ndim)/(2*dx_loc))
         if(.NOT. ALL(ix.EQ.ix_ref(1:ndim)))then
            ix_ref(1:ndim)=ix(1:ndim)
            grid_cpu=g%myid
@@ -1122,11 +1125,17 @@ subroutine balance_part(s,p,ilevel)
            p%idm(ipart)=p%idm(jpart)
            p%idm(jpart)=idp_tmp
         endif
-        ! Swap tracking ids
-        if(allocated(p%idt))then
-           idp_tmp=p%idt(ipart)
-           p%idt(ipart)=p%idt(jpart)
-           p%idt(jpart)=idp_tmp
+        ! Swap size
+        if(allocated(p%size))then
+           mp_tmp=p%size(ipart)
+           p%size(ipart)=p%size(jpart)
+           p%size(jpart)=mp_tmp
+        endif
+        ! Swap charge
+        if(allocated(p%charge))then
+           mp_tmp=p%charge(ipart)
+           p%charge(ipart)=p%charge(jpart)
+           p%charge(jpart)=mp_tmp
         endif
      end do
   end do
@@ -1488,6 +1497,92 @@ subroutine balance_part(s,p,ilevel)
      call MPI_WAITALL(countsend,reqsend,statuses,info)
 
   endif
+
+  !-------------------------
+  ! Swap sizes
+  !-------------------------
+  if(allocated(p%size))then
+
+     countrecv=0
+     do icpu=1,g%ncpu
+        nbuffer=recv_cnt(icpu)
+        if(nbuffer>0)then
+           countrecv=countrecv+1
+           istart=recv_oft(icpu)+1
+           call MPI_IRECV(x_recv_buf(istart),nbuffer,MPI_DOUBLE_PRECISION,icpu-1,tag,MPI_COMM_WORLD,reqrecv(countrecv),info)
+        endif
+     end do
+
+     do i=1,send_cnt_tot
+        ipart=p%headp(ilevel)-1+count_loc+i
+        x_send_buf(i)=p%size(ipart)
+     end do
+
+     countsend=0
+     do icpu=1,g%ncpu
+        nbuffer=send_cnt(icpu)
+        if(nbuffer>0) then
+           countsend=countsend+1
+           istart=send_oft(icpu)+1
+           call MPI_ISEND(x_send_buf(istart),nbuffer,MPI_DOUBLE_PRECISION,icpu-1,tag,MPI_COMM_WORLD,reqsend(countsend),info)
+        end if
+     end do
+
+     ! Wait for full completion of receives
+     call MPI_WAITALL(countrecv,reqrecv,statuses,info)
+
+     do i=1,recv_cnt_tot
+        ipart=p%headp(ilevel)-1+count_loc+i
+        p%size(ipart)=x_recv_buf(i)
+     end do
+
+     ! Wait for full completion of sends
+     call MPI_WAITALL(countsend,reqsend,statuses,info)
+
+  endif
+
+  !-------------------------
+  ! Swap charges
+  !-------------------------
+  if(allocated(p%charge))then
+
+     countrecv=0
+     do icpu=1,g%ncpu
+        nbuffer=recv_cnt(icpu)
+        if(nbuffer>0)then
+           countrecv=countrecv+1
+           istart=recv_oft(icpu)+1
+           call MPI_IRECV(x_recv_buf(istart),nbuffer,MPI_DOUBLE_PRECISION,icpu-1,tag,MPI_COMM_WORLD,reqrecv(countrecv),info)
+        endif
+     end do
+
+     do i=1,send_cnt_tot
+        ipart=p%headp(ilevel)-1+count_loc+i
+        x_send_buf(i)=p%charge(ipart)
+     end do
+
+     countsend=0
+     do icpu=1,g%ncpu
+        nbuffer=send_cnt(icpu)
+        if(nbuffer>0) then
+           countsend=countsend+1
+           istart=send_oft(icpu)+1
+           call MPI_ISEND(x_send_buf(istart),nbuffer,MPI_DOUBLE_PRECISION,icpu-1,tag,MPI_COMM_WORLD,reqsend(countsend),info)
+        end if
+     end do
+
+     ! Wait for full completion of receives
+     call MPI_WAITALL(countrecv,reqrecv,statuses,info)
+
+     do i=1,recv_cnt_tot
+        ipart=p%headp(ilevel)-1+count_loc+i
+        p%charge(ipart)=x_recv_buf(i)
+     end do
+
+     ! Wait for full completion of sends
+     call MPI_WAITALL(countsend,reqsend,statuses,info)
+
+  endif
   
   deallocate(x_recv_buf,x_send_buf)
 
@@ -1636,56 +1731,8 @@ subroutine balance_part(s,p,ilevel)
 
   endif
 
-  !-------------------------
-  ! Swap tracking ids
-  !-------------------------
-  if(allocated(p%idt))then
 
-     countrecv=0
-     do icpu=1,g%ncpu
-        nbuffer=recv_cnt(icpu)
-        if(nbuffer>0)then
-           countrecv=countrecv+1
-           istart=recv_oft(icpu)+1
-#ifndef LONGINT
-           call MPI_IRECV(l_recv_buf(istart),nbuffer,MPI_INTEGER,icpu-1,tag,MPI_COMM_WORLD,reqrecv(countrecv),info)
-#else
-           call MPI_IRECV(l_recv_buf(istart),nbuffer,MPI_INTEGER8,icpu-1,tag,MPI_COMM_WORLD,reqrecv(countrecv),info)
-#endif
-        endif
-     end do
 
-     do i=1,send_cnt_tot
-        ipart=p%headp(ilevel)-1+count_loc+i
-        l_send_buf(i)=p%idt(ipart)
-     end do
-
-     countsend=0
-     do icpu=1,g%ncpu
-        nbuffer=send_cnt(icpu)
-        if(nbuffer>0) then
-           countsend=countsend+1
-           istart=send_oft(icpu)+1
-#ifndef LONGINT
-           call MPI_ISEND(l_send_buf(istart),nbuffer,MPI_INTEGER,icpu-1,tag,MPI_COMM_WORLD,reqsend(countsend),info)
-#else
-           call MPI_ISEND(l_send_buf(istart),nbuffer,MPI_INTEGER8,icpu-1,tag,MPI_COMM_WORLD,reqsend(countsend),info)
-#endif
-        end if
-     end do
-
-     ! Wait for full completion of receives
-     call MPI_WAITALL(countrecv,reqrecv,statuses,info)
-
-     do i=1,recv_cnt_tot
-        ipart=p%headp(ilevel)-1+count_loc+i
-        p%idt(ipart)=l_recv_buf(i)
-     end do
-
-     ! Wait for full completion of sends
-     call MPI_WAITALL(countsend,reqsend,statuses,info)
-
-  endif
 
   deallocate(l_recv_buf,l_send_buf)
 

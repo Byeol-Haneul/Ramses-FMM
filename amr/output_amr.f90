@@ -30,7 +30,7 @@ subroutine m_dump_all(pst,write_bkp_file)
   type(in_output_poisson_t)::in_output_poisson
 
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,star=>pst%s%star, &
-   & sink=>pst%s%sink,tree=>pst%s%tree,trac=>pst%s%trac,mdl=>pst%s%mdl)
+   & sink=>pst%s%sink,tree=>pst%s%tree,trac=>pst%s%trac,dust=>pst%s%dust,mdl=>pst%s%mdl)
 
   if(g%nstep_coarse==g%nstep_coarse_old.and.g%nstep_coarse>0)return
   if(g%nstep_coarse==0.and.r%nrestart>0)return
@@ -104,6 +104,10 @@ subroutine m_dump_all(pst,write_bkp_file)
      if(r%trac)then
         filename=TRIM(filedir)//'trac_header.txt'
         call output_header(r,g,trac,filename)
+     endif
+     if(r%dust)then
+        filename=TRIM(filedir)//'dust_header.txt'
+        call output_header(r,g,dust,filename)
      endif
      if(r%hydro)then
         filename=TRIM(filedir)//'hydro_header.txt'
@@ -427,7 +431,6 @@ subroutine input_params(mdl,r,g,filename,ncpu_file,levelmin_file,nlevelmax_file)
   ! Read various constants
   read(ilun)g%const,g%mass_tot_0,g%rho_tot
   read(ilun)g%omega_m,g%omega_l,g%omega_k,g%omega_b,g%h0,g%aexp_ini,g%boxlen_ini
-  g%omega_k=1-g%omega_m-g%omega_l
   read(ilun)g%aexp,g%texp,g%hexp
   read(ilun)g%aexp_old,g%epot_tot_int,g%epot_tot_old
   read(ilun)mass_sph_file
@@ -669,9 +672,6 @@ subroutine output_header(r,g,p,filename)
   ! Keep track of what particle fields are present
   write(ilun,*)'Particle fields'
   write(ilun,'(a)',advance='no')'pos vel mass '
-#ifdef OUTPUT_PARTICLE_POTENTIAL
-  write(ilun,'(a)',advance='no')'phi '
-#endif
   if(allocated(p%zp))then
      write(ilun,'(a)',advance='no')'metallicity '
   endif
@@ -691,9 +691,15 @@ subroutine output_header(r,g,p,filename)
   if(allocated(p%idm))then
      write(ilun,'(a)',advance='no')'merging_id '
   endif
-  if(allocated(p%idt))then
-     write(ilun,'(a)',advance='no')'tracking_id '
+  if(allocated(p%size))then
+     write(ilun,'(a)',advance='no')'size '
   endif
+  if(allocated(p%charge))then
+     write(ilun,'(a)',advance='no')'charge '
+  endif
+#ifdef OUTPUT_PARTICLE_POTENTIAL
+  write(ilun,'(a)',advance='no')'phi '
+#endif
   close(ilun)
 
 end subroutine output_header
