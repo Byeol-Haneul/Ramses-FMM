@@ -158,8 +158,10 @@ subroutine tree_formation(r,g,m,p,c)
         p%vp(p%npart,1)=c%peak_vel(j,1)-c%peak_acc(j,1)*0.5d0*g%dtnew(c%peak_level(j))
         p%vp(p%npart,2)=c%peak_vel(j,2)-c%peak_acc(j,2)*0.5d0*g%dtnew(c%peak_level(j))
         p%vp(p%npart,3)=c%peak_vel(j,3)-c%peak_acc(j,3)*0.5d0*g%dtnew(c%peak_level(j))
-        ! Set tree particle parent clump mass
-        p%mp(p%npart)=c%halo_mass(j)
+        ! Set mass to zero
+        p%mp(p%npart)=0d0
+        ! Set tracking number to parent clump global id
+        p%idt(p%npart)=j+c%npeak_cum(g%myid-1)
         ! Compute tree particle birth time using proper time
         p%tp(p%npart)=g%texp
         ! Set merging time to -1000
@@ -218,20 +220,15 @@ subroutine m_formation_site(pst)
   !----------------------------------------------------------------------  
 
 #if NDIM==3 && defined(GRAV)
-
-  associate(r=>pst%s%r,g=>pst%s%g,mdl=>pst%s%mdl,p=>pst%s%p,star=>pst%s%star)
-
   !--------------------------------------------------------------
   ! Compute rho from gas density or dark matter or star particles
   !--------------------------------------------------------------
-  call m_rho_fine(pst,r%levelmin,r%rho_type_clump)
+  call m_rho_fine(pst,pst%s%r%levelmin,pst%s%r%rho_type_clump)
 
   !----------------------------------------------
   ! Find relevant peak patches as formation sites
   !----------------------------------------------
   call r_tree_clump(pst)
-
-  end associate
 #endif
 
 end subroutine m_formation_site
@@ -431,29 +428,29 @@ subroutine tree_in_peak(s,reset_tree_pos,count_tree)
   !----------------------------------------------------
   call open_cache_clump(s,pack_size=storage_size(dummy_tree_minid)/32,&
        pack=pack_fetch_minid,unpack=unpack_fetch_minid)
-  ! Set mass to zero for orphan merger tree tracer particles
+  ! Set tracking id to zero for orphan merger tree tracer particles
   do i=1,p%norphan_peak
      ipart=p%sortp(i)
-     p%mp(ipart)=0d0
+     p%idt(ipart)=0
   end do
   do i=1+p%norphan_peak,p%npart
      ipart=p%sortp(i)
      global_peak_id=p%workp(i)
      call get_peak(s,global_peak_id,peak_nr,fetch_cache=.true.,flush_cache=.false.)
-     ! If tree particle is not bound and not merged, set as orphan with zero mass
+     ! If tree particle is not bound and not merged, set as orphan with zero tracking id
      if(p%idm(ipart).EQ.0)then
-        p%mp(ipart)=0d0
+        p%idt(ipart)=0
      endif
-     ! If tree particle is bound and just merged, update merging age, merge-to clump id and tree particle mass
+     ! If tree particle is bound and just merged, update merging age, merge-to clump id and tree particle tracking id
      if(p%idm(ipart).EQ.-2.AND.p%idp(ipart).NE.c%min_tree_id(peak_nr))then
         p%idm(ipart)=c%min_tree_id(peak_nr)
         p%tm(ipart)=g%texp
-        p%mp(ipart)=0d0
+        p%idt(ipart)=0
      endif
-     ! If tree particle is bound and not merged, update its parent clump particle mass
+     ! If tree particle is bound and not merged, update its tracking id to clump id
      if(p%idm(ipart).EQ.-2.AND.p%idp(ipart).EQ.c%min_tree_id(peak_nr))then
         p%idm(ipart)=0
-        p%mp(ipart)=c%particle_mass(peak_nr)
+        p%idt(ipart)=global_peak_id
      endif
   end do
   call close_cache(s,m%grid_dict)

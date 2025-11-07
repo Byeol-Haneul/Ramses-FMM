@@ -107,7 +107,7 @@ end subroutine r_kick_drift_part
 !################################################################
 !################################################################
 subroutine cic_kick_drift_part(s,p,ilevel,action_part)
-  use amr_parameters, only: ndim, twotondim
+  use amr_parameters, only: ndim, twotondim, nvector
   use pm_parameters
   use pm_commons, only: part_t
   use amr_commons, only: nbor
@@ -133,6 +133,8 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
   real(kind=8)::gamma,norm2,fnorm,delta
   real(kind=8),dimension(1:ndim)::ff
   logical::ok_level
+  real(kind=8),dimension(1:nvector,1:ndim)::xana
+  real(kind=8),dimension(1:nvector,1:ndim)::fana
   type(nbor),dimension(1:twotondim)::gridp
   type(msg_three_realdp)::dummy_three_realdp
 
@@ -140,29 +142,70 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
 
   if(p%static)then
      ! We still need to set the particle levels correctly, even if they are not moved
-     ! Loop over particles
      do ipart=p%headp(ilevel),p%tailp(ilevel)
-        ! Update level
         p%levelp(ipart)=ilevel
      end do
      return
   end if
+
+  ! Deal with particles that left the computational domain
+  if(ilevel==r%levelmin.and.ANY(.not.r%periodic(1:ndim)))then
+
+     ! Loop over particles outside the box
+     do ipart=p%headp(ilevel-1),p%tailp(ilevel-1)
+
+        ! Get particle position
+        do idim=1,ndim
+           x(idim)=p%xp(ipart,idim)
+        end do
+
+        ! Call analytical acceleration routine
+        xana(1,1:ndim)=x(1:ndim)
+        call gravana(r,g,xana,fana,1)
+        ff(1:ndim)=fana(1,1:ndim)
+
+        ! Perform kick, or drift, or both
+        if(action_part==action_kick_drift)then
+
+           ! Update velocity (use levelmin time step)
+           p%vp(ipart,1:ndim)=p%vp(ipart,1:ndim)+ff(1:ndim)*0.5d0*g%dtnew(ilevel)
+
+           ! Update position (use levelmin time step)
+           p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
+
+        else if(action_part.EQ.action_kick_only)then
+
+           ! Compute proper time step for second kick
+           dteff=g%dtnew(p%levelp(ipart))
+
+           ! Update level to levelmin
+           p%levelp(ipart)=ilevel
+
+           ! Update velocity
+           p%vp(ipart,1:ndim)=p%vp(ipart,1:ndim)+ff(1:ndim)*0.5d0*dteff
+
+        endif
+
+     end do
+     ! End loop over particles
+
+  endif
 
   ! Mesh spacing in that level
   dx_loc=r%boxlen/2**ilevel 
   vol_loc=dx_loc**ndim
 
   ! Open read-only cache
-  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-                     hilbert=m%domain, pack_size=storage_size(dummy_three_realdp)/32,&
-                     pack=pack_fetch_kick,unpack=unpack_fetch_kick)
+  call open_cache(s,table=m%grid_dict, data_size=storage_size(m%grid(1))/32,&
+       hilbert=m%domain, pack_size=storage_size(dummy_three_realdp)/32,&
+       pack=pack_fetch_kick, unpack=unpack_fetch_kick)
 
   ! Loop over particles
   do ipart=p%headp(ilevel),p%tailp(ilevel)
 
      ! Rescale particle position at level ilevel
      do idim=1,ndim
-        x(idim)=p%xp(ipart,idim)/dx_loc
+        x(idim)=(p%xp(ipart,idim)+m%skip(idim))/dx_loc
      end do
 
      ! CIC at level ilevel (dr: right cloud boundary; dl: left cloud boundary)
@@ -176,8 +219,10 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
 
      ! Periodic boundary conditions
      do idim=1,ndim
-        if(il(idim)<0)il(idim)=m%ckey_max(ilevel+1)-1
-        if(ir(idim)==m%ckey_max(ilevel+1))ir(idim)=0
+        if(r%periodic(idim))then
+           if(il(idim)< m%box_ckey_min(idim,ilevel+1))il(idim)=m%box_ckey_max(idim,ilevel+1)-1
+           if(ir(idim)>=m%box_ckey_max(idim,ilevel+1))ir(idim)=m%box_ckey_min(idim,ilevel+1)
+        endif
      enddo
 
      ! Compute cells Cartesian key
@@ -217,8 +262,10 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
 
         ! Periodic boundary conditions
         do idim=1,ndim
-           if(il(idim)<0)il(idim)=m%ckey_max(ilevel)-1
-           if(ir(idim)==m%ckey_max(ilevel))ir(idim)=0
+           if(r%periodic(idim))then
+              if(il(idim)< m%box_ckey_min(idim,ilevel))il(idim)=m%box_ckey_max(idim,ilevel)-1
+              if(ir(idim)>=m%box_ckey_max(idim,ilevel))ir(idim)=m%box_ckey_min(idim,ilevel)
+           endif
         enddo
 
         ! Compute cells Cartesian key
@@ -246,11 +293,17 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
      ! Gather 3-force
      ff(1:ndim)=0.0
      if(ok_level)then
-        do ind=1,twotondim
 #ifdef GRAV
+        do ind=1,twotondim
            ff(1:ndim)=ff(1:ndim)+gridp(ind)%p%f(icell(ind),1:ndim)*vol(ind)
-#endif
         end do
+#ifdef OUTPUT_PARTICLE_POTENTIAL
+        p%phip(ipart)=0.0
+        do ind=1,twotondim
+           p%phip(ipart)=p%phip(ipart)+gridp(ind)%p%phi(icell(ind))*vol(ind)
+        end do
+#endif
+#endif
      endif
 
      ! Perform kick, or drift, or both
@@ -321,8 +374,10 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
   if(action_part==action_kick_drift)then
      do ipart=p%headp(ilevel),p%tailp(ilevel)
         do idim=1,ndim
-           if(p%xp(ipart,idim)<   0.0d0 )p%xp(ipart,idim)=p%xp(ipart,idim)+r%boxlen
-           if(p%xp(ipart,idim)>=r%boxlen)p%xp(ipart,idim)=p%xp(ipart,idim)-r%boxlen
+           if(r%periodic(idim))then
+              if(p%xp(ipart,idim)< 0.0d0           )p%xp(ipart,idim)=p%xp(ipart,idim)+r%box_size(idim)
+              if(p%xp(ipart,idim)>=r%box_size(idim))p%xp(ipart,idim)=p%xp(ipart,idim)-r%box_size(idim)
+           end if
         end do
      end do
   end if
@@ -368,9 +423,7 @@ subroutine tsc_kick_drift_part(s,p,ilevel,action_part)
 
   if(p%static)then
      ! We still need to set the particle levels correctly, even if they are not moved
-     ! Loop over particles
      do ipart=p%headp(ilevel),p%tailp(ilevel)
-        ! Update level
         p%levelp(ipart)=ilevel
      end do
      return
@@ -390,7 +443,7 @@ subroutine tsc_kick_drift_part(s,p,ilevel,action_part)
 
      ! Rescale particle position at level ilevel
      do idim=1,ndim
-        x(idim)=p%xp(ipart,idim)/dx_loc
+        x(idim)=(p%xp(ipart,idim)+m%skip(idim))/dx_loc
      end do
 
      ! TSC at level ilevel; a particle contributes to 3 cells in each direction
@@ -408,8 +461,10 @@ subroutine tsc_kick_drift_part(s,p,ilevel,action_part)
 
      ! Periodic boundary conditions
      do idim=1,ndim
-        if(cl(idim)<0)cl(idim)=m%ckey_max(ilevel+1)-1
-        if(cr(idim)==m%ckey_max(ilevel+1))cr(idim)=0
+        if(r%periodic(idim))then
+           if(cl(idim)< m%box_ckey_min(idim,ilevel+1))cl(idim)=m%box_ckey_max(idim,ilevel+1)-1
+           if(cr(idim)>=m%box_ckey_max(idim,ilevel+1))cr(idim)=m%box_ckey_min(idim,ilevel+1)
+        endif
      enddo
 
      ! Compute cells Cartesian key
@@ -500,8 +555,10 @@ subroutine tsc_kick_drift_part(s,p,ilevel,action_part)
   if(action_part==action_kick_drift)then
      do ipart=p%headp(ilevel),p%tailp(ilevel)
         do idim=1,ndim
-           if(p%xp(ipart,idim)<   0.0d0 )p%xp(ipart,idim)=p%xp(ipart,idim)+r%boxlen
-           if(p%xp(ipart,idim)>=r%boxlen)p%xp(ipart,idim)=p%xp(ipart,idim)-r%boxlen
+           if(r%periodic(idim))then
+              if(p%xp(ipart,idim)< 0.0d0           )p%xp(ipart,idim)=p%xp(ipart,idim)+r%box_size(idim)
+              if(p%xp(ipart,idim)>=r%box_size(idim))p%xp(ipart,idim)=p%xp(ipart,idim)-r%box_size(idim)
+           end if
         end do
      end do
   end if
@@ -547,9 +604,7 @@ subroutine pcs_kick_drift_part(s,p,ilevel,action_part)
 
   if(p%static)then
      ! We still need to set the particle levels correctly, even if they are not moved
-     ! Loop over particles
      do ipart=p%headp(ilevel),p%tailp(ilevel)
-        ! Update level
         p%levelp(ipart)=ilevel
      end do
      return
@@ -569,7 +624,7 @@ subroutine pcs_kick_drift_part(s,p,ilevel,action_part)
 
      ! Rescale particle position at level ilevel
      do idim=1,ndim
-        x(idim)=p%xp(ipart,idim)/dx_loc
+        x(idim)=(p%xp(ipart,idim)+m%skip(idim))/dx_loc
      end do
 
      ! PCS at level ilevel; a particle contributes to 4 cells in each direction
@@ -590,10 +645,12 @@ subroutine pcs_kick_drift_part(s,p,ilevel,action_part)
 
      ! Periodic boundary conditions
      do idim=1,ndim
-        if(cll(idim)<0)cll(idim)=cll(idim)+m%ckey_max(ilevel+1)
-        if(cl (idim)<0)cl (idim)=cl (idim)+m%ckey_max(ilevel+1)
-        if(cr (idim)>=m%ckey_max(ilevel+1))cr (idim)=cr (idim)-m%ckey_max(ilevel+1)
-        if(crr(idim)>=m%ckey_max(ilevel+1))crr(idim)=crr(idim)-m%ckey_max(ilevel+1)
+        if(r%periodic(idim))then
+           if(cll(idim)< m%box_ckey_min(idim,ilevel+1))cll(idim)=cll(idim)-m%box_ckey_min(idim,ilevel+1)+m%box_ckey_max(idim,ilevel+1)
+           if(cl (idim)< m%box_ckey_min(idim,ilevel+1))cl (idim)=cl (idim)-m%box_ckey_min(idim,ilevel+1)+m%box_ckey_max(idim,ilevel+1)
+           if(cr (idim)>=m%box_ckey_max(idim,ilevel+1))cr (idim)=cr (idim)+m%box_ckey_min(idim,ilevel+1)-m%box_ckey_max(idim,ilevel+1)
+           if(crr(idim)>=m%box_ckey_max(idim,ilevel+1))crr(idim)=crr(idim)+m%box_ckey_min(idim,ilevel+1)-m%box_ckey_max(idim,ilevel+1)
+        endif
      enddo
 
      ! Compute cells Cartesian key
@@ -684,8 +741,10 @@ subroutine pcs_kick_drift_part(s,p,ilevel,action_part)
   if(action_part==action_kick_drift)then
      do ipart=p%headp(ilevel),p%tailp(ilevel)
         do idim=1,ndim
-           if(p%xp(ipart,idim)<   0.0d0 )p%xp(ipart,idim)=p%xp(ipart,idim)+r%boxlen
-           if(p%xp(ipart,idim)>=r%boxlen)p%xp(ipart,idim)=p%xp(ipart,idim)-r%boxlen
+           if(r%periodic(idim))then
+              if(p%xp(ipart,idim)< 0.0d0           )p%xp(ipart,idim)=p%xp(ipart,idim)+r%box_size(idim)
+              if(p%xp(ipart,idim)>=r%box_size(idim))p%xp(ipart,idim)=p%xp(ipart,idim)-r%box_size(idim)
+           end if
         end do
      end do
   end if
@@ -849,13 +908,14 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
   do ipart=p%headp(ilevel),p%tailp(ilevel)
      ! Position in cell units at current level
      do idim=1,ndim
-        x(idim)=p%xp(ipart,idim)/dx_loc
+        x(idim)=(p%xp(ipart,idim)+m%skip(idim))/dx_loc
      end do
      do idim=1,ndim
-        if(x(idim)<0d0)x(idim)=x(idim)+dble(m%ckey_max(ilevel+1))
-        if(x(idim)>=dble(m%ckey_max(ilevel+1)))x(idim)=x(idim)-dble(m%ckey_max(ilevel+1))
+        if(r%periodic(idim))then
+           if(x(idim)< dble(m%box_ckey_min(idim,ilevel+1)))x(idim)=x(idim)+dble(m%box_ckey_max(idim,ilevel+1)-m%box_ckey_min(idim,ilevel+1))
+           if(x(idim)>=dble(m%box_ckey_max(idim,ilevel+1)))x(idim)=x(idim)-dble(m%box_ckey_max(idim,ilevel+1)-m%box_ckey_min(idim,ilevel+1))
+        endif
      end do
-
      ! Gather velocity v = mom/rho at x^n using CIC
      do idim=1,ndim
         dr(idim)=x(idim)+0.5D0
@@ -865,8 +925,10 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
         il(idim)=ir(idim)-1
      end do
      do idim=1,ndim
-        if(il(idim)<0)il(idim)=m%ckey_max(ilevel+1)-1
-        if(ir(idim)==m%ckey_max(ilevel+1))ir(idim)=0
+        if(r%periodic(idim))then
+           if(il(idim)< m%box_ckey_min(idim,ilevel+1))il(idim)=m%box_ckey_max(idim,ilevel+1)-1
+           if(ir(idim)>=m%box_ckey_max(idim,ilevel+1))ir(idim)=m%box_ckey_min(idim,ilevel+1)
+        endif
      enddo
      ckey = cic_index(il,ir)
      vol = cic_weight(dl,dr)
@@ -896,8 +958,10 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
            il(idim)=ir(idim)-1
         end do
         do idim=1,ndim
-           if(il(idim)<0)il(idim)=m%ckey_max(ilevel)-1
-           if(ir(idim)==m%ckey_max(ilevel))ir(idim)=0
+           if(r%periodic(idim))then
+              if(il(idim)< m%box_ckey_min(idim,ilevel))il(idim)=m%box_ckey_max(idim,ilevel)-1
+              if(ir(idim)>=m%box_ckey_max(idim,ilevel))ir(idim)=m%box_ckey_min(idim,ilevel)
+           endif
         enddo
         ckey = cic_index(il,ir)
         vol = cic_weight(dl,dr)
@@ -932,10 +996,11 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
            x_mid(idim)=x(idim)+0.5d0*g%dtnew(ilevel)*v_pred(idim)/dx_loc
         end do
         do idim=1,ndim
-           if(x_mid(idim)<0d0)x_mid(idim)=x_mid(idim)+dble(m%ckey_max(ilevel+1))
-           if(x_mid(idim)>=dble(m%ckey_max(ilevel+1)))x_mid(idim)=x_mid(idim)-dble(m%ckey_max(ilevel+1))
+           if(r%periodic(idim))then
+              if(x_mid(idim)< dble(m%box_ckey_min(idim,ilevel+1)))x_mid(idim)=x_mid(idim)+dble(m%box_ckey_max(idim,ilevel+1)-m%box_ckey_min(idim,ilevel+1))
+              if(x_mid(idim)>=dble(m%box_ckey_max(idim,ilevel+1)))x_mid(idim)=x_mid(idim)-dble(m%box_ckey_max(idim,ilevel+1)-m%box_ckey_min(idim,ilevel+1))
+           endif
         end do
-
         ! Gather v^{n+1} at x_mid using CIC
         do idim=1,ndim
            dr2(idim)=x_mid(idim)+0.5D0
@@ -945,8 +1010,10 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
            il2(idim)=ir2(idim)-1
         end do
         do idim=1,ndim
-           if(il2(idim)<0)il2(idim)=m%ckey_max(ilevel+1)-1
-           if(ir2(idim)==m%ckey_max(ilevel+1))ir2(idim)=0
+           if(r%periodic(idim))then
+              if(il2(idim)< m%box_ckey_min(idim,ilevel+1))il2(idim)=m%box_ckey_max(idim,ilevel+1)-1
+              if(ir2(idim)>=m%box_ckey_max(idim,ilevel+1))ir2(idim)=m%box_ckey_min(idim,ilevel+1)
+           endif
         enddo
         ckey2 = cic_index(il2,ir2)
         vol2 = cic_weight(dl2,dr2)
@@ -976,8 +1043,10 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
               il2(idim)=ir2(idim)-1
            end do
            do idim=1,ndim
-              if(il2(idim)<0)il2(idim)=m%ckey_max(ilevel)-1
-              if(ir2(idim)==m%ckey_max(ilevel))ir2(idim)=0
+              if(r%periodic(idim))then
+                 if(il2(idim)< m%box_ckey_min(idim,ilevel))il2(idim)=m%box_ckey_max(idim,ilevel)-1
+                 if(ir2(idim)>=m%box_ckey_max(idim,ilevel))ir2(idim)=m%box_ckey_min(idim,ilevel)
+              endif
            enddo
            ckey2 = cic_index(il2,ir2)
            vol2 = cic_weight(dl2,dr2)
@@ -1003,8 +1072,10 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
   if(action_part==action_kick_drift)then
      do ipart=p%headp(ilevel),p%tailp(ilevel)
         do idim=1,ndim
-           if(p%xp(ipart,idim)<0.0d0)p%xp(ipart,idim)=p%xp(ipart,idim)+r%boxlen
-           if(p%xp(ipart,idim)>=r%boxlen)p%xp(ipart,idim)=p%xp(ipart,idim)-r%boxlen
+           if(r%periodic(idim))then
+              if(p%xp(ipart,idim)< 0.0d0           )p%xp(ipart,idim)=p%xp(ipart,idim)+r%box_size(idim)
+              if(p%xp(ipart,idim)>=r%box_size(idim))p%xp(ipart,idim)=p%xp(ipart,idim)-r%box_size(idim)
+           endif
         end do
      end do
    end if
@@ -1049,11 +1120,13 @@ subroutine tsc_trace_gas_part(s,p,ilevel,action_part)
                      pack=pack_fetch_kick_trac,unpack=unpack_fetch_kick_trac)
   do ipart=p%headp(ilevel),p%tailp(ilevel)
      do idim=1,ndim
-        x(idim)=p%xp(ipart,idim)/dx_loc
+        x(idim)=(p%xp(ipart,idim)+m%skip(idim))/dx_loc
      end do
      do idim=1,ndim
-        if(x(idim)<0d0)x(idim)=x(idim)+dble(m%ckey_max(ilevel+1))
-        if(x(idim)>=dble(m%ckey_max(ilevel+1)))x(idim)=x(idim)-dble(m%ckey_max(ilevel+1))
+        if(r%periodic(idim))then
+           if(x(idim)< dble(m%box_ckey_min(idim,ilevel+1)))x(idim)=x(idim)+dble(m%box_ckey_max(idim,ilevel+1)-m%box_ckey_min(idim,ilevel+1))
+           if(x(idim)>=dble(m%box_ckey_max(idim,ilevel+1)))x(idim)=x(idim)-dble(m%box_ckey_max(idim,ilevel+1)-m%box_ckey_min(idim,ilevel+1))
+        endif
      end do
      do idim=1,ndim
         cl(idim)=int(x(idim))-1
@@ -1067,8 +1140,10 @@ subroutine tsc_trace_gas_part(s,p,ilevel,action_part)
         wr(idim)=0.5D0*(1.5D0-abs(x(idim)-xr))**2
      end do
      do idim=1,ndim
-        if(cl(idim)<0)cl(idim)=m%ckey_max(ilevel+1)-1
-        if(cr(idim)==m%ckey_max(ilevel+1))cr(idim)=0
+        if(r%periodic(idim))then
+           if(cl(idim)< m%box_ckey_min(idim,ilevel+1))cl(idim)=m%box_ckey_max(idim,ilevel+1)-1
+           if(cr(idim)>=m%box_ckey_max(idim,ilevel+1))cr(idim)=m%box_ckey_min(idim,ilevel+1)
+        endif
      enddo
      ckey = tsc_index(cl,cc,cr)
      vol = tsc_weight(wl,wc,wr)
@@ -1100,8 +1175,10 @@ subroutine tsc_trace_gas_part(s,p,ilevel,action_part)
            x_mid(idim)=x(idim)+0.5d0*g%dtnew(ilevel)*v_pred(idim)/dx_loc
         end do
         do idim=1,ndim
-           if(x_mid(idim)<0d0)x_mid(idim)=x_mid(idim)+dble(m%ckey_max(ilevel+1))
-           if(x_mid(idim)>=dble(m%ckey_max(ilevel+1)))x_mid(idim)=x_mid(idim)-dble(m%ckey_max(ilevel+1))
+           if(r%periodic(idim))then
+              if(x_mid(idim)< dble(m%box_ckey_min(idim,ilevel+1)))x_mid(idim)=x_mid(idim)+dble(m%box_ckey_max(idim,ilevel+1)-m%box_ckey_min(idim,ilevel+1))
+              if(x_mid(idim)>=dble(m%box_ckey_max(idim,ilevel+1)))x_mid(idim)=x_mid(idim)-dble(m%box_ckey_max(idim,ilevel+1)-m%box_ckey_min(idim,ilevel+1))
+           endif
         end do
         do idim=1,ndim
            cl2(idim)=int(x_mid(idim))-1
@@ -1115,8 +1192,10 @@ subroutine tsc_trace_gas_part(s,p,ilevel,action_part)
            wr2(idim)=0.5D0*(1.5D0-abs(x_mid(idim)-xr))**2
         end do
         do idim=1,ndim
-           if(cl2(idim)<0)cl2(idim)=m%ckey_max(ilevel+1)-1
-           if(cr2(idim)==m%ckey_max(ilevel+1))cr2(idim)=0
+           if(r%periodic(idim))then
+              if(cl2(idim)< m%box_ckey_min(idim,ilevel+1))cl2(idim)=m%box_ckey_max(idim,ilevel+1)-1
+              if(cr2(idim)>=m%box_ckey_max(idim,ilevel+1))cr2(idim)=m%box_ckey_min(idim,ilevel+1)
+           endif
         enddo
         ckey2 = tsc_index(cl2,cc2,cr2)
         vol2 = tsc_weight(wl2,wc2,wr2)
@@ -1139,8 +1218,10 @@ subroutine tsc_trace_gas_part(s,p,ilevel,action_part)
   if(action_part==action_kick_drift)then
      do ipart=p%headp(ilevel),p%tailp(ilevel)
         do idim=1,ndim
-           if(p%xp(ipart,idim)<0.0d0)p%xp(ipart,idim)=p%xp(ipart,idim)+r%boxlen
-           if(p%xp(ipart,idim)>=r%boxlen)p%xp(ipart,idim)=p%xp(ipart,idim)-r%boxlen
+           if(r%periodic(idim))then
+              if(p%xp(ipart,idim) <0.0d0           )p%xp(ipart,idim)=p%xp(ipart,idim)+r%box_size(idim)
+              if(p%xp(ipart,idim)>=r%box_size(idim))p%xp(ipart,idim)=p%xp(ipart,idim)-r%box_size(idim)
+           endif
         end do
      end do
   end if
@@ -1184,11 +1265,13 @@ subroutine pcs_trace_gas_part(s,p,ilevel,action_part)
        pack=pack_fetch_kick_trac,unpack=unpack_fetch_kick_trac)
   do ipart=p%headp(ilevel),p%tailp(ilevel)
      do idim=1,ndim
-        x(idim)=p%xp(ipart,idim)/dx_loc
+        x(idim)=(p%xp(ipart,idim)+m%skip(idim))/dx_loc
      end do
      do idim=1,ndim
-        if(x(idim)<0d0)x(idim)=x(idim)+dble(m%ckey_max(ilevel+1))
-        if(x(idim)>=dble(m%ckey_max(ilevel+1)))x(idim)=x(idim)-dble(m%ckey_max(ilevel+1))
+        if(r%periodic(idim))then
+           if(x(idim)< dble(m%box_ckey_min(idim,ilevel+1)))x(idim)=x(idim)+dble(m%box_ckey_max(idim,ilevel+1)-m%box_ckey_min(idim,ilevel+1))
+           if(x(idim)>=dble(m%box_ckey_max(idim,ilevel+1)))x(idim)=x(idim)-dble(m%box_ckey_max(idim,ilevel+1)-m%box_ckey_min(idim,ilevel+1))
+        endif
      end do
      do idim=1,ndim
         crr(idim)=int(x(idim)+1.5D0)
@@ -1205,10 +1288,12 @@ subroutine pcs_trace_gas_part(s,p,ilevel,action_part)
         wrr(idim)=(2D0-abs(x(idim)-xrr))**3/6D0
      end do
      do idim=1,ndim
-        if(cll(idim)<0)cll(idim)=cll(idim)+m%ckey_max(ilevel+1)
-        if(cl (idim)<0)cl (idim)=cl (idim)+m%ckey_max(ilevel+1)
-        if(cr (idim)>=m%ckey_max(ilevel+1))cr (idim)=cr (idim)-m%ckey_max(ilevel+1)
-        if(crr(idim)>=m%ckey_max(ilevel+1))crr(idim)=crr(idim)-m%ckey_max(ilevel+1)
+        if(r%periodic(idim))then
+           if(cll(idim)< m%box_ckey_min(idim,ilevel+1))cll(idim)=cll(idim)-m%box_ckey_min(idim,ilevel+1)+m%box_ckey_max(idim,ilevel+1)
+           if(cl (idim)< m%box_ckey_min(idim,ilevel+1))cl (idim)=cl (idim)-m%box_ckey_min(idim,ilevel+1)+m%box_ckey_max(idim,ilevel+1)
+           if(cr (idim)>=m%box_ckey_max(idim,ilevel+1))cr (idim)=cr (idim)+m%box_ckey_min(idim,ilevel+1)-m%box_ckey_max(idim,ilevel+1)
+           if(crr(idim)>=m%box_ckey_max(idim,ilevel+1))crr(idim)=crr(idim)+m%box_ckey_min(idim,ilevel+1)-m%box_ckey_max(idim,ilevel+1)
+        endif
      enddo
      ckey = pcs_index(cll,cl,cr,crr)
      vol = pcs_weight(wll,wl,wr,wrr)
@@ -1240,8 +1325,10 @@ subroutine pcs_trace_gas_part(s,p,ilevel,action_part)
            x_mid(idim)=x(idim)+0.5d0*g%dtnew(ilevel)*v_pred(idim)/dx_loc
         end do
         do idim=1,ndim
-           if(x_mid(idim)<0d0)x_mid(idim)=x_mid(idim)+dble(m%ckey_max(ilevel+1))
-           if(x_mid(idim)>=dble(m%ckey_max(ilevel+1)))x_mid(idim)=x_mid(idim)-dble(m%ckey_max(ilevel+1))
+           if(r%periodic(idim))then
+              if(x_mid(idim)< dble(m%box_ckey_min(idim,ilevel+1)))x_mid(idim)=x_mid(idim)+dble(m%box_ckey_max(idim,ilevel+1)-m%box_ckey_min(idim,ilevel+1))
+              if(x_mid(idim)>=dble(m%box_ckey_max(idim,ilevel+1)))x_mid(idim)=x_mid(idim)-dble(m%box_ckey_max(idim,ilevel+1)-m%box_ckey_min(idim,ilevel+1))
+           endif
         end do
         do idim=1,ndim
            crr2(idim)=int(x_mid(idim)+1.5D0)
@@ -1258,10 +1345,12 @@ subroutine pcs_trace_gas_part(s,p,ilevel,action_part)
            wrr2(idim)=(2D0-abs(x_mid(idim)-xrr))**3/6D0
         end do
         do idim=1,ndim
-           if(cll2(idim)<0)cll2(idim)=cll2(idim)+m%ckey_max(ilevel+1)
-           if(cl2 (idim)<0)cl2 (idim)=cl2 (idim)+m%ckey_max(ilevel+1)
-           if(cr2 (idim)>=m%ckey_max(ilevel+1))cr2 (idim)=cr2 (idim)-m%ckey_max(ilevel+1)
-           if(crr2(idim)>=m%ckey_max(ilevel+1))crr2(idim)=crr2(idim)-m%ckey_max(ilevel+1)
+           if(r%periodic(idim))then
+              if(cll2(idim)< m%box_ckey_min(idim,ilevel+1))cll2(idim)=cll2(idim)-m%box_ckey_min(idim,ilevel+1)+m%box_ckey_max(idim,ilevel+1)
+              if(cl2 (idim)< m%box_ckey_min(idim,ilevel+1))cl2 (idim)=cl2 (idim)-m%box_ckey_min(idim,ilevel+1)+m%box_ckey_max(idim,ilevel+1)
+              if(cr2 (idim)>=m%box_ckey_max(idim,ilevel+1))cr2 (idim)=cr2 (idim)+m%box_ckey_min(idim,ilevel+1)-m%box_ckey_max(idim,ilevel+1)
+              if(crr2(idim)>=m%box_ckey_max(idim,ilevel+1))crr2(idim)=crr2(idim)+m%box_ckey_min(idim,ilevel+1)-m%box_ckey_max(idim,ilevel+1)
+           endif
         enddo
         ckey2 = pcs_index(cll2,cl2,cr2,crr2)
         vol2 = pcs_weight(wll2,wl2,wr2,wrr2)
@@ -1284,8 +1373,10 @@ subroutine pcs_trace_gas_part(s,p,ilevel,action_part)
   if(action_part==action_kick_drift)then
      do ipart=p%headp(ilevel),p%tailp(ilevel)
         do idim=1,ndim
-           if(p%xp(ipart,idim)<0.0d0)p%xp(ipart,idim)=p%xp(ipart,idim)+r%boxlen
-           if(p%xp(ipart,idim)>=r%boxlen)p%xp(ipart,idim)=p%xp(ipart,idim)-r%boxlen
+           if(r%periodic(idim))then
+              if(p%xp(ipart,idim)< 0.0d0           )p%xp(ipart,idim)=p%xp(ipart,idim)+r%box_size(idim)
+              if(p%xp(ipart,idim)>=r%box_size(idim))p%xp(ipart,idim)=p%xp(ipart,idim)-r%box_size(idim)
+           endif
         end do
      end do
   end if

@@ -10,52 +10,21 @@ subroutine get_bound(s,ix,ilevel,ibound)
 
   logical::in_bound
   integer::i,idim
-  integer(kind=4)::bound_ckey_min  ! Min. Cartesian key per level for the boundary region
-  integer(kind=4)::bound_ckey_max  ! Max. Cartesian key per level for the boundary region
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
-    do i=1,r%nbound
+    ibound = 0
+    do i = 1, r%nbound
        in_bound = .true.
-       if(r%bound_xmin(i).GE.0)then
-          bound_ckey_min=r%bound_xmin(i)*2**(ilevel-r%levelmin)
-       else
-          bound_ckey_min=(m%ckey_max(r%levelmin)+r%bound_xmin(i))*2**(ilevel-r%levelmin)
-       endif
-       if(r%bound_xmax(i).LE.0)then
-          bound_ckey_max=(m%ckey_max(r%levelmin)+r%bound_xmax(i))*2**(ilevel-r%levelmin)-1
-       else
-          bound_ckey_max=r%bound_xmax(i)*2**(ilevel-r%levelmin)-1
-       endif
-       in_bound = in_bound .and. ix(1) .ge. bound_ckey_min .and. ix(1) .le. bound_ckey_max
+       in_bound = in_bound .and. ix(1) .ge. m%bound_ckey_min(1,i,ilevel) .and. ix(1) .lt. m%bound_ckey_max(1,i,ilevel)
 #if NDIM>1
-       if(r%bound_ymin(i).GE.0)then
-          bound_ckey_min=r%bound_ymin(i)*2**(ilevel-r%levelmin)
-       else
-          bound_ckey_min=(m%ckey_max(r%levelmin)+r%bound_ymin(i))*2**(ilevel-r%levelmin)
-       endif
-       if(r%bound_ymax(i).LE.0)then
-          bound_ckey_max=(m%ckey_max(r%levelmin)+r%bound_ymax(i))*2**(ilevel-r%levelmin)-1
-       else
-          bound_ckey_max=r%bound_ymax(i)*2**(ilevel-r%levelmin)-1
-       endif
-       in_bound = in_bound .and. ix(2) .ge. bound_ckey_min .and. ix(2) .le. bound_ckey_max
+       in_bound = in_bound .and. ix(2) .ge. m%bound_ckey_min(2,i,ilevel) .and. ix(2) .lt. m%bound_ckey_max(2,i,ilevel)
 #endif
 #if NDIM>2
-       if(r%bound_zmin(i).GE.0)then
-          bound_ckey_min=r%bound_zmin(i)*2**(ilevel-r%levelmin)
-       else
-          bound_ckey_min=(m%ckey_max(r%levelmin)+r%bound_zmin(i))*2**(ilevel-r%levelmin)
-       endif
-       if(r%bound_zmax(i).LE.0)then
-          bound_ckey_max=(m%ckey_max(r%levelmin)+r%bound_zmax(i))*2**(ilevel-r%levelmin)-1
-       else
-          bound_ckey_max=r%bound_zmax(i)*2**(ilevel-r%levelmin)-1
-       endif
-       in_bound = in_bound .and. ix(3) .ge. bound_ckey_min .and. ix(3) .le. bound_ckey_max
+       in_bound = in_bound .and. ix(3) .ge. m%bound_ckey_min(3,i,ilevel) .and. ix(3) .lt. m%bound_ckey_max(3,i,ilevel)
 #endif
-       if(in_bound)then
-          ibound=i
+       if (in_bound) then
+          ibound = i
           exit
        endif
     end do
@@ -111,11 +80,16 @@ subroutine init_bound_refine(r,g,m,grid,grid_ref,ibound)
   real(kind=8),dimension(1:nvector,1:ndim)::xx
   real(kind=8),dimension(1:nvector,1:nvar)::uu
   real(kind=8),dimension(1:nvector,1:nvar)::qq
+  real(kind=8),dimension(1:nvector,1:ndim)::ff
+  real(kind=8),dimension(1:nvector)::phi
   real(kind=8)::dx,rr,vx,vy,vz,pp,eint,ekin,emag,erad
 
   type = r%bound_type(ibound)
   dir = r%bound_dir(ibound)
   shift = r%bound_shift(ibound)
+
+  ! Mesh size at level ilevel in code units
+  dx=r%boxlen/2**grid%lev
 
   ! Set refinement map
   if(shift==+1)then
@@ -350,9 +324,6 @@ subroutine init_bound_refine(r,g,m,grid,grid_ref,ibound)
   ! Imposed BC from condinit
   if(type == 4)then
 
-     ! Mesh size at level ilevel in code units
-     dx=r%boxlen/2**grid%lev
-
      do ind=1,twotondim
         do idim=1,ndim
            nstride=2**(idim-1)
@@ -402,9 +373,6 @@ subroutine init_bound_refine(r,g,m,grid,grid_ref,ibound)
   ! Imposed BC from boundana
   if(type == 5)then
 
-     ! Mesh size at level ilevel in code units
-     dx=r%boxlen/2**grid%lev
-
      do ind=1,twotondim
         do idim=1,ndim
            nstride=2**(idim-1)
@@ -423,16 +391,23 @@ subroutine init_bound_refine(r,g,m,grid,grid_ref,ibound)
 #endif
 
 #ifdef GRAV
-  ! Isolated BC
-  do idim=1,ndim
-     do ind=1,twotondim
-        grid%f(ind,idim)=0.0d0
-     end do
-  end do
+
   do ind=1,twotondim
-     grid%phi(ind)=0.0d0
-     grid%phi_old(ind)=0.0d0
+     do idim=1,ndim
+        nstride=2**(idim-1)
+        xx(1,idim)=(2*grid%ckey(idim)+MOD((ind-1)/nstride,2)+0.5)*dx-m%skip(idim)
+     end do
+     ! Call analytical acceleration routine
+     call gravana(r,g,xx,ff,1)
+     do idim=1,ndim
+        grid%f(ind,idim)=ff(1,idim)
+     end do
+     ! Call analytical potential routine
+     call phiana(r,g,xx,phi,1)
+     grid%phi(ind)=phi(1)
+     grid%phi_old(ind)=phi(1)
   end do
+
 #endif
 
 end subroutine init_bound_refine
@@ -440,18 +415,18 @@ end subroutine init_bound_refine
 !################################################################
 !################################################################
 !################################################################
-subroutine init_bound_grav(r,g,m,grid)
+subroutine init_bound_phi(r,g,m,grid,grid_ref,ibound)
   use amr_parameters, only: ndim, twotondim, nvector
   use amr_commons, only: run_t, global_t, mesh_t, oct
   type(run_t)::r
   type(global_t)::g
   type(mesh_t)::m
-  type(oct)::grid
+  type(oct)::grid, grid_ref
+  integer::ibound
 
   integer::idim, ind, nstride
   real(kind=8)::dx
   real(kind=8),dimension(1:nvector,1:ndim)::xx
-  real(kind=8),dimension(1:nvector,1:ndim)::ff
   real(kind=8),dimension(1:nvector)::pp
 
 #ifdef GRAV
@@ -464,15 +439,73 @@ subroutine init_bound_grav(r,g,m,grid)
         nstride=2**(idim-1)
         xx(1,idim)=(2*grid%ckey(idim)+MOD((ind-1)/nstride,2)+0.5)*dx-m%skip(idim)
      end do
+     ! Call analytical potential routine
+     call phiana(r,g,xx,pp,1)
+     grid%phi(ind)=pp(1)
+     grid%phi_old(ind)=pp(1)
+     ! Set mask to -1
+     grid%f(ind,3)=-1
+  end do
+
+#endif
+
+end subroutine init_bound_phi
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine init_bound_mg(r,g,m,grid,grid_ref,ibound)
+  use amr_parameters, only: ndim, twotondim, nvector
+  use amr_commons, only: run_t, global_t, mesh_t, oct
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(oct)::grid, grid_ref
+  integer::ibound
+
+  integer::ind
+
+#ifdef GRAV
+  do ind=1,twotondim
+     grid%phi(ind)=0.0
+     grid%f(ind,3)=-1
+  end do
+#endif
+
+end subroutine init_bound_mg
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine init_bound_grav(r,g,m,grid,grid_ref,ibound)
+  use amr_parameters, only: ndim, twotondim, nvector
+  use amr_commons, only: run_t, global_t, mesh_t, oct
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(oct)::grid, grid_ref
+  integer::ibound
+
+  integer::idim, ind, nstride
+  real(kind=8)::dx
+  real(kind=8),dimension(1:nvector,1:ndim)::xx
+  real(kind=8),dimension(1:nvector,1:ndim)::ff
+
+#ifdef GRAV
+
+  ! Mesh size at level ilevel in code units
+  dx=r%boxlen/2**grid%lev
+
+  do ind=1,twotondim
+     do idim=1,ndim
+        nstride=2**(idim-1)
+        xx(1,idim)=(2*grid%ckey(idim)+MOD((ind-1)/nstride,2)+0.5)*dx-m%skip(idim)
+     end do
      ! Call analytical acceleration routine
-     call gravana(r,g,xx,ff,dx,1)
+     call gravana(r,g,xx,ff,1)
      do idim=1,ndim
         grid%f(ind,idim)=ff(1,idim)
      end do
-     ! Call analytical potential routine
-     call phiana(r,g,xx,pp,dx,1)
-     grid%phi(ind)=pp(1)
-     grid%phi_old(ind)=pp(1)
   end do
 
 #endif

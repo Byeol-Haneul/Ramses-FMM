@@ -18,18 +18,17 @@ nstepmax=1
 levelmin=4
 levelmax=4
 ngridmax=80000
-box_size=1.0
-box_xmin=1
-box_xmax=-1
 /
 
 &INIT_PARAMS
-!aexp_ini=0.20
-!aexp_ini=0.999
 aexp_ini=1.d-3
 /
 
 &BOUNDARY_PARAMS
+bound_levelmin=4
+box_size=1.0
+box_xmin=1
+box_xmax=-1
 nbound=2
 periodic=.false.
 bound_dir=1,1

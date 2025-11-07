@@ -525,7 +525,7 @@ subroutine rescale_gadget(r,g,p)
   call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
   scale_m = scale_d*scale_l**3
   do i=1,p%npart
-     p%xp(i,1:ndim)=p%xp(i,1:ndim)*(r%gadget_scale_l/scale_l)+r%boxlen/2.0d0
+     p%xp(i,1:ndim)=p%xp(i,1:ndim)*(r%gadget_scale_l/scale_l)+r%box_size(1:ndim)/2.0d0
      p%vp(i,1:ndim)=p%vp(i,1:ndim)*(r%gadget_scale_v/scale_v)
      p%mp(i)=p%mp(i)*(r%gadget_scale_m/scale_m)
   end do
@@ -559,7 +559,7 @@ subroutine trim_box(r,g,p)
   do i=1,p%npart
      ok_part=.true.
      do idim=1,ndim
-        ok_part=ok_part.and.p%xp(i,idim)>0.and.p%xp(i,idim)<r%boxlen
+        ok_part=ok_part.and.p%xp(i,idim)>0.and.p%xp(i,idim)<r%box_size(idim)
      end do
      if(ok_part)then
         ipart=ipart+1
@@ -624,6 +624,7 @@ end subroutine trim_box
 !#########################################################################
 !#########################################################################
 subroutine init_levelmin(r,p)
+  use amr_parameters, only: ndim
   use amr_commons, only: run_t
   use pm_commons, only: part_t
   type(run_t)::r
@@ -633,6 +634,10 @@ subroutine init_levelmin(r,p)
   p%tailp=p%npart
   p%headp(r%levelmin)=1
   p%tailp(r%levelmin)=p%npart  
+  if(ANY(.not.r%periodic(1:ndim)))then
+     p%headp(r%levelmin-1)=1
+     p%tailp(r%levelmin-1)=0
+  endif
 end subroutine init_levelmin
 !#########################################################################
 !#########################################################################

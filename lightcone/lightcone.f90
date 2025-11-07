@@ -143,9 +143,9 @@ endif
              do npart = 1, p%npart
 
                 position = p%xp(npart, :)
-                position(1) = position(1) + i * s%r%boxlen
-                position(2) = position(2) + j * s%r%boxlen
-                position(3) = position(3) + k * s%r%boxlen
+                position(1) = position(1) + i * s%r%box_size(1)
+                position(2) = position(2) + j * s%r%box_size(2)
+                position(3) = position(3) + k * s%r%box_size(3)
 
                 position = box_to_cone_coordinates(box_to_cone_rotation, s%r%cone_observer, position)
 
@@ -189,9 +189,9 @@ endif
 
              do npart = 1, p%npart
                 position = p%xp(npart, :)
-                position(1) = position(1) + i * s%r%boxlen
-                position(2) = position(2) + j * s%r%boxlen
-                position(3) = position(3) + k * s%r%boxlen
+                position(1) = position(1) + i * s%r%box_size(1)
+                position(2) = position(2) + j * s%r%box_size(2)
+                position(3) = position(3) + k * s%r%box_size(3)
 
                 position = box_to_cone_coordinates(box_to_cone_rotation, s%r%cone_observer, position)
 
@@ -296,9 +296,9 @@ endif
                       position(idim) = ( 2 * s%m%grid(igrid)%ckey(idim) + MOD((ind-1)/nskip,2) + 0.5 ) * dx - s%m%skip(idim)
                    end do
 
-                   position(1) = position(1) + i * s%r%boxlen
-                   position(2) = position(2) + j * s%r%boxlen
-                   position(3) = position(3) + k * s%r%boxlen
+                   position(1) = position(1) + i * s%r%box_size(1)
+                   position(2) = position(2) + j * s%r%box_size(2)
+                   position(3) = position(3) + k * s%r%box_size(3)
 
                    position = box_to_cone_coordinates(box_to_cone_rotation, s%r%cone_observer, position)
 
@@ -349,9 +349,9 @@ endif
                       position(idim) = ( 2 * s%m%grid(igrid)%ckey(idim) + MOD((ind-1)/nskip,2) + 0.5 ) * dx - s%m%skip(idim)
                    end do
 
-                   position(1) = position(1) + i * s%r%boxlen
-                   position(2) = position(2) + j * s%r%boxlen
-                   position(3) = position(3) + k * s%r%boxlen
+                   position(1) = position(1) + i * s%r%box_size(1)
+                   position(2) = position(2) + j * s%r%box_size(2)
+                   position(3) = position(3) + k * s%r%box_size(3)
 
                    position = box_to_cone_coordinates(box_to_cone_rotation, s%r%cone_observer, position)
 

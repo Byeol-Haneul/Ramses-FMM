@@ -2,14 +2,13 @@
 !#########################################################
 !#########################################################
 !#########################################################
-subroutine gravana(r,g,x,f,dx,ncell)
+subroutine gravana(r,g,x,f,ncell)
   use amr_parameters, only: ndim, nvector
   use amr_commons, only: run_t, global_t
   implicit none
   type(run_t)::r
   type(global_t)::g
   integer::ncell                              ! Size of input arrays
-  real(kind=8)::dx                            ! Cell size
   real(kind=8),dimension(1:nvector,1:ndim)::f ! Gravitational acceleration
   real(kind=8),dimension(1:nvector,1:ndim)::x ! Cell center position.
   !================================================================
@@ -19,6 +18,33 @@ subroutine gravana(r,g,x,f,dx,ncell)
   !================================================================
   integer::idim,i
   real(kind=8)::gmass,emass,xmass,ymass,zmass,rr,rx,ry,rz
+
+  ! Multipole expansion for isolated boundary conditions
+  if(r%gravity_type==0)then
+     do i=1,ncell
+        rx=0.0d0; ry=0.0d0; rz=0.0d0
+        rx=x(i,1)-g%multipole%q(2)/g%multipole%q(1)
+#if NDIM>1
+        ry=x(i,2)-g%multipole%q(3)/g%multipole%q(1)
+#endif
+#if NDIM>2
+        rz=x(i,3)-g%multipole%q(4)/g%multipole%q(1)
+#endif
+        rr=sqrt(rx**2+ry**2+rz**2)
+#if NDIM==1
+        f(i,1)=-g%multipole%q(1)*2d0*ACOS(-1d0)*rx/rr
+#endif
+#if NDIM==2
+        f(i,1)=-g%multipole%q(1)*2d0*rx/rr*2
+        f(i,2)=-g%multipole%q(1)*2d0*ry/rr*2
+#endif
+#if NDIM==3
+        f(i,1)=-g%multipole%q(1)*rx/rr*3
+        f(i,2)=-g%multipole%q(1)*ry/rr*3
+        f(i,3)=-g%multipole%q(1)*rz/rr*3
+#endif
+     end do
+  end if
 
   ! Constant vector
   if(r%gravity_type==1)then
@@ -46,11 +72,16 @@ subroutine gravana(r,g,x,f,dx,ncell)
         rz=x(i,3)-zmass
 #endif
         rr=sqrt(rx**2+ry**2+rz**2+emass**2)
-        f(i,1)=-gmass*rx/rr**3
-#if NDIM>1
-        f(i,2)=-gmass*ry/rr**3
+#if NDIM==1
+        f(i,1)=-gmass*rx/rr
 #endif
-#if NDIM>2
+#if NDIM==2
+        f(i,1)=-gmass*ry/rr**2
+        f(i,2)=-gmass*ry/rr**2
+#endif
+#if NDIM==3
+        f(i,1)=-gmass*rx/rr**3
+        f(i,2)=-gmass*ry/rr**3
         f(i,3)=-gmass*rz/rr**3
 #endif
      end do
@@ -61,14 +92,13 @@ end subroutine gravana
 !#########################################################
 !#########################################################
 !#########################################################
-subroutine phiana(r,g,x,phi,dx,ncell)
+subroutine phiana(r,g,x,phi,ncell)
   use amr_parameters, only: ndim, nvector
   use amr_commons, only: run_t, global_t
   implicit none
   type(run_t)::r
   type(global_t)::g
   integer::ncell                              ! Size of input arrays
-  real(kind=8)::dx                            ! Cell size
   real(kind=8),dimension(1:nvector)::phi      ! Gravitational potential
   real(kind=8),dimension(1:nvector,1:ndim)::x ! Cell center position.
   !================================================================
@@ -83,12 +113,12 @@ subroutine phiana(r,g,x,phi,dx,ncell)
 
   do i=1,ncell
      rx=0.0d0; ry=0.0d0; rz=0.0d0
-     rx=x(i,1)
+     rx=x(i,1)-g%multipole%q(2)/g%multipole%q(1)
 #if NDIM>1
-     ry=x(i,2)
+     ry=x(i,2)-g%multipole%q(3)/g%multipole%q(1)
 #endif
 #if NDIM>2
-     rz=x(i,3)
+     rz=x(i,3)-g%multipole%q(4)/g%multipole%q(1)
 #endif
      rr=sqrt(rx**2+ry**2+rz**2)
 #if NDIM==1
@@ -101,6 +131,7 @@ subroutine phiana(r,g,x,phi,dx,ncell)
      phi(i)=-g%multipole%q(1)/rr
 #endif
   end do
+
 end subroutine phiana
 !#########################################################
 !#########################################################

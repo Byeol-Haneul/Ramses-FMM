@@ -489,6 +489,26 @@ subroutine input_part_restart(r,g,p,ncpu_file,npart_file,mpart_loc)
 #endif
      endif
 
+     ! Read tracking identity
+     if(allocated(p%idt))then
+#ifndef LONGINT
+        ipos=iskip+4*(istart-1)
+#else
+        ipos=iskip+8*(istart-1)
+#endif
+        read(10,POS=ipos)isp8
+        ipart=ipart_old
+        do i=istart,iend
+           ipart=ipart+1
+           p%idt(ipart)=isp8(i)
+        end do
+#ifndef LONGINT
+        iskip=iskip+4*npart_file(icpu)
+#else
+        iskip=iskip+8*npart_file(icpu)
+#endif
+     endif
+
      deallocate(isp8)
 
      ! Close the particle file
@@ -503,7 +523,11 @@ subroutine input_part_restart(r,g,p,ncpu_file,npart_file,mpart_loc)
   p%tailp=p%npart
   p%headp(r%levelmin)=1
   p%tailp(r%levelmin)=p%npart
-        
+  if(ANY(.not.r%periodic(1:ndim)))then
+     p%headp(r%levelmin-1)=1
+     p%tailp(r%levelmin-1)=0
+  endif
+
 end subroutine input_part_restart
 !#########################################################################
 !#########################################################################

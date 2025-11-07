@@ -542,8 +542,10 @@ subroutine collect_peak(s)
         xnei(1:ndim)=xcen(1:ndim)+xSnei(1:ndim,j)
         ! Periodic boundary conditions
         do idim=1,ndim
-           if(xnei(idim)<                0.0d0)xnei(idim)=xnei(idim)+m%ckey_max(ilevel+1)
-           if(xnei(idim)>=m%ckey_max(ilevel+1))xnei(idim)=xnei(idim)-m%ckey_max(ilevel+1)
+           if(r%periodic(idim))then
+              if(xnei(idim)< m%box_ckey_min(idim,ilevel+1))xnei(idim)=xnei(idim)-m%box_ckey_min(idim,ilevel+1)+m%box_ckey_max(idim,ilevel+1)
+              if(xnei(idim)>=m%box_ckey_max(idim,ilevel+1))xnei(idim)=xnei(idim)+m%box_ckey_min(idim,ilevel+1)-m%box_ckey_max(idim,ilevel+1)
+           endif
         end do
 
         ! Get neighboring cell at ilevel

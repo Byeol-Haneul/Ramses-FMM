@@ -81,13 +81,6 @@ subroutine m_read_params(pst)
   integer::ngridmax=0         ! Maximum number of grids
   integer::ncachemax=10000    ! Maximum number of cache lines
   real(kind=8)::boxlen=1.0D0      ! Cell sixe at level 0
-  real(kind=8)::box_size=0.0D0    ! Box length in active domain along x direction
-  integer::box_xmin=0 ! Min. Cartesian key for the box at levelmin in x direction
-  integer::box_xmax=0 ! Max. Cartesian key for the box at levelmin in x direction
-  integer::box_ymin=0 ! Min. Cartesian key for the box at levelmin in y direction
-  integer::box_ymax=0 ! Max. Cartesian key for the box at levelmin in y direction
-  integer::box_zmin=0 ! Min. Cartesian key for the box at levelmin in z direction
-  integer::box_zmax=0 ! Max. Cartesian key for the box at levelmin in z direction
 
   ! Output parameters
   integer::noutput=1          ! Total number of outputs
@@ -283,7 +276,7 @@ subroutine m_read_params(pst)
   integer :: cg_levelmin=999   ! Min level for CG solver
   ! level < cg_levelmin uses fine multigrid
   ! level >=cg_levelmin uses conjugate gradient
-  logical :: fast_solver = .false.   ! Fast solver with MPI pre-fetch (memory intensive)
+  logical :: fast_solver=.false.   ! Fast solver with MPI pre-fetch (memory intensive)
   integer :: part_mass_deposition_scheme=1     ! part mass deposition schemes (CIC 1, TSC 2, PCS 3)
   integer :: part_force_interpolation_scheme=1 ! part force interpolation schemes (CIC 1, TSC 2, PCS 3)
   integer :: star_mass_deposition_scheme=1     ! star mass deposition schemes
@@ -298,6 +291,14 @@ subroutine m_read_params(pst)
   integer::nbound=0
   logical::no_inflow=.false.
   logical,dimension(1:NDIM)::periodic=.true.
+  integer::bound_levelmin=1 ! AMR level for boundary geometry
+  real(kind=8),dimension(1:3)::box_size=0.0D0 ! Box length in active domain along each direction
+  integer::box_xmin=0 ! Min. Cartesian key for the box at levelmin in x direction
+  integer::box_xmax=0 ! Max. Cartesian key for the box at levelmin in x direction
+  integer::box_ymin=0 ! Min. Cartesian key for the box at levelmin in y direction
+  integer::box_ymax=0 ! Max. Cartesian key for the box at levelmin in y direction
+  integer::box_zmin=0 ! Min. Cartesian key for the box at levelmin in z direction
+  integer::box_zmax=0 ! Max. Cartesian key for the box at levelmin in z direction
   integer,dimension(1:MAXBOUND)::bound_type=0
   integer,dimension(1:MAXBOUND)::bound_dir=0
   integer,dimension(1:MAXBOUND)::bound_shift=0
@@ -510,15 +511,14 @@ subroutine m_read_params(pst)
        & ,run_time_hrs,bkp_time_hrs,bkp_last_min,bkp_modulo,nfile
   ! AMR grid basic parameters
   namelist/amr_params/levelmin,levelmax,ngridmax,ncachemax,ngridtot &
-       & ,npartmax,nparttot,nexpand,boxlen,box_size &
-       & ,box_xmin,box_xmax,box_ymin,box_ymax,box_zmin,box_zmax
+       & ,npartmax,nparttot,nexpand,boxlen
   ! Poisson solver parameters
   namelist/poisson_params/epsilon,gravity_type,gravity_params &
-       & ,cg_levelmin,cic_levelmax,fast_solver,part_mass_deposition_scheme &
-       & ,part_force_interpolation_scheme,star_mass_deposition_scheme &
-       & ,star_force_interpolation_scheme,sink_mass_deposition_scheme &
-       & ,sink_force_interpolation_scheme,tree_mass_deposition_scheme &
-       & ,tree_force_interpolation_scheme 
+       & ,cg_levelmin,cic_levelmax,fast_solver &
+       & ,part_mass_deposition_scheme,part_force_interpolation_scheme &
+       & ,star_mass_deposition_scheme,star_force_interpolation_scheme &
+       & ,sink_mass_deposition_scheme,sink_force_interpolation_scheme &
+       & ,tree_mass_deposition_scheme,tree_force_interpolation_scheme
   ! Movies parameters
   namelist/movie_params/levelmax_frame,nw_frame,nh_frame,ivar_frame &
        & ,xcentre_frame,ycentre_frame,zcentre_frame &
@@ -577,6 +577,7 @@ subroutine m_read_params(pst)
   ! Boundary conditions parameters
   namelist/boundary_params/periodic,nbound,bound_type,bound_dir,bound_shift &
        & ,bound_xmin,bound_xmax,bound_ymin,bound_ymax,bound_zmin,bound_zmax &
+       & ,bound_levelmin,box_size,box_xmin,box_xmax,box_ymin,box_ymax,box_zmin,box_zmax &
 #if NENER>0
        & ,prad_bound &
 #endif
@@ -1178,13 +1179,6 @@ subroutine m_read_params(pst)
   s%r%ntracmax=ntracmax
   s%r%nexpand=nexpand
   s%r%boxlen=boxlen
-  s%r%box_size=box_size
-  s%r%box_xmin=box_xmin
-  s%r%box_xmax=box_xmax
-  s%r%box_ymin=box_ymin
-  s%r%box_ymax=box_ymax
-  s%r%box_zmin=box_zmin
-  s%r%box_zmax=box_zmax
 
   s%r%epsilon=epsilon
   s%r%gravity_type=gravity_type
@@ -1387,6 +1381,14 @@ subroutine m_read_params(pst)
   s%r%periodic=periodic
   s%r%nbound=nbound
   s%r%no_inflow=no_inflow
+  s%r%bound_levelmin=bound_levelmin
+  s%r%box_size=box_size
+  s%r%box_xmin=box_xmin
+  s%r%box_xmax=box_xmax
+  s%r%box_ymin=box_ymin
+  s%r%box_ymax=box_ymax
+  s%r%box_zmin=box_zmin
+  s%r%box_zmax=box_zmax
   s%r%bound_dir=bound_dir
   s%r%bound_type=bound_type
   s%r%bound_shift=bound_shift

@@ -12,12 +12,13 @@ levelmin=3
 levelmax=11
 ngridmax=4000
 nexpand=1
-box_size=1.0
-box_xmin=1
-box_xmax=-1
 /
 
 &BOUNDARY_PARAMS
+bound_levelmin=3
+box_size=1.0
+box_xmin=1
+box_xmax=-1
 nbound=2
 periodic=.false.
 bound_dir=1,1

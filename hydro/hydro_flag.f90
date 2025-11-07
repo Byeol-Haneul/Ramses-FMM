@@ -80,7 +80,7 @@ subroutine hydro_flag(s,ilevel)
            do idim=1,ndim
               hash_nbor(idim)=hash_key(idim)+shift(idim,i_nbor)
               if(r%periodic(idim))then
-                 if(hash_nbor(idim)<m%box_ckey_min(idim,ilevel+1))hash_nbor(idim)=m%box_ckey_max(idim,ilevel+1)-1
+                 if(hash_nbor(idim)< m%box_ckey_min(idim,ilevel+1))hash_nbor(idim)=m%box_ckey_max(idim,ilevel+1)-1
                  if(hash_nbor(idim)>=m%box_ckey_max(idim,ilevel+1))hash_nbor(idim)=m%box_ckey_min(idim,ilevel+1)
               endif
            enddo

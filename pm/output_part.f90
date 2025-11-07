@@ -125,6 +125,16 @@ subroutine output_part(s,p,filename)
   write(ilun,POS=nskip(ivar))
   write(ilun)xsp
 
+#ifdef OUTPUT_PARTICLE_POTENTIAL
+  ! Write potential (optional)
+  do i=1,p%npart
+     xsp(i)=p%phip(i)
+  end do
+  ivar=ivar+1
+  write(ilun,POS=nskip(ivar))
+  write(ilun)xsp
+#endif
+
   ! Write metallicity
   if(allocated(p%zp))then
      do i=1,p%npart
@@ -213,19 +223,17 @@ subroutine output_part(s,p,filename)
      write(ilun)ii8
   endif
 
-  deallocate(ii8)
+  ! Write tracking identity
+  if(allocated(p%idt))then
+     do i=1,p%npart
+        ii8(i)=p%idt(i)
+     end do
+     ivar=ivar+1
+     write(ilun,POS=nskip(ivar))
+     write(ilun)ii8
+  endif
 
-#ifdef OUTPUT_PARTICLE_POTENTIAL
-  ! Write potential (optional)
-  allocate(xsp(1:p%npart))
-  do i=1,p%npart
-     xsp(i)=p%phip(i)
-  end do
-  ivar=ivar+1
-  write(ilun,POS=nskip(ivar))
-  write(ilun)xsp
-  deallocate(xsp)
-#endif
+  deallocate(ii8)
 
   call close_part_file(s,p,filename,nskip,ilun)
 
@@ -362,6 +370,14 @@ subroutine backup_part(r,g,p,filename)
   if(allocated(p%idm))then
      do i=1,p%npart
         ii8(i)=p%idm(i)
+     end do
+     write(ilun)ii8
+  endif
+
+  ! Write tracking identity
+  if(allocated(p%idt))then
+     do i=1,p%npart
+        ii8(i)=p%idt(i)
      end do
      write(ilun)ii8
   endif

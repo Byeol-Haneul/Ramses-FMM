@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-import numpy as np
-import matplotlib.pyplot as plt
-import argparse
+import pyvista as pv
 import miniramses as ram
+import numpy as np
+import argparse
 
 # Check if we should use non-interactive backend
 import sys
@@ -25,13 +25,10 @@ parser.add_argument("--xcen", help="specify the image center x-coordinate")
 parser.add_argument("--ycen", help="specify the image center y-coordinate")
 parser.add_argument("--zcen", help="specify the image center z-coordinate")
 parser.add_argument("--rad", help="specify the image radius")
-parser.add_argument("--clump", help="specify if clumps are overplotted")
-parser.add_argument("--sink", help="specify if sinks are overplotted")
-parser.add_argument("--dir", help="specify the projection axis")
-parser.add_argument("--grid", help="overlay the AMR grid",action="store_true")
 parser.add_argument("--no-display", help="prevent GUI display (useful for batch processing)",action="store_true")
+
 args = parser.parse_args()
-# path the the file
+
 path = args.path
 prefix = args.prefix
 ivar = args.var
@@ -42,11 +39,7 @@ radius = args.rad
 xcenter = args.xcen
 ycenter = args.ycen
 zcenter = args.zcen
-clump = args.clump
-sink = args.sink
-axis = args.dir
 log = args.log
-grid = args.grid
 no_display = args.no_display
 
 # Convert vmin and vmax to float if provided
@@ -55,15 +48,6 @@ if vmin is not None:
 if vmax is not None:
     vmax = float(vmax)
 
-grid0 = None
-if grid:
-    grid0=1
-if clump==None:
-    clump=False
-if sink==None:
-    sink=False
-if axis==None:
-    axis="z"
 if xcenter==None:
     xcenter=None
 else:
@@ -82,91 +66,57 @@ else:
     radius=float(radius)
 center=np.array([xcenter,ycenter,zcenter])
 
-log0=None
+log0=False
 if log:
-    log0=1
+    log0=True
 
 if ivar==None:
-    ivar=0
+    ivar=1
 else:
-    ivar=int(ivar)-1
+    ivar=int(ivar)
+
 if prefix==None:
     prefix="hydro"
 if path==None:
     path="./"
 else:
     path=path+"/"
-if prefix=="hydro":
-    isort=0
-if prefix=="peak":
-    isort=1
-if prefix=="grav":
-    isort=0
-if prefix=="rt":
-    isort=0
+
+if col==None:
+    col="jet"
 
 nout = args.nout
 print("Reading output number ",nout)
 
-if axis=="x":
-    ii=2; jj=3
-if axis=="y":
-    ii=1; jj=3
-if axis=="z":
-    ii=1; jj=2
-
 c=ram.rd_cell(nout,path=path,prefix=prefix,center=center,radius=radius)
-kwargs={}
-if col is not None:
-    kwargs["cmap"]=col
-# Create visualization with specified colorbar limits (vmin, vmax)
-ram.visu(c.x[ii-1],c.x[jj-1],c.dx,c.u[ivar],sort=c.u[isort],log=log0,vmin=vmin,vmax=vmax,grid=grid0,**kwargs)
-
-if clump:
-    h=ram.rd_clump(nout)
-    if radius is not None:
-        r = np.sqrt((h.x-center[0])**2+(h.y-center[1])**2+(h.z-center[2])**2)
-        nn = np.count_nonzero(r < radius)
-        xx = h.x[r < radius]
-        yy = h.y[r < radius]
-        zz = h.z[r < radius]
-        mm = h.mass[r < radius]
-    else:
-        xx = h.x
-        yy = h.y
-        zz = h.z
-    if axis=="x":
-        plt.plot(yy,zz,'r.')
-    if axis=="y":
-        plt.plot(xx,zz,'r.')
-    if axis=="z":
-        plt.plot(xx,yy,'r.')
-
-if sink:
-    s=ram.rd_part(nout,prefix='sink')
-    if radius is not None:
-        r = np.sqrt((s.pos[0]-center[0])**2+(s.pos[1]-center[1])**2+(s.pos[2]-center[2])**2)
-        nn = np.count_nonzero(r < radius)
-        xx = s.pos[0][r < radius]
-        yy = s.pos[1][r < radius]
-        zz = s.pos[2][r < radius]
-        mm = s.mass[r < radius]
-    else:
-        xx = s.pos[0]
-        yy = s.pos[1]
-        zz = s.pos[2]
-    if axis=="x":
-        plt.plot(yy,zz,'r.')
-    if axis=="y":
-        plt.plot(xx,zz,'r.')
-    if axis=="z":
-        plt.plot(xx,yy,'r.')
-
-if args.out:
-    plt.savefig(args.out)
-
-if not no_display:
-    plt.show()
+x=c.x[0]
+y=c.x[1]
+z=c.x[2]
+print(ivar,c.nvar)
+if ivar <= c.nvar:
+    xx = c.u[ivar-1]
+elif ivar == 15: # temperature
+    xx = c.u[4]/c.u[0]
+elif ivar == 16: # magnetic energy
+    xx = 0.5*(c.u[5]**2+c.u[6]**2+c.u[7]**2)
+elif ivar == 17: # kinetic energy
+    xx = 0.5*(c.u[1]**2+c.u[2]**2+c.u[3]**2)
 else:
-    plt.close()
+    print("unknown variable: use rho instead")
+    xx = c.u[0]
+
+print("min=",np.min(xx)," max=",np.max(xx))
+min_val = 1e-3*np.max(xx)
+data = ram.mk_cube(x,y,z,c.dx,xx)
+grid = pv.ImageData()
+grid.dimensions = np.array(data.shape) + 1
+if log0:
+    grid.cell_data["values"] = np.log10(data.flatten(order="F")+min_val)
+else:
+    grid.cell_data["values"] = data.flatten(order="F")
+    
+pl = pv.Plotter(window_size=[1600, 1600])
+pl.add_volume(grid, scalars="values", cmap=col, opacity="sigmoid")
+pl.add_bounding_box()
+pl.show()
 
