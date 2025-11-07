@@ -46,7 +46,7 @@ subroutine fmm(pst,ilevel,icount)
 
   ! Downward pass for fmm grids. 
    call m_timer(pst,'fmm: downward for fmm','start')
-   do ilev = 2, pst%s%r%levelmin-pst%s%g%level_fmm_to_amr
+   do ilev = 2, pst%s%r%levelmin-pst%s%r%level_fmm_to_amr
      call r_fmm_downward(pst, ilev, 1)
      if(pst%s%r%verbose) print '(A,I2)','[M2L & L2L] Downpass for FMM grids at level done', ilev
    end do
@@ -60,7 +60,7 @@ subroutine fmm(pst,ilevel,icount)
    call r_fmm_amr_direct(pst, pst%s%r%levelmin, 1)
    if(pst%s%r%verbose) print '(A,I2)','Direct Force Calculation done', pst%s%r%levelmin
 
-   !do ilev = 1, pst%s%r%levelmin - pst%s%g%level_fmm_to_amr
+   !do ilev = 1, pst%s%r%levelmin - pst%s%r%level_fmm_to_amr
    !  call dump_taylor(pst%s%r, pst%s%m, ilev)
    !end do 
     
@@ -93,7 +93,7 @@ recursive subroutine recursive_fmm(pst,ifinelevel)
 
   integer :: i, igrid, icycle, ncycle
   
-  if(ifinelevel<=pst%s%r%levelmin - pst%s%g%level_fmm_to_amr) then
+  if(ifinelevel<=pst%s%r%levelmin - pst%s%r%level_fmm_to_amr) then
      ! Solve 'directly' :
      return
   end if
@@ -356,7 +356,7 @@ subroutine fmm_amr_intermediate(s, ilevel)
       ], [twotondim, ndim] )
 
   ! =====================================================
-  ! Runtime-allocated arrays depending on g%level_fmm_to_amr
+  ! Runtime-allocated arrays depending on r%level_fmm_to_amr
   ! =====================================================
   real(kind=8), allocatable :: D0_list(:,:,:,:), D1_list(:,:,:,:), D2_list(:,:,:,:)
   real(kind=8), allocatable :: intermediate_diff_list(:,:,:,:,:), cell_diff_list(:,:,:,:)
@@ -375,13 +375,13 @@ subroutine fmm_amr_intermediate(s, ilevel)
                   init=init_flush_taylor, flush=pack_flush_taylor, combine=unpack_flush_taylor)
 
   hash_key(0) = ilevel
-  hash_fmm_grid(0) = ilevel - g%level_fmm_to_amr
-  prev_hash_fmm_grid(0) = ilevel - g%level_fmm_to_amr
-  hash_fmm_cell(0) = ilevel - g%level_fmm_to_amr + 1
+  hash_fmm_grid(0) = ilevel - r%level_fmm_to_amr
+  prev_hash_fmm_grid(0) = ilevel - r%level_fmm_to_amr
+  hash_fmm_cell(0) = ilevel - r%level_fmm_to_amr + 1
   prev_hash_fmm_grid(1:ndim) = -1 ! initialize
 
   dx_loc = r%boxlen / 2.0D0**ilevel
-  nfine = 2**g%level_fmm_to_amr
+  nfine = 2**r%level_fmm_to_amr
   neighbors_cached = .false.
 
   ! nbox is the number of cells at the target AMR level
@@ -489,8 +489,8 @@ subroutine fmm_amr_intermediate(s, ilevel)
         cycle_flag = .false.
         cc_jcell_periodic = hash_fmm_cell(1:ndim) + cell_diff_list(ind, jcell, igrid,:)
         do idim = 1, ndim
-          if ((cc_jcell_periodic(idim) < m%box_ckey_min(idim, ilevel - g%level_fmm_to_amr + 1)) .or. &
-              (cc_jcell_periodic(idim) >= m%box_ckey_max(idim, ilevel - g%level_fmm_to_amr + 1))) then
+          if ((cc_jcell_periodic(idim) < m%box_ckey_min(idim, ilevel - r%level_fmm_to_amr + 1)) .or. &
+              (cc_jcell_periodic(idim) >= m%box_ckey_max(idim, ilevel - r%level_fmm_to_amr + 1))) then
             cycle_flag = .true.
           end if
         end do
@@ -587,16 +587,16 @@ subroutine fmm_amr_direct(s, ilevel)
             init=init_flush_taylor, flush=pack_flush_taylor, combine=unpack_flush_taylor)
 
   hash_key(0) = ilevel
-  hash_fmm_grid(0) = ilevel - g%level_fmm_to_amr
-  hash_prev_fmm_grid(0) = ilevel - g%level_fmm_to_amr
-  hash_fmm_cell(0) = ilevel - g%level_fmm_to_amr + 1
+  hash_fmm_grid(0) = ilevel - r%level_fmm_to_amr
+  hash_prev_fmm_grid(0) = ilevel - r%level_fmm_to_amr
+  hash_fmm_cell(0) = ilevel - r%level_fmm_to_amr + 1
   hash_direct(0) = ilevel
 
   hash_prev_fmm_grid(1:ndim) = -1 ! initialize
 
   dx_loc = r%boxlen / 2.0D0**ilevel
   dxn    = dx_loc**ndim
-  nfine  = 2**g%level_fmm_to_amr
+  nfine  = 2**r%level_fmm_to_amr
   nbox   = (nfine/2)**ndim
   initialized = .false.
 

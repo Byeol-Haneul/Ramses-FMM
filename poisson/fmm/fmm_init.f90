@@ -30,7 +30,7 @@ subroutine m_init_fmm(pst)
   if(r%verbose)write(*,*)'Entering init_fmm'
 
   ! Call recursive slave routine
-  do ilevel = 1, r%levelmin - g%level_fmm_to_amr ! TODO: exception for this levelmin vs. level_fmm_to amr. 
+  do ilevel = 1, r%levelmin - r%level_fmm_to_amr ! TODO: exception for this levelmin vs. level_fmm_to amr. 
     write(*,*)'Building init_fmm grid at level ',ilevel
     call r_init_fmm(pst, ilevel, 1)
     ! Get total, min and max grid count (only in master).

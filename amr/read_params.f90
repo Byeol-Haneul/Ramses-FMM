@@ -274,6 +274,7 @@ subroutine m_read_params(pst)
   integer :: gravity_type=0 ! Type of gravity calculations (see user guide)
   integer :: cic_levelmax=0 ! Maximum level for CIC dark matter interpolation
   integer :: cg_levelmin=999   ! Min level for CG solver
+  integer :: level_fmm_to_amr=1
   ! level < cg_levelmin uses fine multigrid
   ! level >=cg_levelmin uses conjugate gradient
   logical :: fast_solver=.false.   ! Fast solver with MPI pre-fetch (memory intensive)
@@ -514,6 +515,7 @@ subroutine m_read_params(pst)
        & ,npartmax,nparttot,nexpand,boxlen
   ! Poisson solver parameters
   namelist/poisson_params/epsilon,gravity_type,gravity_params &
+       & ,level_fmm_to_amr &
        & ,cg_levelmin,cic_levelmax,fast_solver &
        & ,part_mass_deposition_scheme,part_force_interpolation_scheme &
        & ,star_mass_deposition_scheme,star_force_interpolation_scheme &
@@ -1185,6 +1187,7 @@ subroutine m_read_params(pst)
   s%r%gravity_params=gravity_params
   s%r%cic_levelmax=cic_levelmax
   s%r%cg_levelmin=cg_levelmin
+  s%r%level_fmm_to_amr=level_fmm_to_amr
   s%r%fast_solver=fast_solver
   s%r%part_mass_deposition_scheme=part_mass_deposition_scheme
   s%r%part_force_interpolation_scheme=part_force_interpolation_scheme

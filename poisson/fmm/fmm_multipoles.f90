@@ -35,7 +35,7 @@ subroutine m_fmm_multipoles(pst,ilevel)
 
   ! Initialize both AMR and FMM grids. 
   do i = 1, r%nlevelmax, 1
-      if (m%noct_tot(i) > 0 .or. i < r%levelmin-g%level_fmm_to_amr) then
+      if (m%noct_tot(i) > 0 .or. i < r%levelmin-r%level_fmm_to_amr) then
           call r_reset_multipoles_taylor(pst, i, 1)
       endif
   end do
@@ -47,7 +47,7 @@ subroutine m_fmm_multipoles(pst,ilevel)
   end do
 
   ! Add multipoles to FMM grids. 
-  do i=r%levelmin-g%level_fmm_to_amr-1,1,-1
+  do i=r%levelmin-r%level_fmm_to_amr-1,1,-1
      if(r%verbose)write(*,'(" [M2M] Compute multipoles for FMM level ",I2)')i
      call r_fmm_multipole_fmm2fmm(pst,i,1)
   end do
@@ -138,13 +138,13 @@ subroutine fmm_multipole_amr2fmm(s,ilevel)
                      init=init_flush_multipole, flush=pack_flush_multipole, combine=unpack_flush_multipole)
 
   ! Loop over levelmin grids.
-  hash_key_fmm(0)=ilevel - g%level_fmm_to_amr
+  hash_key_fmm(0)=ilevel - r%level_fmm_to_amr
   do ioct=m%head(ilevel),m%tail(ilevel)
      ! Get fmm grid above level_fmm_to_amr
      hash_key_amr(1:ndim)=m%grid(ioct)%ckey(1:ndim)
-     hash_key_fmm(1:ndim)= hash_key_amr(1:ndim)/(2**g%level_fmm_to_amr)
-     ii(1:ndim)=hash_key_amr(1:ndim)-(2**g%level_fmm_to_amr)*hash_key_fmm(1:ndim) ! 0 to 2^(level_fmm_to_amr)-1
-     ii(1:ndim)=ii(1:ndim)/(2**(g%level_fmm_to_amr-1)) ! 0 or 1 
+     hash_key_fmm(1:ndim)= hash_key_amr(1:ndim)/(2**r%level_fmm_to_amr)
+     ii(1:ndim)=hash_key_amr(1:ndim)-(2**r%level_fmm_to_amr)*hash_key_fmm(1:ndim) ! 0 to 2^(level_fmm_to_amr)-1
+     ii(1:ndim)=ii(1:ndim)/(2**(r%level_fmm_to_amr-1)) ! 0 or 1 
      icell=1
      do idim=1,ndim
        icell=icell+2**(idim-1)*ii(idim) ! 1 to twotondim
@@ -383,7 +383,7 @@ subroutine reset_multipoles_taylor(r,g,m,ilevel)
   integer :: igrid, ind
   integer :: first, last
 
-  if (ilevel <= r%levelmin-g%level_fmm_to_amr) then
+  if (ilevel <= r%levelmin-r%level_fmm_to_amr) then
      first = m%head_mg(ilevel)
      last  = m%tail_mg(ilevel)
   else if (ilevel > r%nlevelmax .or. ilevel < r%levelmin) then

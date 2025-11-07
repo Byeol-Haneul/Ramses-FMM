@@ -74,6 +74,7 @@ module amr_commons
      integer :: cic_levelmax=0     ! Maximum level for CIC dark matter interpolation
      integer :: cg_levelmin=999    ! Min level for CG solver
      logical :: fast_solver = .false. ! Fast solver with MPI pre-fetch (memory intensive)
+     integer :: level_fmm_to_amr = 1 ! Level difference of fmm grid and amr grid
      integer :: part_mass_deposition_scheme=1     ! part mass deposition schemes (CIC 1, TSC 2, PCS 3)
      integer :: part_force_interpolation_scheme=1 ! part force interpolation schemes (CIC 1, TSC 2, PCS 3)
      integer :: star_mass_deposition_scheme=1     ! star mass deposition schemes
@@ -613,10 +614,6 @@ module amr_commons
 
      ! Minimum MG level
      integer :: levelmin_mg
-
-#ifdef FMM
-     integer :: level_fmm_to_amr = 1 !Jun-Young: relative level to the amr levelmin. 
-#endif 
 
      ! Multigrid safety switch
      logical, dimension(1:MAXLEVEL)::safe_mode=.false.
