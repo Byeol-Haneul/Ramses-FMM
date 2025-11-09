@@ -14,7 +14,7 @@ subroutine fmm(pst,ilevel,icount)
   use poisson_parameters, only: ngs_fine, ngs_coarse, ncycles_coarse_safe
   use ramses_commons, only: pst_t
   use phi_fine_cg_module, only: r_make_initial_phi, in_make_initial_phi_t
-  use init_fmm_module, only: m_init_fmm
+  use init_fmm_module, only: r_init_fmm
   use fmm_multipoles, only: m_fmm_multipoles
   use cleanup_fmm_module, only: r_cleanup_fmm
   implicit none
@@ -33,10 +33,17 @@ subroutine fmm(pst,ilevel,icount)
   ! ---------------------------------------------------------------------
   ! Build FMM hierarchy in memory
   ! ---------------------------------------------------------------------
-  if(ilevel==pst%s%r%levelmin) then
-    call m_init_fmm(pst)
-    if(pst%s%r%verbose) print '(A)','FMM init done ' 
-  endif
+  allocate(pst%s%m%head_mg(1:pst%s%r%nlevelmax))
+  allocate(pst%s%m%tail_mg(1:pst%s%r%nlevelmax))
+  allocate(pst%s%m%noct_mg(1:pst%s%r%nlevelmax))
+  allocate(pst%s%m%domain_mg(1:pst%s%r%nlevelmax))
+
+  do ilev = 1, pst%s%r%levelmin - pst%s%r%level_fmm_to_amr
+    write(*,*)'Building init_fmm grid at level ',ilev
+    call r_init_fmm(pst, ilev, 1)
+  end do
+
+  if(pst%s%r%verbose) print '(A)','FMM init done ' 
 
   ! ---------------------------------------------------------------------
   ! Initiate solve at fine level

@@ -503,9 +503,9 @@ subroutine dump_multipole(r, g, m, ilevel)
   ! open debug file
   unit_debug = 99
 #ifdef FMM
-  open(unit_debug, file="out_fmm/mult_fmm.out", status="replace")
+  open(unit_debug, file="out/mult_fmm.out", status="replace")
 #else
-  open(unit_debug, file="out_mg/mult_mg.out", status="replace")
+  open(unit_debug, file="out/mult_mg.out", status="replace")
 #endif
   dx_loc = r%boxlen / 2.0D0**ilevel
   do ioct = m%head(ilevel), m%tail(ilevel)

@@ -5,48 +5,6 @@ contains
 !#########################################################################
 !#########################################################################
 #ifdef FMM
-subroutine m_init_fmm(pst)
-  use ramses_commons, only: pst_t
-  use flag_utils, only: m_flag_fine
-  use init_refine_basegrid_module, only: r_collect_noct,r_noct_tot,r_noct_min,r_noct_max,r_noct_used_max
-#ifdef GRAV
-  use rho_fine_module, only: m_rho_fine
-#endif
-  use input_hydro_grafic_module, only: r_input_refmap_grafic
-  implicit none
-  type(pst_t)::pst
-  integer::ilevel
-  !--------------------------------------------------------------------
-  ! This routine is the master procedure to set the  grid
-  ! and init_fmmialize all cell-based variables within it.
-  !--------------------------------------------------------------------
-  associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
-
-  allocate(m%head_mg(1:r%nlevelmax))
-  allocate(m%tail_mg(1:r%nlevelmax))
-  allocate(m%noct_mg(1:r%nlevelmax))
-  allocate(m%domain_mg(1:r%nlevelmax))
-
-  if(r%verbose)write(*,*)'Entering init_fmm'
-
-  ! Call recursive slave routine
-  do ilevel = 1, r%levelmin - r%level_fmm_to_amr ! TODO: exception for this levelmin vs. level_fmm_to amr. 
-    write(*,*)'Building init_fmm grid at level ',ilevel
-    call r_init_fmm(pst, ilevel, 1)
-    ! Get total, min and max grid count (only in master).
-    !call r_noct_tot(pst,ilevel,1,m%noct_tot(ilevel),2)
-    !call r_noct_min(pst,ilevel,1,m%noct_min(ilevel),1)
-    !call r_noct_max(pst,ilevel,1,m%noct_max(ilevel),1)
-    !call r_noct_used_max(pst,ilevel,1,m%noct_used_max,1)
-  end do
-
-  end associate
-
-end subroutine m_init_fmm
-!###############################################
-!###############################################
-!###############################################
-!###############################################
 recursive subroutine r_init_fmm(pst,ilevel,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
@@ -95,7 +53,7 @@ subroutine init_fmm(s,ilevel)
   integer,dimension(1:s%r%nlevelmax)::n_same,npatch
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
-
+  
   ! Compute starting grid index at that level
   if(ilevel == 1)then
      m%ifree=m%noct_used+1 ! Jun-Young: start at index of the first free variable
