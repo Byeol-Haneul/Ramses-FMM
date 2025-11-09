@@ -33,6 +33,7 @@ nexpand=1,
 
 &POISSON_PARAMS
 epsilon=1.d-6
+level_fmm_to_amr=1
 /
 
 &REFINE_PARAMS

@@ -41,7 +41,7 @@ boxlen=600.
 
 &POISSON_PARAMS
 epsilon=1.d-4
-level_fmm_to_amr=2
+level_fmm_to_amr=1
 /
 
 &HYDRO_PARAMS

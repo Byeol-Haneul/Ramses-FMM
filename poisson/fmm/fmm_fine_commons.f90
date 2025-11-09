@@ -404,7 +404,7 @@ subroutine fmm_amr_intermediate(s, ilevel)
       nstride = nfine**(idim-1)
       fmm_grid_center_offset(igrid, idim) = MOD((igrid-1)/nstride, nfine) - (nfine/2) ! offset by how many amr octs from fmm grid center
       nstride = (nfine/2)**(idim-1)
-      fmm_cell_center_offset(igrid, idim) = MOD((igrid-1)/nstride, nfine/2) - (nfine/2) ! offset by how many amr cells from fmm cell center
+      fmm_cell_center_offset(igrid, idim) = 2 * MOD(fmm_grid_center_offset(igrid, idim) + (nfine/2), nfine/2) - (nfine/2) ! offset by how many amr cells from fmm cell center
     end do 
     do icell = 1, twotondim
       far_diff_list(igrid, icell, :) = (fmm_cell_center_offset(igrid, :) + displacement_list(icell,:) + 0.5) * dx_loc

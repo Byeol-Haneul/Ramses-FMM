@@ -467,7 +467,7 @@ end subroutine compute_rhomax
 !#########################################################
 subroutine dump_phi(r, g, m, ilevel)
   use amr_parameters, only: ndim, twotondim
-  use amr_commons, only: nbor, oct, run_t, global_t, mesh_t
+  use amr_commons,   only: nbor, oct, run_t, global_t, mesh_t
   implicit none
   type(run_t)    :: r
   type(global_t) :: g
@@ -477,16 +477,24 @@ subroutine dump_phi(r, g, m, ilevel)
   integer :: ioct, icell, idim, nstride
   integer :: unit_debug
   integer(kind=8), dimension(ndim) :: cc_icell
-  real(kind=8), dimension(ndim) :: xx_icell
+  real(kind=8),    dimension(ndim) :: xx_icell
   real(kind=8) :: dx_loc
 
-  ! open debug file
-  unit_debug = 99
 #ifdef FMM
-  open(unit_debug, file="./out_fmm/single_fmm.out", status="replace")
-#else
-  open(unit_debug, file="./out_mg/single_mg.out", status="replace")
+  character(len=256) :: filename
+  character(len=10)  :: level_str
 #endif
+
+  unit_debug = 99
+
+#ifdef FMM
+  write(level_str, '(I0)') r%level_fmm_to_amr  ! convert integer to string
+  filename = "./out/single_fmm_" // trim(level_str) // ".out"
+  open(unit_debug, file=filename, status="replace")
+#else
+  open(unit_debug, file="./out/halo_mg.out", status="replace")
+#endif
+
   dx_loc = r%boxlen / 2.0D0**ilevel
   do ioct = m%head(ilevel), m%tail(ilevel)
      do icell = 1, twotondim
@@ -498,6 +506,7 @@ subroutine dump_phi(r, g, m, ilevel)
         write(unit_debug, '(3I6, 3E20.4, E20.4)') cc_icell, m%grid(ioct)%f(icell,1:ndim), m%grid(ioct)%phi(icell)
      end do
   end do
+
   close(unit_debug)
 end subroutine dump_phi
 #endif
