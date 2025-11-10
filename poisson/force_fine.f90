@@ -489,7 +489,7 @@ subroutine dump_phi(r, g, m, ilevel)
 
 #ifdef FMM
   write(level_str, '(I0)') r%level_fmm_to_amr  ! convert integer to string
-  filename = "./out/single_fmm_" // trim(level_str) // ".out"
+  filename = "./out/halo_fmm_" // trim(level_str) // ".out"
   open(unit_debug, file=filename, status="replace")
 #else
   open(unit_debug, file="./out/halo_mg.out", status="replace")

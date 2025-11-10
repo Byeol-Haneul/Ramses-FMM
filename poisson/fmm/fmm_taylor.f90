@@ -107,26 +107,26 @@ subroutine calc_taylor_from_multipole(R, D0, D1, D2, D3, multipoles, taylor_coef
   !------------------------------------------------------------------
   ! C2 (correct order: (1,1),(1,2),(2,2),(1,3),(2,3),(3,3))
   !------------------------------------------------------------------
-  taylor_coeff(5) = multipoles(1)*(D1 + R(1)**2*D2) - RdotM1*D2 - 2*R(1)*multipoles(2)*D2 - R(1)**2*RdotM1*D3
-  taylor_coeff(6) = multipoles(1)*(R(1)*R(2)*D2) - R(1)*multipoles(3)*D2 - R(2)*multipoles(2)*D2 - R(1)*R(2)*RdotM1*D3
-  taylor_coeff(7) = multipoles(1)*(D1 + R(2)**2*D2) - RdotM1*D2 - 2*R(2)*multipoles(3)*D2 - R(2)**2*RdotM1*D3
-  taylor_coeff(8) = multipoles(1)*(R(1)*R(3)*D2) - R(1)*multipoles(4)*D2 - R(3)*multipoles(2)*D2 - R(1)*R(3)*RdotM1*D3
-  taylor_coeff(9) = multipoles(1)*(R(2)*R(3)*D2) - R(2)*multipoles(4)*D2 - R(3)*multipoles(3)*D2 - R(2)*R(3)*RdotM1*D3
-  taylor_coeff(10)= multipoles(1)*(D1 + R(3)**2*D2) - RdotM1*D2 - 2*R(3)*multipoles(4)*D2 - R(3)**2*RdotM1*D3
+  taylor_coeff(5) = multipoles(1)*(D1 + R(1)**2*D2) - RdotM1*D2 - 2*R(1)*multipoles(2)*D2           - R(1)**2*RdotM1*D3
+  taylor_coeff(6) = multipoles(1)*(R(1)*R(2)*D2)    - R(1)*multipoles(3)*D2 - R(2)*multipoles(2)*D2 - R(1)*R(2)*RdotM1*D3
+  taylor_coeff(7) = multipoles(1)*(D1 + R(2)**2*D2) - RdotM1*D2 - 2*R(2)*multipoles(3)*D2           - R(2)**2*RdotM1*D3
+  taylor_coeff(8) = multipoles(1)*(R(1)*R(3)*D2)    - R(1)*multipoles(4)*D2 - R(3)*multipoles(2)*D2 - R(1)*R(3)*RdotM1*D3
+  taylor_coeff(9) = multipoles(1)*(R(2)*R(3)*D2)    - R(2)*multipoles(4)*D2 - R(3)*multipoles(3)*D2 - R(2)*R(3)*RdotM1*D3
+  taylor_coeff(10)= multipoles(1)*(D1 + R(3)**2*D2) - RdotM1*D2 - 2*R(3)*multipoles(4)*D2           - R(3)**2*RdotM1*D3
 
   !------------------------------------------------------------------
   ! C3 (correct fully hand-unrolled)
   ! Loop order: (1,1,1),(1,1,2),(1,2,2),(2,2,2),(1,1,3),(1,2,3),(2,2,3),(1,3,3),(2,3,3),(3,3,3)
   !------------------------------------------------------------------
   taylor_coeff(11) = multipoles(1)*( 3*R(1)*D2 + R(1)*R(1)*R(1)*D3 )   ! (1,1,1)
-  taylor_coeff(12) = multipoles(1)*( R(2)*D2 + R(1)*R(1)*R(2)*D3 )   ! (1,1,2)
-  taylor_coeff(13) = multipoles(1)*( R(1)*D2 + R(1)*R(2)*R(2)*D3 )   ! (1,2,2)
+  taylor_coeff(12) = multipoles(1)*( R(2)*D2   + R(1)*R(1)*R(2)*D3 )   ! (1,1,2)
+  taylor_coeff(13) = multipoles(1)*( R(1)*D2   + R(1)*R(2)*R(2)*D3 )   ! (1,2,2)
   taylor_coeff(14) = multipoles(1)*( 3*R(2)*D2 + R(2)*R(2)*R(2)*D3 )   ! (2,2,2)
-  taylor_coeff(15) = multipoles(1)*( R(3)*D2 + R(1)*R(1)*R(3)*D3 )   ! (1,1,3)
-  taylor_coeff(16) = multipoles(1)*( R(1)*R(2)*R(3)*D3 )   ! (1,2,3)
-  taylor_coeff(17) = multipoles(1)*( R(3)*D2 + R(2)*R(2)*R(3)*D3 )   ! (2,2,3)
-  taylor_coeff(18) = multipoles(1)*( R(1)*D2 + R(1)*R(3)*R(3)*D3 )       ! (1,3,3)
-  taylor_coeff(19) = multipoles(1)*( R(2)*D2 + R(2)*R(3)*R(3)*D3 )   ! (2,3,3)
+  taylor_coeff(15) = multipoles(1)*( R(3)*D2   + R(1)*R(1)*R(3)*D3 )   ! (1,1,3)
+  taylor_coeff(16) = multipoles(1)*(             R(1)*R(2)*R(3)*D3 )   ! (1,2,3)
+  taylor_coeff(17) = multipoles(1)*( R(3)*D2   + R(2)*R(2)*R(3)*D3 )   ! (2,2,3)
+  taylor_coeff(18) = multipoles(1)*( R(1)*D2   + R(1)*R(3)*R(3)*D3 )   ! (1,3,3)
+  taylor_coeff(19) = multipoles(1)*( R(2)*D2   + R(2)*R(3)*R(3)*D3 )   ! (2,3,3)
   taylor_coeff(20) = multipoles(1)*( 3*R(3)*D2 + R(3)*R(3)*R(3)*D3 )   ! (3,3,3)
 #endif
 
@@ -329,8 +329,8 @@ subroutine calc_phi(taylor_in, a, phi_out)
      ! t(1) = C0, t(2:4) = C1, t(5:10) = C2, t(11:20) = C3
      phi_out = - t(1) &
                - a(1)*t(2) - a(2)*t(3) - a(3)*t(4) &
-               - 0.5d0*( a(1)**2*t(5) + 2.0d0*a(1)*a(2)*t(6) + 2.0d0*a(1)*a(3)*t(7) &
-                        + a(2)**2*t(8) + 2.0d0*a(2)*a(3)*t(9) + a(3)**2*t(10) ) &
+               - 0.5d0*( a(1)**2*t(5) + 2.0d0*a(1)*a(2)*t(6) + a(2)**2*t(7) &
+               + 2.0d0*a(1)*a(3)*t(8) + 2.0d0*a(2)*a(3)*t(9) + a(3)**2*t(10) ) & 
                - (1.0d0/6.0d0)*( a(1)**3*t(11) + 3.0d0*a(1)**2*a(2)*t(12) + 3.0d0*a(1)**2*a(3)*t(15) &
                                 + 3.0d0*a(1)*a(2)**2*t(13) + 6.0d0*a(1)*a(2)*a(3)*t(16) + 3.0d0*a(1)*a(3)**2*t(18) &
                                 + a(2)**3*t(14) + 3.0d0*a(2)**2*a(3)*t(17) + 3.0d0*a(2)*a(3)**2*t(19) &
