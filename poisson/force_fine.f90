@@ -479,9 +479,8 @@ subroutine dump_phi(r, g, m, ilevel)
   integer(kind=8), dimension(ndim) :: cc_icell
   real(kind=8),    dimension(ndim) :: xx_icell
   real(kind=8) :: dx_loc
-
-#ifdef FMM
   character(len=256) :: filename
+#ifdef FMM
   character(len=10)  :: level_str
 #endif
 
@@ -489,10 +488,11 @@ subroutine dump_phi(r, g, m, ilevel)
 
 #ifdef FMM
   write(level_str, '(I0)') r%level_fmm_to_amr  ! convert integer to string
-  filename = "./out/halo_fmm_" // trim(level_str) // ".out"
+  filename = "./out/" // trim(r%initfile(ilevel)) // "_fmm_" // trim(level_str) // ".out"
   open(unit_debug, file=filename, status="replace")
 #else
-  open(unit_debug, file="./out/halo_mg.out", status="replace")
+  filename = "./out" // trim(r%initfile(ilevel)) // "_mg.out"
+  open(unit_debug, file=filename, status="replace")
 #endif
 
   dx_loc = r%boxlen / 2.0D0**ilevel
