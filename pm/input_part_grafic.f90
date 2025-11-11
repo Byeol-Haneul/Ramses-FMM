@@ -300,18 +300,12 @@ subroutine input_part_grafic(r,g,p,npart_tot)
 
   ! Periodic box
   do ipart=1,p%npart
-#if NDIM>0
-     if(p%xp(ipart,1)<   0.0d0 )p%xp(ipart,1)=p%xp(ipart,1)+r%boxlen
-     if(p%xp(ipart,1)>=r%boxlen)p%xp(ipart,1)=p%xp(ipart,1)-r%boxlen
-#endif
-#if NDIM>1
-     if(p%xp(ipart,2)<   0.0d0 )p%xp(ipart,2)=p%xp(ipart,2)+r%boxlen
-     if(p%xp(ipart,2)>=r%boxlen)p%xp(ipart,2)=p%xp(ipart,2)-r%boxlen
-#endif
-#if NDIM>2
-     if(p%xp(ipart,3)<   0.0d0 )p%xp(ipart,3)=p%xp(ipart,3)+r%boxlen
-     if(p%xp(ipart,3)>=r%boxlen)p%xp(ipart,3)=p%xp(ipart,3)-r%boxlen
-#endif
+     do idim=1,ndim
+         if(r%periodic(idim))then
+            if(p%xp(ipart,idim)<   0.0d0 )p%xp(ipart,idim)=p%xp(ipart,idim)+r%boxlen
+            if(p%xp(ipart,idim)>=r%boxlen)p%xp(ipart,idim)=p%xp(ipart,idim)-r%boxlen
+         endif
+     end do
   end do
 
   ! Compute particle initial level
@@ -324,6 +318,10 @@ subroutine input_part_grafic(r,g,p,npart_tot)
   p%tailp=p%npart
   p%headp(r%levelmin)=1
   p%tailp(r%levelmin)=p%npart
+  if(ANY(.not.r%periodic(1:ndim)))then
+     p%headp(r%levelmin-1)=1
+     p%tailp(r%levelmin-1)=0
+  endif
 
 end subroutine input_part_grafic
 !#########################################################################
@@ -540,18 +538,12 @@ subroutine input_trac_grafic(r,g,p,npart_tot)
  
    ! Periodic box
    do ipart=1,p%npart
-#if NDIM>0
-      if(p%xp(ipart,1)<   0.0d0 )p%xp(ipart,1)=p%xp(ipart,1)+r%boxlen
-      if(p%xp(ipart,1)>=r%boxlen)p%xp(ipart,1)=p%xp(ipart,1)-r%boxlen
-#endif
-#if NDIM>1
-      if(p%xp(ipart,2)<   0.0d0 )p%xp(ipart,2)=p%xp(ipart,2)+r%boxlen
-      if(p%xp(ipart,2)>=r%boxlen)p%xp(ipart,2)=p%xp(ipart,2)-r%boxlen
-#endif
-#if NDIM>2
-      if(p%xp(ipart,3)<   0.0d0 )p%xp(ipart,3)=p%xp(ipart,3)+r%boxlen
-      if(p%xp(ipart,3)>=r%boxlen)p%xp(ipart,3)=p%xp(ipart,3)-r%boxlen
-#endif
+      do idim=1,ndim
+         if(r%periodic(idim))then
+            if(p%xp(ipart,idim)<   0.0d0 )p%xp(ipart,idim)=p%xp(ipart,idim)+r%boxlen
+            if(p%xp(ipart,idim)>=r%boxlen)p%xp(ipart,idim)=p%xp(ipart,idim)-r%boxlen
+         endif
+      end do
    end do
  
    ! Compute particle initial level
@@ -783,8 +775,10 @@ subroutine input_dust_grafic(r,g,p,npart_tot)
    ! Periodic box
    do ipart=1,p%npart
       do idim=1,ndim
-          if(p%xp(ipart,idim)<   0.0d0 )p%xp(ipart,idim)=p%xp(ipart,idim)+r%boxlen
-          if(p%xp(ipart,idim)>=r%boxlen)p%xp(ipart,idim)=p%xp(ipart,idim)-r%boxlen
+         if(r%periodic(idim))then
+            if(p%xp(ipart,idim)<   0.0d0 )p%xp(ipart,idim)=p%xp(ipart,idim)+r%boxlen
+            if(p%xp(ipart,idim)>=r%boxlen)p%xp(ipart,idim)=p%xp(ipart,idim)-r%boxlen
+         endif
       end do
    end do
  

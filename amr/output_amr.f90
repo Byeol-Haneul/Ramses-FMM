@@ -431,6 +431,7 @@ subroutine input_params(mdl,r,g,filename,ncpu_file,levelmin_file,nlevelmax_file)
   ! Read various constants
   read(ilun)g%const,g%mass_tot_0,g%rho_tot
   read(ilun)g%omega_m,g%omega_l,g%omega_k,g%omega_b,g%h0,g%aexp_ini,g%boxlen_ini
+  g%omega_k=1-g%omega_m-g%omega_l
   read(ilun)g%aexp,g%texp,g%hexp
   read(ilun)g%aexp_old,g%epot_tot_int,g%epot_tot_old
   read(ilun)mass_sph_file
@@ -672,6 +673,9 @@ subroutine output_header(r,g,p,filename)
   ! Keep track of what particle fields are present
   write(ilun,*)'Particle fields'
   write(ilun,'(a)',advance='no')'pos vel mass '
+#ifdef OUTPUT_PARTICLE_POTENTIAL
+  write(ilun,'(a)',advance='no')'phi '
+#endif
   if(allocated(p%zp))then
      write(ilun,'(a)',advance='no')'metallicity '
   endif
@@ -691,15 +695,15 @@ subroutine output_header(r,g,p,filename)
   if(allocated(p%idm))then
      write(ilun,'(a)',advance='no')'merging_id '
   endif
+  if(allocated(p%idt))then
+     write(ilun,'(a)',advance='no')'tracking_id '
+  endif
   if(allocated(p%size))then
      write(ilun,'(a)',advance='no')'size '
   endif
   if(allocated(p%charge))then
      write(ilun,'(a)',advance='no')'charge '
   endif
-#ifdef OUTPUT_PARTICLE_POTENTIAL
-  write(ilun,'(a)',advance='no')'phi '
-#endif
   close(ilun)
 
 end subroutine output_header
