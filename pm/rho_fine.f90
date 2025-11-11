@@ -1914,7 +1914,7 @@ subroutine sort_part(s,p,ilevel)
      p%sortp(i)=i
   end do
   ix=0
-  call sort_hilbert(r,g,p,p%headp(ilevel),p%tailp(r%nlevelmax),ix,0,1,ilevel-1)
+  call sort_hilbert(r,g,m,p,p%headp(ilevel),p%tailp(r%nlevelmax),ix,0,1,ilevel-1)
 
   end associate
 
@@ -1923,7 +1923,7 @@ end subroutine sort_part
 !##############################################################################
 !##############################################################################
 !##############################################################################
-recursive subroutine sort_hilbert(r,g,p,head_part, tail_part, ix_coarse, cstate_coarse, ilevel, final_level)
+recursive subroutine sort_hilbert(r,g,m,p,head_part, tail_part, ix_coarse, cstate_coarse, ilevel, final_level)
   use amr_parameters, only: ndim, twotondim
   use amr_commons, only: run_t, global_t
   use pm_commons, only: part_t
@@ -2054,7 +2054,7 @@ recursive subroutine sort_hilbert(r,g,p,head_part, tail_part, ix_coarse, cstate_
            tail_fine = offset(ip) + numb_part(ip)
            ix_fine(1:ndim) = ix_child(ip,1:ndim)
            cstate_fine = nstate(ip)
-           call sort_hilbert(r,g,p,head_fine,tail_fine,ix_fine,cstate_fine,ilevel+1,final_level)
+           call sort_hilbert(r,g,m,p,head_fine,tail_fine,ix_fine,cstate_fine,ilevel+1,final_level)
         endif
      end do
   endif
