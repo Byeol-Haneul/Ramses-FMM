@@ -76,10 +76,11 @@ subroutine init_fmm(s,ilevel)
     else
       istart=m%tail_mg(ilev-1)+1
     endif
-
     hk=0
     ! New grid in current level
     igrid=istart-1
+    m%head_mg(ilev)=istart
+    m%tail_mg(ilev)=igrid
 
     ! Loop over the Cartesian grid in Hilbert order
     do ikey=m%domain_mg(ilev)%b(1,g%myid-1), m%domain_mg(ilev)%b(1,g%myid)-1
@@ -122,7 +123,7 @@ subroutine init_fmm(s,ilevel)
 #endif
     end do
 
-    print *, "Myid", g%myid, "created", m%noct(ilev), "octs at level", ilev
+    print *, "Myid", g%myid, "created", m%noct(ilev), "octs at level", ilev, "from ", m%head_mg(ilev), " to ", m%tail_mg(ilev)
     if(m%noct(ilev)<1) cycle
     !-----------
     ! Super-octs
