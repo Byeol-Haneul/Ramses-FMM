@@ -8,7 +8,7 @@ hydro=.false.
 nrestart=0
 nsubcycle=1,1,2
 ncontrol=1
-verbose=.false.
+verbose=.true.
 /
 
 &OUTPUT_PARAMS
@@ -33,7 +33,7 @@ nexpand=1,
 
 &POISSON_PARAMS
 epsilon=1.d-6
-level_fmm_to_amr=0
+level_fmm_to_amr=1
 /
 
 &REFINE_PARAMS

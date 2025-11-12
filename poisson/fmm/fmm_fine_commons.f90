@@ -10,18 +10,18 @@ contains
 ! Used variables:
 #ifdef FMM
 subroutine fmm(pst,ilevel,icount)
-  use amr_parameters, only: twotondim
+  use amr_parameters, only: twotondim, nhilbert
   use poisson_parameters, only: ngs_fine, ngs_coarse, ncycles_coarse_safe
   use ramses_commons, only: pst_t
   use phi_fine_cg_module, only: r_make_initial_phi, in_make_initial_phi_t
   use init_fmm_module, only: r_init_fmm
-  use fmm_multipoles, only: m_fmm_multipoles
+  use fmm_multipoles!, only: m_fmm_multipoles
   use cleanup_fmm_module, only: r_cleanup_fmm
   implicit none
   type(pst_t)::pst
   integer,intent(in) :: ilevel,icount
   
-  integer :: igrid, ifine, i, iter, allmasked, ilev
+  integer :: igrid, ifine, i, ierr, allmasked, ilev
   integer,dimension(1:4) :: output_array
   type(in_make_initial_phi_t)::in_make_initial_phi
   
@@ -33,15 +33,11 @@ subroutine fmm(pst,ilevel,icount)
   ! ---------------------------------------------------------------------
   ! Build FMM hierarchy in memory
   ! ---------------------------------------------------------------------
-  allocate(pst%s%m%head_mg(1:pst%s%r%nlevelmax))
-  allocate(pst%s%m%tail_mg(1:pst%s%r%nlevelmax))
-  allocate(pst%s%m%noct_mg(1:pst%s%r%nlevelmax))
-  allocate(pst%s%m%domain_mg(1:pst%s%r%nlevelmax))
 
-  do ilev = 1, pst%s%r%levelmin - pst%s%r%level_fmm_to_amr
-    write(*,*)'Building init_fmm grid at level ',ilev
-    call r_init_fmm(pst, ilev, 1)
-  end do
+  if(ilevel==pst%s%r%levelmin) then
+    call r_init_fmm(pst, ilevel, 1)
+    if(pst%s%r%verbose) print '(A)','FMM init done ' 
+  endif
 
   if(pst%s%r%verbose) print '(A)','FMM init done ' 
 
@@ -50,6 +46,9 @@ subroutine fmm(pst,ilevel,icount)
   ! ---------------------------------------------------------------------
    call m_timer(pst,'fmm: multipole upward','start')
    call m_fmm_multipoles(pst, ilevel) ! do upward pass !
+   do i = 1, pst%s%r%levelmin-pst%s%r%level_fmm_to_amr, 1
+    call r_reset_multipoles_taylor(pst, i, 1)
+   end do
 
   ! Downward pass for fmm grids. 
    call m_timer(pst,'fmm: downward for fmm','start')
@@ -192,6 +191,8 @@ subroutine fmm_downward(s, ilevel)
   hash_nbor_periodic(0) = ilevel - 1
   hash_parent(0) = ilevel - 1
   dx_loc = r%boxlen / 2.0D0**ilevel
+
+  if(m%noct(ilevel)<1) return
 
   ! jcell to icell
   do inbor = 1, threetondim
@@ -548,7 +549,7 @@ end subroutine r_fmm_amr_direct
 !###########################################################
 !###########################################################
 subroutine fmm_amr_direct(s, ilevel)
-  use amr_parameters, only: ndim, twotondim, threetondim
+  use amr_parameters, only: ndim, twotondim, threetondim, nhilbert
   use amr_commons, only: nbor, oct
   use ramses_commons, only: ramses_t
   use nbors_utils
@@ -569,7 +570,7 @@ subroutine fmm_amr_direct(s, ilevel)
                                         hash_direct, hash_prev_fmm_grid, prev_hash_fmm_cell
   real(kind=8), dimension(threetondim, ndim) :: offset_list
   type(oct), pointer :: gridp_nbor
-  type(msg_large_realdp) :: dummy_realdp
+  type(msg_small_realdp) :: dummy_realdp
   logical :: cycle_flag, initialized
   integer, dimension(twotondim, ndim), parameter :: displacement_list = reshape( &
     [ &
@@ -588,9 +589,9 @@ subroutine fmm_amr_direct(s, ilevel)
   if (r%cosmo) fourpi = 1.5D0*g%omega_m*g%aexp
 
   ! Open cache for multipoles (unchanged)
-  call open_cache(s,table=m%mg_dict,data_size=storage_size(m%grid(1))/32,&
-            hilbert=m%domain_mg, pack_size=storage_size(dummy_realdp)/32,&
-            pack=pack_fetch_taylor,unpack=unpack_fetch_taylor,&
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+            hilbert=m%domain, pack_size=storage_size(dummy_realdp)/32,&
+            pack=pack_fetch_rho, unpack=unpack_fetch_rho,&
             init=init_flush_taylor, flush=pack_flush_taylor, combine=unpack_flush_taylor)
 
   hash_key(0) = ilevel
@@ -740,7 +741,7 @@ subroutine fmm_amr_direct(s, ilevel)
   end do ! end over all amr grids @ given ilevel
   deallocate(mm_jcell_list, inv_dist)
   
-  call close_cache(s, m%mg_dict)
+  call close_cache(s, m%grid_dict)
   end associate
 end subroutine fmm_amr_direct
 !################################################################
@@ -917,6 +918,57 @@ subroutine unpack_fetch_taylor(grid,msg_size,msg_array,hash_key)
   grid%multipole=msg%realdp_fmm_multipole
   grid%taylor_coeff=msg%realdp_fmm_taylor
 end subroutine unpack_fetch_taylor
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine pack_fetch_rho(grid,msg_size,msg_array)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: oct
+  use cache_commons, only: msg_small_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+
+  integer::ind
+  type(msg_small_realdp)::msg
+
+#ifdef GRAV
+  do ind=1,twotondim
+     msg%realdp(ind)=grid%rho(ind)
+  end do
+#endif
+
+  msg_array=transfer(msg,msg_array)
+
+end subroutine pack_fetch_rho
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine unpack_fetch_rho(grid,msg_size,msg_array,hash_key)
+  use amr_parameters, only: ndim,twotondim
+  use amr_commons, only: oct
+  use cache_commons, only: msg_small_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
+
+  integer::ind
+  type(msg_small_realdp)::msg
+
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
+  msg=transfer(msg_array,msg)
+
+#ifdef GRAV
+  do ind=1,twotondim
+     grid%rho(ind)=msg%realdp(ind)
+  end do
+#endif
+
+end subroutine unpack_fetch_rho
 !################################################################
 !################################################################
 !################################################################

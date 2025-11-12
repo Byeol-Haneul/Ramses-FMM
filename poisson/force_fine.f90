@@ -488,10 +488,10 @@ subroutine dump_phi(r, g, m, ilevel)
 
 #ifdef FMM
   write(level_str, '(I0)') r%level_fmm_to_amr  ! convert integer to string
-  filename = "./out/" // trim(r%initfile(ilevel)) // "_fmm_" // trim(level_str) // ".out"
+  filename = "./out/" // trim(r%initfile(ilevel)) // "_mpi_fmm_" // trim(level_str) // ".out"
   open(unit_debug, file=filename, status="replace")
 #else
-  filename = "./out" // trim(r%initfile(ilevel)) // "_mg.out"
+  filename = "./out/" // trim(r%initfile(ilevel)) // "_mpi_mg.out"
   open(unit_debug, file=filename, status="replace")
 #endif
 

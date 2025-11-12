@@ -27,7 +27,7 @@ subroutine m_fmm_multipoles(pst,ilevel)
 
   if(.not. r%poisson)return
   if(m%noct_tot(ilevel)==0)return
-  if(r%verbose)write(*,'(" Entering rho_fine for level ",I2)')ilevel
+  if(r%verbose)write(*,'(" Entering fmm_multipoles for level ",I2)')ilevel
 
   !-------------------------------------------------------
   ! Initialize rho to analytical and baryon density field
@@ -35,11 +35,9 @@ subroutine m_fmm_multipoles(pst,ilevel)
 
   ! Initialize both AMR and FMM grids. 
   do i = 1, r%nlevelmax, 1
-      if (m%noct_tot(i) > 0 .or. i < r%levelmin-r%level_fmm_to_amr) then
-          call r_reset_multipoles_taylor(pst, i, 1)
-      endif
+    call r_reset_multipoles_taylor(pst, i, 1)
   end do
-  
+
   ! Add multipoles from AMR grids
   do i=r%nlevelmax,r%levelmin,-1
       if(r%verbose)write(*,'(" [M2M] AMR to FMM AMR LEVEL", I2)')i
@@ -72,7 +70,7 @@ recursive subroutine r_fmm_multipole_amr2fmm(pst,ilevel,input_size)
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_MULTIPOLE_SPLIT_CELLS,pst%iUpper+1,input_size,0,ilevel)
+     rID = mdl_send_request(pst%s%mdl,MDL_MULTIPOLE_AMR2FMM,pst%iUpper+1,input_size,0,ilevel)
      call r_fmm_multipole_amr2fmm(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
@@ -216,7 +214,7 @@ recursive subroutine r_fmm_multipole_fmm2fmm(pst,ilevel,input_size)
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_MULTIPOLE_SPLIT_CELLS,pst%iUpper+1,input_size,0,ilevel)
+     rID = mdl_send_request(pst%s%mdl,MDL_MULTIPOLE_FMM2FMM,pst%iUpper+1,input_size,0,ilevel)
      call r_fmm_multipole_fmm2fmm(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
@@ -307,7 +305,7 @@ subroutine pack_flush_multipole(grid,msg_size,msg_array)
 
   integer::ind,ivar
   type(msg_large_realdp)::msg
-  do ivar=0,multipole_size
+  do ivar=1,multipole_size
      do ind=1,twotondim
         msg%realdp_fmm_multipole(ind,ivar)=grid%multipole(ind,ivar)
      end do
@@ -383,10 +381,11 @@ subroutine reset_multipoles_taylor(r,g,m,ilevel)
   integer :: igrid, ind
   integer :: first, last
 
+  if(m%noct(ilevel)<1) return
   if (ilevel <= r%levelmin-r%level_fmm_to_amr) then
      first = m%head_mg(ilevel)
      last  = m%tail_mg(ilevel)
-  else if (ilevel > r%nlevelmax .or. ilevel < r%levelmin) then
+  else if (ilevel > r%nlevelmax .and. ilevel < r%levelmin) then
      return
   else
      first = m%head(ilevel)

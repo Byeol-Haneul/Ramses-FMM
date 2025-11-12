@@ -54,18 +54,10 @@ subroutine init_fmm(s,ilevel)
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
   
-  ! Compute starting grid index at that level
-  if(ilevel == 1)then
-     m%ifree=m%noct_used+1 ! Jun-Young: start at index of the first free variable
-     istart=m%ifree 
-     m%ifree_mg=m%ifree ! Jun-Young: to recover, save curr ifree. 
-  else
-     istart=m%tail_mg(ilevel-1)+1
-  endif
-
-  hk=0
-  ! New grid in current level
-  igrid=istart-1
+  allocate(m%head_mg(1:r%nlevelmax))
+  allocate(m%tail_mg(1:r%nlevelmax))
+  allocate(m%noct_mg(1:r%nlevelmax))
+  allocate(m%domain_mg(1:r%nlevelmax))
 
   call m%domain_mg(ilevel)%copy(m%domain(ilevel))
   do ilev=ilevel-1,1,-1
@@ -74,115 +66,128 @@ subroutine init_fmm(s,ilevel)
         m%domain_mg(ilev)%b(1:nhilbert,idom)=coarsen_key(m%domain_mg(ilev+1)%b(1:nhilbert,idom),ilev)
      end do
   end do
+  
+  do ilev=1, r%levelmin-r%level_fmm_to_amr
+    ! Compute starting grid index at that level
+    if(ilev == 1)then
+      m%ifree=m%noct_used+1 ! Jun-Young: start at index of the first free variable
+      istart=m%ifree 
+      m%ifree_mg=m%ifree ! Jun-Young: to recover, save curr ifree. 
+    else
+      istart=m%tail_mg(ilev-1)+1
+    endif
 
-  ! Loop over the Cartesian grid in Hilbert order
-  do ikey=m%domain_mg(ilevel)%b(1,g%myid-1), m%domain_mg(ilevel)%b(1,g%myid)-1
-     ! Compute Cartesian index from Hilbert index
-     hk(1)=ikey
-     ix=hilbert_reverse(hk,ilevel-1)
-     if(ix(1).ge.m%box_ckey_min(1,ilevel).and.ix(1).lt.m%box_ckey_max(1,ilevel))then ! Jun-Young Lee if in the domain
+    hk=0
+    ! New grid in current level
+    igrid=istart-1
+
+    ! Loop over the Cartesian grid in Hilbert order
+    do ikey=m%domain_mg(ilev)%b(1,g%myid-1), m%domain_mg(ilev)%b(1,g%myid)-1
+      ! Compute Cartesian index from Hilbert index
+      hk(1)=ikey
+      ix=hilbert_reverse(hk,ilev-1)
+      if(ix(1).ge.m%box_ckey_min(1,ilev).and.ix(1).lt.m%box_ckey_max(1,ilev))then ! Jun-Young Lee if in the domain
 #if NDIM>1
-     if(ix(2).ge.m%box_ckey_min(2,ilevel).and.ix(2).lt.m%box_ckey_max(2,ilevel))then
+      if(ix(2).ge.m%box_ckey_min(2,ilev).and.ix(2).lt.m%box_ckey_max(2,ilev))then
 #endif
 #if NDIM>2
-     if(ix(3).ge.m%box_ckey_min(3,ilevel).and.ix(3).lt.m%box_ckey_max(3,ilevel))then
+      if(ix(3).ge.m%box_ckey_min(3,ilev).and.ix(3).lt.m%box_ckey_max(3,ilev))then
 #endif
-        ! Insert new grid in main array
-        igrid=igrid+1
-        if(igrid.GT.r%ngridmax)then
-           write(*,*)'No more free memory'
-           write(*,*)'Increase ngridmax'
-           call mdl_abort(mdl)
-        end if
-        if(igrid==istart)m%head_mg(ilevel)=istart
-        m%tail_mg(ilevel)=igrid
-        m%noct_mg(ilevel)=m%noct_mg(ilevel)+1
-        m%noct(ilevel)=m%noct(ilevel)+1
-        m%noct_used=m%noct_used+1
-        m%grid(igrid)%lev=ilevel
-        m%grid(igrid)%ckey(1:ndim)=int(ix(1:ndim),kind=4)
-        m%grid(igrid)%hkey(1:nhilbert)=hk(1:nhilbert)
-        m%grid(igrid)%refined(1:twotondim)=.false.
-        ! Insert new grid in hash table
-        hash_key(0)=ilevel
-        hash_key(1:ndim)=ix(1:ndim)
-        call hash_setp(m%mg_dict,hash_key,m%grid(igrid)) !Jun-Young grid_fmm
-        !write(*,'(A,I0,A,I0,A,I0)') "[ID:", g%myid, "]: inserted grid at ilevel:", ilevel, " at igrid:", igrid
-     endif
+          ! Insert new grid in main array
+          igrid=igrid+1
+          if(igrid.GT.r%ngridmax)then
+            write(*,*)'No more free memory'
+            write(*,*)'Increase ngridmax'
+            call mdl_abort(mdl)
+          end if
+          if(igrid==istart)m%head_mg(ilev)=istart
+          m%tail_mg(ilev)=igrid
+          m%noct_mg(ilev)=m%noct_mg(ilev)+1
+          m%noct(ilev)=m%noct(ilev)+1
+          m%noct_used=m%noct_used+1
+          m%grid(igrid)%lev=ilev
+          m%grid(igrid)%ckey(1:ndim)=int(ix(1:ndim),kind=4)
+          m%grid(igrid)%hkey(1:nhilbert)=hk(1:nhilbert)
+          m%grid(igrid)%refined(1:twotondim)=.false.
+          ! Insert new grid in hash table
+          hash_key(0)=ilev
+          hash_key(1:ndim)=ix(1:ndim)
+          call hash_setp(m%mg_dict,hash_key,m%grid(igrid)) !Jun-Young grid_fmm
+      endif
 #if NDIM>1
-     endif
+      endif
 #endif
 #if NDIM>2
-     endif
+      endif
 #endif
-  end do
+    end do
 
-  !-----------
-  ! Super-octs
-  !-----------
-  do i=1,ilevel
-     npatch(i)=twotondim**i
-  end do
-  ilev=ilevel
-  n_same=0
-  key_ref=0
-  key_ref(1,1:r%nlevelmax)=-1
-  do ioct=m%head_mg(ilev),m%tail_mg(ilev)
-     m%grid(ioct)%superoct=1
-     coarse_key(1:nhilbert)=m%grid(ioct)%hkey(1:nhilbert)
-     do i=1,MIN(ilev-1,r%nsuperoct)
-        coarse_key(1:nhilbert)=coarsen_key(coarse_key(1:nhilbert),ilev-1) ! ilev-1 used to speed up only
-        if(eq_keys(coarse_key(1:nhilbert),key_ref(1:nhilbert,i)))then
-           n_same(i)=n_same(i)+1
-        else
-           n_same(i)=1
-           key_ref(1:nhilbert,i)=coarse_key(1:nhilbert)
-        endif
-        if(n_same(i).EQ.npatch(i))then
-           m%grid(ioct-npatch(i)+1:ioct)%superoct=npatch(i)
-        endif
-     end do
-  end do
+    print *, "Myid", g%myid, "created", m%noct(ilev), "octs at level", ilev
+    if(m%noct(ilev)<1) cycle
+    !-----------
+    ! Super-octs
+    !-----------
+    do i=1,ilev
+      npatch(i)=twotondim**i
+    end do
+    n_same=0
+    key_ref=0
+    key_ref(1,1:r%nlevelmax)=-1
+    do ioct=m%head_mg(ilev),m%tail_mg(ilev)
+      m%grid(ioct)%superoct=1
+      coarse_key(1:nhilbert)=m%grid(ioct)%hkey(1:nhilbert)
+      do i=1,MIN(ilev-1,r%nsuperoct)
+          coarse_key(1:nhilbert)=coarsen_key(coarse_key(1:nhilbert),ilev-1) ! ilev-1 used to speed up only
+          if(eq_keys(coarse_key(1:nhilbert),key_ref(1:nhilbert,i)))then
+            n_same(i)=n_same(i)+1
+          else
+            n_same(i)=1
+            key_ref(1:nhilbert,i)=coarse_key(1:nhilbert)
+          endif
+          if(n_same(i).EQ.npatch(i))then
+            m%grid(ioct-npatch(i)+1:ioct)%superoct=npatch(i)
+          endif
+      end do
+    end do
 
-  !---------------------
-  ! Clean and dirty octs
-  !---------------------
-  m%head_clean(ilev)=1
-  m%head_dirty(ilev)=1
-  m%noct_clean(ilev)=0
-  m%noct_dirty(ilev)=0
-  hash_key(0)=ilev
-  do ioct=m%head_mg(ilev),m%tail_mg(ilev)
-     clean=.true.
+    !---------------------
+    ! Clean and dirty octs
+    !---------------------
+    m%head_clean(ilev)=1
+    m%head_dirty(ilev)=1
+    m%noct_clean(ilev)=0
+    m%noct_dirty(ilev)=0
+    hash_key(0)=ilev
+    do ioct=m%head_mg(ilev),m%tail_mg(ilev)
+      clean=.true.
 #if NDIM>2
-     do k1=-1,1
-     hash_key(3)=m%grid(ioct)%ckey(3)+k1
+      do k1=-1,1
+      hash_key(3)=m%grid(ioct)%ckey(3)+k1
 #endif
 #if NDIM>1
-     do j1=-1,1
-     hash_key(2)=m%grid(ioct)%ckey(2)+j1
+      do j1=-1,1
+      hash_key(2)=m%grid(ioct)%ckey(2)+j1
 #endif
-     do i1=-1,1
-        hash_key(1)=m%grid(ioct)%ckey(1)+i1
-        clean=clean.and.hash_is_clean(m%mg_dict,hash_key)
-     end do
+      do i1=-1,1
+          hash_key(1)=m%grid(ioct)%ckey(1)+i1
+          clean=clean.and.hash_is_clean(m%mg_dict,hash_key)
+      end do
 #if NDIM>1
-     end do
+      end do
 #endif
 #if NDIM>2
-     end do
+      end do
 #endif
-     if(clean)then
-        m%indx_clean(m%head_clean(ilev)+m%noct_clean(ilev))=ioct
-        m%noct_clean(ilev)=m%noct_clean(ilev)+1
-     else
-        m%indx_dirty(m%head_dirty(ilev)+m%noct_dirty(ilev))=ioct
-        m%noct_dirty(ilev)=m%noct_dirty(ilev)+1
-     endif
+      if(clean)then
+          m%indx_clean(m%head_clean(ilev)+m%noct_clean(ilev))=ioct
+          m%noct_clean(ilev)=m%noct_clean(ilev)+1
+      else
+          m%indx_dirty(m%head_dirty(ilev)+m%noct_dirty(ilev))=ioct
+          m%noct_dirty(ilev)=m%noct_dirty(ilev)+1
+      endif
+    end do
   end do
-
   end associate
-
 end subroutine init_fmm
 #endif
 !################################################################

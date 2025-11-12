@@ -147,6 +147,7 @@ function worker_init(mdl) result(pst)
   use init_fmm_module, only:r_init_fmm
   use cleanup_fmm_module, only:r_cleanup_fmm
   use fmm_fine_commons, only: r_fmm_downward, r_fmm_amr_intermediate, r_fmm_amr_direct
+  use fmm_multipoles, only: r_reset_multipoles_taylor, r_fmm_multipole_amr2fmm, r_fmm_multipole_fmm2fmm
 #endif
   use clump_finder_module, only: r_clump_finder
   use clump_merger_module, only: r_deallocate_clump
@@ -219,6 +220,9 @@ function worker_init(mdl) result(pst)
 #ifdef FMM
   call mdl_add_service(pst%s%mdl,MDL_INIT_FMM,      pst,C_FUNLOC(r_init_fmm),1,0,"init_fmm")
   call mdl_add_service(pst%s%mdl,MDL_CLEANUP_FMM,   pst,C_FUNLOC(r_cleanup_fmm),1,0,"cleanup_fmm")
+  call mdl_add_service(pst%s%mdl,MDL_RESET_MULTIPOLES,   pst,C_FUNLOC(r_reset_multipoles_taylor),1,0,"reset_multipoles_taylor")
+  call mdl_add_service(pst%s%mdl,MDL_MULTIPOLE_AMR2FMM,   pst,C_FUNLOC(r_fmm_multipole_amr2fmm),1,0,"fmm_multipole_amr2fmm")
+  call mdl_add_service(pst%s%mdl,MDL_MULTIPOLE_FMM2FMM,   pst,C_FUNLOC(r_fmm_multipole_fmm2fmm),1,0,"r_fmm_multipole_fmm2fmm")
   call mdl_add_service(pst%s%mdl,MDL_FMM_DOWNWARD,  pst,C_FUNLOC(r_fmm_downward),1,0,"fmm_downward")
   call mdl_add_service(pst%s%mdl,MDL_FMM_AMR_INTERMEDIATE,  pst,C_FUNLOC(r_fmm_amr_intermediate),1,0,"fmm_amr_intermediate")
   call mdl_add_service(pst%s%mdl,MDL_FMM_AMR_DIRECT,  pst,C_FUNLOC(r_fmm_amr_direct),1,0,"fmm_amr_direct")
