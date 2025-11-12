@@ -8,7 +8,6 @@ contains
 recursive subroutine m_tree_formation(pst)
   use mdl_module
   use ramses_commons, only: pst_t
-  use mdl_module, only: mdl_wtime
   use clump_merger_module, only: r_deallocate_clump
   use mdl_parameters
   implicit none
