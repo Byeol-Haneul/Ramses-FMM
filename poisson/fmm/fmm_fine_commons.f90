@@ -637,7 +637,7 @@ subroutine fmm_amr_direct(s, ilevel)
           do jcell = 1, twotondim
             cc_jcell = 2 * cc_jgrid + displacement_list(jcell, :)
             if (all(cc_icell(1:ndim) == cc_jcell(1:ndim))) then
-              inv_dist(igrid, icell, ind, jgrid, jcell) = 0.d0
+              inv_dist(igrid, icell, ind, jgrid, jcell) = 1 / dx_loc !! cap it to dx_loc instead of skipping
             else
               diff = (cc_icell - cc_jcell) * dx_loc
               inv_dist(igrid, icell, ind, jgrid, jcell) = 1.d0 / sqrt(sum(diff(:)**2))
