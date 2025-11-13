@@ -148,6 +148,7 @@ function worker_init(mdl) result(pst)
   use cleanup_fmm_module, only:r_cleanup_fmm
   use fmm_fine_commons, only: r_fmm_downward, r_fmm_amr_intermediate, r_fmm_amr_direct
   use fmm_multipoles, only: r_reset_multipoles_taylor, r_fmm_multipole_amr2fmm, r_fmm_multipole_fmm2fmm
+  use force_fine_module, only: r_dump_phi
 #endif
   use clump_finder_module, only: r_clump_finder
   use clump_merger_module, only: r_deallocate_clump
@@ -226,6 +227,7 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_FMM_DOWNWARD,  pst,C_FUNLOC(r_fmm_downward),1,0,"fmm_downward")
   call mdl_add_service(pst%s%mdl,MDL_FMM_AMR_INTERMEDIATE,  pst,C_FUNLOC(r_fmm_amr_intermediate),1,0,"fmm_amr_intermediate")
   call mdl_add_service(pst%s%mdl,MDL_FMM_AMR_DIRECT,  pst,C_FUNLOC(r_fmm_amr_direct),1,0,"fmm_amr_direct")
+  call mdl_add_service(pst%s%mdl,MDL_DUMP_PHI,  pst,C_FUNLOC(r_dump_phi),1,0,"dump_phi")
 #endif
   call mdl_add_service(pst%s%mdl,MDL_INIT_REFINE_RESTART,    pst,C_FUNLOC(r_init_refine_restart),0,2*nhilbert*(pst%s%g%ncpu+1),"init_refine_restart")
   call mdl_add_service(pst%s%mdl,MDL_INIT_REFINE_RAMSES,     pst,C_FUNLOC(r_init_refine_ramses),0,2*nhilbert*(pst%s%g%ncpu+1),"init_refine_ramses")

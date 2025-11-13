@@ -1,0 +1,62 @@
+make NDIM=3 MPI=1 GRAV=1 HYDRO=0
+
+&RUN_PARAMS
+cosmo=.false.
+pic=.true.
+poisson=.true.
+hydro=.false.
+nrestart=0
+nsubcycle=1,1,2
+ncontrol=1
+verbose=.true.
+/
+
+&OUTPUT_PARAMS
+tend=0.001
+bkp_time_hrs=1
+bkp_modulo=3
+/
+
+&INIT_PARAMS
+filetype='ascii'
+initfile(1)='./single_offset'
+ic_scale_m=1.00
+/
+
+&AMR_PARAMS
+levelmin=8
+levelmax=8
+ngridmax=2000000
+npartmax=4000000
+nexpand=1,
+/
+
+&BOUNDARY_PARAMS
+bound_levelmin = 3
+box_size = 1.0
+box_xmin = 1
+box_ymin = 1
+box_zmin = 1
+box_xmax = -1
+box_ymax = -1
+box_zmax = -1
+nbound = 6
+periodic = .false., .false., .false.
+bound_dir   = 1, 1, 2, 2, 3, 3
+bound_shift = 1, -1, 1, -1, 1, -1
+bound_type  = 1, 1, 1, 1, 1, 1
+bound_xmin =  0, -1,  0,  0,  0,  0
+bound_xmax =  1,  0,  0,  0,  0,  0
+bound_ymin =  1,  1,  0, -1,  0,  0
+bound_ymax = -1, -1,  1,  0,  0,  0
+bound_zmin =  1,  1,  1,  1,  0, -1
+bound_zmax = -1, -1, -1, -1,  1,  0
+/
+
+&POISSON_PARAMS
+epsilon=1.d-6
+/
+
+&REFINE_PARAMS
+m_refine=10*0.1,
+/

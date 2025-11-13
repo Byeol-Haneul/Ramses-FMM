@@ -34,7 +34,7 @@ subroutine m_force_fine(pst,ilevel,icount)
      in_gradient_phi%icount=icount
      call r_gradient_phi(pst,in_gradient_phi,2)
   endif
-  call dump_phi(pst%s%r, pst%s%g, pst%s%m, ilevel)
+  call r_dump_phi(pst, ilevel)
 
   if(pst%s%r%verbose)write(*,'("   Gradient phi done for level ",I2)')ilevel
 
@@ -465,6 +465,28 @@ end subroutine compute_rhomax
 !#########################################################
 !#########################################################
 !#########################################################
+recursive subroutine r_dump_phi(pst, ilevel)
+  use mdl_module
+  use amr_parameters, only: twotondim
+  use ramses_commons, only: pst_t
+  use mdl_parameters
+  implicit none
+  type(pst_t)::pst
+  integer::rID
+  integer::ilevel
+
+  if(pst%nLower>0)then
+    rID = mdl_send_request(pst%s%mdl,MDL_DUMP_PHI,pst%iUpper+1)
+    call r_dump_phi(pst%pLower, ilevel)
+    call mdl_get_reply(pst%s%mdl,rID,0)
+  else
+     call dump_phi(pst%s%r,pst%s%g,pst%s%m, ilevel)
+  endif
+end subroutine r_dump_phi
+!#########################################################
+!#########################################################
+!#########################################################
+!#########################################################
 subroutine dump_phi(r, g, m, ilevel)
   use amr_parameters, only: ndim, twotondim
   use amr_commons,   only: nbor, oct, run_t, global_t, mesh_t
@@ -480,9 +502,10 @@ subroutine dump_phi(r, g, m, ilevel)
   real(kind=8),    dimension(ndim) :: xx_icell
   real(kind=8) :: dx_loc
   character(len=256) :: filename
-#ifdef FMM
-  character(len=10)  :: level_str
-#endif
+
+  ! helper strings for integer->char conversion
+  character(len=10) :: level_str
+  character(len=10) :: myid_str
 
   unit_debug = 99
 
@@ -491,7 +514,9 @@ subroutine dump_phi(r, g, m, ilevel)
   filename = "./out/" // trim(r%initfile(ilevel)) // "_mpi_fmm_" // trim(level_str) // ".out"
   open(unit_debug, file=filename, status="replace")
 #else
-  filename = "./out/" // trim(r%initfile(ilevel)) // "_mpi_mg.out"
+  ! convert integer MPI id to string before concatenation
+  write(myid_str, '(I0)') g%myid
+  filename = "./out/" // trim(r%initfile(ilevel)) // "_mpi" // trim(myid_str) // "_mg.out"
   open(unit_debug, file=filename, status="replace")
 #endif
 
