@@ -6,12 +6,12 @@ COMPILER = GNU
 NDIM = 3
 MPI = 0
 HYDRO = 1
-GRAV = 1
+GRAV = 0
 MHD = 0
 RT = 0
 RTZ = 0
 INIT =
-UNITS = 
+UNITS =
 NENER = 0
 NMETAL = 0
 TURB = 0
@@ -33,7 +33,7 @@ NHILBERT = 1
 NVECTOR = 32
 NPRE = 8
 PATCH =
-DEBUG = 1
+DEBUG = 0
 HDF5 = 0
 MPIF90 = mpif90
 EXEC = ramses
@@ -126,8 +126,9 @@ ifeq ($(COMPILER),GNU)
    F90 += -ffree-line-length-none -fimplicit-none
    FC += -ffree-line-length-none -fimplicit-none
    ifeq ($(DEBUG),1)
-      F90 += -O0 -fcheck=all
+      F90 += -O0 -fcheck=bounds
       FFLAGS += -g -fbacktrace -ffpe-trap=zero,overflow,invalid -finit-real=nan
+      F90 += -Wuninitialized -Wall
    else
       F90 += -O3
    endif
@@ -196,7 +197,7 @@ endif
 LIBS += $(LIBMPI) $(LIBFFTW)
 #############################################################################
 # Sources directories are searched in this exact order
-VPATH = $(PATCH):$(GPU_PATH):../feedback:../sink:../star:../cooling:../turb:../hydro:../pm:../poisson/fmm:../poisson:../amr:../clump:../mdl1:../rt:../lightcone
+VPATH = $(PATCH):$(GPU_PATH):../feedback:../sink:../star:../cooling:../turb:../hydro:../pm:../poisson:../poisson/fmm:../amr:../clump:../mdl1:../rt:../lightcone
 #############################################################################
 # Modules
 MODOBJ = amr_parameters.o hydro_parameters.o rt_parameters.o oct_commons.o \

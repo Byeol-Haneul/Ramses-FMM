@@ -134,7 +134,8 @@ function worker_init(mdl) result(pst)
   use newdt_fine_module, only: r_newdt_part,r_broadcast_dt
   use rho_fine_module, only: r_split_part,r_sort_part
 #ifdef GRAV
-  use force_fine_module, only: r_force_analytic,r_compute_epot,r_compute_rhomax,r_gradient_phi
+  use force_fine_module, only: r_force_analytic,r_compute_epot,r_compute_rhomax,r_gradient_phi, r_dump_phi
+
   use rho_fine_module, only: r_multipole_leaf_cells,r_multipole_split_cells,r_broadcast_multipole,r_collect_multipole,&
                             r_cic_multipole,r_cic_part,r_reset_rho
   use phi_fine_cg_module, only: r_cmp_pAp_cg,r_cmp_r2_cg,r_cmp_residual_cg,r_cmp_rhs_norm,&
@@ -148,7 +149,6 @@ function worker_init(mdl) result(pst)
   use cleanup_fmm_module, only:r_cleanup_fmm
   use fmm_fine_commons, only: r_fmm_downward, r_fmm_amr_intermediate, r_fmm_amr_direct
   use fmm_multipoles, only: r_reset_multipoles_taylor, r_fmm_multipole_amr2fmm, r_fmm_multipole_fmm2fmm
-  use force_fine_module, only: r_dump_phi
 #endif
   use clump_finder_module, only: r_clump_finder
   use clump_merger_module, only: r_deallocate_clump
