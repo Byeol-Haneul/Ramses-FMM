@@ -247,6 +247,7 @@ class Part:
             self.birth_date = np.zeros([nnp])
             self.merging_date = np.zeros([nnp])
             self.merging_id = np.zeros([nnp])
+            self.tracking_id = np.zeros([nnp])
         if(sink):
             self.angmom = np.zeros([nndim,nnp])
             self.accel = np.zeros([nndim,nnp])
@@ -475,12 +476,17 @@ def rd_part(nout,**kwargs):
 
         p.birth_id[ipart:ipart+npart2] = xp
 
-        # read particle merging id
+        # read particle merging id and tracking id
         if(tree):
             xp = np.fromfile(filename,dtype=np.int32,count=npart2,offset=offset)
             offset = offset + npart2*4
 
             p.merging_id[ipart:ipart+npart2] = xp
+
+            xp = np.fromfile(filename,dtype=np.int32,count=npart2,offset=offset)
+            offset = offset + npart2*4
+
+            p.tracking_id[ipart:ipart+npart2] = xp
 
         ipart = ipart + npart2
 
@@ -543,6 +549,7 @@ def rd_part(nout,**kwargs):
             p.birth_date = p.birth_date[r < radius]
             p.merging_date = p.merging_date[r < radius]
             p.merging_id = p.merging_age[r < radius]
+            p.tracking_id = p.tracking_age[r < radius]
         if(peak):
             p.peak_id = p.peak_id[r < radius]
             p.halo_id = p.halo_id[r < radius]
@@ -2025,6 +2032,7 @@ def plot_tree(nout,pid,**kwargs):
     ind=np.where(s.peak_id==pid)
     idp=s.birth_id[ind]
     idm=s.merging_id[ind]
+    idt=s.tracking_id[ind]
     tp=s.birth_date[ind]
     tm=s.merging_date[ind]
 

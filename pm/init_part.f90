@@ -198,7 +198,8 @@ subroutine init_tree(r,g,p)
   allocate(p%levelp(r%ntreemax))
   allocate(p%idp   (r%ntreemax))
   allocate(p%idm   (r%ntreemax))
-  p%nvaralloc=2*ndim+6
+  allocate(p%idt   (r%ntreemax))
+  p%nvaralloc=2*ndim+7
 #ifdef OUTPUT_PARTICLE_POTENTIAL
   allocate(p%phip  (r%ntreemax))
   p%nvaralloc=p%nvaralloc+1

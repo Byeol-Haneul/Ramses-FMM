@@ -1455,6 +1455,12 @@ subroutine split_part(s,p,ilevel)
            p%idm(ipart)=p%idm(jpart)
            p%idm(jpart)=idp_tmp
         endif
+        ! Swap tracking ids
+        if(allocated(p%idt))then
+           idp_tmp=p%idt(ipart)
+           p%idt(ipart)=p%idt(jpart)
+           p%idt(jpart)=idp_tmp
+        endif
      end do
   end do
 

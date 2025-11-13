@@ -691,6 +691,9 @@ subroutine output_header(r,g,p,filename)
   if(allocated(p%idm))then
      write(ilun,'(a)',advance='no')'merging_id '
   endif
+  if(allocated(p%idt))then
+     write(ilun,'(a)',advance='no')'tracking_id '
+  endif
   close(ilun)
 
 end subroutine output_header

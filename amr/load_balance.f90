@@ -1122,6 +1122,12 @@ subroutine balance_part(s,p,ilevel)
            p%idm(ipart)=p%idm(jpart)
            p%idm(jpart)=idp_tmp
         endif
+        ! Swap tracking ids
+        if(allocated(p%idt))then
+           idp_tmp=p%idt(ipart)
+           p%idt(ipart)=p%idt(jpart)
+           p%idt(jpart)=idp_tmp
+        endif
      end do
   end do
 
@@ -1623,6 +1629,57 @@ subroutine balance_part(s,p,ilevel)
      do i=1,recv_cnt_tot
         ipart=p%headp(ilevel)-1+count_loc+i
         p%idm(ipart)=l_recv_buf(i)
+     end do
+
+     ! Wait for full completion of sends
+     call MPI_WAITALL(countsend,reqsend,statuses,info)
+
+  endif
+
+  !-------------------------
+  ! Swap tracking ids
+  !-------------------------
+  if(allocated(p%idt))then
+
+     countrecv=0
+     do icpu=1,g%ncpu
+        nbuffer=recv_cnt(icpu)
+        if(nbuffer>0)then
+           countrecv=countrecv+1
+           istart=recv_oft(icpu)+1
+#ifndef LONGINT
+           call MPI_IRECV(l_recv_buf(istart),nbuffer,MPI_INTEGER,icpu-1,tag,MPI_COMM_WORLD,reqrecv(countrecv),info)
+#else
+           call MPI_IRECV(l_recv_buf(istart),nbuffer,MPI_INTEGER8,icpu-1,tag,MPI_COMM_WORLD,reqrecv(countrecv),info)
+#endif
+        endif
+     end do
+
+     do i=1,send_cnt_tot
+        ipart=p%headp(ilevel)-1+count_loc+i
+        l_send_buf(i)=p%idt(ipart)
+     end do
+
+     countsend=0
+     do icpu=1,g%ncpu
+        nbuffer=send_cnt(icpu)
+        if(nbuffer>0) then
+           countsend=countsend+1
+           istart=send_oft(icpu)+1
+#ifndef LONGINT
+           call MPI_ISEND(l_send_buf(istart),nbuffer,MPI_INTEGER,icpu-1,tag,MPI_COMM_WORLD,reqsend(countsend),info)
+#else
+           call MPI_ISEND(l_send_buf(istart),nbuffer,MPI_INTEGER8,icpu-1,tag,MPI_COMM_WORLD,reqsend(countsend),info)
+#endif
+        end if
+     end do
+
+     ! Wait for full completion of receives
+     call MPI_WAITALL(countrecv,reqrecv,statuses,info)
+
+     do i=1,recv_cnt_tot
+        ipart=p%headp(ilevel)-1+count_loc+i
+        p%idt(ipart)=l_recv_buf(i)
      end do
 
      ! Wait for full completion of sends

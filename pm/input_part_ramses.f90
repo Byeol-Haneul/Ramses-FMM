@@ -442,6 +442,26 @@ subroutine input_part_ramses(r,g,p,ncpu_file,npart_file,mpart_loc)
 #endif
      endif
 
+     ! Read tracking identity
+     if(allocated(p%idt))then
+#ifndef LONGINT
+        ipos=iskip+4*(istart-1)
+#else
+        ipos=iskip+8*(istart-1)
+#endif
+        read(10,POS=ipos)isp8
+        ipart=ipart_old
+        do i=istart,iend
+           ipart=ipart+1
+           p%idt(ipart)=isp8(i)
+        end do
+#ifndef LONGINT
+        iskip=iskip+4*npart_file(icpu)
+#else
+        iskip=iskip+8*npart_file(icpu)
+#endif
+     endif
+
      deallocate(isp8)
 
      ! Close the particle file

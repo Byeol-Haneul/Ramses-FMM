@@ -148,6 +148,10 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
      return
   end if
 
+  ! Mesh spacing in that level
+  dx_loc=r%boxlen/2**ilevel 
+  vol_loc=dx_loc**ndim
+
   ! Deal with particles that left the computational domain
   if(ilevel==r%levelmin.and.ANY(.not.r%periodic(1:ndim)))then
 
@@ -161,7 +165,7 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
 
         ! Call analytical acceleration routine
         xana(1,1:ndim)=x(1:ndim)
-        call gravana(r,g,xana,fana,1)
+        call gravana(r,g,xana,fana,dx_loc,1)
         ff(1:ndim)=fana(1,1:ndim)
 
         ! Perform kick, or drift, or both
@@ -190,10 +194,6 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
      ! End loop over particles
 
   endif
-
-  ! Mesh spacing in that level
-  dx_loc=r%boxlen/2**ilevel 
-  vol_loc=dx_loc**ndim
 
   ! Open read-only cache
   call open_cache(s,table=m%grid_dict, data_size=storage_size(m%grid(1))/32,&
