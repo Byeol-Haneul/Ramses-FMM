@@ -29,3 +29,4 @@ time*.txt
 nfw/
 ics_ramses/
 analyze/fig**/
+analyze/.ipynb_checkpoints/**
