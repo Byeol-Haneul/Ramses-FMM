@@ -44,11 +44,12 @@ subroutine fmm(pst,ilevel,icount)
   ! ---------------------------------------------------------------------
   ! Initiate solve at fine level
   ! ---------------------------------------------------------------------
-   call m_timer(pst,'fmm: multipole upward','start')
-   call m_fmm_multipoles(pst, ilevel) ! do upward pass !
    do i = 1, pst%s%r%levelmin-pst%s%r%level_fmm_to_amr, 1
     call r_reset_multipoles_taylor(pst, i, 1)
    end do
+
+   call m_timer(pst,'fmm: multipole upward','start')
+   call m_fmm_multipoles(pst, ilevel) ! do upward pass !
 
   ! Downward pass for fmm grids. 
    call m_timer(pst,'fmm: downward for fmm','start')

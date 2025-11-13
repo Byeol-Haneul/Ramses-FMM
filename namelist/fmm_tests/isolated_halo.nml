@@ -1,4 +1,10 @@
-make NDIM=3 MPI=1 GRAV=1 HYDRO=0
+This namelist performs a cooling halo simulation with dark matter and gas.
+Gas cooling and star formation are included.
+You need an ascii file for the initial conditions. You can download one from
+tigress by executing in the command line the following script:
+./utils/scripts/load_nfw_ic.sh
+To compile the code with MPI, type in the command line:
+make NDIM=3 MPI=1 UNITS=MERGER PATCH=../patch/init/halo HYDRO=1 GRAV=1 NPSCAL=2
 
 &RUN_PARAMS
 cosmo=.false.
@@ -8,18 +14,19 @@ hydro=.false.
 nrestart=0
 nsubcycle=1,1,2
 ncontrol=1
-verbose=.false.
+verbose=.true.
 /
 
 &OUTPUT_PARAMS
-tend=0.001
+delta_tout=0.05
+tend=1.0
 bkp_time_hrs=1
 bkp_modulo=3
 /
 
 &INIT_PARAMS
 filetype='ascii'
-initfile(1)='single'
+initfile(1)='nfw'
 ic_scale_m=1.00
 /
 
@@ -33,7 +40,7 @@ nexpand=1,
 
 &BOUNDARY_PARAMS
 bound_levelmin = 3
-box_size = 1.0
+box_size = 600.0
 box_xmin = 1
 box_ymin = 1
 box_zmin = 1
@@ -57,6 +64,26 @@ bound_zmax = -1, -1, -1, -1,  1,  0
 epsilon=1.d-6
 /
 
+&HYDRO_PARAMS
+gamma=1.6666667
+courant_factor=0.5
+slope_type=1
+riemann='hllc'
+/
+
 &REFINE_PARAMS
-m_refine=10*0.1,
+m_refine=10*8.,
+interpol_var=1
+interpol_type=0
+mass_sph=0.4
+/
+
+&HALO_PARAMS
+v_200=150.
+concentration=10
+baryon_fraction=0.00
+lambda=0.04
+halo_eps=0.01
+halo_nmin=1d-6
+halo_tmin=1d6
 /

@@ -8,7 +8,7 @@ hydro=.false.
 nrestart=0
 nsubcycle=1,1,2
 ncontrol=1
-verbose=.false.
+verbose=.true.
 /
 
 &OUTPUT_PARAMS
@@ -19,7 +19,7 @@ bkp_modulo=3
 
 &INIT_PARAMS
 filetype='ascii'
-initfile(1)='single'
+initfile(1)='./single_offset'
 ic_scale_m=1.00
 /
 

@@ -50,7 +50,10 @@ subroutine m_fmm_multipoles(pst,ilevel)
      call r_fmm_multipole_fmm2fmm(pst,i,1)
   end do
 
-  call dump_multipole(r, g, m, 7)
+  !do i=r%levelmin-r%level_fmm_to_amr,1,-1
+  !  write(*,'(" [M2M] DUMPING FOR MULT ",I2)')i
+  !  call dump_multipole(r, g, m, i)
+  !end do
   end associate
 
 end subroutine m_fmm_multipoles
@@ -137,6 +140,7 @@ subroutine fmm_multipole_amr2fmm(s,ilevel)
 
   ! Loop over levelmin grids.
   hash_key_fmm(0)=ilevel - r%level_fmm_to_amr
+  hash_key_amr(0) = ilevel
   do ioct=m%head(ilevel),m%tail(ilevel)
      ! Get fmm grid above level_fmm_to_amr
      hash_key_amr(1:ndim)=m%grid(ioct)%ckey(1:ndim)
@@ -498,16 +502,17 @@ subroutine dump_multipole(r, g, m, ilevel)
   integer(kind=8), dimension(ndim) :: cc_icell
   real(kind=8), dimension(ndim) :: xx_icell
   real(kind=8) :: dx_loc
-
+  character(len=50) :: filename
   ! open debug file
   unit_debug = 99
 #ifdef FMM
-  open(unit_debug, file="out/mult_fmm.out", status="replace")
+    write(filename, '(A,I0,A)') "out/mult_fmm_", ilevel, ".out"
 #else
-  open(unit_debug, file="out/mult_mg.out", status="replace")
+    write(filename, '(A,I0,A)') "out/mult_mg_", ilevel, ".out"
 #endif
+  open(unit_debug, file=filename, status="replace")
   dx_loc = r%boxlen / 2.0D0**ilevel
-  do ioct = m%head(ilevel), m%tail(ilevel)
+  do ioct = m%head_mg(ilevel), m%tail_mg(ilevel)
      do icell = 1, twotondim
         do idim = 1, ndim
           nstride = 2**(idim-1)
