@@ -385,7 +385,7 @@ subroutine reset_multipoles_taylor(r,g,m,ilevel)
   integer :: igrid, ind
   integer :: first, last
 
-  if(m%noct(ilevel)<1) return
+  if(m%noct_mg(ilevel)<1) return
   if (ilevel <= r%levelmin-r%level_fmm_to_amr) then
      first = m%head_mg(ilevel)
      last  = m%tail_mg(ilevel)

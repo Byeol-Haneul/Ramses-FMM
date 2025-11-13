@@ -64,8 +64,7 @@ subroutine open_file(s,filename,nskip,ilun)
   integer,dimension(1:s%r%nfile+1)::istart
   integer::i,ifile,ncpufile,nremain,ilevel,ierr
   integer(kind=8)::iskip=0
-  ! Jun-Young: add levels under levelmin as well for fmm grids
-  integer(kind=8),dimension(1:s%r%nlevelmax)::noct
+  integer(kind=8),dimension(s%r%levelmin:s%r%nlevelmax)::noct
   logical::file_exist
   
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)

@@ -11,12 +11,11 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   use update_time_module, only: m_update_time
   use refine_utils, only: m_refine_fine
   use upload_module, only: m_upload_fine
+  use rho_fine_module, only: m_rho_fine
 #ifdef FMM
-  use mdl_module
   use fmm_fine_commons, only: fmm
 #endif
 #ifdef GRAV
-  use rho_fine_module, only: m_rho_fine
   use phi_fine_cg_module, only: m_phi_fine_cg
   use multigrid_fine_commons, only: multigrid
   use force_fine_module, only: m_force_fine

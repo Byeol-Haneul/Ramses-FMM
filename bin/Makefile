@@ -128,7 +128,6 @@ ifeq ($(COMPILER),GNU)
    ifeq ($(DEBUG),1)
       F90 += -O0 -fcheck=all
       FFLAGS += -g -fbacktrace -ffpe-trap=zero,overflow,invalid -finit-real=nan
-      F90 += -Wuninitialized -Wall
    else
       F90 += -O3
    endif
@@ -197,7 +196,7 @@ endif
 LIBS += $(LIBMPI) $(LIBFFTW)
 #############################################################################
 # Sources directories are searched in this exact order
-VPATH = $(PATCH):$(GPU_PATH):../feedback:../sink:../star:../cooling:../turb:../hydro:../pm:../poisson:../poisson/fmm:../amr:../clump:../mdl1:../rt:../lightcone
+VPATH = $(PATCH):$(GPU_PATH):../feedback:../sink:../star:../cooling:../turb:../hydro:../pm:../poisson/fmm:../poisson:../amr:../clump:../mdl1:../rt:../lightcone
 #############################################################################
 # Modules
 MODOBJ = amr_parameters.o hydro_parameters.o rt_parameters.o oct_commons.o \

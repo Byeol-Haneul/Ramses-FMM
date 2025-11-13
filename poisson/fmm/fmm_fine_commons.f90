@@ -193,7 +193,7 @@ subroutine fmm_downward(s, ilevel)
   hash_parent(0) = ilevel - 1
   dx_loc = r%boxlen / 2.0D0**ilevel
 
-  if(m%noct(ilevel)<1) return
+  if(m%noct_mg(ilevel)<1) return
 
   ! jcell to icell
   do inbor = 1, threetondim

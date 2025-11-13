@@ -104,8 +104,8 @@ subroutine init_fmm(s,ilevel)
           if(igrid==istart)m%head_mg(ilev)=istart
           m%tail_mg(ilev)=igrid
           m%noct_mg(ilev)=m%noct_mg(ilev)+1
-          m%noct(ilev)=m%noct(ilev)+1
-          m%noct_used=m%noct_used+1
+          !m%noct(ilev)=m%noct(ilev)+1
+          !m%noct_used=m%noct_used+1
           m%grid(igrid)%lev=ilev
           m%grid(igrid)%ckey(1:ndim)=int(ix(1:ndim),kind=4)
           m%grid(igrid)%hkey(1:nhilbert)=hk(1:nhilbert)
@@ -123,70 +123,7 @@ subroutine init_fmm(s,ilevel)
 #endif
     end do
 
-    print *, "Myid", g%myid, "created", m%noct(ilev), "octs at level", ilev, "from ", m%head_mg(ilev), " to ", m%tail_mg(ilev)
-    if(m%noct(ilev)<1) cycle
-    !-----------
-    ! Super-octs
-    !-----------
-    do i=1,ilev
-      npatch(i)=twotondim**i
-    end do
-    n_same=0
-    key_ref=0
-    key_ref(1,1:r%nlevelmax)=-1
-    do ioct=m%head_mg(ilev),m%tail_mg(ilev)
-      m%grid(ioct)%superoct=1
-      coarse_key(1:nhilbert)=m%grid(ioct)%hkey(1:nhilbert)
-      do i=1,MIN(ilev-1,r%nsuperoct)
-          coarse_key(1:nhilbert)=coarsen_key(coarse_key(1:nhilbert),ilev-1) ! ilev-1 used to speed up only
-          if(eq_keys(coarse_key(1:nhilbert),key_ref(1:nhilbert,i)))then
-            n_same(i)=n_same(i)+1
-          else
-            n_same(i)=1
-            key_ref(1:nhilbert,i)=coarse_key(1:nhilbert)
-          endif
-          if(n_same(i).EQ.npatch(i))then
-            m%grid(ioct-npatch(i)+1:ioct)%superoct=npatch(i)
-          endif
-      end do
-    end do
-
-    !---------------------
-    ! Clean and dirty octs
-    !---------------------
-    m%head_clean(ilev)=1
-    m%head_dirty(ilev)=1
-    m%noct_clean(ilev)=0
-    m%noct_dirty(ilev)=0
-    hash_key(0)=ilev
-    do ioct=m%head_mg(ilev),m%tail_mg(ilev)
-      clean=.true.
-#if NDIM>2
-      do k1=-1,1
-      hash_key(3)=m%grid(ioct)%ckey(3)+k1
-#endif
-#if NDIM>1
-      do j1=-1,1
-      hash_key(2)=m%grid(ioct)%ckey(2)+j1
-#endif
-      do i1=-1,1
-          hash_key(1)=m%grid(ioct)%ckey(1)+i1
-          clean=clean.and.hash_is_clean(m%mg_dict,hash_key)
-      end do
-#if NDIM>1
-      end do
-#endif
-#if NDIM>2
-      end do
-#endif
-      if(clean)then
-          m%indx_clean(m%head_clean(ilev)+m%noct_clean(ilev))=ioct
-          m%noct_clean(ilev)=m%noct_clean(ilev)+1
-      else
-          m%indx_dirty(m%head_dirty(ilev)+m%noct_dirty(ilev))=ioct
-          m%noct_dirty(ilev)=m%noct_dirty(ilev)+1
-      endif
-    end do
+    print *, "Myid", g%myid, "created", m%noct_mg(ilev), "octs at level", ilev, "from ", m%head_mg(ilev), " to ", m%tail_mg(ilev)
   end do
   end associate
 end subroutine init_fmm

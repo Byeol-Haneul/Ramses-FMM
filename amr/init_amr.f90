@@ -22,18 +22,18 @@ recursive subroutine r_set_add(pst,iUpper,input_size)
   iLower = mdl_self(mdl)-1
   n = iUpper - iLower
   iMiddle = (iUpper + iLower) / 2
- 
+  
   if(n>1)then
-     pst%iUpper = iMiddle
-     pst%nLower = iMiddle - iLower
-     pst%nUpper = iUpper - iMiddle
-     allocate(pst%pLower)
-     pst%pLower%s => pst%s
-     rID = mdl_send_request(mdl,MDL_SET_ADD,pst%iUpper+1,input_size,0,iUpper)
-     call r_set_add(pst%pLower,iMiddle,input_size)
-     call mdl_get_reply(mdl,rID,0)
+      pst%iUpper = iMiddle
+      pst%nLower = iMiddle - iLower
+      pst%nUpper = iUpper - iMiddle
+      allocate(pst%pLower)
+      pst%pLower%s => pst%s
+      rID = mdl_send_request(mdl,MDL_SET_ADD,pst%iUpper+1,input_size,0,iUpper)
+      call r_set_add(pst%pLower,iMiddle,input_size)
+      call mdl_get_reply(mdl,rID,0)
   end if
- 
+  
   end associate
 
 end subroutine r_set_add
@@ -51,11 +51,11 @@ recursive subroutine r_init_amr(pst)
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_INIT_AMR,pst%iUpper+1)
-     call r_init_amr(pst%pLower)
-     call mdl_get_reply(pst%s%mdl,rID,0)
+      rID = mdl_send_request(pst%s%mdl,MDL_INIT_AMR,pst%iUpper+1)
+      call r_init_amr(pst%pLower)
+      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call init_amr(pst%s%mdl,pst%s%r,pst%s%g,pst%s%m)
+      call init_amr(pst%s%mdl,pst%s%r,pst%s%g,pst%s%m)
   endif
 
 end subroutine r_init_amr
@@ -103,7 +103,7 @@ subroutine init_amr(mdl,r,g,m)
   ! Allocate main oct array
   allocate(m%grid(1:r%ngridmax+r%ncachemax))
   do igrid=1,r%ngridmax+r%ncachemax
-     m%grid(igrid)%lev=0
+      m%grid(igrid)%lev=0
   end do
 
   ! Allocate the device array
@@ -138,7 +138,7 @@ subroutine init_amr(mdl,r,g,m)
 
   ! Allocate another smaller hash table for multigrid data
   if(r%poisson)then
-     call init_empty_hash(m%mg_dict,2*(r%ngridmax+r%ncachemax)/7,'simple')
+      call init_empty_hash(m%mg_dict,2*(r%ngridmax+r%ncachemax)/7,'simple')
   endif
 
   ! Set initial cpu boundaries
@@ -153,33 +153,33 @@ subroutine init_amr(mdl,r,g,m)
   allocate(m%box_ckey_max(1:3,1:r%nlevelmax+1))
 
   if(r%nbound>0)then
-     allocate(m%bound_ckey_min(1:3,1:r%nbound,1:r%nlevelmax+1))
-     allocate(m%bound_ckey_max(1:3,1:r%nbound,1:r%nlevelmax+1))
+      allocate(m%bound_ckey_min(1:3,1:r%nbound,1:r%nlevelmax+1))
+      allocate(m%bound_ckey_max(1:3,1:r%nbound,1:r%nlevelmax+1))
   endif
 
   allocate(m%domain(1:r%nlevelmax+1))
   do ilevel=1,r%nlevelmax+1
-     m%domain(ilevel)%ncpu=0
-     call m%domain(ilevel)%create(g%myid,g%ncpu,g%ncpu)
+      m%domain(ilevel)%ncpu=0
+      call m%domain(ilevel)%create(g%myid,g%ncpu,g%ncpu)
   end do
 
   ! Make sure that the coarsest level uses only one Hilbert integer
   if(r%levelmin>(levels_per_key(ndim)+1))then
-     write(*,*)'levelmin is way too large !'
-     write(*,*)'are you crazy ?'
-     stop
+      write(*,*)'levelmin is way too large !'
+      write(*,*)'are you crazy ?'
+      stop
   endif
 
   ! Set max. Cartesian and Hilbert keys for coarse levels
   do ilevel=1,r%levelmin
-     m%ckey_max(ilevel)=2**(ilevel-1)
-     m%hkey_max(1,ilevel)=int(m%ckey_max(ilevel),kind=8)**ndim
+      m%ckey_max(ilevel)=2**(ilevel-1)
+      m%hkey_max(1,ilevel)=int(m%ckey_max(ilevel),kind=8)**ndim
   end do
 
   ! Set max. Cartesian and Hilbert keys for fine levels
   do ilevel=r%levelmin+1,r%nlevelmax+1
-     m%ckey_max(ilevel)=2**(ilevel-1)
-     m%hkey_max(1:nhilbert,ilevel)=refine_key(m%hkey_max(1:nhilbert,ilevel-1),ilevel)
+      m%ckey_max(ilevel)=2**(ilevel-1)
+      m%hkey_max(1:nhilbert,ilevel)=refine_key(m%hkey_max(1:nhilbert,ilevel-1),ilevel)
   end do
 
   ! Bounding box for computational domain
@@ -187,80 +187,80 @@ subroutine init_amr(mdl,r,g,m)
   ! Default is:   box_xmin=0 box_xmax=0
   ! This sets the min. and max. Cartesian keys of the box in each direction
   do ilevel=r%bound_levelmin,r%nlevelmax+1
-     if(r%box_xmin.GE.0)then
+      if(r%box_xmin.GE.0)then
         m%box_ckey_min(1,ilevel)=r%box_xmin*2**(ilevel-r%bound_levelmin)
-     else
+      else
         m%box_ckey_min(1,ilevel)=(m%ckey_max(r%bound_levelmin)+r%box_xmin)*2**(ilevel-r%bound_levelmin)
-     endif
-     if(r%box_xmax.LE.0)then
+      endif
+      if(r%box_xmax.LE.0)then
         m%box_ckey_max(1,ilevel)=(m%ckey_max(r%bound_levelmin)+r%box_xmax)*2**(ilevel-r%bound_levelmin)
-     else
+      else
         m%box_ckey_max(1,ilevel)=r%box_xmax*2**(ilevel-r%bound_levelmin)
-     endif
+      endif
 #if NDIM>1
-     if(r%box_ymin.GE.0)then
+      if(r%box_ymin.GE.0)then
         m%box_ckey_min(2,ilevel)=r%box_ymin*2**(ilevel-r%bound_levelmin)
-     else
+      else
         m%box_ckey_min(2,ilevel)=(m%ckey_max(r%bound_levelmin)+r%box_ymin)*2**(ilevel-r%bound_levelmin)
-     endif
-     if(r%box_ymax.LE.0)then
+      endif
+      if(r%box_ymax.LE.0)then
         m%box_ckey_max(2,ilevel)=(m%ckey_max(r%bound_levelmin)+r%box_ymax)*2**(ilevel-r%bound_levelmin)
-     else
+      else
         m%box_ckey_max(2,ilevel)=r%box_ymax*2**(ilevel-r%bound_levelmin)
-     endif
+      endif
 #endif
 #if NDIM>2
-     if(r%box_zmin.GE.0)then
+      if(r%box_zmin.GE.0)then
         m%box_ckey_min(3,ilevel)=r%box_zmin*2**(ilevel-r%bound_levelmin)
-     else
+      else
         m%box_ckey_min(3,ilevel)=(m%ckey_max(r%bound_levelmin)+r%box_zmin)*2**(ilevel-r%bound_levelmin)
-     endif
-     if(r%box_zmax.LE.0)then
+      endif
+      if(r%box_zmax.LE.0)then
         m%box_ckey_max(3,ilevel)=(m%ckey_max(r%bound_levelmin)+r%box_zmax)*2**(ilevel-r%bound_levelmin)
-     else
+      else
         m%box_ckey_max(3,ilevel)=r%box_zmax*2**(ilevel-r%bound_levelmin)
-     endif
+      endif
 #endif
   end do
 
   ! Bounding box for boundary regions
   do ibound=1,r%nbound
-     do ilevel=r%bound_levelmin,r%nlevelmax+1
+      do ilevel=r%bound_levelmin,r%nlevelmax+1
         if(r%bound_xmin(ibound).GE.0)then
-           m%bound_ckey_min(1,ibound,ilevel)=r%bound_xmin(ibound)*2**(ilevel-r%bound_levelmin)
+            m%bound_ckey_min(1,ibound,ilevel)=r%bound_xmin(ibound)*2**(ilevel-r%bound_levelmin)
         else
-           m%bound_ckey_min(1,ibound,ilevel)=(m%ckey_max(r%bound_levelmin)+r%bound_xmin(ibound))*2**(ilevel-r%bound_levelmin)
+            m%bound_ckey_min(1,ibound,ilevel)=(m%ckey_max(r%bound_levelmin)+r%bound_xmin(ibound))*2**(ilevel-r%bound_levelmin)
         endif
         if(r%bound_xmax(ibound).LE.0)then
-           m%bound_ckey_max(1,ibound,ilevel)=(m%ckey_max(r%bound_levelmin)+r%bound_xmax(ibound))*2**(ilevel-r%bound_levelmin)
+            m%bound_ckey_max(1,ibound,ilevel)=(m%ckey_max(r%bound_levelmin)+r%bound_xmax(ibound))*2**(ilevel-r%bound_levelmin)
         else
-           m%bound_ckey_max(1,ibound,ilevel)=r%bound_xmax(ibound)*2**(ilevel-r%bound_levelmin)
+            m%bound_ckey_max(1,ibound,ilevel)=r%bound_xmax(ibound)*2**(ilevel-r%bound_levelmin)
         endif
 #if NDIM>1
         if(r%bound_ymin(ibound).GE.0)then
-           m%bound_ckey_min(2,ibound,ilevel)=r%bound_ymin(ibound)*2**(ilevel-r%bound_levelmin)
+            m%bound_ckey_min(2,ibound,ilevel)=r%bound_ymin(ibound)*2**(ilevel-r%bound_levelmin)
         else
-           m%bound_ckey_min(2,ibound,ilevel)=(m%ckey_max(r%bound_levelmin)+r%bound_ymin(ibound))*2**(ilevel-r%bound_levelmin)
+            m%bound_ckey_min(2,ibound,ilevel)=(m%ckey_max(r%bound_levelmin)+r%bound_ymin(ibound))*2**(ilevel-r%bound_levelmin)
         endif
         if(r%bound_ymax(ibound).LE.0)then
-           m%bound_ckey_max(2,ibound,ilevel)=(m%ckey_max(r%bound_levelmin)+r%bound_ymax(ibound))*2**(ilevel-r%bound_levelmin)
+            m%bound_ckey_max(2,ibound,ilevel)=(m%ckey_max(r%bound_levelmin)+r%bound_ymax(ibound))*2**(ilevel-r%bound_levelmin)
         else
-           m%bound_ckey_max(2,ibound,ilevel)=r%bound_ymax(ibound)*2**(ilevel-r%bound_levelmin)
+            m%bound_ckey_max(2,ibound,ilevel)=r%bound_ymax(ibound)*2**(ilevel-r%bound_levelmin)
         endif
 #endif
 #if NDIM>2
         if(r%bound_zmin(ibound).GE.0)then
-           m%bound_ckey_min(3,ibound,ilevel)=r%bound_zmin(ibound)*2**(ilevel-r%bound_levelmin)
+            m%bound_ckey_min(3,ibound,ilevel)=r%bound_zmin(ibound)*2**(ilevel-r%bound_levelmin)
         else
-           m%bound_ckey_min(3,ibound,ilevel)=(m%ckey_max(r%bound_levelmin)+r%bound_zmin(ibound))*2**(ilevel-r%bound_levelmin)
+            m%bound_ckey_min(3,ibound,ilevel)=(m%ckey_max(r%bound_levelmin)+r%bound_zmin(ibound))*2**(ilevel-r%bound_levelmin)
         endif
         if(r%bound_zmax(ibound).LE.0)then
-           m%bound_ckey_max(3,ibound,ilevel)=(m%ckey_max(r%bound_levelmin)+r%bound_zmax(ibound))*2**(ilevel-r%bound_levelmin)
+            m%bound_ckey_max(3,ibound,ilevel)=(m%ckey_max(r%bound_levelmin)+r%bound_zmax(ibound))*2**(ilevel-r%bound_levelmin)
         else
-           m%bound_ckey_max(3,ibound,ilevel)=r%bound_zmax(ibound)*2**(ilevel-r%bound_levelmin)
+            m%bound_ckey_max(3,ibound,ilevel)=r%bound_zmax(ibound)*2**(ilevel-r%bound_levelmin)
         endif
 #endif
-     end do
+      end do
   end do
 
   ! Number of octs across the grid at levelmin
@@ -275,9 +275,9 @@ subroutine init_amr(mdl,r,g,m)
 
   ! Size of the box in code units in the x-direction
   if(r%box_size(1)>0)then
-     r%boxlen = r%box_size(1)/dble(m%nx)*m%ckey_max(r%levelmin)
+      r%boxlen = r%box_size(1)/dble(m%nx)*m%ckey_max(r%levelmin)
   else
-     r%box_size(1) = r%boxlen*dble(m%nx)/m%ckey_max(r%levelmin)
+      r%box_size(1) = r%boxlen*dble(m%nx)/m%ckey_max(r%levelmin)
   endif
   ! Size of the box in code units in the y- and z-directions
   r%box_size(2) = r%box_size(1)/dble(m%nx)*dble(m%ny)
@@ -287,34 +287,34 @@ subroutine init_amr(mdl,r,g,m)
   allocate(m%skip(1:ndim))
   dx=r%boxlen/2**(r%levelmin-1)
   do idim=1,ndim
-     m%skip(idim)=m%box_ckey_min(idim,r%levelmin)*dx
+      m%skip(idim)=m%box_ckey_min(idim,r%levelmin)*dx
   end do
 
   ! Set bounds for Hilbert keys for coarse levels
   do ilevel=1,r%levelmin-1
-     max_key = m%hkey_max(1,ilevel)
-     do icpu=1,g%ncpu-1
+      max_key = m%hkey_max(1,ilevel)
+      do icpu=1,g%ncpu-1
         m%domain(ilevel)%b(1,icpu) = (icpu*max_key)/g%ncpu
-     end do
-     m%domain(ilevel)%b(1,0) = 0
-     m%domain(ilevel)%b(1,g%ncpu) = max_key
+      end do
+      m%domain(ilevel)%b(1,0) = 0
+      m%domain(ilevel)%b(1,g%ncpu) = max_key
   end do
 
   ! Set bounds for Hilbert keys for levelmin
   ngrid_tot=int(m%nx,kind=8)*int(m%ny,kind=8)*int(m%nz,kind=8)
   if(ngrid_tot.EQ.m%hkey_max(1,r%levelmin))then
-     max_key = m%hkey_max(1,r%levelmin)
-     do icpu=1,g%ncpu-1
+      max_key = m%hkey_max(1,r%levelmin)
+      do icpu=1,g%ncpu-1
         m%domain(r%levelmin)%b(1,icpu) = (icpu*max_key)/g%ncpu
-     end do
-     m%domain(r%levelmin)%b(1,0) = 0
-     m%domain(r%levelmin)%b(1,g%ncpu) = m%hkey_max(1,r%levelmin)
+      end do
+      m%domain(r%levelmin)%b(1,0) = 0
+      m%domain(r%levelmin)%b(1,g%ncpu) = m%hkey_max(1,r%levelmin)
   else
-     ngrid=ngrid_tot/g%ncpu
-     nremain=ngrid_tot-int(ngrid,kind=8)*g%ncpu
-     igrid=0
-     icpu=1
-     do ikey=1, m%hkey_max(1,r%levelmin)-1
+      ngrid=ngrid_tot/g%ncpu
+      nremain=ngrid_tot-int(ngrid,kind=8)*g%ncpu
+      igrid=0
+      icpu=1
+      do ikey=1, m%hkey_max(1,r%levelmin)-1
         hk(1)=ikey
         ix=hilbert_reverse(hk,r%levelmin-1)
         if(ix(1).ge.m%box_ckey_min(1,r%levelmin).and.ix(1).lt.m%box_ckey_max(1,r%levelmin))then
@@ -324,20 +324,20 @@ subroutine init_amr(mdl,r,g,m)
 #if NDIM>2
         if(ix(3).ge.m%box_ckey_min(3,r%levelmin).and.ix(3).lt.m%box_ckey_max(3,r%levelmin))then
 #endif
-           igrid=igrid+1
-           if(icpu.LE.nremain)then
+            igrid=igrid+1
+            if(icpu.LE.nremain)then
               if(igrid.EQ.ngrid+1)then
-                 m%domain(r%levelmin)%b(1,icpu:g%ncpu) = hk(1)+1
-                 igrid=0
-                 icpu=icpu+1
+                  m%domain(r%levelmin)%b(1,icpu:g%ncpu) = hk(1)+1
+                  igrid=0
+                  icpu=icpu+1
               endif
-           else
+            else
               if(igrid.EQ.ngrid)then
-                 m%domain(r%levelmin)%b(1,icpu:g%ncpu) = hk(1)+1
-                 igrid=0
-                 icpu=icpu+1
+                  m%domain(r%levelmin)%b(1,icpu:g%ncpu) = hk(1)+1
+                  igrid=0
+                  icpu=icpu+1
               endif
-           endif
+            endif
 #if NDIM>2
         endif
 #endif
@@ -345,29 +345,28 @@ subroutine init_amr(mdl,r,g,m)
         endif
 #endif
         endif
-     end do
-     m%domain(r%levelmin)%b(1,0) = 0
-     m%domain(r%levelmin)%b(1,g%ncpu) = m%hkey_max(1,r%levelmin)
+      end do
+      m%domain(r%levelmin)%b(1,0) = 0
+      m%domain(r%levelmin)%b(1,g%ncpu) = m%hkey_max(1,r%levelmin)
   endif
 
   ! Set bounds for Hilbert keys for fine levels
   do ilevel=r%levelmin+1,r%nlevelmax+1
-     do icpu=0,g%ncpu
+      do icpu=0,g%ncpu
         m%domain(ilevel)%b(1:nhilbert,icpu) = refine_key(m%domain(ilevel-1)%b(1:nhilbert,icpu),ilevel)
-     end do
+      end do
   end do
 
   ! Allocate head, tail and numbers for each level
-  ! Jun-Young: add levels under levelmin as well for fmm grids
   if(r%verbose.and.g%myid==1)write(*,*)'Initialize oct decomposition'
-  allocate(m%head(r%levelmin:r%nlevelmax)) ! leave as it is due to caching. 
+  allocate(m%head(r%levelmin:r%nlevelmax))
   allocate(m%tail(r%levelmin:r%nlevelmax))
   allocate(m%head_cache(1:r%nlevelmax))
   allocate(m%tail_cache(1:r%nlevelmax))
-  allocate(m%noct(1:r%nlevelmax))
-  allocate(m%noct_min(1:r%nlevelmax))
-  allocate(m%noct_max(1:r%nlevelmax))
-  allocate(m%noct_tot(1:r%nlevelmax))
+  allocate(m%noct(r%levelmin:r%nlevelmax))
+  allocate(m%noct_min(r%levelmin:r%nlevelmax))
+  allocate(m%noct_max(r%levelmin:r%nlevelmax))
+  allocate(m%noct_tot(r%levelmin:r%nlevelmax))
   m%head=1       ! Head oct in the level
   m%tail=0       ! Tail oct in the level
   m%noct=0       ! Number of oct in the level and in the cpu
@@ -378,43 +377,42 @@ subroutine init_amr(mdl,r,g,m)
   m%noct_used_tot=0  ! Total number of oct used (all cpus)
 
   ! Allocate head, tail, numbers and indice for clean and dirty octs at each level
-  ! Jun-Young: add levels under levelmin as well for fmm grids
-  allocate(m%head_clean(1:r%nlevelmax))
-  allocate(m%tail_clean(1:r%nlevelmax))
-  allocate(m%noct_clean(1:r%nlevelmax))
+  allocate(m%head_clean(r%levelmin:r%nlevelmax))
+  allocate(m%tail_clean(r%levelmin:r%nlevelmax))
+  allocate(m%noct_clean(r%levelmin:r%nlevelmax))
   allocate(m%indx_clean(1:r%ngridmax))
-  allocate(m%head_dirty(1:r%nlevelmax))
-  allocate(m%tail_dirty(1:r%nlevelmax))
-  allocate(m%noct_dirty(1:r%nlevelmax))
+  allocate(m%head_dirty(r%levelmin:r%nlevelmax))
+  allocate(m%tail_dirty(r%levelmin:r%nlevelmax))
+  allocate(m%noct_dirty(r%levelmin:r%nlevelmax))
   allocate(m%indx_dirty(1:r%ngridmax))
 
   if(r%nrestart>0)then
-     ! Read parameters from restart file
-     call title(r%nrestart,nchar)
-     file_params='backup_'//TRIM(nchar)//'/params.bin'
-     inquire(file=file_params, exist=file_exist)
-     if(file_exist)then
+      ! Read parameters from restart file
+      call title(r%nrestart,nchar)
+      file_params='backup_'//TRIM(nchar)//'/params.bin'
+      inquire(file=file_params, exist=file_exist)
+      if(file_exist)then
         call input_params(mdl,r,g,file_params,ncpu_file,levelmin_file,nlevelmax_file)
         if(g%myid==1)write(*,'(" Restarting from backup number ",I8)')r%nrestart
         if(g%myid==1)write(*,'(" Restart file has ",I8," files")')ncpu_file
-     else
+      else
         if(g%myid==1)write(*,'(" Could not restart from file ",(A))')'backup_'//TRIM(nchar)
         stop
-     endif
+      endif
   else
-     if(r%filetype=='ramses')then
+      if(r%filetype=='ramses')then
         ! Read parameters from ramses output file
         file_params=TRIM(r%initfile(r%levelmin))//'/params.bin'
         inquire(file=file_params, exist=file_exist)
         if(file_exist)then
-           call input_params(mdl,r,g,file_params,ncpu_file,levelmin_file,nlevelmax_file)
-           if(g%myid==1)write(*,'(" Starting from ramses output folder ",(A))')r%initfile(r%levelmin)
-           if(g%myid==1)write(*,'(" Output folder has ",I8," files")')ncpu_file
+            call input_params(mdl,r,g,file_params,ncpu_file,levelmin_file,nlevelmax_file)
+            if(g%myid==1)write(*,'(" Starting from ramses output folder ",(A))')r%initfile(r%levelmin)
+            if(g%myid==1)write(*,'(" Output folder has ",I8," files")')ncpu_file
         else
-           if(g%myid==1)write(*,'(" Could not read folder ",(A))')r%initfile(r%levelmin)
-           stop
+            if(g%myid==1)write(*,'(" Could not read folder ",(A))')r%initfile(r%levelmin)
+            stop
         endif
-     endif
+      endif
   endif
 
 end subroutine init_amr
