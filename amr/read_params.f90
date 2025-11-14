@@ -79,7 +79,7 @@ subroutine m_read_params(pst)
   real(kind=8)::dust_to_gas_mass_ratio=0.0d0
   real(kind=8)::grain_size_parameter=0.0d0
   real(kind=8)::grain_charge_parameter=0.0d0
-  real(kind=8)::dust_gyro_factor
+  real(kind=8)::dust_gyro_factor=0.1d0 ! At least 10 steps per gyro-period.
   logical :: analytic_dust_force = .false.
 
   ! Number of superoct levels
