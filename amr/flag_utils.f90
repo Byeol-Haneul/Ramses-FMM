@@ -500,7 +500,7 @@ subroutine sink_flag(s,p,ilevel)
    do ipart = p%headp(ilevel), p%npart
 
       ! Sink sphere center in units of current level Cartesian coordinates
-      xcen(1:ndim) = (p%xp(ipart,1:ndim)+m%skip(idim)) / dx_loc
+      xcen(1:ndim) = (p%xp(ipart,1:ndim)+m%skip(1:ndim)) / dx_loc
 
       ! Collect sink sphere sampling points
       do i_nei = 1, n_nei
