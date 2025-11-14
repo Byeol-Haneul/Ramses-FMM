@@ -44,7 +44,7 @@ subroutine fmm(pst,ilevel,icount)
   ! ---------------------------------------------------------------------
   ! Initiate solve at fine level
   ! ---------------------------------------------------------------------
-   do i = 1, pst%s%r%levelmin-pst%s%r%level_fmm_to_amr, 1
+   do i = pst%s%r%bound_levelmin, pst%s%r%levelmin-pst%s%r%level_fmm_to_amr, 1
     call r_reset_multipoles_taylor(pst, i, 1)
    end do
 
@@ -53,7 +53,7 @@ subroutine fmm(pst,ilevel,icount)
 
   ! Downward pass for fmm grids. 
    call m_timer(pst,'fmm: downward for fmm','start')
-   do ilev = 2, pst%s%r%levelmin-pst%s%r%level_fmm_to_amr
+   do ilev = pst%s%r%bound_levelmin+1, pst%s%r%levelmin-pst%s%r%level_fmm_to_amr
      call r_fmm_downward(pst, ilev, 1)
      if(pst%s%r%verbose) print '(A,I2)','[M2L & L2L] Downpass for FMM grids at level done', ilev
    end do
@@ -496,7 +496,7 @@ subroutine fmm_amr_intermediate(s, ilevel)
       gridp_nbor => grid_nbor(ind)%p
       do jcell = 1, twotondim
         cycle_flag = .false.
-        cc_jcell_periodic = hash_fmm_cell(1:ndim) + cell_diff_list(ind, jcell, igrid,:)
+        cc_jcell_periodic = hash_fmm_cell(1:ndim) - cell_diff_list(ind, jcell, igrid,:)
         do idim = 1, ndim
           if ((cc_jcell_periodic(idim) < m%box_ckey_min(idim, ilevel - r%level_fmm_to_amr + 1)) .or. &
               (cc_jcell_periodic(idim) >= m%box_ckey_max(idim, ilevel - r%level_fmm_to_amr + 1))) then

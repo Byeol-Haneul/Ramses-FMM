@@ -67,9 +67,9 @@ subroutine init_fmm(s,ilevel)
      end do
   end do
   
-  do ilev=1, r%levelmin-r%level_fmm_to_amr
+  do ilev=r%bound_levelmin, r%levelmin-r%level_fmm_to_amr
     ! Compute starting grid index at that level
-    if(ilev == 1)then
+    if(ilev == r%bound_levelmin)then
       m%ifree=m%noct_used+1 ! Jun-Young: start at index of the first free variable
       istart=m%ifree 
       m%ifree_mg=m%ifree ! Jun-Young: to recover, save curr ifree. 

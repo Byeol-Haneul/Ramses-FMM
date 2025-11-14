@@ -34,7 +34,7 @@ subroutine m_fmm_multipoles(pst,ilevel)
   !-------------------------------------------------------
 
   ! Initialize both AMR and FMM grids. 
-  do i = 1, r%nlevelmax, 1
+  do i = r%bound_levelmin, r%nlevelmax, 1
     call r_reset_multipoles_taylor(pst, i, 1)
   end do
 
@@ -45,7 +45,7 @@ subroutine m_fmm_multipoles(pst,ilevel)
   end do
 
   ! Add multipoles to FMM grids. 
-  do i=r%levelmin-r%level_fmm_to_amr-1,1,-1
+  do i=r%levelmin-r%level_fmm_to_amr-1,r%bound_levelmin,-1
      if(r%verbose)write(*,'(" [M2M] Compute multipoles for FMM level ",I2)')i
      call r_fmm_multipole_fmm2fmm(pst,i,1)
   end do
