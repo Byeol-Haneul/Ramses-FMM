@@ -616,12 +616,12 @@ subroutine input_dust_grafic(r,g,p,npart_tot)
   character(LEN=80)::filename,filename_x
   character(LEN=5)::nchar
   logical::ok,error,keep_part,read_pos=.false.
- 
+
   !-------------------------------------------
   ! Mesh size at levelmin in normalised units
   !-------------------------------------------
   dx=0.5d0**r%levelmin
- 
+
   !--------------------------------------
   ! Compute starting index for each cpu
   !--------------------------------------
@@ -641,7 +641,7 @@ subroutine input_dust_grafic(r,g,p,npart_tot)
      write(*,*)'ERROR: CPU ',g%myid,' has too many dust particles: ',p%npart,' > ',r%ndustmax
      stop
   endif
- 
+
   !--------------------------------------
   ! Initialize particles in planes
   !--------------------------------------
@@ -655,7 +655,7 @@ subroutine input_dust_grafic(r,g,p,npart_tot)
 
   ipart=1
   ipart_grafic=i3_min*plane_size
- 
+
   ! Initialize positions, masses and ids
   do i3=i3_min,i3_max
      do i2=0,g%n2(r%levelmin)-1
@@ -680,7 +680,7 @@ subroutine input_dust_grafic(r,g,p,npart_tot)
         end do
      end do
   end do
- 
+
   !--------------------------------------
   ! Allocate temporary arrays
   !--------------------------------------
@@ -694,17 +694,17 @@ subroutine input_dust_grafic(r,g,p,npart_tot)
   else
      if(g%myid==1)write(*,*)'File '//TRIM(filename_x)//' not found.'
   endif
- 
+
   !--------------------------------------
   ! Loop over spatial dimensions
   !--------------------------------------
   do idim=1,ndim
- 
+
      ! Read particle initial velocities
      if(idim==1)filename=TRIM(r%initfile(r%levelmin))//'/ic_velcx'
      if(idim==2)filename=TRIM(r%initfile(r%levelmin))//'/ic_velcy'
      if(idim==3)filename=TRIM(r%initfile(r%levelmin))//'/ic_velcz'
- 
+
      if(g%myid==1)write(*,*)'Reading file '//TRIM(filename)     
      open(10,file=filename,form='unformatted')
      rewind 10
@@ -712,13 +712,13 @@ subroutine input_dust_grafic(r,g,p,npart_tot)
      do i3=0,i3_min-1
         read(10) ! skip unnecessary planes
      end do
- 
+
      ! If present, read initial position displacement field
      if(read_pos)then
         if(idim==1)filename_x=TRIM(r%initfile(r%levelmin))//'/ic_poscx'
         if(idim==2)filename_x=TRIM(r%initfile(r%levelmin))//'/ic_poscy'
         if(idim==3)filename_x=TRIM(r%initfile(r%levelmin))//'/ic_poscz'
-  
+
         if(g%myid==1)write(*,*)'Reading file '//TRIM(filename_x)
         open(11,file=filename_x,form='unformatted')
         rewind 11
@@ -727,7 +727,7 @@ subroutine input_dust_grafic(r,g,p,npart_tot)
            read(11) ! skip unnecessary planes
         end do
      end if
- 
+
      ! Read useful planes
      ipart=1
      ipart_grafic=i3_min*plane_size
@@ -763,15 +763,15 @@ subroutine input_dust_grafic(r,g,p,npart_tot)
      ! End loop over planes
      close(10)
      if(read_pos)close(11)
- 
+
   end do
   ! End loop over dimensions
- 
+
   ! Deallocate temporary array
   deallocate(init_plane)
   if(read_pos)deallocate(init_plane_x)
   if(allocated(tdx))deallocate(tdx,tdy,tdz)
- 
+
   ! Periodic box
   do ipart=1,p%npart
      do idim=1,ndim
@@ -781,18 +781,18 @@ subroutine input_dust_grafic(r,g,p,npart_tot)
         endif
      end do
   end do
- 
+
   ! Compute particle initial level
   do ipart=1,p%npart
      p%levelp(ipart)=r%levelmin
   end do
- 
+
   ! Put all particles in levelmin
   p%headp=p%npart+1
   p%tailp=p%npart
   p%headp(r%levelmin)=1
   p%tailp(r%levelmin)=p%npart
- 
+
 end subroutine input_dust_grafic
 
 ! Evenly distribute offsets within a cell for nt sub-particles
