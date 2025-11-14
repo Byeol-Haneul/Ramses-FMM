@@ -1,5 +1,5 @@
 module cleanup_fmm_module
-#ifdef FMM
+#ifdef GRAV
 contains
 recursive subroutine r_cleanup_fmm(pst)
   use mdl_module

@@ -1,6 +1,6 @@
 module fmm_taylor
 contains
-#ifdef FMM
+#ifdef GRAV
 subroutine calc_taylor_from_multipole(R, D0, D1, D2, D3, multipoles, taylor_coeff)
   use amr_parameters, only: ndim
   implicit none

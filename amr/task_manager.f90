@@ -143,8 +143,6 @@ function worker_init(mdl) result(pst)
   use multigrid_fine_commons, only: r_init_mg,r_build_mg,r_cleanup_mg,r_make_mask,r_make_bc_rhs
   use multigrid_fine_coarse, only: r_restrict_mask,r_cmp_residual_mg,r_cmp_residual_norm2,r_restrict_residual,&
                                 r_reset_correction,r_set_scan_flag,r_gauss_seidel_mg,r_interpolate_and_correct
-#endif
-#ifdef FMM
   use init_fmm_module, only:r_init_fmm
   use cleanup_fmm_module, only:r_cleanup_fmm
   use fmm_fine_commons, only: r_fmm_downward, r_fmm_amr_intermediate, r_fmm_amr_direct
@@ -218,16 +216,6 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_NOCT_MAX,               pst,C_FUNLOC(r_noct_max),1,1,"noct_max")
   call mdl_add_service(pst%s%mdl,MDL_NOCT_USED_MAX,          pst,C_FUNLOC(r_noct_used_max),1,1,"noct_used_max")
   call mdl_add_service(pst%s%mdl,MDL_INIT_REFINE_BASEGRID,   pst,C_FUNLOC(r_init_refine_basegrid),1,0,"init_refine_basegrid")
-#ifdef FMM
-  call mdl_add_service(pst%s%mdl,MDL_INIT_FMM,      pst,C_FUNLOC(r_init_fmm),1,0,"init_fmm")
-  call mdl_add_service(pst%s%mdl,MDL_CLEANUP_FMM,   pst,C_FUNLOC(r_cleanup_fmm),1,0,"cleanup_fmm")
-  call mdl_add_service(pst%s%mdl,MDL_RESET_MULTIPOLES,   pst,C_FUNLOC(r_reset_multipoles_taylor),1,0,"reset_multipoles_taylor")
-  call mdl_add_service(pst%s%mdl,MDL_MULTIPOLE_AMR2FMM,   pst,C_FUNLOC(r_fmm_multipole_amr2fmm),1,0,"fmm_multipole_amr2fmm")
-  call mdl_add_service(pst%s%mdl,MDL_MULTIPOLE_FMM2FMM,   pst,C_FUNLOC(r_fmm_multipole_fmm2fmm),1,0,"r_fmm_multipole_fmm2fmm")
-  call mdl_add_service(pst%s%mdl,MDL_FMM_DOWNWARD,  pst,C_FUNLOC(r_fmm_downward),1,0,"fmm_downward")
-  call mdl_add_service(pst%s%mdl,MDL_FMM_AMR_INTERMEDIATE,  pst,C_FUNLOC(r_fmm_amr_intermediate),1,0,"fmm_amr_intermediate")
-  call mdl_add_service(pst%s%mdl,MDL_FMM_AMR_DIRECT,  pst,C_FUNLOC(r_fmm_amr_direct),1,0,"fmm_amr_direct")
-#endif
   call mdl_add_service(pst%s%mdl,MDL_DUMP_PHI,  pst,C_FUNLOC(r_dump_phi),1,0,"dump_phi")
   call mdl_add_service(pst%s%mdl,MDL_INIT_REFINE_RESTART,    pst,C_FUNLOC(r_init_refine_restart),0,2*nhilbert*(pst%s%g%ncpu+1),"init_refine_restart")
   call mdl_add_service(pst%s%mdl,MDL_INIT_REFINE_RAMSES,     pst,C_FUNLOC(r_init_refine_ramses),0,2*nhilbert*(pst%s%g%ncpu+1),"init_refine_ramses")
@@ -310,6 +298,14 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_INTERPOLATE_AND_CORRECT,pst,C_FUNLOC(r_interpolate_and_correct),1,0,"interpolate_and_correct")
   call mdl_add_service(pst%s%mdl,MDL_SET_SCAN_FLAG,          pst,C_FUNLOC(r_set_scan_flag),2,0,"set_scan_flag")
   call mdl_add_service(pst%s%mdl,MDL_CMP_RESIDUAL_NORM2,     pst,C_FUNLOC(r_cmp_residual_norm2),1,2,"cmp_residual_norm2")
+  call mdl_add_service(pst%s%mdl,MDL_INIT_FMM,               pst,C_FUNLOC(r_init_fmm),1,0,"init_fmm")
+  call mdl_add_service(pst%s%mdl,MDL_CLEANUP_FMM,            pst,C_FUNLOC(r_cleanup_fmm),1,0,"cleanup_fmm")
+  call mdl_add_service(pst%s%mdl,MDL_RESET_MULTIPOLES,       pst,C_FUNLOC(r_reset_multipoles_taylor),1,0,"reset_multipoles_taylor")
+  call mdl_add_service(pst%s%mdl,MDL_MULTIPOLE_AMR2FMM,      pst,C_FUNLOC(r_fmm_multipole_amr2fmm),1,0,"fmm_multipole_amr2fmm")
+  call mdl_add_service(pst%s%mdl,MDL_MULTIPOLE_FMM2FMM,      pst,C_FUNLOC(r_fmm_multipole_fmm2fmm),1,0,"r_fmm_multipole_fmm2fmm")
+  call mdl_add_service(pst%s%mdl,MDL_FMM_DOWNWARD,           pst,C_FUNLOC(r_fmm_downward),1,0,"fmm_downward")
+  call mdl_add_service(pst%s%mdl,MDL_FMM_AMR_INTERMEDIATE,   pst,C_FUNLOC(r_fmm_amr_intermediate),1,0,"fmm_amr_intermediate")
+  call mdl_add_service(pst%s%mdl,MDL_FMM_AMR_DIRECT,         pst,C_FUNLOC(r_fmm_amr_direct),1,0,"fmm_amr_direct")
 #endif
   call mdl_add_service(pst%s%mdl,MDL_INIT_RT,                pst,C_FUNLOC(r_init_rt),0,0,"init_rt")
   call mdl_add_service(pst%s%mdl,MDL_RT_UPLOAD_FINE,         pst,C_FUNLOC(r_rt_upload_fine),1,0,"rt_upload_fine")

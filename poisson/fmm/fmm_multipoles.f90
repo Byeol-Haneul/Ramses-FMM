@@ -1,6 +1,6 @@
 module fmm_multipoles
 contains
-#ifdef FMM
+#ifdef GRAV
 !###############################################
 !###############################################
 !###############################################
@@ -197,7 +197,9 @@ subroutine fmm_multipole_amr2fmm(s,ilevel)
         multipole(2:1+ndim) = multipole(2:1+ndim) + dipole
         multipole(2+ndim:1+ndim+nq) = multipole(2+ndim:1+ndim+nq) + quadrupole
      end do  ! cell loop
+#ifdef FMM
      grid_fmm%multipole(icell,:) = grid_fmm%multipole(icell,:) + multipole
+#endif
   end do
   call close_cache(s,m%mg_dict)
   end associate
@@ -271,10 +273,12 @@ subroutine fmm_multipole_fmm2fmm(s,ilevel)
      ! Get parent cell using a write-only cache
      call get_parent_cell(s,hash_key,m%mg_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
      multipole = 0.0D0
+#ifdef FMM
      do ind=1,twotondim
        multipole = multipole + m%grid(ioct)%multipole(ind,:)
      end do
      gridp%multipole(icell,:) = gridp%multipole(icell,:) + multipole
+#endif
   end do
   call close_cache(s,m%mg_dict)
   end associate
@@ -290,10 +294,11 @@ subroutine init_flush_multipole(grid,hash_key)
   integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind,ivar
-  
+#ifdef FMM
   grid%lev=hash_key(0)
   grid%ckey(1:ndim)=hash_key(1:ndim)
   grid%multipole=0.0D0
+#endif
 end subroutine init_flush_multipole
 !################################################################
 !################################################################
@@ -309,13 +314,14 @@ subroutine pack_flush_multipole(grid,msg_size,msg_array)
 
   integer::ind,ivar
   type(msg_large_realdp)::msg
+#ifdef FMM
   do ivar=1,multipole_size
      do ind=1,twotondim
         msg%realdp_fmm_multipole(ind,ivar)=grid%multipole(ind,ivar)
      end do
   end do
   msg_array=transfer(msg,msg_array)
-
+#endif
 end subroutine pack_flush_multipole
 !################################################################
 !################################################################
@@ -336,7 +342,7 @@ subroutine unpack_flush_multipole(grid,msg_size,msg_array,hash_key)
   grid%lev=hash_key(0)
   grid%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
-  
+#ifdef FMM  
   do ivar=1,multipole_size
      do ind=1,twotondim
         if(grid%refined(ind))then
@@ -344,7 +350,7 @@ subroutine unpack_flush_multipole(grid,msg_size,msg_array,hash_key)
         endif
      end do
   end do
-
+#endif
 end subroutine unpack_flush_multipole
 !################################################################
 !################################################################
@@ -395,11 +401,12 @@ subroutine reset_multipoles_taylor(r,g,m,ilevel)
      first = m%head(ilevel)
      last  = m%tail(ilevel)
   end if
-
+#ifdef FMM
   do igrid = first, last
     m%grid(igrid)%multipole = 0.0D0
     m%grid(igrid)%taylor_coeff = 0.0D0
   end do
+#endif
 end subroutine reset_multipoles_taylor
 !###########################################################
 !###########################################################
@@ -519,10 +526,12 @@ subroutine dump_multipole(r, g, m, ilevel)
           cc_icell(idim) = 2*m%grid(ioct)%ckey(idim) + MOD((icell-1)/nstride, 2)
           xx_icell(idim) = (cc_icell(idim) + 0.5D0) * dx_loc
         end do
+#ifdef FMM
         write(unit_debug, '(3I6, E20.4)') cc_icell, m%grid(ioct)%multipole(icell, 1)
+#endif
      end do
   end do
   close(unit_debug)
 end subroutine dump_multipole
-#endif FMM
+#endif
 end module fmm_multipoles

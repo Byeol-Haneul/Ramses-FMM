@@ -8,7 +8,7 @@ contains
 !   * MG workspace building
 !
 ! Used variables:
-#ifdef FMM
+#ifdef GRAV
 subroutine fmm(pst,ilevel,icount)
   use amr_parameters, only: twotondim, nhilbert
   use poisson_parameters, only: ngs_fine, ngs_coarse, ncycles_coarse_safe
@@ -230,16 +230,19 @@ subroutine fmm_downward(s, ilevel)
      hash_key(1:ndim) = m%grid(ioct)%ckey(1:ndim)
 
     call get_parent_cell(s, hash_key, m%mg_dict, gridp_parent, pcell, flush_cache=.false., fetch_cache=.true.)
+#ifdef FMM
     parent_taylor = gridp_parent%taylor_coeff(pcell, :)
+#endif
     hash_parent(1:ndim) = gridp_parent%ckey(1:ndim)
 
     do icell = 1, twotondim
       ! Multipole Shifting
       call get_cell_pos(hash_key, icell, r%boxlen, xx_icell, cc_icell)
+#ifdef FMM
       multipole = m%grid(ioct)%multipole(icell, :)
       call shift_multipole(multipole, xx_icell, multipole_shifted)
       m%grid(ioct)%multipole(icell, :) = multipole_shifted
-
+#endif
       ! Far Field Calculation
       do idim =1,ndim
         dx(idim) = (displacement_list(icell, idim) - 0.5) * dx_loc
@@ -272,7 +275,9 @@ subroutine fmm_downward(s, ilevel)
           ! skip direct neighbors
           if (direct_neighbor_list(inbor, jcell, pcell) .or. cycle_flag) cycle
           ! Shift multipole from origin -> source center (Need to use grid position)
+#ifdef FMM
           multipole = gridp_nbor%multipole(jcell,:)
+#endif
           ! Get taylor coeffs from local
           do icell=1, twotondim
             dx = intermediate_diff_list(inbor, jcell, pcell, icell, :)
@@ -286,7 +291,9 @@ subroutine fmm_downward(s, ilevel)
        end do ! over neighboring grid's cells 2^n
      end do ! over neighboring grids 3^n 
      ! Add taylor coefficients from intermediate fields
+#ifdef FMM
      m%grid(ioct)%taylor_coeff = m%grid(ioct)%taylor_coeff + accum_taylor
+#endif
      ! Unlock neighbor octs
      do inbor = 1, threetondim
         call unlock_cache(s, grid_nbor(inbor)%p)
@@ -481,14 +488,16 @@ subroutine fmm_amr_intermediate(s, ilevel)
       nstride = 2**(idim-1)
       pcell = pcell + nstride * MOD(hash_fmm_cell(idim), 2)
     end do
-
+#ifdef FMM
     parent_taylor = gridp_parent%taylor_coeff(pcell, :)
-
+#endif
     ! Far field
     do icell = 1, twotondim
       diff = far_diff_list(igrid, icell, :)
       call calc_phi(parent_taylor, diff, phi)
+#ifdef FMM
       m%grid(ioct)%phi(icell) = m%grid(ioct)%phi(icell) + phi
+#endif
     end do
 
     ! Intermediate field
@@ -504,7 +513,9 @@ subroutine fmm_amr_intermediate(s, ilevel)
           end if
         end do
         if (cycle_flag .or. direct_neighbor_list(ind, jcell, igrid)) cycle
+#ifdef FMM
         multipole = gridp_nbor%multipole(jcell, 1:multipole_size)
+#endif
         do icell=1, twotondim
           diff  = intermediate_diff_list(ind, jcell, igrid, icell, :)
           D0 = D0_list(ind, jcell, igrid, icell)
@@ -712,7 +723,9 @@ subroutine fmm_amr_direct(s, ilevel)
           else
             call get_grid(s, hash_direct, m%grid_dict, gridp_nbor, flush_cache = .false., fetch_cache = .true.)
             do jcell = 1, twotondim
+#ifdef FMM
               mm_jcell_list(ind, jgrid, jcell) = gridp_nbor%rho(jcell)*dxn
+#endif
             end do
           end if
 #if NDIM>0
@@ -823,11 +836,12 @@ subroutine init_flush_taylor(grid,hash_key)
   integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind,ivar
-  
+#ifdef FMM  
   grid%lev=hash_key(0)
   grid%ckey(1:ndim)=hash_key(1:ndim)
   grid%multipole=0.0D0
   grid%taylor_coeff=0.0D0
+#endif
 end subroutine init_flush_taylor
 !################################################################
 !################################################################
@@ -843,11 +857,13 @@ subroutine pack_flush_taylor(grid,msg_size,msg_array)
 
   integer::ind,ivar
   type(msg_large_realdp)::msg
+#ifdef FMM
   do ind=1,twotondim
     do ivar=1,taylor_size
       msg%realdp_fmm_taylor(ind, ivar)=grid%taylor_coeff(ind, ivar)
     end do
   end do
+#endif
   msg_array=transfer(msg,msg_array)
 end subroutine pack_flush_taylor
 !################################################################
@@ -869,12 +885,13 @@ subroutine unpack_flush_taylor(grid,msg_size,msg_array,hash_key)
   grid%lev=hash_key(0)
   grid%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
-  
+#ifdef FMM 
   do ind=1,twotondim
     do ivar=1,taylor_size
       grid%taylor_coeff(ind,ivar)=grid%taylor_coeff(ind,ivar)+msg%realdp_fmm_taylor(ind,ivar)
     end do
   end do
+#endif
 end subroutine unpack_flush_taylor
 !################################################################
 !################################################################
@@ -891,8 +908,10 @@ subroutine pack_fetch_taylor(grid,msg_size,msg_array)
 
   integer::ind,ivar
   type(msg_large_realdp)::msg
+#ifdef FMM
   msg%realdp_fmm_multipole=grid%multipole
   msg%realdp_fmm_taylor=grid%taylor_coeff
+#endif
   msg_array=transfer(msg,msg_array)
 end subroutine pack_fetch_taylor
 !#####################################################################
@@ -915,9 +934,10 @@ subroutine unpack_fetch_taylor(grid,msg_size,msg_array,hash_key)
   grid%lev=hash_key(0)
   grid%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
-
+#ifdef FMM
   grid%multipole=msg%realdp_fmm_multipole
   grid%taylor_coeff=msg%realdp_fmm_taylor
+#endif
 end subroutine unpack_fetch_taylor
 !################################################################
 !################################################################
@@ -991,11 +1011,11 @@ subroutine dump_taylor(r, m, ilevel)
 
   unit_debug = 999
   open(unit_debug, file=filename, status="replace")
-
+#ifdef FMM
   do ioct = m%head_mg(ilevel), m%tail_mg(ilevel)
     write(unit_debug, '(3I6, 20E20.5)') m%grid(ioct)%ckey(1:ndim), m%grid(ioct)%taylor_coeff
   end do
-
+#endif
   close(unit_debug)
 end subroutine dump_taylor
 #endif

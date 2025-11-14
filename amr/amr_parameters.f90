@@ -38,7 +38,7 @@ module amr_parameters
   integer,parameter::fivetondim=5**ndim
   integer,parameter::twondim=2*ndim
 
-   ! Up to quadrupole
+  ! Up to quadrupole
   integer,parameter::multipole_size=1+ndim+int(ndim*(ndim+1)/2)
   integer,parameter::taylor_size=multipole_size+int(ndim*(ndim+1)*(ndim+2)/6)
   ! Number of 64-bit integers needed to store one Hilbert key
