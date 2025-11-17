@@ -122,8 +122,6 @@ subroutine init_fmm(s,ilevel)
       endif
 #endif
     end do
-
-    print *, "Myid", g%myid, "created", m%noct_mg(ilev), "octs at level", ilev, "from ", m%head_mg(ilev), " to ", m%tail_mg(ilev)
   end do
   end associate
 end subroutine init_fmm

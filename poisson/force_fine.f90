@@ -34,7 +34,7 @@ subroutine m_force_fine(pst,ilevel,icount)
      in_gradient_phi%icount=icount
      call r_gradient_phi(pst,in_gradient_phi,2)
   endif
-  call r_dump_phi(pst)
+  !call r_dump_phi(pst)
 
   if(pst%s%r%verbose)write(*,'("   Gradient phi done for level ",I2)')ilevel
 
