@@ -114,8 +114,6 @@ subroutine fmm_downward(s, ilevel)
   use nbors_utils
   use cache_commons
   use cache
-
-  use fmm_multipoles, only: shift_multipole
   use fmm_taylor
   implicit none
 
@@ -297,7 +295,6 @@ subroutine fmm_amr_intermediate(s, ilevel)
   use nbors_utils
   use cache_commons
   use cache
-  use fmm_multipoles, only: shift_multipole
   use fmm_taylor
   implicit none
 
