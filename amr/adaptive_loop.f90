@@ -136,7 +136,7 @@ subroutine adaptive_loop(pst)
 #else
      call m_output_timer(pst,.true.,'time_mg.txt')
 #endif
-     STOP !!! Jun-Young for testing!!
+     !STOP !!! Jun-Young for testing!!
   end do
 
   call m_output_timer(pst,.false.,'dummy')

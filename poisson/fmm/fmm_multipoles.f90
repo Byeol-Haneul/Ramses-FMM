@@ -46,11 +46,17 @@ subroutine m_fmm_multipoles(pst,ilevel)
 
   ! Add multipoles to FMM grids. 
   do i=r%levelmin-r%level_fmm_to_amr-1,r%bound_levelmin,-1
+     if(i<1) cycle
      if(r%verbose)write(*,'(" [M2M] Compute multipoles for FMM level ",I2)')i
      call r_fmm_multipole_fmm2fmm(pst,i,1)
   end do
 
-  !do i=r%levelmin-r%level_fmm_to_amr,1,-1
+  do i=r%bound_levelmin,r%levelmin-r%level_fmm_to_amr
+    if(r%verbose)write(*,'(" [M2M] Downward pass shifting multipoles for FMM level ",I2)')i
+    call r_fmm_multipole_shift_downward(pst,i,1)
+ end do
+
+  !do i=r%levelmin-r%level_fmm_to_amr,r%bound_levelmin,-1
   !  write(*,'(" [M2M] DUMPING FOR MULT ",I2)')i
   !  call dump_multipole(r, g, m, i)
   !end do
@@ -164,10 +170,10 @@ subroutine fmm_multipole_amr2fmm(s,ilevel)
         quadrupole = 0.0D0
 
         if (leaf_cell) then
-           ! Compute cell center coordinates
+          ! Compute cell center coordinates
            do idim = 1, ndim
               nstride = 2**(idim-1)
-              xx(idim) = (2*m%grid(ioct)%ckey(idim) + MOD((ind-1)/nstride, 2) + 0.5D0) * dx_loc
+              xx(idim) = (2*m%grid(ioct)%ckey(idim) + MOD((ind-1)/nstride, 2) + 0.5D0) * dx_loc - m%skip(idim)
            end do
 
            ! Gas mass contribution
@@ -283,6 +289,76 @@ subroutine fmm_multipole_fmm2fmm(s,ilevel)
   call close_cache(s,m%mg_dict)
   end associate
 end subroutine fmm_multipole_fmm2fmm
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+recursive subroutine r_fmm_multipole_shift_downward(pst,ilevel,input_size)
+  use mdl_module
+  use ramses_commons, only: pst_t
+  use mdl_parameters
+  implicit none
+  type(pst_t)::pst
+  integer,VALUE::input_size
+  integer::ilevel
+
+  integer::rID
+
+  if(pst%nLower>0)then
+     rID = mdl_send_request(pst%s%mdl,MDL_MULTIPOLE_SHIFT_DOWNWARD,pst%iUpper+1,input_size,0,ilevel)
+     call r_fmm_multipole_shift_downward(pst%pLower,ilevel,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
+  else
+     call fmm_multipole_shift_downward(pst%s,ilevel)
+  endif
+
+end subroutine r_fmm_multipole_shift_downward
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
+subroutine fmm_multipole_shift_downward(s,ilevel)
+  use amr_parameters, only: ndim, twotondim, multipole_size
+  use amr_commons, only: oct
+  use ramses_commons, only: ramses_t
+  use nbors_utils
+  use hydro_flag_module, only: pack_fetch_hydro, unpack_fetch_hydro
+  use cache_commons
+  use cache
+  implicit none
+  type(ramses_t)::s
+  integer::ilevel
+  integer::idim,ioct,icell, nstride
+  real(kind=8)::average
+  integer(kind=8),dimension(0:ndim)::hash_key
+  real(kind=8) :: dx_loc
+  real(kind=8), dimension(1:multipole_size) :: multipole, multipole_shifted
+  integer(kind=8), dimension(ndim) :: cc_icell! cartesian coordinate
+  real(kind=8), dimension(ndim) :: xx_icell ! box unit real coordinate
+
+  associate(r=>s%r,g=>s%g,m=>s%m)
+  if(m%noct_mg(ilevel)<1) return
+
+  dx_loc = r%boxlen / 2.0D0**ilevel
+  hash_key(0)=ilevel
+  do ioct=m%head_mg(ilevel),m%tail_mg(ilevel)
+     hash_key(1:ndim)=m%grid(ioct)%ckey(1:ndim)
+     multipole = 0.0D0
+     do icell = 1, twotondim
+      do idim = 1, ndim
+        nstride = 2**(idim-1)
+        cc_icell(idim) = 2*hash_key(idim) + MOD((icell-1)/nstride, 2)
+        xx_icell(idim) = (cc_icell(idim) + 0.5d0) * dx_loc - m%skip(idim)
+      end do
+#ifdef FMM
+      multipole = m%grid(ioct)%multipole(icell, :)
+      call shift_multipole(multipole, xx_icell, multipole_shifted)
+      m%grid(ioct)%multipole(icell, :) = multipole_shifted
+#endif
+    end do
+  end do
+  end associate
+end subroutine fmm_multipole_shift_downward
 !################################################################
 !################################################################
 !################################################################
@@ -524,7 +600,7 @@ subroutine dump_multipole(r, g, m, ilevel)
         do idim = 1, ndim
           nstride = 2**(idim-1)
           cc_icell(idim) = 2*m%grid(ioct)%ckey(idim) + MOD((icell-1)/nstride, 2)
-          xx_icell(idim) = (cc_icell(idim) + 0.5D0) * dx_loc
+          xx_icell(idim) = (cc_icell(idim) + 0.5D0) * dx_loc - m%skip(idim)
         end do
 #ifdef FMM
         write(unit_debug, '(3I6, E20.4)') cc_icell, m%grid(ioct)%multipole(icell, 1)

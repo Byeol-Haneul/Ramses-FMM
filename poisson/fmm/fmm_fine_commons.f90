@@ -80,37 +80,6 @@ subroutine fmm(pst,ilevel,icount)
    if(pst%s%r%verbose) print '(A)','FMM cleanup done '
   endif
 end subroutine fmm
-
-! ########################################################################
-! ########################################################################
-! ########################################################################
-! ########################################################################
-
-! ------------------------------------------------------------------------
-! Recursive fmm routine for coarse MG levels
-! ------------------------------------------------------------------------
-
-recursive subroutine recursive_fmm(pst,ifinelevel)
-  use amr_parameters, only: twotondim
-  use poisson_parameters, only: ngs_fine, ngs_coarse, ncycles_coarse_safe
-  use ramses_commons, only: pst_t
-  implicit none
-  type(pst_t)::pst
-  integer,intent(in) :: ifinelevel
-
-  integer :: i, igrid, icycle, ncycle
-  
-  if(ifinelevel<=pst%s%r%levelmin - pst%s%r%level_fmm_to_amr) then
-     ! Solve 'directly' :
-     return
-  end if
-     
-   ! FMM-solve the upper level
-   call recursive_fmm(pst,ifinelevel-1)
-
-   ! Interpolate coarse solution and correct back into fine solution
-   !call r_interpolate_and_correct(pst,ifinelevel,1)  
-end subroutine recursive_fmm
 !###########################################################
 !###########################################################
 !###########################################################
@@ -181,6 +150,8 @@ subroutine fmm_downward(s, ilevel)
       ], [twotondim, ndim] )
   associate(r=>s%r, g=>s%g, m=>s%m)
 
+  if(m%noct_mg(ilevel)<1) return
+
   ! Open cache for multipoles
   call open_cache(s,table=m%mg_dict,data_size=storage_size(m%grid(1))/32,& 
             hilbert=m%domain_mg, pack_size=storage_size(dummy_realdp)/32,& 
@@ -192,8 +163,6 @@ subroutine fmm_downward(s, ilevel)
   hash_nbor_periodic(0) = ilevel - 1
   hash_parent(0) = ilevel - 1
   dx_loc = r%boxlen / 2.0D0**ilevel
-
-  if(m%noct_mg(ilevel)<1) return
 
   ! jcell to icell
   do inbor = 1, threetondim
@@ -214,7 +183,6 @@ subroutine fmm_downward(s, ilevel)
           diff = (cc_icell - 0.5 - 2 * cc_jcell) * dx_loc
           intermediate_diff_list(inbor, jcell, pcell, icell, :) = diff
           dist = sqrt(sum(diff(:)**2))
-          !print *, diff/dx_loc, cc_jcell, cc_icell
           D0_list(inbor, jcell, pcell, icell) = 1.0D0 / dist
           D1_list(inbor, jcell, pcell, icell) = -1.0D0 / dist**3
           D2_list(inbor, jcell, pcell, icell) = 3.0D0 / dist**5
@@ -235,15 +203,8 @@ subroutine fmm_downward(s, ilevel)
 #endif
     hash_parent(1:ndim) = gridp_parent%ckey(1:ndim)
 
+    ! Far Field Calculation
     do icell = 1, twotondim
-      ! Multipole Shifting
-      call get_cell_pos(hash_key, icell, r%boxlen, xx_icell, cc_icell)
-#ifdef FMM
-      multipole = m%grid(ioct)%multipole(icell, :)
-      call shift_multipole(multipole, xx_icell, multipole_shifted)
-      m%grid(ioct)%multipole(icell, :) = multipole_shifted
-#endif
-      ! Far Field Calculation
       do idim =1,ndim
         dx(idim) = (displacement_list(icell, idim) - 0.5) * dx_loc
       end do 
@@ -267,7 +228,6 @@ subroutine fmm_downward(s, ilevel)
           do idim=1,ndim
             nstride = 2**(idim-1)
             cc_jcell_periodic(idim) = 2*hash_nbor_periodic(idim) + MOD((jcell-1)/nstride, 2)
-            xx_jcell_periodic(idim) = (cc_jcell_periodic(idim) + 0.5d0) * (dx_loc*2)
             if ((cc_jcell_periodic(idim)<m%box_ckey_min(idim, ilevel) .or. cc_jcell_periodic(idim)>=m%box_ckey_max(idim, ilevel))) then
               cycle_flag = .true.
             end if 
@@ -466,6 +426,10 @@ subroutine fmm_amr_intermediate(s, ilevel)
     do idim=1,ndim
       nstride = nfine**(idim-1)
       igrid = igrid + nstride * MOD(hash_key(idim), nfine)
+    end do
+
+    do icell=1,twotondim
+      m%grid(ioct)%phi(icell) = 0.0D0
     end do
 
     ! Check if we need to fetch neighbors & parent Taylor
@@ -781,50 +745,6 @@ logical function is_direct_neighbor(cc_icell, cc_jcell, ilevel)
      end if
   end do
 end function is_direct_neighbor
-!################################################################
-!################################################################
-!################################################################
-!################################################################
-subroutine get_grid_pos(hash_key, boxlen, pos)
-  use amr_parameters, only: ndim
-  implicit none
-  integer(kind=8), intent(in)  :: hash_key(0:ndim)   ! (0)=ilevel, (1:ndim)=spatial keys
-  real(kind=8),    intent(in)  :: boxlen             ! size of domain
-  real(kind=8),    intent(out) :: pos(ndim)          ! grid center position in physical units
-
-  integer :: idim, ilevel
-  real(kind=8) :: dx_loc
-
-  ilevel = hash_key(0)
-  dx_loc = boxlen / 2.0d0**(ilevel-1)
-  do idim = 1, ndim
-     pos(idim) = (hash_key(idim) + 0.5d0) * dx_loc
-  end do
-end subroutine get_grid_pos
-!################################################################
-!################################################################
-!################################################################
-!################################################################
-subroutine get_cell_pos(hash_key, icell, boxlen, pos, cc_icell)
-  use amr_parameters, only: ndim
-  implicit none
-  integer(kind=8), intent(in)  :: hash_key(0:ndim)   ! (0)=ilevel, (1:ndim)=spatial keys
-  integer,        intent(in)   :: icell              ! local cell index (1..2^ndim)
-  real(kind=8),   intent(in)   :: boxlen             ! size of domain
-  real(kind=8),   intent(out)  :: pos(:)          ! cell center position in physical units
-  integer(kind=8),   intent(out)  :: cc_icell(:)          ! cartesian coordinate
-
-  integer :: idim, ilevel, nstride
-  real(kind=8) :: dx_loc
-
-  ilevel = hash_key(0)
-  dx_loc = boxlen / 2.0d0**ilevel
-  do idim = 1, ndim
-     nstride = 2**(idim-1)
-     cc_icell(idim) = 2*hash_key(idim) + MOD((icell-1)/nstride, 2)
-     pos(idim)      = (cc_icell(idim) + 0.5d0) * dx_loc
-  end do
-end subroutine get_cell_pos
 !################################################################
 !################################################################
 !################################################################

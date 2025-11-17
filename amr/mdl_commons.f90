@@ -40,6 +40,7 @@ module mdl_parameters
      enumerator::MDL_DUMP_PHI
      enumerator::MDL_RESET_MULTIPOLES
      enumerator::MDL_MULTIPOLE_FMM2FMM
+     enumerator::MDL_MULTIPOLE_SHIFT_DOWNWARD
      enumerator::MDL_MULTIPOLE_AMR2FMM
      enumerator::MDL_INIT_REFINE_RESTART
      enumerator::MDL_INIT_REFINE_RAMSES
