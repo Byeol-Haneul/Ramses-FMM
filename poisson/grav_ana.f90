@@ -2,13 +2,14 @@
 !#########################################################
 !#########################################################
 !#########################################################
-subroutine gravana(r,g,x,f,ncell)
+subroutine gravana(r,g,x,f,dx,ncell)
   use amr_parameters, only: ndim, nvector
   use amr_commons, only: run_t, global_t
   implicit none
   type(run_t)::r
   type(global_t)::g
   integer::ncell                              ! Size of input arrays
+  real(kind=8)::dx                            ! Cell size
   real(kind=8),dimension(1:nvector,1:ndim)::f ! Gravitational acceleration
   real(kind=8),dimension(1:nvector,1:ndim)::x ! Cell center position.
   !================================================================
@@ -30,7 +31,7 @@ subroutine gravana(r,g,x,f,ncell)
 #if NDIM>2
         rz=x(i,3)-g%multipole%q(4)/g%multipole%q(1)
 #endif
-        rr=sqrt(rx**2+ry**2+rz**2)
+        rr=MAX(sqrt(rx**2+ry**2+rz**2),dx)
 #if NDIM==1
         f(i,1)=-g%multipole%q(1)*2d0*ACOS(-1d0)*rx/rr
 #endif
@@ -92,13 +93,14 @@ end subroutine gravana
 !#########################################################
 !#########################################################
 !#########################################################
-subroutine phiana(r,g,x,phi,ncell)
+subroutine phiana(r,g,x,phi,dx,ncell)
   use amr_parameters, only: ndim, nvector
   use amr_commons, only: run_t, global_t
   implicit none
   type(run_t)::r
   type(global_t)::g
   integer::ncell                              ! Size of input arrays
+  real(kind=8)::dx                            ! Cell size
   real(kind=8),dimension(1:nvector)::phi      ! Gravitational potential
   real(kind=8),dimension(1:nvector,1:ndim)::x ! Cell center position.
   !================================================================
@@ -120,7 +122,7 @@ subroutine phiana(r,g,x,phi,ncell)
 #if NDIM>2
      rz=x(i,3)-g%multipole%q(4)/g%multipole%q(1)
 #endif
-     rr=sqrt(rx**2+ry**2+rz**2)
+     rr=MAX(sqrt(rx**2+ry**2+rz**2),dx)
 #if NDIM==1
      phi(i)=g%multipole%q(1)*fourpi/2d0*rr
 #endif

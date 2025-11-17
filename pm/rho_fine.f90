@@ -598,13 +598,15 @@ subroutine cic_multipole(s,ilevel)
            if(associated(gridp))then
               gridp%rho(icell)=gridp%rho(icell)+mmm*vol(inbor)/vol_loc
 #ifdef HYDRO
-              if(r%ivar_refine>0)then
-                 mask=m%grid(igrid)%uold(ind,r%ivar_refine)/m%grid(igrid)%uold(ind,1)
-                 if(mask.gt.r%var_cut_refine)then
+              if(r%m_refine(ilevel)>=0)then
+                 if(r%ivar_refine>0)then
+                    mask=m%grid(igrid)%uold(ind,r%ivar_refine)/m%grid(igrid)%uold(ind,1)
+                    if(mask.gt.r%var_cut_refine)then
+                       gridp%nref(icell)=gridp%nref(icell)+mmm*vol(inbor)/r%mass_sph
+                    endif
+                 else
                     gridp%nref(icell)=gridp%nref(icell)+mmm*vol(inbor)/r%mass_sph
                  endif
-              else
-                 gridp%nref(icell)=gridp%nref(icell)+mmm*vol(inbor)/r%mass_sph
               endif
 #endif
            end if
@@ -783,16 +785,18 @@ subroutine cic_part(s,p,ilevel,rtype)
         call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
         if(associated(gridp))then
            gridp%rho(icell)=gridp%rho(icell)+p%mp(ipart)*vol(ind)/vol_loc
-           if(star.or.sink)then
-              gridp%nref(icell)=gridp%nref(icell)+p%mp(ipart)*vol(ind)/r%mass_sph
-           endif
-           if(part)then
-              if(r%mass_cut_refine>0)then
-                 if(p%mp(ipart)<r%mass_cut_refine)then
+           if(r%m_refine(ilevel)>=0)then
+              if(star.or.sink)then
+                 gridp%nref(icell)=gridp%nref(icell)+p%mp(ipart)*vol(ind)/r%mass_sph
+              endif
+              if(part)then
+                 if(r%mass_cut_refine>0)then
+                    if(p%mp(ipart)<r%mass_cut_refine)then
+                       gridp%nref(icell)=gridp%nref(icell)+vol(ind)
+                    endif
+                 else
                     gridp%nref(icell)=gridp%nref(icell)+vol(ind)
                  endif
-              else
-                 gridp%nref(icell)=gridp%nref(icell)+vol(ind)
               endif
            endif
         endif
@@ -918,16 +922,18 @@ subroutine tsc_part(s,p,ilevel,rtype)
         call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
         if(associated(gridp))then
            gridp%rho(icell)=gridp%rho(icell)+p%mp(ipart)*vol(ind)/vol_loc
-           if(star.or.sink)then
-              gridp%nref(icell)=gridp%nref(icell)+p%mp(ipart)*vol(ind)/r%mass_sph
-           endif
-           if(part)then
-              if(r%mass_cut_refine>0)then
-                 if(p%mp(ipart)<r%mass_cut_refine)then
+           if(r%m_refine(ilevel)>=0)then
+              if(star.or.sink)then
+                 gridp%nref(icell)=gridp%nref(icell)+p%mp(ipart)*vol(ind)/r%mass_sph
+              endif
+              if(part)then
+                 if(r%mass_cut_refine>0)then
+                    if(p%mp(ipart)<r%mass_cut_refine)then
+                       gridp%nref(icell)=gridp%nref(icell)+vol(ind)
+                    endif
+                 else
                     gridp%nref(icell)=gridp%nref(icell)+vol(ind)
                  endif
-              else
-                 gridp%nref(icell)=gridp%nref(icell)+vol(ind)
               endif
            endif
         endif
@@ -1058,16 +1064,18 @@ subroutine pcs_part(s,p,ilevel,rtype)
         call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
         if(associated(gridp))then
            gridp%rho(icell)=gridp%rho(icell)+p%mp(ipart)*vol(ind)/vol_loc
-           if(star.or.sink)then
-              gridp%nref(icell)=gridp%nref(icell)+p%mp(ipart)*vol(ind)/r%mass_sph
-           endif
-           if(part)then
-              if(r%mass_cut_refine>0)then
-                 if(p%mp(ipart)<r%mass_cut_refine)then
+           if(r%m_refine(ilevel)>=0)then
+              if(star.or.sink)then
+                 gridp%nref(icell)=gridp%nref(icell)+p%mp(ipart)*vol(ind)/r%mass_sph
+              endif
+              if(part)then
+                 if(r%mass_cut_refine>0)then
+                    if(p%mp(ipart)<r%mass_cut_refine)then
+                       gridp%nref(icell)=gridp%nref(icell)+vol(ind)
+                    endif
+                 else
                     gridp%nref(icell)=gridp%nref(icell)+vol(ind)
                  endif
-              else
-                 gridp%nref(icell)=gridp%nref(icell)+vol(ind)
               endif
            endif
         endif
