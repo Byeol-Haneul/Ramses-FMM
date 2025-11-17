@@ -125,15 +125,15 @@ subroutine output_part(s,p,filename)
   write(ilun,POS=nskip(ivar))
   write(ilun)xsp
 
-#ifdef OUTPUT_PARTICLE_POTENTIAL
   ! Write potential (optional)
-  do i=1,p%npart
-     xsp(i)=p%phip(i)
-  end do
-  ivar=ivar+1
-  write(ilun,POS=nskip(ivar))
-  write(ilun)xsp
-#endif
+  if(allocated(p%phip))then
+     do i=1,p%npart
+        xsp(i)=p%phip(i)
+     end do
+     ivar=ivar+1
+     write(ilun,POS=nskip(ivar))
+     write(ilun)xsp
+  endif
 
   ! Write metallicity
   if(allocated(p%zp))then
@@ -157,7 +157,7 @@ subroutine output_part(s,p,filename)
      end do
   endif
 
-  ! Write Angular momentum
+  ! Write angular momentum
   if(allocated(p%jp))then
      do idim=1,ndim
         do i=1,p%npart

@@ -297,12 +297,17 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
         do ind=1,twotondim
            ff(1:ndim)=ff(1:ndim)+gridp(ind)%p%f(icell(ind),1:ndim)*vol(ind)
         end do
-#ifdef OUTPUT_PARTICLE_POTENTIAL
-        p%phip(ipart)=0.0
-        do ind=1,twotondim
-           p%phip(ipart)=p%phip(ipart)+gridp(ind)%p%phi(icell(ind))*vol(ind)
-        end do
-#endif
+        ! Store potential
+        if(allocated(p%phip))then
+           p%phip(ipart)=0.0
+           do ind=1,twotondim
+              p%phip(ipart)=p%phip(ipart)+gridp(ind)%p%phi(icell(ind))*vol(ind)
+           end do
+        endif
+        ! Store old force
+        if(allocated(p%fp))then
+           p%fp(ipart,1:ndim)=ff(1:ndim)
+        endif
 #endif
      endif
 
@@ -342,10 +347,6 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
 !!$           if(norm2>0)then
 !!$              p%xp(ipart,1:ndim) = p%xp(ipart,1:ndim) + (ff(1:ndim)-p%fp(ipart,1:ndim))/sqrt(norm2)*delta
 !!$           endif
-
-           ! Store old force
-           p%fp(ipart,1:ndim)=ff(1:ndim)
-
         endif
 
      else if(action_part.EQ.action_kick_only)then
