@@ -26,7 +26,6 @@ subroutine m_fmm_multipoles(pst,ilevel)
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
 
   if(.not. r%poisson)return
-  if(m%noct_tot(ilevel)==0)return
   if(r%verbose)write(*,'(" Entering fmm_multipoles for level ",I2)')ilevel
 
   !-------------------------------------------------------
@@ -277,7 +276,7 @@ subroutine fmm_multipole_fmm2fmm(s,ilevel)
   do ioct=m%head_mg(ilevel+1),m%tail_mg(ilevel+1)
      hash_key(1:ndim)=m%grid(ioct)%ckey(1:ndim)
      ! Get parent cell using a write-only cache
-     call get_parent_cell(s,hash_key,m%mg_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
+     call get_parent_cell(s,hash_key,m%mg_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.,lock=.true.)
      multipole = 0.0D0
 #ifdef FMM
      do ind=1,twotondim
@@ -337,7 +336,6 @@ subroutine fmm_multipole_shift_downward(s,ilevel)
   real(kind=8), dimension(ndim) :: xx_icell ! box unit real coordinate
 
   associate(r=>s%r,g=>s%g,m=>s%m)
-  if(m%noct_mg(ilevel)<1) return
 
   dx_loc = r%boxlen / 2.0D0**ilevel
   hash_key(0)=ilevel
@@ -467,7 +465,6 @@ subroutine reset_multipoles_taylor(r,g,m,ilevel)
   integer :: igrid, ind
   integer :: first, last
 
-  if(m%noct_mg(ilevel)<1) return
   if (ilevel <= r%levelmin-r%level_fmm_to_amr) then
      first = m%head_mg(ilevel)
      last  = m%tail_mg(ilevel)

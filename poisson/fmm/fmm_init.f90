@@ -81,6 +81,7 @@ subroutine init_fmm(s,ilevel)
     igrid=istart-1
     m%head_mg(ilev)=istart
     m%tail_mg(ilev)=igrid
+    m%noct_mg(ilev)=0
 
     ! Loop over the Cartesian grid in Hilbert order
     do ikey=m%domain_mg(ilev)%b(1,g%myid-1), m%domain_mg(ilev)%b(1,g%myid)-1
