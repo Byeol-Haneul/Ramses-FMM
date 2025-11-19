@@ -4,8 +4,8 @@
 # Compilation time parameters
 COMPILER = GNU
 NDIM = 3
-MPI = 0
-HYDRO = 1
+MPI = 1
+HYDRO = 0
 GRAV = 1
 MHD = 0
 RT = 0

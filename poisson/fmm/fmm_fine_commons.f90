@@ -48,22 +48,22 @@ subroutine fmm(pst,ilevel,icount)
     call r_reset_multipoles_taylor(pst, i, 1)
    end do
 
-   call m_timer(pst,'fmm: multipole upward','start')
+   !call m_timer(pst,'fmm: multipole upward','start')
    call m_fmm_multipoles(pst, ilevel) ! do upward pass !
 
   ! Downward pass for fmm grids. 
-   call m_timer(pst,'fmm: downward for fmm','start')
+   !call m_timer(pst,'fmm: downward for fmm','start')
    do ilev = pst%s%r%bound_levelmin+1, pst%s%r%levelmin-pst%s%r%level_fmm_to_amr
      call r_fmm_downward(pst, ilev, 1)
      if(pst%s%r%verbose) print '(A,I2)','[M2L & L2L] Downpass for FMM grids at level done', ilev
    end do
 
    ! Call direct force calculation
-   call m_timer(pst,'fmm: amr intermediate force','start')
+   !call m_timer(pst,'fmm: amr intermediate force','start')
    call r_fmm_amr_intermediate(pst, pst%s%r%levelmin, 1)
    if(pst%s%r%verbose) print '(A,I2)','AMR Intermediate Calculation done', pst%s%r%levelmin
 
-   call m_timer(pst,'fmm: direct force','start')
+   !call m_timer(pst,'fmm: direct force','start')
    call r_fmm_amr_direct(pst, pst%s%r%levelmin, 1)
    if(pst%s%r%verbose) print '(A,I2)','Direct Force Calculation done', pst%s%r%levelmin
 
@@ -74,7 +74,7 @@ subroutine fmm(pst,ilevel,icount)
   ! ---------------------------------------------------------------------
   ! Cleanup MG levels after solve complete
   ! ---------------------------------------------------------------------
-   call m_timer(pst,'fmm: cleanup','start')
+   !call m_timer(pst,'fmm: cleanup','start')
    if(ilevel==pst%s%r%levelmin) then 
      call r_cleanup_fmm(pst)
    if(pst%s%r%verbose) print '(A)','FMM cleanup done '
@@ -148,7 +148,7 @@ subroutine fmm_downward(s, ilevel)
       ], [twotondim, ndim] )
   associate(r=>s%r, g=>s%g, m=>s%m)
 
-  if(m%noct_mg(ilevel)<1) return
+  !if(m%noct_mg(ilevel)<1) return
 
   ! Open cache for multipoles
   call open_cache(s,table=m%mg_dict,data_size=storage_size(m%grid(1))/32,& 
