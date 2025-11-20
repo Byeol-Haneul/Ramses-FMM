@@ -290,7 +290,7 @@ contains
     macc_loc=0d0
 
     ! Black hole position
-    xcen(1:ndim) = (p%xp(ipart,1:ndim)+m%skip(idim)) / dx_loc
+    xcen(1:ndim) = (p%xp(ipart,1:ndim)+m%skip(1:ndim)) / dx_loc
 
     !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     ! Initialise B-spline interpolation
@@ -728,7 +728,7 @@ contains
     xBH_fb_nei=0d0; ckey_fb_nei=0d0; weight_fb_nei=0d0
 
     ! Black hole position
-    xcen(1:ndim) = (p%xp(ipart,1:ndim)+m%skip(idim)) / dx_loc
+    xcen(1:ndim) = (p%xp(ipart,1:ndim)+m%skip(1:ndim)) / dx_loc
 
     !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     ! AGN Feedback: Set everything up

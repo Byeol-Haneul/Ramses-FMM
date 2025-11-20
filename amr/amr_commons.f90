@@ -7,7 +7,6 @@ module amr_commons
   use rt_commons
   use hash
   use domain_m
-  use rt_parameters,only: nrtgrp
   
   type multipole_t
     real(kind=8),dimension(1:ndim+1)::q
@@ -360,6 +359,7 @@ module amr_commons
      real(kind=8)::sink_radius=-1
      real(kind=8)::sink_delta_tout=0
      logical::sink_form=.false.
+     logical::sink_merge=.false.
      logical::sink_refine=.false.
      logical::sink_dump=.false.
      logical::static_sink=.false.

@@ -148,6 +148,10 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
      return
   end if
 
+  ! Mesh spacing in that level
+  dx_loc=r%boxlen/2**ilevel 
+  vol_loc=dx_loc**ndim
+
   ! Deal with particles that left the computational domain
   if(ilevel==r%levelmin.and.ANY(.not.r%periodic(1:ndim)))then
 
@@ -161,7 +165,7 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
 
         ! Call analytical acceleration routine
         xana(1,1:ndim)=x(1:ndim)
-        call gravana(r,g,xana,fana,1)
+        call gravana(r,g,xana,fana,dx_loc,1)
         ff(1:ndim)=fana(1,1:ndim)
 
         ! Perform kick, or drift, or both
@@ -190,10 +194,6 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
      ! End loop over particles
 
   endif
-
-  ! Mesh spacing in that level
-  dx_loc=r%boxlen/2**ilevel 
-  vol_loc=dx_loc**ndim
 
   ! Open read-only cache
   call open_cache(s,table=m%grid_dict, data_size=storage_size(m%grid(1))/32,&
@@ -297,12 +297,17 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
         do ind=1,twotondim
            ff(1:ndim)=ff(1:ndim)+gridp(ind)%p%f(icell(ind),1:ndim)*vol(ind)
         end do
-#ifdef OUTPUT_PARTICLE_POTENTIAL
-        p%phip(ipart)=0.0
-        do ind=1,twotondim
-           p%phip(ipart)=p%phip(ipart)+gridp(ind)%p%phi(icell(ind))*vol(ind)
-        end do
-#endif
+        ! Store potential
+        if(allocated(p%phip))then
+           p%phip(ipart)=0.0
+           do ind=1,twotondim
+              p%phip(ipart)=p%phip(ipart)+gridp(ind)%p%phi(icell(ind))*vol(ind)
+           end do
+        endif
+        ! Store old force
+        if(allocated(p%fp))then
+           p%fp(ipart,1:ndim)=ff(1:ndim)
+        endif
 #endif
      endif
 
@@ -342,10 +347,6 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
 !!$           if(norm2>0)then
 !!$              p%xp(ipart,1:ndim) = p%xp(ipart,1:ndim) + (ff(1:ndim)-p%fp(ipart,1:ndim))/sqrt(norm2)*delta
 !!$           endif
-
-           ! Store old force
-           p%fp(ipart,1:ndim)=ff(1:ndim)
-
         endif
 
      else if(action_part.EQ.action_kick_only)then

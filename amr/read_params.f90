@@ -428,6 +428,7 @@ subroutine m_read_params(pst)
   real(kind=8)::sink_fraction_threshold=2d0
   real(kind=8)::sink_delta_tout=0 ! Time interval in code units between each sink high frequency dump
   logical::sink_form=.false.
+  logical::sink_merge=.false.
   logical::sink_refine=.false.
   logical::sink_dump=.false.
   logical::static_sink=.false.
@@ -606,7 +607,7 @@ subroutine m_read_params(pst)
   namelist/sink_params/sink,nsinkmax,nsinktot,rho_type_sink,sink_descent,fudge_descent &
        & ,sink_relevance_threshold,sink_density_threshold,sink_saddle_threshold &
        & ,sink_mass_threshold,sink_purity_threshold,sink_fraction_threshold &
-       & ,sink_form,verbose_sink,sink_dump,drag_sink
+       & ,sink_form,sink_merge,verbose_sink,sink_dump,drag_sink
   ! Black Hole accretion parameters
   namelist/sink_accretion_params/accretion_type,acc_sink_boost,bondi_use_vrel,use_rho_inf &
        & ,eddington_cap,sink_b_spline_order,bondi_use_gas_mass,use_bondi_lambda &
@@ -1527,6 +1528,7 @@ subroutine m_read_params(pst)
   s%r%bondi_use_vrel = bondi_use_vrel
   s%r%eddington_cap = eddington_cap
   s%r%sink_form = sink_form
+  s%r%sink_merge = sink_merge
   s%r%sink_refine = sink_refine
   s%r%sink_dump = sink_dump
   s%r%sink_b_spline_order = sink_b_spline_order

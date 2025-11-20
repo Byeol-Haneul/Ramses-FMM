@@ -373,11 +373,11 @@ subroutine open_part_file(s,p,filename,nskip,ilun)
      ! Masses
      ivar=2*ndim+1
      nskip(ivar+1)=nskip(ivar)+4*npart
-#ifdef OUTPUT_PARTICLE_POTENTIAL
      ! Potentials
-     ivar=ivar+1
-     nskip(ivar+1)=nskip(ivar)+4*npart
-#endif
+     if(allocated(p%phip))then
+        ivar=ivar+1
+        nskip(ivar+1)=nskip(ivar)+4*npart
+     endif
      ! Metallicities
      if(allocated(p%zp))then
         ivar=ivar+1
@@ -504,11 +504,11 @@ subroutine close_part_file(s,p,filename,nskip,ilun)
      ! Masses
      ivar=2*ndim+1
      nskip(ivar)=nskip(ivar)+4*p%npart
-#ifdef OUTPUT_PARTICLE_POTENTIAL
      ! Potentials
-     ivar=ivar+1
-     nskip(ivar)=nskip(ivar)+4*p%npart
-#endif
+     if(allocated(p%phip))then
+        ivar=ivar+1
+        nskip(ivar)=nskip(ivar)+4*p%npart
+     endif
      ! Metallicities
      if(allocated(p%zp))then
         ivar=ivar+1
