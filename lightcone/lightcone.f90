@@ -72,7 +72,7 @@ contains
        if (pst%s%r%poisson) then
           call output_lightcone_grav(pst%s, grav_filename)
        end if
-endif
+    endif
 
   end subroutine r_output_lightcone
 

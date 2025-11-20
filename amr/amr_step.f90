@@ -125,10 +125,10 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
         endif
      endif
      ! Lightcone
-      if (r%lightcone) then
-         call m_timer(pst,'lightcone','start')
-         call m_output_lightcone(pst)
-      endif
+     if (r%lightcone) then
+        call m_timer(pst,'lightcone','start')
+        call m_output_lightcone(pst)
+     endif
   endif
 
   !--------------------------

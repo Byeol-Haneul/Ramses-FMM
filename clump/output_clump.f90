@@ -75,7 +75,7 @@ subroutine output_clump_properties(s,filename)
   integer::ilun,j,ind,igrid,hid
   character(LEN=flen)::fileloc
   integer(kind=8),dimension(s%r%levelmin:s%r%nlevelmax)::nskip
-  real(kind=8)::pi,grav,rho,rad,mass,r200b,rmax,concentration,purity
+  real(kind=8)::pi,grav,rad,mass,r200b,rmax,concentration,purity
   real(kind=8),dimension(1:nbin)::mbin
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
@@ -96,11 +96,9 @@ subroutine output_clump_properties(s,filename)
 
         ! Get cumulative mass profile
         mbin=c%mass_bin(j,1:nbin)
-        ! Get clump tidal density
-        rho=c%tidal_dens(j)
-        ! Compute clump tidal radius
-        rad=(c%clump_mass(j)/4d0/pi/rho*3d0)**(1d0/3d0)
-        ! Compute clump particle mass
+        ! Get clump tidal radius
+        rad=c%clump_rad(j)
+        ! Get clump particle mass
         mass=c%mass_bin(j,nbin)
         ! Comnpute r200, rmax and concentration
         call halo_mass_def(s,mbin,rad,r200b,rmax,concentration)

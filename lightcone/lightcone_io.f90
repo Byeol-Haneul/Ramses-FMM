@@ -16,9 +16,10 @@ contains
 #endif
 
 #ifndef WITHOUTMPI
-    call MPI_FILE_OPEN(MPI_COMM_WORLD, TRIM(filename), MPI_MODE_WRONLY + MPI_MODE_CREATE, MPI_INFO_NULL, ilun, ierr)
+    call MPI_FILE_OPEN(MPI_COMM_WORLD, TRIM(filename), IOR(MPI_MODE_WRONLY,MPI_MODE_CREATE), MPI_INFO_NULL, ilun, ierr)
+    call MPI_FILE_SET_SIZE(ilun, 0_MPI_OFFSET_KIND, ierr)
 #else
-    open(ilun, file=TRIM(filename), form='unformatted', access='stream')
+    open(ilun, file=TRIM(filename), form='unformatted', access='stream', status='replace')
 #endif
   end subroutine open_lightcone_file
 

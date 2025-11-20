@@ -8,7 +8,6 @@ contains
 recursive subroutine m_tree_formation(pst)
   use mdl_module
   use ramses_commons, only: pst_t
-  use mdl_module, only: mdl_wtime
   use clump_merger_module, only: r_deallocate_clump
   use mdl_parameters
   implicit none
@@ -361,7 +360,7 @@ subroutine tree_in_peak(s,reset_tree_pos,count_tree)
   type(msg_tree_minid)::dummy_tree_minid
 
   logical::bound
-  real(kind=8)::pi,grav,r2,v2,vcirc2,omega2,radius
+  real(kind=8)::pi,grav,rr,r2,v2,rad2,vel2,radius
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c,p=>s%tree)
 
@@ -391,10 +390,10 @@ subroutine tree_in_peak(s,reset_tree_pos,count_tree)
         ipart=p%sortp(i)
         global_peak_id=p%workp(i)
         call get_peak(s,global_peak_id,peak_nr,fetch_cache=.true.,flush_cache=.true.)
-        ! Compute peak central core properties
-        radius = 2.0d0 * r%boxlen / 2**c%peak_level(peak_nr)
-        vcirc2 = grav * c%particle_mass(peak_nr) / radius
-        omega2 = vcirc2 / radius**2
+        ! Compute peak's central core properties
+        radius = MAX(4.0d0*r%boxlen/2**c%peak_level(peak_nr), 0.1*c%clump_rad(peak_nr))
+        rad2 = radius**2
+        vel2 = grav*c%particle_mass(peak_nr)/radius
         ! Compute relative velocity
         v2 =     (p%vp(ipart,1) - c%peak_vel(peak_nr,1))**2 &
              & + (p%vp(ipart,2) - c%peak_vel(peak_nr,2))**2 &
@@ -403,8 +402,11 @@ subroutine tree_in_peak(s,reset_tree_pos,count_tree)
         r2 =     (p%xp(ipart,1) - c%peak_com(peak_nr,1))**2 &
              & + (p%xp(ipart,2) - c%peak_com(peak_nr,2))**2 &
              & + (p%xp(ipart,3) - c%peak_com(peak_nr,3))**2
+        rr = sqrt(r2)
         ! Compute boundness criteria
-        bound = ( v2+r2*omega2 <  15d0*vcirc2 )
+!        bound = ( r2 < rad2 ) .and. ( v2 < 9d0*vel2 
+        bound = ( rr < radius ) .and. ( v2 < 2*vel2*(1d0-rr/radius) )
+
         if(bound)then
            ! If not merged yet then mark as merger candidate
            if(p%idm(ipart)==0)p%idm(ipart)=-2
@@ -418,6 +420,10 @@ subroutine tree_in_peak(s,reset_tree_pos,count_tree)
            p%vp(ipart,3)=c%peak_vel(peak_nr,3)-c%peak_acc(peak_nr,3)*0.5d0*g%dtnew(c%peak_level(peak_nr))
            ! Update minimum tree id in each clump
            c%min_tree_id(peak_nr)=min(c%min_tree_id(peak_nr),p%idp(ipart))
+        endif
+        if(p%idp(ipart)==1)then
+           write(*,*)'PART 1=',p%xp(ipart,1:3),p%vp(ipart,1:3),bound,sqrt(r2),sqrt(v2),sqrt(rad2),sqrt(vel2)
+           write(*,*)'PEAK 1=',c%peak_pos(peak_nr,1:3),c%peak_vel(peak_nr,1:3),c%particle_mass(peak_nr),c%peak_level(peak_nr),c%clump_rad(peak_nr)
         endif
      end do
      call close_cache(s,m%grid_dict)
@@ -441,13 +447,13 @@ subroutine tree_in_peak(s,reset_tree_pos,count_tree)
      if(p%idm(ipart).EQ.0)then
         p%idt(ipart)=0
      endif
-     ! If tree particle is bound and just merged, update merging age, merge-to clump id and tree particle tracking id
+     ! If tree particle is bound and just merged, update merging age, merge-to clump id and clump tracking id
      if(p%idm(ipart).EQ.-2.AND.p%idp(ipart).NE.c%min_tree_id(peak_nr))then
         p%idm(ipart)=c%min_tree_id(peak_nr)
         p%tm(ipart)=g%texp
-        p%idt(ipart)=0
+        p%idt(ipart)=global_peak_id
      endif
-     ! If tree particle is bound and not merged, update its tracking id to clump id
+     ! If tree particle is bound and not merged, update its clump tracking id
      if(p%idm(ipart).EQ.-2.AND.p%idp(ipart).EQ.c%min_tree_id(peak_nr))then
         p%idm(ipart)=0
         p%idt(ipart)=global_peak_id
@@ -507,6 +513,7 @@ subroutine pack_fetch_tree(c,local_peak_id,msg_size,msg_array)
   type(msg_tree_clump)::msg
 
   msg%lev = c%peak_level(local_peak_id)
+  msg%rad = c%clump_rad(local_peak_id)
   msg%mass = c%particle_mass(local_peak_id)
   msg%pos(1:ndim) = c%peak_com(local_peak_id,1:ndim)
   msg%vel(1:ndim) = c%peak_vel(local_peak_id,1:ndim)
@@ -533,6 +540,7 @@ subroutine unpack_fetch_tree(c,local_peak_id,msg_size,msg_array)
   msg = transfer(msg_array,msg)
 
   c%peak_level(local_peak_id) = msg%lev
+  c%clump_rad(local_peak_id) = msg%rad
   c%particle_mass(local_peak_id) = msg%mass
   c%peak_com(local_peak_id,1:ndim) = msg%pos(1:ndim)
   c%peak_vel(local_peak_id,1:ndim) = msg%vel(1:ndim)
