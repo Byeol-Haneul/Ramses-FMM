@@ -151,7 +151,7 @@ contains
 
     real(kind=8),dimension(1:ndim)::xcen
     integer(kind=8),dimension(0:ndim)::hash_nbor
-    integer::ipart,icelln,j,myrank,ierr
+    integer::ipart,icelln,j
     type(oct),pointer::gridn
     
     real(kind=8),dimension(1:ndim,1:nBHnei)::xBHnei
@@ -159,12 +159,11 @@ contains
     real(kind=8),dimension(1:nBHnei)::vol
     real(kind=8)::weight
     integer::ind,igrid,new_id
+    type(msg_int4)::dummy_int4
 
 #ifdef HYDRO
 #if NDIM==3
     associate(r=>s%r,g=>s%g,m=>s%m)
-
-    call MPI_COMM_RANK(MPI_COMM_WORLD, myrank, ierr)
 
     ! Set flag1 to max possible index
     do igrid=m%head(ilevel),m%tail(ilevel)
@@ -174,12 +173,12 @@ contains
     end do
 
     call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-         hilbert=m%domain,pack_size=storage_size(m%grid(1)%flag1)/32,&
-         pack=pack_fetch_flag,unpack=unpack_fetch_flag,&
+         hilbert=m%domain,pack_size=storage_size(dummy_int4)/32,&
+         pack=pack_fetch_flag, unpack=unpack_fetch_flag,&
          init=init_flush_idsinkmin, flush=pack_flush_idsinkmin, combine=unpack_flush_idsinkmin)
 
     hash_nbor(0) = ilevel+1
-    do ipart = p%headp(ilevel), p%tailp(ilevel)
+    do ipart = p%headp(r%nlevelmax), p%tailp(r%nlevelmax)
 
        ! Skip zero-mass sinks
        if(p%mp(ipart) <= 0.0d0) cycle
