@@ -209,22 +209,6 @@ contains
     end do
     call close_cache(s,m%grid_dict)
 
-    do igrid=m%head(ilevel),m%tail(ilevel)
-       do ind=1,twotondim
-          if(m%grid(igrid)%flag1(ind)==1)then
-             write(*,*)"SINK 1"
-          endif
-          if(m%grid(igrid)%flag1(ind)==2)then
-             write(*,*)"SINK 2"
-          endif
-          if(m%grid(igrid)%flag1(ind)==0)then
-             write(*,*)"BUG"
-          endif
-       end do
-    end do
-
-    stop
-    
     end associate
 #endif
 #endif
