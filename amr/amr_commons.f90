@@ -359,6 +359,7 @@ module amr_commons
      real(kind=8)::sink_radius=-1
      real(kind=8)::sink_delta_tout=0
      logical::sink_form=.false.
+     logical::sink_merge=.false.
      logical::sink_refine=.false.
      logical::sink_dump=.false.
      logical::static_sink=.false.
