@@ -404,8 +404,8 @@ subroutine tree_in_peak(s,reset_tree_pos,count_tree)
              & + (p%xp(ipart,3) - c%peak_com(peak_nr,3))**2
         rr = sqrt(r2)
         ! Compute boundness criteria
-!        bound = ( r2 < rad2 ) .and. ( v2 < 9d0*vel2 
-        bound = ( rr < radius ) .and. ( v2 < 2*vel2*(1d0-rr/radius) )
+!        bound = ( rr < radius ) .and. ( v2 < 2d0*vel2 
+        bound = ( rr < radius ) .and. ( v2 < 2d0*vel2*(1d0-rr/radius) )
 
         if(bound)then
            ! If not merged yet then mark as merger candidate
@@ -420,10 +420,6 @@ subroutine tree_in_peak(s,reset_tree_pos,count_tree)
            p%vp(ipart,3)=c%peak_vel(peak_nr,3)-c%peak_acc(peak_nr,3)*0.5d0*g%dtnew(c%peak_level(peak_nr))
            ! Update minimum tree id in each clump
            c%min_tree_id(peak_nr)=min(c%min_tree_id(peak_nr),p%idp(ipart))
-        endif
-        if(p%idp(ipart)==1)then
-           write(*,*)'PART 1=',p%xp(ipart,1:3),p%vp(ipart,1:3),bound,sqrt(r2),sqrt(v2),sqrt(rad2),sqrt(vel2)
-           write(*,*)'PEAK 1=',c%peak_pos(peak_nr,1:3),c%peak_vel(peak_nr,1:3),c%particle_mass(peak_nr),c%peak_level(peak_nr),c%clump_rad(peak_nr)
         endif
      end do
      call close_cache(s,m%grid_dict)
