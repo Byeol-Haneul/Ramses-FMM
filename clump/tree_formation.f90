@@ -404,7 +404,7 @@ subroutine tree_in_peak(s,reset_tree_pos,count_tree)
              & + (p%xp(ipart,3) - c%peak_com(peak_nr,3))**2
         rr = sqrt(r2)
         ! Compute boundness criteria
-!        bound = ( rr < radius ) .and. ( v2 < 2d0*vel2 
+!        bound = ( rr < radius ) .and. ( v2 < 2d0*vel2 )
         bound = ( rr < radius ) .and. ( v2 < 2d0*vel2*(1d0-rr/radius) )
 
         if(bound)then
