@@ -391,7 +391,7 @@ subroutine tree_in_peak(s,reset_tree_pos,count_tree)
         global_peak_id=p%workp(i)
         call get_peak(s,global_peak_id,peak_nr,fetch_cache=.true.,flush_cache=.true.)
         ! Compute peak's central core properties
-        radius = MAX(4.0d0*r%boxlen/2**c%peak_level(peak_nr), 0.1*c%clump_rad(peak_nr))
+        radius = MAX(4.0d0*r%boxlen/2**c%peak_level(peak_nr),0.1*c%clump_rad(peak_nr))
         rad2 = radius**2
         vel2 = grav*c%particle_mass(peak_nr)/radius
         ! Compute relative velocity
@@ -404,7 +404,6 @@ subroutine tree_in_peak(s,reset_tree_pos,count_tree)
              & + (p%xp(ipart,3) - c%peak_com(peak_nr,3))**2
         rr = sqrt(r2)
         ! Compute boundness criteria
-!        bound = ( rr < radius ) .and. ( v2 < 2d0*vel2 )
         bound = ( rr < radius ) .and. ( v2 < 2d0*vel2*(1d0-rr/radius) )
 
         if(bound)then
