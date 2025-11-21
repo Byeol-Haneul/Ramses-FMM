@@ -995,6 +995,8 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
   integer::ipart,ind,idim
   real(kind=8)::dx_loc,dt_level
   real(kind=8),dimension(1:ndim)::ff,v_pred,xi,disp
+  real(kind=8),dimension(1:ndim)::momentum,momentum2
+  real(kind=8)::rho,rho2
   real(kind=8),dimension(1:twotondim)::kappa_nodes,kappa_nodes2
   real(kind=8)::kappa_mid,noise_amp
   type(oct),pointer :: gridp
@@ -1005,7 +1007,7 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
   real(kind=8)::RngStream_RandUni
   integer(kind=8)::stream_skip
   external :: RngStream_SetPackageSeed, RngStream_AdvanceState, gaussdev
-  real(kind=8), parameter :: tracer_schmidt_number = 1.0d-3
+  real(kind=8), parameter :: tracer_schmidt_number = 1.0d-2
   type(RngStream), save :: tracer_rng
   logical, save :: tracer_rng_ready = .false.
 
@@ -1054,6 +1056,8 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
      ckey = cic_index(il,ir)
      vol = cic_weight(dl,dr)
      ff(1:ndim)=0.0
+     momentum(1:ndim)=0.0d0
+     rho=0.0d0
      kappa_nodes=0.0d0
      ok_level=.true.
      hash_nbor(0)=ilevel+1
@@ -1062,7 +1066,8 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
         call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
 #ifdef HYDRO
         if(associated(gridp))then
-           ff(1:ndim)=ff(1:ndim)+gridp%uold(icell,2:ndim+1)/max(gridp%uold(icell,1), r%smallr)*vol(ind)
+           momentum(1:ndim)=momentum(1:ndim)+gridp%uold(icell,2:ndim+1)*vol(ind)
+           rho=rho+gridp%uold(icell,1)*vol(ind)
            if(use_sgs)then
               kappa_nodes(ind)=tracer_cell_kappa(gridp%uold(icell,1),gridp%uold(icell,r%iturb),dx_loc,r%smallr)
            end if
@@ -1072,7 +1077,9 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
         end if
 #endif
      end do
-     if(.not.ok_level)then
+     if(ok_level .and. rho>0.0d0)then
+        ff(1:ndim)=momentum(1:ndim)/max(rho,r%smallr)
+     else if(.not.ok_level)then
         if(use_sgs)kappa_nodes=0.0d0
         do idim=1,ndim
            x(idim)=x(idim)/2.0d0
@@ -1093,17 +1100,21 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
         ckey = cic_index(il,ir)
         vol = cic_weight(dl,dr)
         ff(1:ndim)=0.0
+        momentum(1:ndim)=0.0d0
+        rho=0.0d0
         hash_nbor(0)=ilevel
         do ind=1,twotondim
            hash_nbor(1:ndim)=ckey(1:ndim,ind)
            call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
 #ifdef HYDRO
            if(associated(gridp))then
-              ff(1:ndim)=ff(1:ndim)+gridp%uold(icell,2:ndim+1)/max(gridp%uold(icell,1), r%smallr)*vol(ind)
+              momentum(1:ndim)=momentum(1:ndim)+gridp%uold(icell,2:ndim+1)*vol(ind)
+              rho=rho+gridp%uold(icell,1)*vol(ind)
               if(use_sgs)kappa_nodes(ind)=tracer_cell_kappa(gridp%uold(icell,1),gridp%uold(icell,r%iturb),dx_loc,r%smallr)
            end if
 #endif
         end do
+        ff(1:ndim)=momentum(1:ndim)/max(rho,r%smallr)
      end if
 
      if(action_part==action_kick_only)then
@@ -1146,6 +1157,8 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
         ckey2 = cic_index(il2,ir2)
         vol2 = cic_weight(dl2,dr2)
         ff(1:ndim)=0.0
+        momentum2(1:ndim)=0.0d0
+        rho2=0.0d0
         kappa_nodes2=0.0d0
         ok_level=.true.
         hash_nbor(0)=ilevel+1
@@ -1154,7 +1167,8 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
            call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
 #ifdef HYDRO
            if(associated(gridp))then
-              ff(1:ndim)=ff(1:ndim)+gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)*vol2(ind)
+              momentum2(1:ndim)=momentum2(1:ndim)+gridp%uold(icell2,2:ndim+1)*vol2(ind)
+              rho2=rho2+gridp%uold(icell2,1)*vol2(ind)
               if(use_sgs)kappa_nodes2(ind)=tracer_cell_kappa(gridp%uold(icell2,1),gridp%uold(icell2,r%iturb),dx_loc,r%smallr)
            else
               ok_level=.false.
@@ -1162,7 +1176,9 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
            end if
 #endif
         end do
-        if(.not.ok_level)then
+        if(ok_level .and. rho2>0.0d0)then
+           ff(1:ndim)=momentum2(1:ndim)/max(rho2,r%smallr)
+        else if(.not.ok_level)then
            if(use_sgs)kappa_nodes2=0.0d0
            do idim=1,ndim
               x_mid(idim)=x_mid(idim)/2.0d0
@@ -1183,17 +1199,21 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
            ckey2 = cic_index(il2,ir2)
            vol2 = cic_weight(dl2,dr2)
            ff(1:ndim)=0.0
+           momentum2(1:ndim)=0.0d0
+           rho2=0.0d0
            hash_nbor(0)=ilevel
            do ind=1,twotondim
               hash_nbor(1:ndim)=ckey2(1:ndim,ind)
               call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
 #ifdef HYDRO
               if(associated(gridp))then
-                 ff(1:ndim)=ff(1:ndim)+gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)*vol2(ind)
+                 momentum2(1:ndim)=momentum2(1:ndim)+gridp%uold(icell2,2:ndim+1)*vol2(ind)
+                 rho2=rho2+gridp%uold(icell2,1)*vol2(ind)
                  if(use_sgs)kappa_nodes2(ind)=tracer_cell_kappa(gridp%uold(icell2,1),gridp%uold(icell2,r%iturb),dx_loc,r%smallr)
               end if
 #endif
            end do
+           ff(1:ndim)=momentum2(1:ndim)/max(rho2,r%smallr)
         end if
         if(use_sgs)then
            kappa_mid = max(dot_product(kappa_nodes2,vol2),0.0d0)
