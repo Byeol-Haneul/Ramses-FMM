@@ -31,7 +31,7 @@ ics_ramses/
 analyze/fig**/
 analyze/.ipynb_checkpoints/**
 logs/
-benchmark**/
+**benchmark**/
 ramses_*
 *.err
 *.out

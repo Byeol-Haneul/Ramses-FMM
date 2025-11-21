@@ -57,7 +57,7 @@ subroutine m_fmm_multipoles(pst,ilevel)
 
   !do i=r%levelmin-r%level_fmm_to_amr,r%bound_levelmin,-1
   !  write(*,'(" [M2M] DUMPING FOR MULT ",I2)')i
-  !  call dump_multipole(r, g, m, i)
+  !  call r_dump_multipole(pst, i,1)
   !end do
   end associate
 
@@ -276,7 +276,7 @@ subroutine fmm_multipole_fmm2fmm(s,ilevel)
   do ioct=m%head_mg(ilevel+1),m%tail_mg(ilevel+1)
      hash_key(1:ndim)=m%grid(ioct)%ckey(1:ndim)
      ! Get parent cell using a write-only cache
-     call get_parent_cell(s,hash_key,m%mg_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.,lock=.true.)
+     call get_parent_cell(s,hash_key,m%mg_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
      multipole = 0.0D0
 #ifdef FMM
      do ind=1,twotondim
@@ -568,6 +568,34 @@ subroutine shift_multipole(multipole_in, a, multipole_out)
   multipole_out(10) = qp_out(3,3)  ! zz
 #endif
 end subroutine shift_multipole
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+recursive subroutine r_dump_multipole(pst,ilevel,input_size)
+  use mdl_module
+  use ramses_commons, only: pst_t
+  use mdl_parameters
+  implicit none
+  type(pst_t)::pst
+  integer,VALUE::input_size
+  integer::ilevel
+
+  integer::rID
+
+  if(pst%nLower>0)then
+     rID = mdl_send_request(pst%s%mdl,MDL_DUMP_MULTIPOLE,pst%iUpper+1,input_size,0,ilevel)
+     call r_dump_multipole(pst%pLower,ilevel,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
+  else
+     call dump_multipole(pst%s%r,pst%s%g,pst%s%m,ilevel)
+  endif
+
+end subroutine r_dump_multipole
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
 subroutine dump_multipole(r, g, m, ilevel)
   use amr_parameters, only: ndim, twotondim
   use amr_commons, only: nbor, oct, run_t, global_t, mesh_t
@@ -586,7 +614,7 @@ subroutine dump_multipole(r, g, m, ilevel)
   ! open debug file
   unit_debug = 99
 #ifdef FMM
-    write(filename, '(A,I0,A)') "out/mult_fmm_", ilevel, ".out"
+    write(filename, '(A,I0,A,I0,A)') "out/mult_fmm_", ilevel, "mpi_", g%myid,".out"
 #else
     write(filename, '(A,I0,A)') "out/mult_mg_", ilevel, ".out"
 #endif

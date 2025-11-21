@@ -110,11 +110,11 @@ subroutine init_fmm(s,ilevel)
           m%grid(igrid)%lev=ilev
           m%grid(igrid)%ckey(1:ndim)=int(ix(1:ndim),kind=4)
           m%grid(igrid)%hkey(1:nhilbert)=hk(1:nhilbert)
-          m%grid(igrid)%refined(1:twotondim)=.false.
+          m%grid(igrid)%refined(1:twotondim)=.true.
           ! Insert new grid in hash table
           hash_key(0)=ilev
           hash_key(1:ndim)=ix(1:ndim)
-          call hash_setp(m%mg_dict,hash_key,m%grid(igrid)) !Jun-Young grid_fmm
+          call hash_setp(m%mg_dict,hash_key,m%grid(igrid))
       endif
 #if NDIM>1
       endif

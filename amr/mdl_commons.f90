@@ -39,6 +39,7 @@ module mdl_parameters
      enumerator::MDL_FMM_AMR_DIRECT
      enumerator::MDL_DUMP_PHI
      enumerator::MDL_RESET_MULTIPOLES
+     enumerator::MDL_DUMP_MULTIPOLE
      enumerator::MDL_MULTIPOLE_FMM2FMM
      enumerator::MDL_MULTIPOLE_SHIFT_DOWNWARD
      enumerator::MDL_MULTIPOLE_AMR2FMM
