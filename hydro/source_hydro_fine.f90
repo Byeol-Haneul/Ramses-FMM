@@ -69,7 +69,7 @@ subroutine source_hydro_fine(s,ilevel)
   type(nbor),dimension(1:twondim)::gridn
   type(oct),pointer::gridp
   type(msg_realdp)::dummy_realdp
-  real(kind=8)::dx,phi_diss,div,divu
+  real(kind=8)::dx,phi_diss,div,divu,sigma_arg
   real(kind=8)::d,u,v,w,bx,by,bz,d_old,sigma
   real(kind=8)::e_kin,e_mag,e_cons,e_prim,e_turb,e_trunc,T2_cons,T2_fix
   real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
@@ -220,6 +220,10 @@ subroutine source_hydro_fine(s,ilevel)
               enddo
            enddo
            phi_diss=phi_diss-2.0/3.0*divu**2
+           if(.not.is_finite_val(phi_diss))then
+              write(*,*) '[sgs_turb] phi_diss NaN at level',ilevel,'igrid',igrid,'cell',ind
+              stop
+           end if
            
            ! Add -pdV term to subgrid turbulent energy
            m%grid(igrid)%unew(ind,r%iturb)=m%grid(igrid)%unew(ind,r%iturb) &
@@ -232,10 +236,21 @@ subroutine source_hydro_fine(s,ilevel)
               ! Implicit solution wrt to decay term only
               d_old=max(dble(m%grid(igrid)%uold(ind,1)),r%smallr)
               e_turb=m%grid(igrid)%uold(ind,r%iturb)
-              sigma=sqrt(max(2.0*e_turb/d_old,dble(r%smallc)**2))
+              sigma_arg = max(2.0d0*e_turb/d_old,dble(r%smallc)**2)
+              if(.not.is_finite_val(sigma_arg))then
+                 write(*,*) '[sgs_turb] sigma^2 NaN: eturb/d=',e_turb,d_old,' level',ilevel,'igrid',igrid,'cell',ind
+                 stop
+              end if
+              sigma=sqrt(sigma_arg)
               m%grid(igrid)%unew(ind,r%iturb)=(m%grid(igrid)%unew(ind,r%iturb) &
                    &  +d_old*dx*sigma*phi_diss*g%dtnew(ilevel)) &
                    & /(1.0+sigma/dx*g%dtnew(ilevel))
+              if(.not.is_finite_val(m%grid(igrid)%unew(ind,r%iturb)))then
+                 write(*,*) '[sgs_turb] unew(iturb) NaN; numerator=', &
+                      m%grid(igrid)%unew(ind,r%iturb),' denom=',(1.0+sigma/dx*g%dtnew(ilevel)), &
+                      ' level',ilevel,'igrid',igrid,'cell',ind
+                 stop
+              end if
            end if
 
         endif
@@ -256,4 +271,10 @@ end subroutine source_hydro_fine
 !################################################################
 !################################################################
 !################################################################
+
+logical function is_finite_val(x)
+  real(kind=8), intent(in) :: x
+  is_finite_val = (x == x) .and. (abs(x) <= huge(x))
+end function is_finite_val
+
 end module source_hydro_fine_module

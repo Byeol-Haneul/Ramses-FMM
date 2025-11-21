@@ -976,6 +976,7 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
   use pm_commons, only: part_t
   use oct_commons, only: oct
   use ramses_commons, only: ramses_t
+  use rng
   use nbors_utils
   use cache_commons
   use cache
@@ -992,16 +993,34 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
   integer::icell,icell2
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer::ipart,ind,idim
-  real(kind=8)::dx_loc,vol_loc
-  real(kind=8),dimension(1:ndim)::ff,v_pred
+  real(kind=8)::dx_loc,dt_level
+  real(kind=8),dimension(1:ndim)::ff,v_pred,xi,disp
+  real(kind=8),dimension(1:twotondim)::kappa_nodes,kappa_nodes2
+  real(kind=8)::kappa_mid,noise_amp
   type(oct),pointer :: gridp
-  logical :: ok_level
+  logical :: ok_level,use_sgs
   type(msg_three_realdp)::dummy_three_realdp
   type(msg_nvar_realdp)::dummy_nvar_realdp
+  type(RngStream)::RngStream_CreateStream
+  real(kind=8)::RngStream_RandUni
+  integer(kind=8)::stream_skip
+  external :: RngStream_SetPackageSeed, RngStream_AdvanceState, gaussdev
+  real(kind=8), parameter :: tracer_schmidt_number = 1.0d-3
+  type(RngStream), save :: tracer_rng
+  logical, save :: tracer_rng_ready = .false.
+
   associate(r=>s%r,g=>s%g,m=>s%m)
   if(p%static)return
   dx_loc=r%boxlen/2**ilevel
-  vol_loc=dx_loc**ndim
+  dt_level=g%dtnew(ilevel)
+  use_sgs = r%sgs_turb .and. (r%iturb>0)
+  if(use_sgs .and. .not. tracer_rng_ready)then
+     call RngStream_SetPackageSeed(r%seed)
+     tracer_rng = RngStream_CreateStream('tracer_sgs')
+     stream_skip = int(2*g%myid,kind=8)
+     call RngStream_AdvanceState(tracer_rng,0_8,stream_skip)
+     tracer_rng_ready = .true.
+  end if
   if (p%type/=TRAC_TYPE) return
   ! Tracer hydro cache (uold only)
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
@@ -1035,6 +1054,7 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
      ckey = cic_index(il,ir)
      vol = cic_weight(dl,dr)
      ff(1:ndim)=0.0
+     kappa_nodes=0.0d0
      ok_level=.true.
      hash_nbor(0)=ilevel+1
      do ind=1,twotondim
@@ -1043,12 +1063,17 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
 #ifdef HYDRO
         if(associated(gridp))then
            ff(1:ndim)=ff(1:ndim)+gridp%uold(icell,2:ndim+1)/max(gridp%uold(icell,1), r%smallr)*vol(ind)
+           if(use_sgs)then
+              kappa_nodes(ind)=tracer_cell_kappa(gridp%uold(icell,1),gridp%uold(icell,r%iturb),dx_loc,r%smallr)
+           end if
         else
            ok_level=.false.
+           if(use_sgs)kappa_nodes(ind)=0.0d0
         end if
 #endif
      end do
      if(.not.ok_level)then
+        if(use_sgs)kappa_nodes=0.0d0
         do idim=1,ndim
            x(idim)=x(idim)/2.0d0
         end do
@@ -1075,6 +1100,7 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
 #ifdef HYDRO
            if(associated(gridp))then
               ff(1:ndim)=ff(1:ndim)+gridp%uold(icell,2:ndim+1)/max(gridp%uold(icell,1), r%smallr)*vol(ind)
+              if(use_sgs)kappa_nodes(ind)=tracer_cell_kappa(gridp%uold(icell,1),gridp%uold(icell,r%iturb),dx_loc,r%smallr)
            end if
 #endif
         end do
@@ -1120,6 +1146,7 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
         ckey2 = cic_index(il2,ir2)
         vol2 = cic_weight(dl2,dr2)
         ff(1:ndim)=0.0
+        kappa_nodes2=0.0d0
         ok_level=.true.
         hash_nbor(0)=ilevel+1
         do ind=1,twotondim
@@ -1128,12 +1155,15 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
 #ifdef HYDRO
            if(associated(gridp))then
               ff(1:ndim)=ff(1:ndim)+gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)*vol2(ind)
+              if(use_sgs)kappa_nodes2(ind)=tracer_cell_kappa(gridp%uold(icell2,1),gridp%uold(icell2,r%iturb),dx_loc,r%smallr)
            else
               ok_level=.false.
+              if(use_sgs)kappa_nodes2(ind)=0.0d0
            end if
 #endif
         end do
         if(.not.ok_level)then
+           if(use_sgs)kappa_nodes2=0.0d0
            do idim=1,ndim
               x_mid(idim)=x_mid(idim)/2.0d0
            end do
@@ -1160,13 +1190,24 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
 #ifdef HYDRO
               if(associated(gridp))then
                  ff(1:ndim)=ff(1:ndim)+gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)*vol2(ind)
+                 if(use_sgs)kappa_nodes2(ind)=tracer_cell_kappa(gridp%uold(icell2,1),gridp%uold(icell2,r%iturb),dx_loc,r%smallr)
               end if
 #endif
            end do
         end if
-        ! Set time-centered velocity and drift
+        if(use_sgs)then
+           kappa_mid = max(dot_product(kappa_nodes2,vol2),0.0d0)
+        else
+           kappa_mid = 0.0d0
+        end if
         p%vp(ipart,1:ndim)=ff(1:ndim)
-        p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
+        disp(1:ndim)=p%vp(ipart,1:ndim)*dt_level
+        if(use_sgs .and. kappa_mid>0.0d0)then
+           call sample_tracer_gaussian(xi)
+           noise_amp = sqrt(2.0d0*kappa_mid*dt_level)
+           disp(1:ndim)=disp(1:ndim)+noise_amp*xi(1:ndim)
+        end if
+        p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+disp(1:ndim)
      endif
   end do
   call close_cache(s,m%grid_dict)
@@ -1182,6 +1223,35 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
      end do
    end if
   end associate
+
+contains
+
+  real(kind=8) function tracer_cell_kappa(dens_in,eturb_in,dx_in,smallr_in) result(kappa_val)
+    real(kind=8),intent(in)::dens_in,eturb_in,dx_in,smallr_in
+    real(kind=8)::rho_eff,sigma_sq
+
+    rho_eff = max(dens_in,smallr_in)
+    sigma_sq = max(2.0d0*max(eturb_in,0.0d0)/rho_eff,0.0d0)
+    if(sigma_sq>0.0d0)then
+       kappa_val = tracer_schmidt_number*dx_in*sqrt(sigma_sq)
+    else
+       kappa_val = 0.0d0
+    end if
+  end function tracer_cell_kappa
+
+  subroutine sample_tracer_gaussian(vec)
+    real(kind=8),intent(out)::vec(1:ndim)
+    integer :: jd
+    real(kind=8)::u_rand,tmp
+
+    vec=0.0d0
+    do jd=1,ndim
+       u_rand = RngStream_RandUni(tracer_rng)
+       call gaussdev(u_rand,tmp)
+       vec(jd)=tmp
+    end do
+  end subroutine sample_tracer_gaussian
+
 end subroutine cic_trace_gas_part
 
 subroutine tsc_trace_gas_part(s,p,ilevel,action_part)
@@ -1704,9 +1774,9 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
   real(kind=8)::xl,xc,xr
   real(kind=8)::dx_loc
   real(kind=8),dimension(1:ndim)::ff,uu,v_pred,wdrift
-#ifdef MHD
+
   real(kind=8),dimension(1:3)::bb
-#endif
+
   real(kind=8)::rho_gas,c_sound,eint,coeff
   real(kind=8)::nu_stop,dens,etot,ekin,erad,emag,cs2,pi
   integer :: ii
@@ -1902,10 +1972,8 @@ subroutine pcs_kick_drift_dust(s,p,ilevel,action_part)
   real(kind=8)::xll,xl,xr,xrr
   real(kind=8)::dx_loc
   real(kind=8),dimension(1:ndim)::ff,v_pred,uu,what,wdrift
-#ifdef MHD
   real(kind=8),dimension(1:3)::bb
   real(kind=8)::emag
-#endif
   real(kind=8)::rho_gas,c_sound,eint,coeff,wdrift2
   real(kind=8)::nu_stop,dens,etot,ekin,erad,cs2,pi
   integer::irad
@@ -2008,10 +2076,8 @@ subroutine pcs_kick_drift_dust(s,p,ilevel,action_part)
        uu(1:ndim)=0.0
        rho_gas=0.0d0
        eint=0.0d0
-#ifdef MHD
        bb(1:3)=0.0d0
        emag=0.0d0
-#endif
        do ind=1,fourtondim
           hash_nbor(1:ndim)=ckey2(1:ndim,ind)
           call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
