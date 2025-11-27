@@ -68,6 +68,7 @@ subroutine adaptive_loop(pst)
      endif
   else
      call m_init_refine_restart(pst) ! Build AMR grid from restart file
+     g%first_coarse_restart = .true. ! Indicate the initial course step post restart
   endif
 
   ! Initialization of ionization fractions

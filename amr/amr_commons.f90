@@ -360,6 +360,7 @@ module amr_commons
      real(kind=8)::sink_radius=-1
      real(kind=8)::sink_delta_tout=0
      logical::sink_form=.false.
+     logical::sink_merge=.false.
      logical::sink_refine=.false.
      logical::sink_dump=.false.
      logical::static_sink=.false.
@@ -545,6 +546,7 @@ module amr_commons
      integer::nstep_coarse=0                       ! Coarse step
      integer::nstep_coarse_old=0                   ! Old coarse step
      integer::nflag,ncreate,nkill                  ! Refinements
+     logical::first_coarse_restart =.false.        ! Flag that indicates first course time step after restart
 
      real(kind=8)::ekin_tot=0.0D0                      ! Total kinetic energy
      real(kind=8)::eint_tot=0.0D0                      ! Total internal energy
