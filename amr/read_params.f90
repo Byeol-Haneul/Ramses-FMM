@@ -290,7 +290,7 @@ subroutine m_read_params(pst)
   ! Boundary conditions parameters
   integer::nbound=0
   logical::no_inflow=.false.
-  logical,dimension(1:NDIM)::periodic=.true.
+  logical,dimension(1:3)::periodic=.true.
   integer::bound_levelmin=1 ! AMR level for boundary geometry
   real(kind=8),dimension(1:3)::box_size=0.0D0 ! Box length in active domain along each direction
   integer::box_xmin=0 ! Min. Cartesian key for the box at levelmin in x direction

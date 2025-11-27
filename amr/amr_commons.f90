@@ -224,7 +224,7 @@ module amr_commons
      real(kind=8)::ic_scale_m=1.0d0
 
      ! Boundary conditions parameters
-     logical,dimension(1:NDIM)::periodic=.true.
+     logical,dimension(1:3)::periodic=.true.
      integer::nbound=0
      logical::no_inflow=.false.
      integer::bound_levelmin=1   ! AMR level to define boundary geometry

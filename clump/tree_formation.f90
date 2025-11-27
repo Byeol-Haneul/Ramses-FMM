@@ -360,7 +360,7 @@ subroutine tree_in_peak(s,reset_tree_pos,count_tree)
   type(msg_tree_minid)::dummy_tree_minid
 
   logical::bound
-  real(kind=8)::pi,grav,rr,r2,v2,rad2,vel2,radius
+  real(kind=8)::pi,grav,r2,v2,rad2,vel2,radius
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c,p=>s%tree)
 
@@ -391,9 +391,9 @@ subroutine tree_in_peak(s,reset_tree_pos,count_tree)
         global_peak_id=p%workp(i)
         call get_peak(s,global_peak_id,peak_nr,fetch_cache=.true.,flush_cache=.true.)
         ! Compute peak's central core properties
-        radius = MAX(4.0d0*r%boxlen/2**c%peak_level(peak_nr),0.1*c%clump_rad(peak_nr))
-        rad2 = radius**2
+        radius = 2d0*r%boxlen/2**c%peak_level(peak_nr)
         vel2 = grav*c%particle_mass(peak_nr)/radius
+        rad2 = radius**2
         ! Compute relative velocity
         v2 =     (p%vp(ipart,1) - c%peak_vel(peak_nr,1))**2 &
              & + (p%vp(ipart,2) - c%peak_vel(peak_nr,2))**2 &
@@ -402,9 +402,9 @@ subroutine tree_in_peak(s,reset_tree_pos,count_tree)
         r2 =     (p%xp(ipart,1) - c%peak_com(peak_nr,1))**2 &
              & + (p%xp(ipart,2) - c%peak_com(peak_nr,2))**2 &
              & + (p%xp(ipart,3) - c%peak_com(peak_nr,3))**2
-        rr = sqrt(r2)
         ! Compute boundness criteria
-        bound = ( rr < radius ) .and. ( v2 < 2d0*vel2*(1d0-rr/radius) )
+!        bound = ( v2/vel2 + r2/rad2 < 15d0 )
+        bound = ( v2/vel2 + 2d0*sqrt(r2/rad2) < 20d0 )
 
         if(bound)then
            ! If not merged yet then mark as merger candidate
