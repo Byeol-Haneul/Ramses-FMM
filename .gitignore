@@ -30,6 +30,7 @@ nfw/
 ics_ramses/
 analyze/fig**/
 analyze/.ipynb_checkpoints/**
+analyze/txt/**
 logs/
 **benchmark**/
 ramses_*
