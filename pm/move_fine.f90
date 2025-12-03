@@ -767,7 +767,7 @@ end subroutine pcs_kick_drift_part
 !#########################################################################
 subroutine pack_fetch_kick(grid,msg_size,msg_array)
   use amr_parameters, only: twotondim
-  use amr_commons, only: oct
+  use oct_commons, only: oct
   use cache_commons, only: msg_three_realdp
   type(oct)::grid
   integer::msg_size
@@ -793,7 +793,7 @@ end subroutine pack_fetch_kick
 !#########################################################################
 subroutine unpack_fetch_kick(grid,msg_size,msg_array,hash_key)
   use amr_parameters, only: ndim,twotondim
-  use amr_commons, only: oct
+  use oct_commons, only: oct
   use cache_commons, only: msg_three_realdp
   type(oct)::grid
   integer::msg_size
@@ -825,7 +825,7 @@ end subroutine unpack_fetch_kick
 subroutine pack_fetch_kick_trac(grid,msg_size,msg_array)
   use amr_parameters, only: twotondim, ndim
   use hydro_parameters, only: nvar
-  use amr_commons, only: oct
+  use oct_commons, only: oct
   use cache_commons, only: msg_nvar_realdp
   type(oct)::grid
   integer::msg_size
@@ -850,7 +850,7 @@ end subroutine pack_fetch_kick_trac
 subroutine unpack_fetch_kick_trac(grid,msg_size,msg_array,hash_key)
   use amr_parameters, only: ndim,twotondim
   use hydro_parameters, only: nvar
-  use amr_commons, only: oct
+  use oct_commons, only: oct
   use cache_commons, only: msg_nvar_realdp
   type(oct)::grid
   integer::msg_size
@@ -877,7 +877,7 @@ end subroutine unpack_fetch_kick_trac
 subroutine pack_fetch_kick_dust(grid,msg_size,msg_array)
   use amr_parameters, only: twotondim
   use hydro_parameters, only: nvar
-  use amr_commons, only: oct
+  use oct_commons, only: oct
   use cache_commons, only: msg_large_realdp
   type(oct)::grid
   integer::msg_size
@@ -922,7 +922,7 @@ end subroutine pack_fetch_kick_dust
 subroutine unpack_fetch_kick_dust(grid,msg_size,msg_array,hash_key)
   use amr_parameters, only: ndim,twotondim
   use hydro_parameters, only: nvar
-  use amr_commons, only: oct
+  use oct_commons, only: oct
   use cache_commons, only: msg_large_realdp
   type(oct)::grid
   integer::msg_size
@@ -985,23 +985,9 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
   type(part_t)::p
   integer::ilevel
   integer::action_part
-  real(kind=8),dimension(1:ndim)::x,x_mid,dr,dl,dr2,dl2
-  integer,dimension(1:ndim)::ir,il
-  integer,dimension(1:ndim)::ir2,il2
-  real(kind=8),dimension(1:twotondim)::vol,vol2
-  integer,dimension(1:ndim,1:twotondim)::ckey,ckey2
-  integer::icell,icell2
-  integer(kind=8),dimension(0:ndim)::hash_nbor
-  integer::ipart,ind,idim
-  real(kind=8)::dx_loc,dt_level
-  real(kind=8),dimension(1:ndim)::ff,v_pred,xi,disp
-  real(kind=8),dimension(1:ndim)::momentum,momentum2
-  real(kind=8)::rho,rho2
-  real(kind=8),dimension(1:twotondim)::kappa_nodes,kappa_nodes2
-  real(kind=8)::kappa_mid,noise_amp
-  type(oct),pointer :: gridp
-  logical :: ok_level,use_sgs
-  type(msg_three_realdp)::dummy_three_realdp
+  real(kind=8),dimension(1:ndim)::x,x_mid,v_pred,vel,vel_mid,disp,xi
+  real(kind=8)::dx_loc,dt_level,kappa_mid,noise_amp
+  logical :: use_sgs
   type(msg_nvar_realdp)::dummy_nvar_realdp
   type(RngStream)::RngStream_CreateStream
   real(kind=8)::RngStream_RandUni
@@ -1009,9 +995,12 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
   external :: RngStream_SetPackageSeed, RngStream_AdvanceState, gaussdev
   type(RngStream), save :: tracer_rng
   logical, save :: tracer_rng_ready = .false.
+  integer :: ipart,idim
 
   associate(r=>s%r,g=>s%g,m=>s%m)
   if(p%static)return
+  if (p%type/=TRAC_TYPE) return
+
   dx_loc=r%boxlen/2**ilevel
   dt_level=g%dtnew(ilevel)
   use_sgs = r%sgs_turb .and. (r%iturb>0)
@@ -1022,228 +1011,149 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
      call RngStream_AdvanceState(tracer_rng,0_8,stream_skip)
      tracer_rng_ready = .true.
   end if
-  if (p%type/=TRAC_TYPE) return
-  ! Tracer hydro cache (uold only)
+
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
                      hilbert=m%domain, pack_size=storage_size(dummy_nvar_realdp)/32,&
                      pack=pack_fetch_kick_trac,unpack=unpack_fetch_kick_trac)
+
   do ipart=p%headp(ilevel),p%tailp(ilevel)
-     ! Position in cell units at current level
+
      do idim=1,ndim
         x(idim)=(p%xp(ipart,idim)+m%skip(idim))/dx_loc
      end do
-     do idim=1,ndim
-        if(r%periodic(idim))then
-           if(x(idim)< dble(m%box_ckey_min(idim,ilevel+1)))x(idim)=x(idim)+dble(m%box_ckey_max(idim,ilevel+1)-m%box_ckey_min(idim,ilevel+1))
-           if(x(idim)>=dble(m%box_ckey_max(idim,ilevel+1)))x(idim)=x(idim)-dble(m%box_ckey_max(idim,ilevel+1)-m%box_ckey_min(idim,ilevel+1))
-        endif
-     end do
-     ! Gather velocity v = mom/rho at x^n using CIC
-     do idim=1,ndim
-        dr(idim)=x(idim)+0.5D0
-        ir(idim)=int(dr(idim))
-        dr(idim)=dr(idim)-ir(idim)
-        dl(idim)=1.0D0-dr(idim)
-        il(idim)=ir(idim)-1
-     end do
-     do idim=1,ndim
-        if(r%periodic(idim))then
-           if(il(idim)< m%box_ckey_min(idim,ilevel+1))il(idim)=m%box_ckey_max(idim,ilevel+1)-1
-           if(ir(idim)>=m%box_ckey_max(idim,ilevel+1))ir(idim)=m%box_ckey_min(idim,ilevel+1)
-        endif
-     enddo
-     ckey = cic_index(il,ir)
-     vol = cic_weight(dl,dr)
-     ff(1:ndim)=0.0
-     momentum(1:ndim)=0.0d0
-     rho=0.0d0
-     kappa_nodes=0.0d0
-     ok_level=.true.
-     hash_nbor(0)=ilevel+1
-     do ind=1,twotondim
-        hash_nbor(1:ndim)=ckey(1:ndim,ind)
-        call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
-#ifdef HYDRO
-        if(associated(gridp))then
-           momentum(1:ndim)=momentum(1:ndim)+gridp%uold(icell,2:ndim+1)*vol(ind)
-           rho=rho+gridp%uold(icell,1)*vol(ind)
-           if(use_sgs)then
-              kappa_nodes(ind)=tracer_cell_kappa(gridp%uold(icell,1),gridp%uold(icell,r%iturb),dx_loc,r%smallr,r%tracer_schmidt_number)
-           end if
-        else
-           ok_level=.false.
-           if(use_sgs)kappa_nodes(ind)=0.0d0
-        end if
-#endif
-     end do
-     if(ok_level .and. rho>0.0d0)then
-        ff(1:ndim)=momentum(1:ndim)/max(rho,r%smallr)
-     else if(.not.ok_level)then
-        if(use_sgs)kappa_nodes=0.0d0
-        do idim=1,ndim
-           x(idim)=x(idim)/2.0d0
-        end do
-        do idim=1,ndim
-           dr(idim)=x(idim)+0.5D0
-           ir(idim)=int(dr(idim))
-           dr(idim)=dr(idim)-ir(idim)
-           dl(idim)=1.0D0-dr(idim)
-           il(idim)=ir(idim)-1
-        end do
-        do idim=1,ndim
-           if(r%periodic(idim))then
-              if(il(idim)< m%box_ckey_min(idim,ilevel))il(idim)=m%box_ckey_max(idim,ilevel)-1
-              if(ir(idim)>=m%box_ckey_max(idim,ilevel))ir(idim)=m%box_ckey_min(idim,ilevel)
-           endif
-        enddo
-        ckey = cic_index(il,ir)
-        vol = cic_weight(dl,dr)
-        ff(1:ndim)=0.0
-        momentum(1:ndim)=0.0d0
-        rho=0.0d0
-        hash_nbor(0)=ilevel
-        do ind=1,twotondim
-           hash_nbor(1:ndim)=ckey(1:ndim,ind)
-           call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
-#ifdef HYDRO
-           if(associated(gridp))then
-              momentum(1:ndim)=momentum(1:ndim)+gridp%uold(icell,2:ndim+1)*vol(ind)
-              rho=rho+gridp%uold(icell,1)*vol(ind)
-              if(use_sgs)kappa_nodes(ind)=tracer_cell_kappa(gridp%uold(icell,1),gridp%uold(icell,r%iturb),dx_loc,r%smallr,r%tracer_schmidt_number)
-           end if
-#endif
-        end do
-        ff(1:ndim)=momentum(1:ndim)/max(rho,r%smallr)
-     end if
+     call wrap_cell_coords(s,x,ilevel+1)
+
+     call gather_cic_state(s,x,ilevel,dx_loc,use_sgs,vel,kappa_mid)
 
      if(action_part==action_kick_only)then
-        ! RK2 step 1 (early call): stash v^n at x^n, no move
-        p%vp(ipart,1:ndim)=ff(1:ndim)
+        p%vp(ipart,1:ndim)=vel(1:ndim)
         p%levelp(ipart)=ilevel
-
-     else if(action_part==action_kick_drift)then
-        ! RK2 step 2 (late call): predict midpoint and correct
-        ! Use stored v^n if available; fallback to current ff at step 0
-        if (g%nstep>0) then
-           v_pred(1:ndim)=p%vp(ipart,1:ndim)
-        else
-           v_pred(1:ndim)=ff(1:ndim)
-        endif
-        ! Predict x_mid in cell units
-        do idim=1,ndim
-           x_mid(idim)=x(idim)+0.5d0*g%dtnew(ilevel)*v_pred(idim)/dx_loc
-        end do
-        do idim=1,ndim
-           if(r%periodic(idim))then
-              if(x_mid(idim)< dble(m%box_ckey_min(idim,ilevel+1)))x_mid(idim)=x_mid(idim)+dble(m%box_ckey_max(idim,ilevel+1)-m%box_ckey_min(idim,ilevel+1))
-              if(x_mid(idim)>=dble(m%box_ckey_max(idim,ilevel+1)))x_mid(idim)=x_mid(idim)-dble(m%box_ckey_max(idim,ilevel+1)-m%box_ckey_min(idim,ilevel+1))
-           endif
-        end do
-        ! Gather v^{n+1} at x_mid using CIC
-        do idim=1,ndim
-           dr2(idim)=x_mid(idim)+0.5D0
-           ir2(idim)=int(dr2(idim))
-           dr2(idim)=dr2(idim)-ir2(idim)
-           dl2(idim)=1.0D0-dr2(idim)
-           il2(idim)=ir2(idim)-1
-        end do
-        do idim=1,ndim
-           if(r%periodic(idim))then
-              if(il2(idim)< m%box_ckey_min(idim,ilevel+1))il2(idim)=m%box_ckey_max(idim,ilevel+1)-1
-              if(ir2(idim)>=m%box_ckey_max(idim,ilevel+1))ir2(idim)=m%box_ckey_min(idim,ilevel+1)
-           endif
-        enddo
-        ckey2 = cic_index(il2,ir2)
-        vol2 = cic_weight(dl2,dr2)
-        ff(1:ndim)=0.0
-        momentum2(1:ndim)=0.0d0
-        rho2=0.0d0
-        kappa_nodes2=0.0d0
-        ok_level=.true.
-        hash_nbor(0)=ilevel+1
-        do ind=1,twotondim
-           hash_nbor(1:ndim)=ckey2(1:ndim,ind)
-           call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
-#ifdef HYDRO
-           if(associated(gridp))then
-              momentum2(1:ndim)=momentum2(1:ndim)+gridp%uold(icell2,2:ndim+1)*vol2(ind)
-              rho2=rho2+gridp%uold(icell2,1)*vol2(ind)
-              if(use_sgs)kappa_nodes2(ind)=tracer_cell_kappa(gridp%uold(icell2,1),gridp%uold(icell2,r%iturb),dx_loc,r%smallr,r%tracer_schmidt_number)
-           else
-              ok_level=.false.
-              if(use_sgs)kappa_nodes2(ind)=0.0d0
-           end if
-#endif
-        end do
-        if(ok_level .and. rho2>0.0d0)then
-           ff(1:ndim)=momentum2(1:ndim)/max(rho2,r%smallr)
-        else if(.not.ok_level)then
-           if(use_sgs)kappa_nodes2=0.0d0
-           do idim=1,ndim
-              x_mid(idim)=x_mid(idim)/2.0d0
-           end do
-           do idim=1,ndim
-              dr2(idim)=x_mid(idim)+0.5D0
-              ir2(idim)=int(dr2(idim))
-              dr2(idim)=dr2(idim)-ir2(idim)
-              dl2(idim)=1.0D0-dr2(idim)
-              il2(idim)=ir2(idim)-1
-           end do
-           do idim=1,ndim
-              if(r%periodic(idim))then
-                 if(il2(idim)< m%box_ckey_min(idim,ilevel))il2(idim)=m%box_ckey_max(idim,ilevel)-1
-                 if(ir2(idim)>=m%box_ckey_max(idim,ilevel))ir2(idim)=m%box_ckey_min(idim,ilevel)
-              endif
-           enddo
-           ckey2 = cic_index(il2,ir2)
-           vol2 = cic_weight(dl2,dr2)
-           ff(1:ndim)=0.0
-           momentum2(1:ndim)=0.0d0
-           rho2=0.0d0
-           hash_nbor(0)=ilevel
-           do ind=1,twotondim
-              hash_nbor(1:ndim)=ckey2(1:ndim,ind)
-              call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
-#ifdef HYDRO
-              if(associated(gridp))then
-                 momentum2(1:ndim)=momentum2(1:ndim)+gridp%uold(icell2,2:ndim+1)*vol2(ind)
-                 rho2=rho2+gridp%uold(icell2,1)*vol2(ind)
-                 if(use_sgs)kappa_nodes2(ind)=tracer_cell_kappa(gridp%uold(icell2,1),gridp%uold(icell2,r%iturb),dx_loc,r%smallr,r%tracer_schmidt_number)
-              end if
-#endif
-           end do
-           ff(1:ndim)=momentum2(1:ndim)/max(rho2,r%smallr)
-        end if
-        if(use_sgs)then
-           kappa_mid = max(dot_product(kappa_nodes2,vol2),0.0d0)
-        else
-           kappa_mid = 0.0d0
-        end if
-        p%vp(ipart,1:ndim)=ff(1:ndim)
-        disp(1:ndim)=p%vp(ipart,1:ndim)*dt_level
-        if(use_sgs .and. kappa_mid>0.0d0)then
-           call sample_tracer_gaussian(xi)
-           noise_amp = sqrt(2.0d0*kappa_mid*dt_level)
-           disp(1:ndim)=disp(1:ndim)+noise_amp*xi(1:ndim)
-        end if
-        p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+disp(1:ndim)
+        cycle
      endif
+
+     if (g%nstep>0) then
+        v_pred(1:ndim)=p%vp(ipart,1:ndim)
+     else
+        v_pred(1:ndim)=vel(1:ndim)
+     endif
+
+     do idim=1,ndim
+        x_mid(idim)=x(idim)+0.5d0*dt_level*v_pred(idim)/dx_loc
+     end do
+     call wrap_cell_coords(s,x_mid,ilevel+1)
+
+     call gather_cic_state(s,x_mid,ilevel,dx_loc,use_sgs,vel_mid,kappa_mid)
+
+     p%vp(ipart,1:ndim)=vel_mid(1:ndim)
+     disp(1:ndim)=p%vp(ipart,1:ndim)*dt_level
+     if(use_sgs .and. kappa_mid>0.0d0)then
+        call sample_tracer_gaussian(xi)
+        noise_amp = sqrt(2.0d0*kappa_mid*dt_level)
+        disp(1:ndim)=disp(1:ndim)+noise_amp*xi(1:ndim)
+     end if
+     p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+disp(1:ndim)
   end do
+
   call close_cache(s,m%grid_dict)
-  
+
   if(action_part==action_kick_drift)then
      do ipart=p%headp(ilevel),p%tailp(ilevel)
         do idim=1,ndim
            if(r%periodic(idim))then
-              if(p%xp(ipart,idim)< 0.0d0           )p%xp(ipart,idim)=p%xp(ipart,idim)+r%box_size(idim)
+              if(p%xp(ipart,idim)< 0.0d0)p%xp(ipart,idim)=p%xp(ipart,idim)+r%box_size(idim)
               if(p%xp(ipart,idim)>=r%box_size(idim))p%xp(ipart,idim)=p%xp(ipart,idim)-r%box_size(idim)
            endif
         end do
      end do
-   end if
+  end if
+
   end associate
 
 contains
+
+  subroutine wrap_cell_coords(st,x_cell,levelp1)
+    type(ramses_t),intent(in)::st
+    real(kind=8),intent(inout)::x_cell(1:ndim)
+    integer,intent(in)::levelp1
+    integer::jd
+    real(kind=8)::range
+
+    do jd=1,ndim
+       if(st%r%periodic(jd))then
+          range=dble(st%m%box_ckey_max(jd,levelp1)-st%m%box_ckey_min(jd,levelp1))
+          if(range<=0.d0)cycle
+          if(x_cell(jd)< dble(st%m%box_ckey_min(jd,levelp1)))x_cell(jd)=x_cell(jd)+range
+          if(x_cell(jd)>=dble(st%m%box_ckey_max(jd,levelp1)))x_cell(jd)=x_cell(jd)-range
+       endif
+    end do
+  end subroutine wrap_cell_coords
+
+  subroutine gather_cic_state(st,x_cell,level_in,dx_cell,use_sgs_in,vel_out,kappa_out)
+    type(ramses_t),intent(in)::st
+    real(kind=8),intent(in)::x_cell(1:ndim)
+    integer,intent(in)::level_in
+    real(kind=8),intent(in)::dx_cell
+    logical,intent(in)::use_sgs_in
+    real(kind=8),intent(out)::vel_out(1:ndim)
+    real(kind=8),intent(out)::kappa_out
+    real(kind=8),dimension(1:ndim)::dl,dr
+    integer,dimension(1:ndim)::il,ir
+    real(kind=8),dimension(1:twotondim)::vol
+    integer,dimension(1:ndim,1:twotondim)::ckey
+    real(kind=8),dimension(1:ndim)::momentum
+    real(kind=8)::rho,kappa_sum
+    integer(kind=8),dimension(0:ndim)::hash_nbor
+    integer::ind,icell,jd
+    type(oct),pointer::gridp
+
+    vel_out=0.d0
+    momentum=0.d0
+    rho=0.d0
+    kappa_sum=0.d0
+
+    do jd=1,ndim
+       dr(jd)=x_cell(jd)+0.5d0
+       ir(jd)=int(dr(jd))
+       dr(jd)=dr(jd)-ir(jd)
+       dl(jd)=1.0d0-dr(jd)
+       il(jd)=ir(jd)-1
+    end do
+    do jd=1,ndim
+        if(st%r%periodic(jd))then
+           if(il(jd)< st%m%box_ckey_min(jd,level_in+1))il(jd)=st%m%box_ckey_max(jd,level_in+1)-1
+           if(ir(jd)>=st%m%box_ckey_max(jd,level_in+1))ir(jd)=st%m%box_ckey_min(jd,level_in+1)
+       endif
+    end do
+    ckey = cic_index(il,ir)
+    vol = cic_weight(dl,dr)
+
+    hash_nbor(0)=level_in+1
+    do ind=1,twotondim
+       hash_nbor(1:ndim)=ckey(1:ndim,ind)
+       call get_parent_cell(st,hash_nbor,st%m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+#ifdef HYDRO
+       if(associated(gridp))then
+          momentum(1:ndim)=momentum(1:ndim)+gridp%uold(icell,2:ndim+1)*vol(ind)
+          rho=rho+gridp%uold(icell,1)*vol(ind)
+          if(use_sgs_in)then
+             kappa_sum=kappa_sum+tracer_cell_kappa(gridp%uold(icell,1),gridp%uold(icell,st%r%iturb),dx_cell,st%r%smallr,st%r%tracer_schmidt_number)*vol(ind)
+          end if
+       end if
+#endif
+    end do
+
+    if(rho>0.d0)then
+       vel_out(1:ndim)=momentum(1:ndim)/max(rho,st%r%smallr)
+    else
+       vel_out(1:ndim)=0.d0
+    end if
+
+    if(use_sgs_in)then
+       kappa_out=max(kappa_sum,0.d0)
+    else
+       kappa_out=0.d0
+    end if
+  end subroutine gather_cic_state
 
   real(kind=8) function tracer_cell_kappa(dens_in,eturb_in,dx_in,smallr_in,schmidt_in) result(kappa_val)
     real(kind=8),intent(in)::dens_in,eturb_in,dx_in,smallr_in,schmidt_in
