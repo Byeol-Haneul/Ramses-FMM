@@ -304,6 +304,7 @@ subroutine m_read_params(pst)
   integer :: tree_mass_deposition_scheme=1     ! tree mass deposition schemes
   integer :: tree_force_interpolation_scheme=1 ! tree force interpolation schemes
   integer :: trac_interpolation_scheme=1 ! tracer force interpolation schemes
+  real(kind=8) :: tracer_schmidt_number=1.0d-2 ! tracer turbulent Schmidt number for SGS diffusion
   integer :: dust_mass_deposition_scheme=1 ! dust mass deposition schemes
   integer :: dust_force_interpolation_scheme=1 ! dust force interpolation schemes
 
@@ -622,7 +623,7 @@ subroutine m_read_params(pst)
        & ,rtz_primary_cosmic_ray_ionization_rate, rtz_include_HM12_UVB, isH2_rtz &
        & ,rtz_max_cool_timestep, rtz_eqm_min_its
   ! Tracer particles parameters
-  namelist/trac_params/trac,ntracmax,ntractot,ntrac_per_cell,trac_interpolation_scheme
+  namelist/trac_params/trac,ntracmax,ntractot,ntrac_per_cell,trac_interpolation_scheme,tracer_schmidt_number
   namelist/dust_params/dust,ndustmax,ndusttot,ndust_per_cell,dust_to_gas_mass_ratio,&
   & grain_size_parameter,grain_charge_parameter,dust_mass_deposition_scheme,dust_force_interpolation_scheme,dust_gyro_factor,analytic_dust_force
   ! Star particles and star formation recipe
@@ -1029,6 +1030,16 @@ subroutine m_read_params(pst)
   if(sgs_turb)then
      ichem=iturb+1
   endif
+
+  !--------------------------------------------------
+  ! Check for sgs_turb
+  !--------------------------------------------------
+  if(sgs_turb.and.iturb>nvar)then
+     write(*,*)'Error: sgs_turb=.true. needs nvar >= ',iturb
+     write(*,*)'Currently nvar=',nvar,' but iturb=',iturb
+     write(*,*)'Modify NVAR and recompile'
+     nml_ok=.false.
+  endif
   if(hydro.and.(nvar>5)) then
      write(*,'(A50)')"__________________________________________________"
      write(*,*) 'Hydro var extra indices:'
@@ -1239,6 +1250,7 @@ subroutine m_read_params(pst)
   s%r%tree_mass_deposition_scheme=tree_mass_deposition_scheme
   s%r%tree_force_interpolation_scheme=tree_force_interpolation_scheme
   s%r%trac_interpolation_scheme=trac_interpolation_scheme
+  s%r%tracer_schmidt_number=tracer_schmidt_number
   s%r%dust_mass_deposition_scheme=dust_mass_deposition_scheme
   s%r%dust_force_interpolation_scheme=dust_force_interpolation_scheme
 

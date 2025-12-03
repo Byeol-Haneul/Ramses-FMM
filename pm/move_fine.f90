@@ -1007,7 +1007,6 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
   real(kind=8)::RngStream_RandUni
   integer(kind=8)::stream_skip
   external :: RngStream_SetPackageSeed, RngStream_AdvanceState, gaussdev
-  real(kind=8), parameter :: tracer_schmidt_number = 1.0d-2
   type(RngStream), save :: tracer_rng
   logical, save :: tracer_rng_ready = .false.
 
@@ -1069,7 +1068,7 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
            momentum(1:ndim)=momentum(1:ndim)+gridp%uold(icell,2:ndim+1)*vol(ind)
            rho=rho+gridp%uold(icell,1)*vol(ind)
            if(use_sgs)then
-              kappa_nodes(ind)=tracer_cell_kappa(gridp%uold(icell,1),gridp%uold(icell,r%iturb),dx_loc,r%smallr)
+              kappa_nodes(ind)=tracer_cell_kappa(gridp%uold(icell,1),gridp%uold(icell,r%iturb),dx_loc,r%smallr,r%tracer_schmidt_number)
            end if
         else
            ok_level=.false.
@@ -1110,7 +1109,7 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
            if(associated(gridp))then
               momentum(1:ndim)=momentum(1:ndim)+gridp%uold(icell,2:ndim+1)*vol(ind)
               rho=rho+gridp%uold(icell,1)*vol(ind)
-              if(use_sgs)kappa_nodes(ind)=tracer_cell_kappa(gridp%uold(icell,1),gridp%uold(icell,r%iturb),dx_loc,r%smallr)
+              if(use_sgs)kappa_nodes(ind)=tracer_cell_kappa(gridp%uold(icell,1),gridp%uold(icell,r%iturb),dx_loc,r%smallr,r%tracer_schmidt_number)
            end if
 #endif
         end do
@@ -1169,7 +1168,7 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
            if(associated(gridp))then
               momentum2(1:ndim)=momentum2(1:ndim)+gridp%uold(icell2,2:ndim+1)*vol2(ind)
               rho2=rho2+gridp%uold(icell2,1)*vol2(ind)
-              if(use_sgs)kappa_nodes2(ind)=tracer_cell_kappa(gridp%uold(icell2,1),gridp%uold(icell2,r%iturb),dx_loc,r%smallr)
+              if(use_sgs)kappa_nodes2(ind)=tracer_cell_kappa(gridp%uold(icell2,1),gridp%uold(icell2,r%iturb),dx_loc,r%smallr,r%tracer_schmidt_number)
            else
               ok_level=.false.
               if(use_sgs)kappa_nodes2(ind)=0.0d0
@@ -1209,7 +1208,7 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
               if(associated(gridp))then
                  momentum2(1:ndim)=momentum2(1:ndim)+gridp%uold(icell2,2:ndim+1)*vol2(ind)
                  rho2=rho2+gridp%uold(icell2,1)*vol2(ind)
-                 if(use_sgs)kappa_nodes2(ind)=tracer_cell_kappa(gridp%uold(icell2,1),gridp%uold(icell2,r%iturb),dx_loc,r%smallr)
+                 if(use_sgs)kappa_nodes2(ind)=tracer_cell_kappa(gridp%uold(icell2,1),gridp%uold(icell2,r%iturb),dx_loc,r%smallr,r%tracer_schmidt_number)
               end if
 #endif
            end do
@@ -1246,14 +1245,14 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
 
 contains
 
-  real(kind=8) function tracer_cell_kappa(dens_in,eturb_in,dx_in,smallr_in) result(kappa_val)
-    real(kind=8),intent(in)::dens_in,eturb_in,dx_in,smallr_in
+  real(kind=8) function tracer_cell_kappa(dens_in,eturb_in,dx_in,smallr_in,schmidt_in) result(kappa_val)
+    real(kind=8),intent(in)::dens_in,eturb_in,dx_in,smallr_in,schmidt_in
     real(kind=8)::rho_eff,sigma_sq
 
     rho_eff = max(dens_in,smallr_in)
     sigma_sq = max(2.0d0*max(eturb_in,0.0d0)/rho_eff,0.0d0)
     if(sigma_sq>0.0d0)then
-       kappa_val = tracer_schmidt_number*dx_in*sqrt(sigma_sq)
+       kappa_val = schmidt_in*dx_in*sqrt(sigma_sq)
     else
        kappa_val = 0.0d0
     end if
