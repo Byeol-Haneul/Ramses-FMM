@@ -35,6 +35,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   use rt_godunov_fine_module, only: r_rt_godunov_fine,r_set_rtunew,r_set_rtuold,r_set_emissivity
   use rt_step_module, only: m_rt_step
   use sink_evolution_module, only: r_sink_evolution, out_accretion_t
+  use sink_merger_module, only: r_sink_merger
   use turb_driving, only: r_drive_turb
   use turb_hydro_module, only: m_turb_hydro
 
@@ -125,10 +126,10 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
         endif
      endif
      ! Lightcone
-      if (r%lightcone) then
-         call m_timer(pst,'lightcone','start')
-         call m_output_lightcone(pst)
-      endif
+     if (r%lightcone) then
+        call m_timer(pst,'lightcone','start')
+        call m_output_lightcone(pst)
+     endif
   endif
 
   !--------------------------
@@ -375,6 +376,14 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
      call m_timer(pst,'cooling','start')
      call r_cooling_fine(pst,ilevel,1)
   endif
+
+  !----------------------------
+  ! Sink merger
+  !----------------------------
+  if(r%sink.and.r%sink_merge)then
+     call m_timer(pst,'sink - merger','start')
+     call r_sink_merger(pst,ilevel,1)
+  end if
 
   !-------------------------------------------
   ! Perform first kick and drift for particles

@@ -91,6 +91,7 @@ module cache_commons
      real(kind=8)::dens
      real(kind=8)::mass
      real(kind=8)::vol
+     real(kind=8)::rad
      real(kind=8),dimension(1:ndim)::pos
      real(kind=8),dimension(1:ndim)::vel
   end type msg_prop_clump
@@ -102,15 +103,14 @@ module cache_commons
      integer::npart
      integer::lev
      integer(kind=8)::ind
-     real(kind=8)::dens
-     real(kind=8)::mass
+     real(kind=8)::rad
      real(kind=8),dimension(1:ndim)::pos
      real(kind=8),dimension(1:nbin)::mbin
   end type msg_mbin_clump
   type msg_unbind_clump
      integer::lev
      integer(kind=8)::ind
-     real(kind=8)::dens
+     real(kind=8)::rad
      real(kind=8)::mass
      real(kind=8),dimension(1:ndim)::pos
      real(kind=8),dimension(1:ndim)::vel
@@ -125,6 +125,7 @@ module cache_commons
   type msg_tree_clump
      integer::id
      integer::lev
+     real(kind=8)::rad
      real(kind=8)::mass
      real(kind=8),dimension(1:ndim)::pos
      real(kind=8),dimension(1:ndim)::vel

@@ -38,6 +38,7 @@ module clfind_commons
        real(kind=8),allocatable,dimension(:) :: tidal_dens ! Density at the tidal radius
        real(kind=8),allocatable,dimension(:) :: min_dens ! Min density of the clump
        real(kind=8),allocatable,dimension(:) :: clump_vol ! Volume of the clump
+       real(kind=8),allocatable,dimension(:) :: clump_rad ! Tidal radius of the clump
        real(kind=8),allocatable,dimension(:) :: particle_mass ! Clump mass using directly dark matter particles
        real(kind=8),allocatable,dimension(:,:) :: peak_pos ! Position of the peak
        real(kind=8),allocatable,dimension(:,:) :: peak_vel ! Velocity of the peak

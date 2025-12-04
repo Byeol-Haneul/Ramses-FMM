@@ -317,6 +317,7 @@ subroutine allocate_peak_patch_arrays(s)
   allocate(c%n_cells(1:c%npeak_max))
   allocate(c%clump_mass(1:c%npeak_max))
   allocate(c%clump_vol(1:c%npeak_max))
+  allocate(c%clump_rad(1:c%npeak_max))
 
   allocate(c%npart(1:c%npeak_max))
   allocate(c%particle_mass(1:c%npeak_max))
@@ -473,6 +474,7 @@ subroutine deallocate_peak_patch_arrays(s)
   deallocate(c%n_cells)
   deallocate(c%clump_mass)
   deallocate(c%clump_vol)
+  deallocate(c%clump_rad)
 
   deallocate(c%npart)
   deallocate(c%particle_mass)
@@ -1304,11 +1306,7 @@ subroutine compute_clump_properties(s,rtype)
   real(kind=8),dimension(1:ndim)::xcell,accel
   real(kind=8)::dx_loc,tot_mass
   real(kind=8)::zero=0
-  ! variables needed temporarily store cell properties
-  real(kind=8)::d=0, vol=0, nref=0
-  ! variables related to the size of a cell on a given level
-  integer::nx_loc
-  logical::periodic
+  real(kind=8)::d=0, vol=0, nref=0, pi
 #ifndef WITHOUTMPI
   integer::i
   real(kind=8)::tot_mass_tot
@@ -1317,6 +1315,9 @@ subroutine compute_clump_properties(s,rtype)
   associate(g=>s%g,r=>s%r,m=>s%m,c=>s%c)
 
   if(g%myid==1.and.r%verbose)write(*,*)'Entering compute clump properties'
+
+  ! Constants
+  pi=ACOS(-1.0D0)
 
   !-----------------------------------------------------------------------
   ! Loop over local peaks and compute peak cell coordinates, velocities...
@@ -1391,6 +1392,11 @@ subroutine compute_clump_properties(s,rtype)
      end if
   end do
   call close_cache(s,m%grid_dict)
+
+  ! Calculate clump tidal radius
+  do ipeak=1,c%npeak
+     c%clump_rad(ipeak)=(c%clump_mass(ipeak)*3d0/4d0/pi/c%tidal_dens(ipeak))**(1d0/3d0)
+  end do
 
   ! Calculate total mass above threshold
   tot_mass=sum(c%clump_mass(1:c%npeak))
@@ -1719,7 +1725,7 @@ subroutine particle_clump_properties(s,p)
   integer::i,ipeak,ipart,ind,idim,ibin,ilevel
   integer(kind=8)::global_peak_id
   integer::halo_nr,peak_nr
-  real(kind=8)::xx,rad,dx_loc,r2
+  real(kind=8)::xx,rad,dx_loc,r2,core_radius
   real(kind=8),dimension(1:ndim)::xpart
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
@@ -1749,18 +1755,22 @@ subroutine particle_clump_properties(s,p)
      global_peak_id=p%workp(i)
      if (global_peak_id /=0 ) then
         call get_peak(s,global_peak_id,peak_nr,flush_cache=.true.,fetch_cache=.true.)
+        ! Compute distance to cell center
         xpart(1:ndim)=p%xp(ipart,1:ndim)-c%peak_pos(peak_nr,1:ndim)
-        ! In case of periodic boundaries
         r2=0d0
         do idim=1,ndim
-           if(xpart(idim)> r%box_size(idim)*0.5)xpart(idim)=xpart(idim)-r%box_size(idim)
-           if(xpart(idim)<-r%box_size(idim)*0.5)xpart(idim)=xpart(idim)+r%box_size(idim)
+           ! In case of periodic boundaries
+           if(r%periodic(idim))then
+              if(xpart(idim)> r%box_size(idim)*0.5)xpart(idim)=xpart(idim)-r%box_size(idim)
+              if(xpart(idim)<-r%box_size(idim)*0.5)xpart(idim)=xpart(idim)+r%box_size(idim)
+           endif
            r2=r2+xpart(idim)**2
         end do
+        ! Keep only particles within 4-cell or 10% of tidal radius
         ilevel=c%peak_level(peak_nr)
         dx_loc=r%boxlen/2**ilevel
-        ! Keep only particles within a 2-cell radius
-        if(r2<=4d0*dx_loc**2)then
+        core_radius=2d0*dx_loc
+        if(r2<=core_radius**2)then
            c%peak_com(peak_nr,1:ndim)=c%peak_com(peak_nr,1:ndim)+p%mp(ipart)*xpart(1:ndim)
            c%peak_vel(peak_nr,1:ndim)=c%peak_vel(peak_nr,1:ndim)+p%mp(ipart)*p%vp(ipart,1:ndim)
            c%particle_mass(peak_nr)=c%particle_mass(peak_nr)+p%mp(ipart)
@@ -1786,7 +1796,7 @@ subroutine particle_clump_properties(s,p)
      end do
   end do
 
- end associate
+  end associate
 
 end subroutine particle_clump_properties
 !################################################################
@@ -1806,6 +1816,7 @@ subroutine pack_fetch_part(c,local_peak_id,msg_size,msg_array)
 
   msg%pos(1:ndim)=c%peak_pos(local_peak_id,1:ndim)
   msg%ind=c%peak_level(local_peak_id)
+  msg%rad=c%clump_rad(local_peak_id)
 
   msg_array=transfer(msg,msg_array)
 
@@ -1829,6 +1840,7 @@ subroutine unpack_fetch_part(c,local_peak_id,msg_size,msg_array)
 
   c%peak_pos(local_peak_id,1:ndim)=msg%pos(1:ndim)
   c%peak_level(local_peak_id)=msg%ind
+  c%clump_rad(local_peak_id)=msg%rad
 
 end subroutine unpack_fetch_part
 !################################################################
@@ -1917,7 +1929,7 @@ subroutine particle_potential(s,p)
   integer::i,ipart,ind,idim,ibin,ilevel
   integer(kind=8)::global_peak_id
   integer::ipeak
-  real(kind=8)::pi,grav,rho,rad,dist,dr
+  real(kind=8)::pi,grav,rad,dist,dr
   real(kind=8),dimension(1:ndim)::xpart,vpart
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
@@ -1948,17 +1960,17 @@ subroutine particle_potential(s,p)
         global_peak_id=p%workp(i)
         call get_peak(s,global_peak_id,ipeak,flush_cache=.true.,fetch_cache=.true.)
         if(c%lev_peak(ipeak)==ilevel)then
-           ! Get clump saddle point density
-           rho=c%tidal_dens(ipeak)
-           ! Compute clump tidal radius
-           rad=(c%clump_mass(ipeak)/4d0/pi/rho*3d0)**(1d0/3d0)
+           ! Get clump tidal radius
+           rad=c%clump_rad(ipeak)
            ! Compute particle radius
            xpart(1:ndim)=p%xp(ipart,1:ndim)-c%peak_pos(ipeak,1:ndim)
            dist=0d0
            do idim=1,ndim
               ! In case of periodic boundaries
-              if(xpart(idim)> r%box_size(idim)*0.5)xpart(idim)=xpart(idim)-r%box_size(idim)
-              if(xpart(idim)<-r%box_size(idim)*0.5)xpart(idim)=xpart(idim)+r%box_size(idim)
+              if(r%periodic(idim))then
+                 if(xpart(idim)> r%box_size(idim)*0.5)xpart(idim)=xpart(idim)-r%box_size(idim)
+                 if(xpart(idim)<-r%box_size(idim)*0.5)xpart(idim)=xpart(idim)+r%box_size(idim)
+              endif
               dist=dist+xpart(idim)**2
            end do
            dist=sqrt(dist)
@@ -1999,10 +2011,8 @@ subroutine particle_potential(s,p)
   do ipeak=1,c%npeak
      if(   c%clump_mass(ipeak) > c%mass_threshold.AND. &
           & c%relevance(ipeak) > c%relevance_threshold)then
-        ! Get clump saddle point density
-        rho=c%tidal_dens(ipeak)
-        ! Compute clump tidal radius
-        rad=(c%clump_mass(ipeak)/4d0/pi/rho*3d0)**(1d0/3d0)
+        ! Get clump tidal radius
+        rad=c%clump_rad(ipeak)
         ! Convert mass profile into potential energy
         dr=2d0*rad/dble(nbin)
         dist=(dble(nbin-1)+0.5d0)*dr
@@ -2040,7 +2050,7 @@ subroutine particle_unbind(s,p)
   integer::i,ipart,ind,idim,ibin,ilevel
   integer(kind=8)::global_peak_id
   integer::ipeak
-  real(kind=8)::pi,rho,rad,vel,bound
+  real(kind=8)::pi,rad,vel,bound
   real(kind=8),dimension(1:ndim)::xpart,vpart
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
@@ -2066,14 +2076,12 @@ subroutine particle_unbind(s,p)
         global_peak_id=p%workp(i)
         call get_peak(s,global_peak_id,ipeak,flush_cache=.false.,fetch_cache=.true.)
         if(c%lev_peak(ipeak)==ilevel)then
-           ! Get clump saddle point density
-           rho=c%tidal_dens(ipeak)
-           ! Compute clump tidal radius
-           rad=(c%clump_mass(ipeak)/4d0/pi/rho*3d0)**(1d0/3d0)
+           ! Get clump tidal radius
+           rad=c%clump_rad(ipeak)
            ! Compute total energy
            bound=total_energy(dble(p%xp(ipart,1:ndim)),c%peak_pos(ipeak,1:ndim), &
                 &             dble(p%vp(ipart,1:ndim)),c%peak_vel(ipeak,1:ndim), &
-                &             c%phi(ipeak,1:nbin),rad,r%box_size)
+                &             c%phi(ipeak,1:nbin),rad,r%box_size,r%periodic)
            ! If unbound, assign to next peak in hierarchy
            if(bound.GE.0d0.or.c%clump_mass(ipeak).LE.c%mass_threshold)then
               p%workp(i)=c%new_peak(ipeak)
@@ -2105,7 +2113,7 @@ subroutine pack_fetch_unbind(c,local_peak_id,msg_size,msg_array)
 
   msg%lev=c%lev_peak(local_peak_id)
   msg%ind=c%new_peak(local_peak_id)
-  msg%dens=c%tidal_dens(local_peak_id)
+  msg%rad=c%clump_rad(local_peak_id)
   msg%mass=c%clump_mass(local_peak_id)
   msg%vel=c%peak_vel(local_peak_id,1:ndim)
   msg%pos=c%peak_pos(local_peak_id,1:ndim)
@@ -2133,7 +2141,7 @@ subroutine unpack_fetch_unbind(c,local_peak_id,msg_size,msg_array)
 
   c%lev_peak(local_peak_id)=msg%lev
   c%new_peak(local_peak_id)=msg%ind
-  c%tidal_dens(local_peak_id)=msg%dens
+  c%clump_rad(local_peak_id)=msg%rad
   c%clump_mass(local_peak_id)=msg%mass
   c%peak_vel(local_peak_id,1:ndim)=msg%vel
   c%peak_pos(local_peak_id,1:ndim)=msg%pos
@@ -2163,7 +2171,7 @@ subroutine mass_profile(s,p)
   integer::i,ipart,ind,idim,ibin,ilevel
   integer(kind=8)::global_peak_id
   integer::ipeak,jpeak
-  real(kind=8)::pi,rad,rho,dist,dr
+  real(kind=8)::pi,rad,dist,dr
   real(kind=8),dimension(1:ndim)::xpart,vpart
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
@@ -2194,17 +2202,17 @@ subroutine mass_profile(s,p)
      global_peak_id=p%workp(i)
      if (global_peak_id /=0 ) then
         call get_peak(s,global_peak_id,ipeak,flush_cache=.true.,fetch_cache=.true.)
-        ! Compute subhalo saddle point density
-        rho=c%tidal_dens(ipeak)
-        ! Compute clump tidal radius
-        rad=(c%clump_mass(ipeak)/4d0/pi/rho*3d0)**(1d0/3d0)
+        ! Get clump tidal radius
+        rad=c%clump_rad(ipeak)
         ! Compute particle radius
         xpart(1:ndim)=p%xp(ipart,1:ndim)-c%peak_pos(ipeak,1:ndim)
         dist=0d0
         do idim=1,ndim
            ! In case of periodic boundaries
-           if(xpart(idim)> r%box_size(idim)*0.5)xpart(idim)=xpart(idim)-r%box_size(idim)
-           if(xpart(idim)<-r%box_size(idim)*0.5)xpart(idim)=xpart(idim)+r%box_size(idim)
+           if(r%periodic(idim))then
+              if(xpart(idim)> r%box_size(idim)*0.5)xpart(idim)=xpart(idim)-r%box_size(idim)
+              if(xpart(idim)<-r%box_size(idim)*0.5)xpart(idim)=xpart(idim)+r%box_size(idim)
+           endif
            dist=dist+xpart(idim)**2
         end do
         dist=sqrt(dist)
@@ -2240,12 +2248,13 @@ end subroutine mass_profile
 !################################################################
 !################################################################
 !################################################################
-function cmp_distance(x1,x2,v1,v2,radius,velocity,box_size)
+function cmp_distance(x1,x2,v1,v2,radius,velocity,box_size,periodic)
   use amr_parameters, only: ndim
   real(kind=8),dimension(1:ndim)::x1,x2,v1,v2
   real(kind=8)::radius,velocity
-  real(kind=8)::box_size(1:3)
+  real(kind=8),dimension(1:3)::box_size
   real(kind=8)::cmp_distance
+  logical,dimension(1:3)::periodic
   !-----------------------------------------------------------
   ! This function computes the phase-space Euclidian distance
   !-----------------------------------------------------------
@@ -2256,8 +2265,10 @@ function cmp_distance(x1,x2,v1,v2,radius,velocity,box_size)
   xpart(1:ndim)=x1(1:ndim)-x2(1:ndim)
   ! In case of periodic boundaries
   do idim=1,ndim
-     if(xpart(idim)> box_size(idim)*0.5)xpart(idim)=xpart(idim)-box_size(idim)
-     if(xpart(idim)<-box_size(idim)*0.5)xpart(idim)=xpart(idim)+box_size(idim)
+     if(periodic(idim))then
+        if(xpart(idim)> box_size(idim)*0.5)xpart(idim)=xpart(idim)-box_size(idim)
+        if(xpart(idim)<-box_size(idim)*0.5)xpart(idim)=xpart(idim)+box_size(idim)
+     endif
      xdist=xdist+xpart(idim)**2
   end do
   ! Rescale distance in configuration space
@@ -2276,13 +2287,14 @@ end function cmp_distance
 !################################################################
 !################################################################
 !################################################################
-function total_energy(x1,x2,v1,v2,phi,radius,box_size)
+function total_energy(x1,x2,v1,v2,phi,radius,box_size,periodic)
   use amr_parameters, only: ndim, nbin
   real(kind=8),dimension(1:ndim)::x1,x2,v1,v2
   real(kind=8),dimension(1:nbin)::phi
   real(kind=8)::radius
   real(kind=8),dimension(1:3)::box_size
   real(kind=8)::total_energy
+  logical,dimension(1:3)::periodic
   !-----------------------------------------------------------
   ! This function computes the phase-space Euclidian distance
   !-----------------------------------------------------------
@@ -2292,8 +2304,10 @@ function total_energy(x1,x2,v1,v2,phi,radius,box_size)
   r2=0d0
   xpart(1:ndim)=x1(1:ndim)-x2(1:ndim)
   do idim=1,ndim  ! In case of periodic boundaries
-     if(xpart(idim)> box_size(idim)*0.5)xpart(idim)=xpart(idim)-box_size(idim)
-     if(xpart(idim)<-box_size(idim)*0.5)xpart(idim)=xpart(idim)+box_size(idim)
+     if(periodic(idim))then
+        if(xpart(idim)> box_size(idim)*0.5)xpart(idim)=xpart(idim)-box_size(idim)
+        if(xpart(idim)<-box_size(idim)*0.5)xpart(idim)=xpart(idim)+box_size(idim)
+     endif
      r2=r2+xpart(idim)**2
   end do
   r=sqrt(r2)
@@ -2331,8 +2345,7 @@ subroutine pack_fetch_mbin(c,local_peak_id,msg_size,msg_array)
   type(msg_mbin_clump)::msg
 
   msg%pos(1:ndim)=c%peak_pos(local_peak_id,1:ndim)
-  msg%mass=c%clump_mass(local_peak_id)
-  msg%dens=c%tidal_dens(local_peak_id)
+  msg%rad=c%clump_rad(local_peak_id)
   msg%lev=c%lev_peak(local_peak_id)
   msg%ind=c%new_peak(local_peak_id)
 
@@ -2357,8 +2370,7 @@ subroutine unpack_fetch_mbin(c,local_peak_id,msg_size,msg_array)
   msg=transfer(msg_array,msg)
 
   c%peak_pos(local_peak_id,1:ndim)=msg%pos(1:ndim)
-  c%clump_mass(local_peak_id)=msg%mass
-  c%tidal_dens(local_peak_id)=msg%dens
+  c%clump_rad(local_peak_id)=msg%rad
   c%lev_peak(local_peak_id)=msg%lev
   c%new_peak(local_peak_id)=msg%ind
 
@@ -2482,14 +2494,9 @@ subroutine particle_peak_id(s,p)
         hash_cell(1:ndim)=ckey(1:ndim)
         call get_parent_cell(s,hash_cell,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
 
-        if(.not.associated(gridp))then
-           write(*,*)"Something went wrong in particle_peak_id"
-           write(*,*)"Current level grid does not exist..."
-           stop
-        endif
-
         ! Read flag2 value
-        global_peak_id=gridp%flag2(icell)
+        global_peak_id=0
+        if(associated(gridp))global_peak_id=gridp%flag2(icell)
         if (global_peak_id==0)no_peak=no_peak+1
 
         ! Store global peak id in pid array
@@ -2571,14 +2578,9 @@ subroutine particle_halo_id(s,p)
         hash_cell(1:ndim)=ckey(1:ndim)
         call get_parent_cell(s,hash_cell,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
 
-        if(.not.associated(gridp))then
-           write(*,*)"Something went wrong in particle_halo_id"
-           write(*,*)"Current level grid does not exist..."
-           stop
-        endif
-
         ! Read flag1 value
-        global_halo_id=gridp%flag1(icell)
+        global_halo_id=0
+        if(associated(gridp))global_halo_id=gridp%flag1(icell)
         if (global_halo_id==0)no_halo=no_halo+1
 
         ! Store global halo id in hid array
