@@ -75,7 +75,7 @@ subroutine output_clump_properties(s,filename)
   integer::ilun,j,ind,igrid,hid
   character(LEN=flen)::fileloc
   integer(kind=8),dimension(s%r%levelmin:s%r%nlevelmax)::nskip
-  real(kind=8)::pi,grav,rho,rad,mass,r200b,rmax,concentration,purity
+  real(kind=8)::pi,grav,rad,mass,r200b,rmax,concentration,purity
   real(kind=8),dimension(1:nbin)::mbin
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
@@ -96,11 +96,9 @@ subroutine output_clump_properties(s,filename)
 
         ! Get cumulative mass profile
         mbin=c%mass_bin(j,1:nbin)
-        ! Get clump tidal density
-        rho=c%tidal_dens(j)
-        ! Compute clump tidal radius
-        rad=(c%clump_mass(j)/4d0/pi/rho*3d0)**(1d0/3d0)
-        ! Compute clump particle mass
+        ! Get clump tidal radius
+        rad=c%clump_rad(j)
+        ! Get clump particle mass
         mass=c%mass_bin(j,nbin)
         ! Comnpute r200, rmax and concentration
         call halo_mass_def(s,mbin,rad,r200b,rmax,concentration)
@@ -147,12 +145,13 @@ subroutine halo_mass_def(s,mbin,rad,r200b,rmax,c)
   real(kind=8),dimension(1:nbin)::mbin
   real(kind=8)::rad,rmax,r200b,c,deltamax,cmin,cmax
   real(kind=8)::pi,G,delta,deltaold,rbin,vcirc,volbin,alpha
-  real(kind=8)::vmax,v200b,c0,cl,cr,err,const,dr
+  real(kind=8)::d200,vmax,v200b,c0,cl,cr,err,const,dr
   integer::i,imax
   ! Constants
   pi=ACOS(-1.0D0)
   G=1d0
   if(s%r%cosmo)G=3d0/8d0/pi*s%g%omega_m*s%g%aexp
+  d200=s%r%density_threshold*200d0/80d0
   ! Find densest bin
   deltamax=0
   imax=1
@@ -185,9 +184,9 @@ subroutine halo_mass_def(s,mbin,rad,r200b,rmax,c)
      volbin=4d0/3d0*pi*rbin**3
      deltaold=delta
      delta=mbin(i)/volbin
-     if(delta<=200.and.r200b==0)then
+     if(delta<=d200.and.r200b==0)then
         if(deltaold>0)then
-           alpha=log(200d0/delta)/log(deltaold/delta)
+           alpha=log(d200/delta)/log(deltaold/delta)
            r200b=rbin*(dble(i-1)/dble(i))**alpha
         else
            r200b=rbin
@@ -195,12 +194,12 @@ subroutine halo_mass_def(s,mbin,rad,r200b,rmax,c)
      endif
   end do
   ! Compute quantities at r200b
-  if(delta>200d0.and.r200b==0)then
-     alpha=log(200d0/delta)/log(deltaold/delta)
+  if(delta>d200.and.r200b==0)then
+     alpha=log(d200/delta)/log(deltaold/delta)
      r200b=2d0*rad*(dble(nbin-1)/dble(nbin))**alpha
   endif
   c0=2.1626
-  v200b=sqrt(G*4d0*pi/3d0*200d0*r200b**2)
+  v200b=sqrt(G*4d0*pi/3d0*d200*r200b**2)
   ! Find concentration parameter
   vmax=max(vmax,v200b)
   const=MIN(dble(vmax**2/v200b**2),4d0)*c0/(log(1d0+c0)-c0/(1d0+c0))
