@@ -698,6 +698,9 @@ subroutine pack_fetch_interpol(grid,msg_size,msg_array)
      msg%realdp_dis(ind)=grid%f(ind,3)
   end do
 #endif
+#ifdef HYDRO
+  msg%realdp_mflux=grid%mflux
+#endif
 
   msg_array=transfer(msg,msg_array)
 
@@ -725,6 +728,9 @@ subroutine unpack_fetch_interpol(grid,msg_size,msg_array,hash_key)
      grid%phi_old(ind)=msg%realdp_phi_old(ind)
      grid%f(ind,3)=msg%realdp_dis(ind)
   end do
+#endif
+#ifdef HYDRO
+  grid%mflux=msg%realdp_mflux
 #endif
 
 end subroutine unpack_fetch_interpol

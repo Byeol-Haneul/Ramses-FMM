@@ -377,6 +377,9 @@ subroutine pack_flush_multipole(grid,msg_size,msg_array)
      end do
   end do
 #endif
+#ifdef HYDRO
+  msg%realdp_mflux=grid%mflux
+#endif
 
   msg_array=transfer(msg,msg_array)
 
@@ -409,6 +412,9 @@ subroutine unpack_flush_multipole(grid,msg_size,msg_array,hash_key)
         endif
      end do
   end do
+#endif
+#ifdef HYDRO
+  grid%mflux=msg%realdp_mflux
 #endif
 
 end subroutine unpack_flush_multipole

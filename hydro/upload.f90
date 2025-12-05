@@ -251,6 +251,7 @@ subroutine init_flush_upload(grid,hash_key)
         grid%uold(ind,ivar)=0.0d0
      end do
   end do
+  grid%mflux=0.0d0
 #endif
 #ifdef MHD
   grid%bold=0.0d0
@@ -279,6 +280,10 @@ subroutine pack_flush_upload(grid,msg_size,msg_array)
         msg%realdp(ind,ivar)=grid%uold(ind,ivar)
      end do
   end do
+#endif
+
+#ifdef HYDRO
+  msg%realdp_mflux=grid%mflux
 #endif
 
 #ifdef MHD
@@ -316,6 +321,14 @@ subroutine unpack_flush_upload(grid,msg_size,msg_array,hash_key)
            grid%uold(ind,ivar)=grid%uold(ind,ivar)+msg%realdp(ind,ivar)
         endif
      end do
+  end do
+#endif
+
+#ifdef HYDRO
+  do ind=1,twotondim
+     if(grid%refined(ind))then
+        grid%mflux(ind,1:6)=grid%mflux(ind,1:6)+msg%realdp_mflux(ind,1:6)
+     endif
   end do
 #endif
 

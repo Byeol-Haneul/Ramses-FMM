@@ -40,6 +40,7 @@ module cache_commons
 #ifdef MHD
      real(kind=8),dimension(1:twotondim,1:6)::realdp_mhd
 #endif
+     real(kind=8),dimension(1:twotondim,1:6)::realdp_mflux
   end type msg_realdp
   type msg_small_realdp
      real(kind=8),dimension(1:twotondim)::realdp
@@ -57,6 +58,7 @@ module cache_commons
      real(kind=8),dimension(1:twotondim)::realdp_phi
      real(kind=8),dimension(1:twotondim)::realdp_phi_old
      real(kind=8),dimension(1:twotondim)::realdp_dis
+     real(kind=8),dimension(1:twotondim,1:6)::realdp_mflux
   end type msg_three_realdp
   type msg_nvar_realdp
      real(kind=8),dimension(1:twotondim,1:nvar)::realdp_hydro
@@ -73,6 +75,7 @@ module cache_commons
 #ifdef GRAV
      real(kind=8),dimension(1:twotondim,1:ndim+2)::realdp_poisson
 #endif
+     real(kind=8),dimension(1:twotondim,1:6)::realdp_mflux
   end type msg_large_realdp
   type msg_rt_emissivity_realdp
      real(kind=8),dimension(1:twotondim,1:nrtgrp)::realdp

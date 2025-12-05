@@ -156,6 +156,10 @@ subroutine pack_fetch_rt(grid,msg_size,msg_array)
      end do
   end do
 
+#ifdef HYDRO
+  msg%realdp_mflux=grid%mflux
+#endif
+
   msg_array=transfer(msg,msg_array)
 
 end subroutine pack_fetch_rt
@@ -195,6 +199,10 @@ subroutine unpack_fetch_rt(grid,msg_size,msg_array,hash_key)
 #endif
      end do
   end do
+
+#ifdef HYDRO
+  grid%mflux=msg%realdp_mflux
+#endif
 
 end subroutine unpack_fetch_rt
 !#####################################################################

@@ -788,6 +788,9 @@ subroutine pack_fetch_kick(grid,msg_size,msg_array)
      msg%realdp_dis(ind)=grid%f(ind,3)
   end do
 #endif
+#ifdef HYDRO
+  msg%realdp_mflux=grid%mflux
+#endif
 
   msg_array=transfer(msg,msg_array)
 
@@ -818,6 +821,9 @@ subroutine unpack_fetch_kick(grid,msg_size,msg_array,hash_key)
      grid%f(ind,2)=msg%realdp_phi_old(ind)
      grid%f(ind,3)=msg%realdp_dis(ind)
   end do
+#endif
+#ifdef HYDRO
+  grid%mflux=msg%realdp_mflux
 #endif
 
 end subroutine unpack_fetch_kick
@@ -1435,8 +1441,8 @@ subroutine sample_tracer_gaussian(vec)
   real(kind=8),intent(out)::vec(1:ndim)
   integer :: jd
   real(kind=8)::u_rand,tmp
-  real(kind=8) :: RngStream_RandUni
-  external :: RngStream_RandUni, gaussdev
+  real(kind=8), external :: RngStream_RandUni
+  external :: gaussdev
 
   vec=0.0d0
   do jd=1,ndim

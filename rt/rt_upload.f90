@@ -177,6 +177,9 @@ subroutine pack_flush_upload_rt(grid,msg_size,msg_array)
 #endif
      end do
   end do
+#ifdef HYDRO
+  msg%realdp_mflux=grid%mflux
+#endif
   msg_array=transfer(msg,msg_array)
 
 end subroutine pack_flush_upload_rt
@@ -209,6 +212,9 @@ subroutine unpack_flush_upload_rt(grid,msg_size,msg_array,hash_key)
         endif
      end do
   end do
+#ifdef HYDRO
+  grid%mflux=msg%realdp_mflux
+#endif
 end subroutine unpack_flush_upload_rt
 !##########################################################################
 !##########################################################################
