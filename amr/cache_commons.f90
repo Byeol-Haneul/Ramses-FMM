@@ -111,6 +111,7 @@ module cache_commons
      integer::lev
      integer(kind=8)::ind
      real(kind=8)::rad
+     real(kind=8)::mass
      real(kind=8),dimension(1:ndim)::pos
      real(kind=8),dimension(1:ndim)::vel
      real(kind=8),dimension(1:nbin)::mbin

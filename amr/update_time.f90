@@ -34,6 +34,12 @@ subroutine m_update_time(pst,ilevel,done)
 
   if(ttstart.eq.0.0) ttstart = mdl_wtime(mdl)
 
+  ! Update the outer lightcone shell boundary after restart
+  if(g%first_coarse_restart)then 
+      g%aexp_old = g%aexp
+      g%first_coarse_restart = .false.
+  end if
+
   !-------------------------------------------------------------
   ! At this point, IF nstep_coarse has JUST changed, all levels
   ! are synchronised, and all new refinements have been done.
