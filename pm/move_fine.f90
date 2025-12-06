@@ -1221,13 +1221,14 @@ subroutine cic_trace_gas_part_num(s,p,ilevel,action_part)
   integer::action_part
   real(kind=8),dimension(1:ndim)::x,disp,xi,u_eff,d_eff
   real(kind=8),dimension(1:ndim)::dl,dr
+  real(kind=8),dimension(1:ndim)::grad_at_p
   integer,dimension(1:ndim)::il,ir
-  real(kind=8),dimension(1:twotondim)::vol
+  real(kind=8),dimension(1:twotondim)::vol,phi_slice
   integer,dimension(1:ndim,1:twotondim)::ckey
   integer(kind=8),dimension(0:ndim)::hash_nbor
-  real(kind=8),dimension(1:ndim,1:twotondim)::u_cells,d_cells
+  real(kind=8),dimension(1:ndim,1:twotondim)::u_cells,d_cells,grad_phi_cells
   type(oct),pointer::gridp
-  integer :: ipart,ind,idim,icell
+  integer :: ipart,ind,idim,icell,k
   real(kind=8)::dx_loc,dt_level,rho,denom,fluxL,fluxR,jr,jl,noise_amp
   type(msg_nvar_realdp)::dummy_nvar_realdp
   type(RngStream)::RngStream_CreateStream
@@ -1296,7 +1297,7 @@ subroutine cic_trace_gas_part_num(s,p,ilevel,action_part)
               jr=max(fluxR,0.d0)
               jl=max(-fluxL,0.d0)
               u_cells(idim,ind)=(jr-jl)/denom
-              d_cells(idim,ind)=0.5d0*(jr+jl)/denom*dx_loc*r%tracer_schmidt_number
+              d_cells(idim,ind)=0.5d0*(jr+jl)/denom*dx_loc
            end do
         end if
 #endif
@@ -1309,6 +1310,16 @@ subroutine cic_trace_gas_part_num(s,p,ilevel,action_part)
            u_eff(idim)=u_eff(idim)+u_cells(idim,ind)*vol(ind)
            d_eff(idim)=d_eff(idim)+d_cells(idim,ind)*vol(ind)
         end do
+     end do
+
+     do k=1,ndim
+        do ind=1,twotondim
+           phi_slice(ind)=d_cells(k,ind)
+        end do
+        call compute_cell_gradients(phi_slice,dx_loc,grad_phi_cells)
+        call interp_grad_at_pos(s,x,ilevel,grad_phi_cells,grad_at_p)
+        u_eff(k) = u_eff(k) + (r%tracer_schmidt_number - 1.0d0) * grad_at_p(k)
+        d_eff(k) = d_eff(k) * r%tracer_schmidt_number
      end do
 
      if(action_part==action_kick_only)then
