@@ -102,6 +102,8 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
            call tsc_trace_gas_part(pst%s,pst%s%trac,ilevel,action_part)
         elseif(pst%s%r%trac_interpolation_scheme==3)then
            call pcs_trace_gas_part(pst%s,pst%s%trac,ilevel,action_part)
+        elseif(pst%s%r%trac_interpolation_scheme==4)then
+           call cic_trace_gas_part_num(pst%s,pst%s%trac,ilevel,action_part)
         endif
      endif
      if(pst%s%r%dust)then
@@ -851,6 +853,9 @@ subroutine pack_fetch_kick_trac(grid,msg_size,msg_array)
         msg%realdp_hydro(ind,ivar)=grid%uold(ind,ivar)
      end do
   end do
+  do ind=1,twotondim
+     msg%realdp_mflux(ind,1:6)=grid%mflux(ind,1:6)
+  end do
 #endif
 
   msg_array=transfer(msg,msg_array)
@@ -879,6 +884,9 @@ subroutine unpack_fetch_kick_trac(grid,msg_size,msg_array,hash_key)
      do ind=1,twotondim
         grid%uold(ind,ivar)=msg%realdp_hydro(ind,ivar)
      end do
+  end do
+  do ind=1,twotondim
+     grid%mflux(ind,1:6)=msg%realdp_mflux(ind,1:6)
   end do
 #endif
 
@@ -1196,6 +1204,147 @@ subroutine cic_trace_gas_part_ito(s,p,ilevel,action_part)
   end associate
 end subroutine cic_trace_gas_part_ito
 
+subroutine cic_trace_gas_part_num(s,p,ilevel,action_part)
+  use amr_parameters, only: ndim, twotondim
+  use pm_parameters
+  use pm_commons, only: part_t
+  use oct_commons, only: oct
+  use ramses_commons, only: ramses_t
+  use rng
+  use nbors_utils
+  use cache_commons
+  use cache
+  implicit none
+  type(ramses_t)::s
+  type(part_t)::p
+  integer::ilevel
+  integer::action_part
+  real(kind=8),dimension(1:ndim)::x,disp,xi,u_eff,d_eff
+  real(kind=8),dimension(1:ndim)::dl,dr
+  integer,dimension(1:ndim)::il,ir
+  real(kind=8),dimension(1:twotondim)::vol
+  integer,dimension(1:ndim,1:twotondim)::ckey
+  integer(kind=8),dimension(0:ndim)::hash_nbor
+  real(kind=8),dimension(1:ndim,1:twotondim)::u_cells,d_cells
+  type(oct),pointer::gridp
+  integer :: ipart,ind,idim,icell
+  real(kind=8)::dx_loc,dt_level,rho,denom,fluxL,fluxR,jr,jl,noise_amp
+  type(msg_nvar_realdp)::dummy_nvar_realdp
+  type(RngStream)::RngStream_CreateStream
+  real(kind=8)::RngStream_RandUni
+  integer(kind=8)::stream_skip
+  external :: RngStream_SetPackageSeed, RngStream_AdvanceState, gaussdev
+
+  associate(r=>s%r,g=>s%g,m=>s%m)
+  if(p%static)return
+  if (p%type/=TRAC_TYPE) return
+
+  dx_loc=r%boxlen/2**ilevel
+  dt_level=g%dtnew(ilevel)
+
+  if(.not.tracer_rng_ready)then
+     call RngStream_SetPackageSeed(r%seed)
+     tracer_rng = RngStream_CreateStream('tracer_sgs')
+     stream_skip = int(2*g%myid,kind=8)
+     call RngStream_AdvanceState(tracer_rng,0_8,stream_skip)
+     tracer_rng_ready = .true.
+  end if
+
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                     hilbert=m%domain, pack_size=storage_size(dummy_nvar_realdp)/32,&
+                     pack=pack_fetch_kick_trac,unpack=unpack_fetch_kick_trac)
+
+  do ipart=p%headp(ilevel),p%tailp(ilevel)
+
+     do idim=1,ndim
+        x(idim)=(p%xp(ipart,idim)+m%skip(idim))/dx_loc
+     end do
+     call wrap_cell_coords(s,x,ilevel+1)
+
+     do idim=1,ndim
+        dr(idim)=x(idim)+0.5d0
+        ir(idim)=int(dr(idim))
+        dr(idim)=dr(idim)-ir(idim)
+        dl(idim)=1.0d0-dr(idim)
+        il(idim)=ir(idim)-1
+     end do
+     do idim=1,ndim
+        if(r%periodic(idim))then
+           if(il(idim)< m%box_ckey_min(idim,ilevel+1))il(idim)=m%box_ckey_max(idim,ilevel+1)-1
+           if(ir(idim)>=m%box_ckey_max(idim,ilevel+1))ir(idim)=m%box_ckey_min(idim,ilevel+1)
+        endif
+     enddo
+
+     ckey = cic_index(il,ir)
+     vol = cic_weight(dl,dr)
+
+     u_cells=0.d0
+     d_cells=0.d0
+
+     hash_nbor(0)=ilevel+1
+     do ind=1,twotondim
+        hash_nbor(1:ndim)=ckey(1:ndim,ind)
+        call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+#ifdef HYDRO
+        if(associated(gridp))then
+           rho=gridp%uold(icell,1)
+           denom=max(rho,r%smallr)
+           do idim=1,ndim
+              ! mflux stores time-integrated flux ~ (dt/dx)*F; recover physical flux F with factor dx_loc/dt_level
+              fluxL=gridp%mflux(icell,idim     )*dx_loc/dt_level
+              fluxR=gridp%mflux(icell,idim+ndim)*dx_loc/dt_level
+              jr=max(fluxR,0.d0)
+              jl=max(-fluxL,0.d0)
+              u_cells(idim,ind)=(jr-jl)/denom
+              d_cells(idim,ind)=0.5d0*(jr+jl)/denom*dx_loc*r%tracer_schmidt_number
+           end do
+        end if
+#endif
+     end do
+
+     u_eff=0.d0
+     d_eff=0.d0
+     do ind=1,twotondim
+        do idim=1,ndim
+           u_eff(idim)=u_eff(idim)+u_cells(idim,ind)*vol(ind)
+           d_eff(idim)=d_eff(idim)+d_cells(idim,ind)*vol(ind)
+        end do
+     end do
+
+     if(action_part==action_kick_only)then
+        p%vp(ipart,1:ndim)=u_eff(1:ndim)
+        p%levelp(ipart)=ilevel
+        cycle
+     endif
+
+     !call sample_tracer_gaussian(xi)
+     call sample_tracer_uniform(xi)
+     do idim=1,ndim
+        disp(idim)=u_eff(idim)*dt_level
+        noise_amp = sqrt(max(0.d0,2.d0*d_eff(idim)*dt_level))
+        disp(idim)=disp(idim)+noise_amp*xi(idim)
+     end do
+
+     p%vp(ipart,1:ndim)=u_eff(1:ndim)
+     p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+disp(1:ndim)
+  end do
+
+  call close_cache(s,m%grid_dict)
+
+  if(action_part==action_kick_drift)then
+     do ipart=p%headp(ilevel),p%tailp(ilevel)
+        do idim=1,ndim
+           if(r%periodic(idim))then
+              if(p%xp(ipart,idim)< 0.0d0           )p%xp(ipart,idim)=p%xp(ipart,idim)+r%box_size(idim)
+              if(p%xp(ipart,idim)>=r%box_size(idim))p%xp(ipart,idim)=p%xp(ipart,idim)-r%box_size(idim)
+           endif
+        end do
+     end do
+  end if
+
+  end associate
+end subroutine cic_trace_gas_part_num
+
 subroutine wrap_cell_coords(st,x_cell,levelp1)
   use amr_parameters, only: ndim
   use ramses_commons, only: ramses_t
@@ -1451,6 +1600,24 @@ subroutine sample_tracer_gaussian(vec)
      vec(jd)=tmp
   end do
 end subroutine sample_tracer_gaussian
+
+subroutine sample_tracer_uniform(vec)
+  use amr_parameters, only: ndim
+  implicit none
+  real(kind=8),intent(out)::vec(1:ndim)
+  integer :: jd
+  real(kind=8)::u_rand
+  real(kind=8), external :: RngStream_RandUni
+
+  vec=0.0d0
+  do jd=1,ndim
+     u_rand = RngStream_RandUni(tracer_rng)
+     ! Uniform distribution [-sqrt(3), sqrt(3)]
+     ! variance = (sqrt(3) - (-sqrt(3)))^2 / 12 = 12/12 = 1.
+     ! mean = 0
+     vec(jd) = (2.0d0*u_rand - 1.0d0) * sqrt(3.0d0)
+  end do
+end subroutine sample_tracer_uniform
 
 subroutine tsc_trace_gas_part(s,p,ilevel,action_part)
   use amr_parameters, only: ndim, threetondim
