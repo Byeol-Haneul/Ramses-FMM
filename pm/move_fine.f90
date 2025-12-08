@@ -104,6 +104,8 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
            call pcs_trace_gas_part(pst%s,pst%s%trac,ilevel,action_part)
         elseif(pst%s%r%trac_interpolation_scheme==4)then
            call cic_trace_gas_part_num(pst%s,pst%s%trac,ilevel,action_part)
+        elseif(pst%s%r%trac_interpolation_scheme==5)then
+           call mc_trace_gas_part(pst%s,pst%s%trac,ilevel,action_part)
         endif
      endif
      if(pst%s%r%dust)then
@@ -1313,12 +1315,12 @@ subroutine cic_trace_gas_part_num(s,p,ilevel,action_part)
      end do
 
      do k=1,ndim
-        do ind=1,twotondim
-           phi_slice(ind)=d_cells(k,ind)
-        end do
-        call compute_cell_gradients(phi_slice,dx_loc,grad_phi_cells)
-        call interp_grad_at_pos(s,x,ilevel,grad_phi_cells,grad_at_p)
-        u_eff(k) = u_eff(k) + (r%tracer_schmidt_number - 1.0d0) * grad_at_p(k)
+      !   do ind=1,twotondim
+      !      phi_slice(ind)=d_cells(k,ind)
+      !   end do
+        !call compute_cell_gradients(phi_slice,dx_loc,grad_phi_cells)
+        !call interp_grad_at_pos(s,x,ilevel,grad_phi_cells,grad_at_p)
+        u_eff(k) = u_eff(k) !+ (r%tracer_schmidt_number - 1.0d0) * grad_at_p(k)
         d_eff(k) = d_eff(k) * r%tracer_schmidt_number
      end do
 
@@ -1355,6 +1357,170 @@ subroutine cic_trace_gas_part_num(s,p,ilevel,action_part)
 
   end associate
 end subroutine cic_trace_gas_part_num
+
+subroutine mc_trace_gas_part(s,p,ilevel,action_part)
+  use amr_parameters, only: ndim
+  use pm_parameters
+  use pm_commons, only: part_t
+  use oct_commons, only: oct
+  use ramses_commons, only: ramses_t
+  use rng
+  use nbors_utils
+  use cache_commons
+  use cache
+  implicit none
+  type(ramses_t)::s
+  type(part_t)::p
+  integer::ilevel
+  integer::action_part
+  real(kind=8),dimension(1:ndim)::x,vel
+  integer,dimension(1:ndim)::icell_idx
+  integer(kind=8),dimension(0:ndim)::hash_nbor
+  real(kind=8),dimension(1:6)::prob_face
+  real(kind=8)::out_sum,scale,stay_prob,u,cum
+  integer::ipart,idim,iface,selected,icell
+  real(kind=8)::rho_cell,denom,dx_loc
+  type(oct),pointer::gridp
+  type(msg_nvar_realdp)::dummy_nvar_realdp
+  type(RngStream)::RngStream_CreateStream
+  real(kind=8)::RngStream_RandUni
+  integer(kind=8)::stream_skip
+  external :: RngStream_SetPackageSeed, RngStream_AdvanceState
+
+  associate(r=>s%r,g=>s%g,m=>s%m)
+  if(p%static)return
+  if (p%type/=TRAC_TYPE) return
+
+  dx_loc=r%boxlen/2**ilevel
+
+  if(.not.tracer_rng_ready)then
+     call RngStream_SetPackageSeed(r%seed)
+     tracer_rng = RngStream_CreateStream('tracer_mc')
+     stream_skip = int(2*g%myid,kind=8)
+     call RngStream_AdvanceState(tracer_rng,0_8,stream_skip)
+     tracer_rng_ready = .true.
+  end if
+
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                     hilbert=m%domain, pack_size=storage_size(dummy_nvar_realdp)/32,&
+                     pack=pack_fetch_kick_trac,unpack=unpack_fetch_kick_trac)
+
+  do ipart=p%headp(ilevel),p%tailp(ilevel)
+
+     do idim=1,ndim
+        x(idim)=(p%xp(ipart,idim)+m%skip(idim))/dx_loc
+     end do
+     call wrap_cell_coords(s,x,ilevel+1)
+
+     do idim=1,ndim
+        icell_idx(idim)=int(x(idim))
+        if(r%periodic(idim))then
+           if(icell_idx(idim)< m%box_ckey_min(idim,ilevel+1))icell_idx(idim)=m%box_ckey_max(idim,ilevel+1)-1
+           if(icell_idx(idim)>=m%box_ckey_max(idim,ilevel+1))icell_idx(idim)=m%box_ckey_min(idim,ilevel+1)
+        endif
+     enddo
+
+     hash_nbor(0)=ilevel+1
+     hash_nbor(1:ndim)=icell_idx(1:ndim)
+     call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+#ifdef HYDRO
+     if(.not.associated(gridp))cycle
+
+     rho_cell=gridp%uold(icell,1)
+     denom=max(rho_cell,r%smallr)
+     vel=0.d0
+     vel(1:ndim)=gridp%uold(icell,2:ndim+1)/denom
+
+     prob_face=0.d0
+     if(ndim>=1)then
+        prob_face(1)=max(-gridp%mflux(icell,1),0.d0)/denom
+        prob_face(2)=max( gridp%mflux(icell,1+ndim),0.d0)/denom
+     endif
+     if(ndim>=2)then
+        prob_face(3)=max(-gridp%mflux(icell,2),0.d0)/denom
+        prob_face(4)=max( gridp%mflux(icell,2+ndim),0.d0)/denom
+     endif
+     if(ndim==3)then
+        prob_face(5)=max(-gridp%mflux(icell,3),0.d0)/denom
+        prob_face(6)=max( gridp%mflux(icell,3+ndim),0.d0)/denom
+     endif
+#else
+     if(.not.associated(gridp))cycle
+     prob_face=0.d0
+     vel=0.d0
+     denom=1.d0
+#endif
+
+     out_sum=0.d0
+     do iface=1,2*ndim
+        if(prob_face(iface)>0.d0)out_sum=out_sum+prob_face(iface)
+     end do
+
+     if(out_sum>1.d0)then
+        scale=1.d0/out_sum
+        prob_face=prob_face*scale
+        out_sum=1.d0
+     end if
+
+     stay_prob=max(0.d0,1.d0-out_sum)
+
+     selected=0
+     u=RngStream_RandUni(tracer_rng)
+     cum=0.d0
+     do iface=1,2*ndim
+        cum=cum+prob_face(iface)
+        if(u<cum)then
+           selected=iface
+           exit
+        endif
+     end do
+     if(selected==0)then
+        ! Remaining probability corresponds to staying in the host cell
+        if(u<out_sum+stay_prob)selected=0
+     endif
+
+     if(action_part==action_kick_only)then
+        p%vp(ipart,1:ndim)=vel(1:ndim)
+        p%levelp(ipart)=ilevel
+        cycle
+     endif
+
+     p%vp(ipart,1:ndim)=vel(1:ndim)
+     p%levelp(ipart)=ilevel
+
+     select case(selected)
+     case(1)
+        p%xp(ipart,1)=p%xp(ipart,1)-dx_loc
+     case(2)
+        p%xp(ipart,1)=p%xp(ipart,1)+dx_loc
+     case(3)
+        p%xp(ipart,2)=p%xp(ipart,2)-dx_loc
+     case(4)
+        p%xp(ipart,2)=p%xp(ipart,2)+dx_loc
+     case(5)
+        p%xp(ipart,3)=p%xp(ipart,3)-dx_loc
+     case(6)
+        p%xp(ipart,3)=p%xp(ipart,3)+dx_loc
+     case default
+        continue
+     end select
+  end do
+
+  call close_cache(s,m%grid_dict)
+
+  if(action_part==action_kick_drift)then
+     do ipart=p%headp(ilevel),p%tailp(ilevel)
+        do idim=1,ndim
+           if(r%periodic(idim))then
+              if(p%xp(ipart,idim)< 0.0d0           )p%xp(ipart,idim)=p%xp(ipart,idim)+r%box_size(idim)
+              if(p%xp(ipart,idim)>=r%box_size(idim))p%xp(ipart,idim)=p%xp(ipart,idim)-r%box_size(idim)
+           endif
+        end do
+     end do
+  end if
+
+  end associate
+end subroutine mc_trace_gas_part
 
 subroutine wrap_cell_coords(st,x_cell,levelp1)
   use amr_parameters, only: ndim

@@ -72,6 +72,7 @@ module amr_commons
      integer::ndustmax=0         ! Maximum number of dust particles
      integer::ntrac_per_cell=1   ! Number of tracer particles per cell in ICs
      integer::ndust_per_cell=1   ! Number of dust particles per cell in ICs
+     logical :: part_subcell_positions=.true. ! Use subcell offsets when seeding parts
      real(kind=8)::dust_to_gas_mass_ratio=0.0d0   ! Dust to gas mass ratio
      real(kind=8)::grain_size_parameter=0.0d0   ! Dust particle size parameter (dimensionless)
      real(kind=8)::grain_charge_parameter=0.0d0  ! Dust particle charge-to-mass ratio (dimensionless)

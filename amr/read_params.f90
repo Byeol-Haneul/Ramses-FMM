@@ -74,6 +74,7 @@ subroutine m_read_params(pst)
   ! IC subcell multiplicity
   integer::ntrac_per_cell=1
   integer::ndust_per_cell=1
+  logical :: part_subcell_positions=.true.
 
   ! Dust parameters
   real(kind=8)::dust_to_gas_mass_ratio=0.0d0
@@ -623,7 +624,7 @@ subroutine m_read_params(pst)
        & ,rtz_primary_cosmic_ray_ionization_rate, rtz_include_HM12_UVB, isH2_rtz &
        & ,rtz_max_cool_timestep, rtz_eqm_min_its
   ! Tracer particles parameters
-  namelist/trac_params/trac,ntracmax,ntractot,ntrac_per_cell,trac_interpolation_scheme,tracer_schmidt_number
+  namelist/trac_params/trac,ntracmax,ntractot,ntrac_per_cell,trac_interpolation_scheme,tracer_schmidt_number,part_subcell_positions
   namelist/dust_params/dust,ndustmax,ndusttot,ndust_per_cell,dust_to_gas_mass_ratio,&
   & grain_size_parameter,grain_charge_parameter,dust_mass_deposition_scheme,dust_force_interpolation_scheme,dust_gyro_factor,analytic_dust_force
   ! Star particles and star formation recipe
@@ -1227,6 +1228,7 @@ subroutine m_read_params(pst)
   s%r%ndustmax=ndustmax
   s%r%ntrac_per_cell=ntrac_per_cell
   s%r%ndust_per_cell=ndust_per_cell
+  s%r%part_subcell_positions=part_subcell_positions
   s%r%dust_to_gas_mass_ratio=dust_to_gas_mass_ratio
   s%r%grain_size_parameter=grain_size_parameter
   s%r%grain_charge_parameter=grain_charge_parameter

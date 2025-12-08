@@ -417,7 +417,11 @@ subroutine input_trac_grafic(r,g,p,npart_tot)
  
    ! Precompute subcell offsets
    allocate(tdx(1:n_per_cell),tdy(1:n_per_cell),tdz(1:n_per_cell))
-   call part_subcell_positions(n_per_cell,tdx,tdy,tdz)
+  if(r%part_subcell_positions)then
+     call part_subcell_positions(n_per_cell,tdx,tdy,tdz)
+  else
+     tdx=0.d0 ; tdy=0.d0 ; tdz=0.d0
+  endif
 
    ipart=1
    ipart_grafic=i3_min*plane_size
@@ -651,7 +655,11 @@ subroutine input_dust_grafic(r,g,p,npart_tot)
  
   ! Precompute subcell offsets
   allocate(tdx(1:n_per_cell),tdy(1:n_per_cell),tdz(1:n_per_cell))
-  call part_subcell_positions(n_per_cell,tdx,tdy,tdz)
+  if(r%part_subcell_positions)then
+     call part_subcell_positions(n_per_cell,tdx,tdy,tdz)
+  else
+     tdx=0.d0 ; tdy=0.d0 ; tdz=0.d0
+  endif
 
   ipart=1
   ipart_grafic=i3_min*plane_size
