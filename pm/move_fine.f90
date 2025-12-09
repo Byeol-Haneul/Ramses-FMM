@@ -1539,6 +1539,7 @@ subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
                      hilbert=m%domain, pack_size=storage_size(dummy_large_realdp)/32,&
                      pack=pack_fetch_kick_dust,unpack=unpack_fetch_kick_dust)
 
+#if NDIM==3
   do ipart=p%headp(ilevel),p%tailp(ilevel)
      ! Position in cell units and wrap
      do idim=1,ndim
@@ -1563,8 +1564,6 @@ subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
      enddo
      ckey = cic_index(il,ir)
      vol = cic_weight(dl,dr)
-
-
 
      if(action_part==action_kick_only)then
         p%levelp(ipart)=ilevel
@@ -1657,13 +1656,7 @@ subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
         wdrift(1:ndim)=wdrift(1:ndim)+ff(1:ndim)*0.5d0*g%dtnew(ilevel)
 #endif
 #ifdef MHD
-        if (ndim==3) then
-            call compute_lorentz_step(wdrift, bb(1:ndim), g%dtnew(ilevel), p%charge(ipart), r%analytic_dust_force)
-        else
-            if(g%myid==1 .and. g%nstep==0)then
-               write(*,*) 'Warning: Lorentz force not implemented for NDIM != 3; proceeding without it.'
-            endif
-        endif
+        call compute_lorentz_step(wdrift, bb(1:3), g%dtnew(ilevel), p%charge(ipart), r%analytic_dust_force)
 #endif
 #ifdef GRAV
         wdrift(1:ndim)=wdrift(1:ndim)+ff(1:ndim)*0.5d0*g%dtnew(ilevel)
@@ -1674,6 +1667,7 @@ subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
         p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
      endif
   end do
+#endif
   call close_cache(s,m%grid_dict)
   
   end associate
@@ -1722,9 +1716,12 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
   dx_loc=r%boxlen/2**ilevel
   pi=4.0d0*atan(1.0d0)
   coeff=9.0d0*pi*r%gamma/128.0d0
+
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
        hilbert=m%domain, pack_size=storage_size(dummy_large_realdp)/32,&
        pack=pack_fetch_kick_dust,unpack=unpack_fetch_kick_dust)
+
+#if NDIM==3
   do ipart=p%headp(ilevel),p%tailp(ilevel)
      ! particle position in cell units and periodic wrap
      do idim=1,ndim
@@ -1777,8 +1774,8 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
         vol2 = tsc_weight(wl2,wc2,wr2)
 
         ff(1:ndim)=0.0d0
-        uu(1:ndim)=0.0d0
-        bb(1:ndim)=0.0d0
+        uu(1:3)=0.0d0
+        bb(1:3)=0.0d0
         rho_gas=0.0d0
         eint=0.0d0
         emag=0.0d0
@@ -1830,13 +1827,7 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
         ! Gather ff, and apply to either side of the Lorentz force as a half-step
         wdrift(1:ndim)=wdrift(1:ndim)+ff(1:ndim)*0.5d0*g%dtnew(ilevel) ! External force half-step (includes gravity)
 #ifdef MHD 
-        if (ndim==3) then
-           call compute_lorentz_step(wdrift, bb(1:ndim), g%dtnew(ilevel), p%charge(ipart), r%analytic_dust_force) !Somehow introducing nonphysical oscillations.
-        else
-           if(g%myid==1 .and. g%nstep==0)then
-              write(*,*) 'Warning: Lorentz force not implemented for NDIM != 3; proceeding without it.'
-           endif
-        endif
+        call compute_lorentz_step(wdrift, bb(1:3), g%dtnew(ilevel), p%charge(ipart), r%analytic_dust_force) !Somehow introducing nonphysical oscillations.
 #endif
         wdrift(1:ndim)=wdrift(1:ndim)+ff(1:ndim)*0.5d0*g%dtnew(ilevel) ! Second external force half-step
         call compute_drag_step(wdrift, c_sound, 0.5*g%dtnew(ilevel), nu_stop, coeff, r%analytic_dust_force)
@@ -1865,6 +1856,7 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
       endif
      endif
   end do
+#endif
   call close_cache(s,m%grid_dict)
   if(action_part==action_kick_drift)then
      do ipart=p%headp(ilevel),p%tailp(ilevel)
@@ -1919,9 +1911,12 @@ subroutine pcs_kick_drift_dust(s,p,ilevel,action_part)
   dx_loc=r%boxlen/2**ilevel
   pi=4.0d0*atan(1.0d0)
   coeff=9.0d0*pi*r%gamma/128.0d0
+
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
        hilbert=m%domain, pack_size=storage_size(dummy_large_realdp)/32,&
        pack=pack_fetch_kick_dust,unpack=unpack_fetch_kick_dust)
+
+#if NDIM==3
   do ipart=p%headp(ilevel),p%tailp(ilevel)
      do idim=1,ndim
         x(idim)=p%xp(ipart,idim)/dx_loc
@@ -2058,13 +2053,7 @@ subroutine pcs_kick_drift_dust(s,p,ilevel,action_part)
        wdrift(1:ndim)=wdrift(1:ndim)+ff(1:ndim)*0.5d0*g%dtnew(ilevel)
 #endif
 #ifdef MHD
-       if (ndim==3) then
-           call compute_lorentz_step(wdrift, bb(1:ndim), g%dtnew(ilevel), p%charge(ipart), r%analytic_dust_force)
-       else
-           if(g%myid==1 .and. g%nstep==0)then
-              write(*,*) 'Warning: Lorentz force not implemented for NDIM != 3; proceeding without it.'
-           endif
-       endif
+       call compute_lorentz_step(wdrift, bb(1:3), g%dtnew(ilevel), p%charge(ipart), r%analytic_dust_force)
 #endif
 #ifdef GRAV
        wdrift(1:ndim)=wdrift(1:ndim)+ff(1:ndim)*0.5d0*g%dtnew(ilevel)
@@ -2074,6 +2063,7 @@ subroutine pcs_kick_drift_dust(s,p,ilevel,action_part)
        p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
     endif
   end do
+#endif
   call close_cache(s,m%grid_dict)
   if(action_part==action_kick_drift)then
      do ipart=p%headp(ilevel),p%tailp(ilevel)
@@ -2187,7 +2177,8 @@ subroutine compute_lorentz(driftvel, bfield, dt, charge_parameter)
   real(kind=8) :: det, bsquared, dteff
   real(kind=8) :: v1_new, v2_new, v3_new
   real(kind=8), dimension(1:3,1:3) :: matrix
-  
+
+#if NDIM==3  
   dteff = -1.0d0 * dt * charge_parameter ! Accidentally flipped sign in the original code.
   bsquared = dot_product(bfield(1:ndim), bfield(1:ndim))
 
@@ -2219,7 +2210,8 @@ subroutine compute_lorentz(driftvel, bfield, dt, charge_parameter)
      driftvel(2) = v2_new
      driftvel(3) = v3_new
   end if
-  
+#endif
+
 end subroutine compute_lorentz
 
 !#########################################################################
@@ -2235,14 +2227,11 @@ subroutine compute_lorentz_step(driftvel, bfield, dt, charge_parameter, analytic
   real(kind=8), intent(in)                       :: charge_parameter
   logical, intent(in)                            :: analytic_dust_force
 #ifdef MHD
-  if (ndim/=3) return
   if (.not. analytic_dust_force) then
      call compute_lorentz(driftvel, bfield, dt, charge_parameter)
   else
      call compute_lorentz_analytic(driftvel, bfield, dt, charge_parameter)
   end if
-#else
-  ! No MHD compiled; nothing to do
 #endif
 end subroutine compute_lorentz_step
 !#########################################################################
@@ -2256,8 +2245,7 @@ subroutine compute_lorentz_analytic(driftvel, bfield, dt, charge_parameter)
   real(kind=8), intent(in)                       :: charge_parameter
   real(kind=8) :: dteff, bsquared, bnorm, theta, costh, sinth, vdotb, t2
   real(kind=8), dimension(1:ndim) :: bhat, v, kxv
-
-
+#if NDIM==3
   dteff = dt * charge_parameter
   if (dteff == 0.0d0) return
 
@@ -2291,7 +2279,7 @@ subroutine compute_lorentz_analytic(driftvel, bfield, dt, charge_parameter)
      driftvel(2) = v(2)*costh + kxv(2)*sinth + bhat(2)*vdotb*(1.0d0 - costh)
      driftvel(3) = v(3)*costh + kxv(3)*sinth + bhat(3)*vdotb*(1.0d0 - costh)
   end if
-
+#endif
 end subroutine compute_lorentz_analytic
 
 !#########################################################################

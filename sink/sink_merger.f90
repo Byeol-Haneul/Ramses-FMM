@@ -1,5 +1,7 @@
 module sink_merger_module
+#ifndef WITHOUTMPI
   use mpi
+#endif
   use constants
   use flag_utils
   use amr_commons
@@ -75,6 +77,7 @@ contains
 
     if(pst%s%r%verbose) write(*,*) 'Entering sink merger...' 
 
+#ifndef WITHOUTMPI
     ! Set parameters
     dx_loc = pst%s%r%boxlen/2**ilevel
     factG = 1.0d0
@@ -127,6 +130,7 @@ contains
     deallocate(local_collision_pairs, all_id1, all_id2, unique_ids, global_sink_data)
 
     if(pst%s%r%verbose .and. pst%s%g%myid == 1) write(*,*) 'Sink merger process complete, executed:', n_valid_mergers
+#endif
 
   end subroutine sink_merger_optimized
 
@@ -284,9 +288,9 @@ contains
     integer,dimension(:),allocatable::recvcounts, displs
     integer,dimension(:),allocatable::temp_id1, temp_id2  ! Temporary arrays
 
+#ifndef WITHOUTMPI
     call MPI_COMM_SIZE(MPI_COMM_WORLD, nprocs, ierr)
     call MPI_COMM_RANK(MPI_COMM_WORLD, myrank, ierr)
-
     call MPI_ALLREDUCE(n_local, n_total, 1, MPI_INTEGER, MPI_SUM, MPI_COMM_WORLD, ierr)
 
     if(n_total == 0) return
@@ -320,7 +324,7 @@ contains
     call MPI_ALLGATHERV(temp_id2, n_local, MPI_INTEGER, &
          all_id2, recvcounts, displs, MPI_INTEGER, MPI_COMM_WORLD, ierr)
     deallocate(temp_id1, temp_id2, recvcounts, displs)
-
+#endif
   end subroutine gather_all_collisions
 
   !==============================================================================
@@ -390,6 +394,7 @@ contains
     logical,dimension(:,:),allocatable::all_exists
     integer,dimension(:,:),allocatable::all_owners
 
+#ifndef WITHOUTMPI
     call MPI_COMM_RANK(MPI_COMM_WORLD, myrank, ierr)
     call MPI_COMM_SIZE(MPI_COMM_WORLD, nprocs, ierr)
 
@@ -460,6 +465,7 @@ contains
     end do
 
     deallocate(all_masses, all_positions, all_velocities, all_exists, all_owners)
+#endif
 
   end subroutine mpi_gather_all_sink_data
 
@@ -569,6 +575,7 @@ contains
     real(kind=8)::mass1, mass2, total_mass
     real(kind=8),dimension(1:3)::com_position, momentum
 
+#ifndef WITHOUTMPI
     call MPI_COMM_RANK(MPI_COMM_WORLD, myrank, ierr)
 
     do i = 1, n_total
@@ -626,7 +633,7 @@ contains
           end do
        endif
     end do
-
+#endif
   end subroutine execute_mergers_batch
 
   !==============================================================================
