@@ -1010,8 +1010,8 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
   real(kind=8)::dx_loc,dt_level,kappa_mid,noise_amp
   logical :: use_sgs
   type(msg_nvar_realdp)::dummy_nvar_realdp
-  type(RngStream)::RngStream_CreateStream
-  real(kind=8)::RngStream_RandUni
+  type(RngStream),external::RngStream_CreateStream
+  real(kind=8),external::RngStream_RandUni
   integer(kind=8)::stream_skip
   external :: RngStream_SetPackageSeed, RngStream_AdvanceState, gaussdev
   integer :: ipart,idim
@@ -1111,8 +1111,8 @@ subroutine cic_trace_gas_part_ito(s,p,ilevel,action_part)
   real(kind=8)::dx_loc,dt_level,kappa_mid,noise_amp
   logical :: use_sgs
   type(msg_nvar_realdp)::dummy_nvar_realdp
-  type(RngStream)::RngStream_CreateStream
-  real(kind=8)::RngStream_RandUni
+  type(RngStream),external::RngStream_CreateStream
+  real(kind=8),external::RngStream_RandUni
   integer(kind=8)::stream_skip
   external :: RngStream_SetPackageSeed, RngStream_AdvanceState, gaussdev
   integer :: ipart,idim,ic
@@ -1233,8 +1233,8 @@ subroutine cic_trace_gas_part_num(s,p,ilevel,action_part)
   integer :: ipart,ind,idim,icell,k
   real(kind=8)::dx_loc,dt_level,rho,denom,fluxL,fluxR,jr,jl,noise_amp
   type(msg_nvar_realdp)::dummy_nvar_realdp
-  type(RngStream)::RngStream_CreateStream
-  real(kind=8)::RngStream_RandUni
+  type(RngStream),external::RngStream_CreateStream
+  real(kind=8),external::RngStream_RandUni
   integer(kind=8)::stream_skip
   external :: RngStream_SetPackageSeed, RngStream_AdvanceState, gaussdev
 
@@ -1382,8 +1382,8 @@ subroutine mc_trace_gas_part(s,p,ilevel,action_part)
   real(kind=8)::rho_cell,denom,dx_loc,dist_to_face
   type(oct),pointer::gridp
   type(msg_nvar_realdp)::dummy_nvar_realdp
-  type(RngStream)::RngStream_CreateStream
-  real(kind=8)::RngStream_RandUni
+  type(RngStream),external::RngStream_CreateStream
+  real(kind=8),external::RngStream_RandUni
   integer(kind=8)::stream_skip
   external :: RngStream_SetPackageSeed, RngStream_AdvanceState
 
