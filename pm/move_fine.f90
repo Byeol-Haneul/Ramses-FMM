@@ -1699,9 +1699,7 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
   real(kind=8)::xl,xc,xr
   real(kind=8)::dx_loc
   real(kind=8),dimension(1:ndim)::ff,uu,v_pred,wdrift
-#ifdef MHD
   real(kind=8),dimension(1:3)::bb
-#endif
   real(kind=8)::rho_gas,c_sound,eint,coeff
   real(kind=8)::nu_stop,dens,etot,ekin,erad,emag,cs2,pi
   integer :: ii
