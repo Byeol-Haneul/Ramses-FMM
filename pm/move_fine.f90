@@ -95,7 +95,7 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
      endif
      if(pst%s%r%trac)then
         if(pst%s%r%trac_interpolation_scheme==0)then
-           call cic_trace_gas_part_ito(pst%s,pst%s%trac,ilevel,action_part)
+           call mc_trace_gas_part(pst%s,pst%s%trac,ilevel,action_part) ! Classical Monte Carlo (may not work with AMR)
         elseif(pst%s%r%trac_interpolation_scheme==1)then
            call cic_trace_gas_part(pst%s,pst%s%trac,ilevel,action_part)
         elseif(pst%s%r%trac_interpolation_scheme==2)then
@@ -103,9 +103,9 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
         elseif(pst%s%r%trac_interpolation_scheme==3)then
            call pcs_trace_gas_part(pst%s,pst%s%trac,ilevel,action_part)
         elseif(pst%s%r%trac_interpolation_scheme==4)then
-           call cic_trace_gas_part_num(pst%s,pst%s%trac,ilevel,action_part)
+           call cic_trace_gas_part_num(pst%s,pst%s%trac,ilevel,action_part) ! Ito formulation of the flux-based Monte Carlo tracer
         elseif(pst%s%r%trac_interpolation_scheme==5)then
-           call mc_trace_gas_part(pst%s,pst%s%trac,ilevel,action_part)
+           call cic_trace_gas_part_ito(pst%s,pst%s%trac,ilevel,action_part) ! Ito formulation of the sgs driven diffusion tracer
         endif
      endif
      if(pst%s%r%dust)then
@@ -1221,14 +1221,14 @@ subroutine cic_trace_gas_part_num(s,p,ilevel,action_part)
   type(part_t)::p
   integer::ilevel
   integer::action_part
-  real(kind=8),dimension(1:ndim)::x,disp,xi,u_eff,d_eff
+  real(kind=8),dimension(1:ndim)::x,disp,xi,u_eff,kappa_num
   real(kind=8),dimension(1:ndim)::dl,dr
-  real(kind=8),dimension(1:ndim)::grad_at_p
+  real(kind=8),dimension(1:ndim)::grad_at_part
   integer,dimension(1:ndim)::il,ir
   real(kind=8),dimension(1:twotondim)::vol,phi_slice
   integer,dimension(1:ndim,1:twotondim)::ckey
   integer(kind=8),dimension(0:ndim)::hash_nbor
-  real(kind=8),dimension(1:ndim,1:twotondim)::u_cells,d_cells,grad_phi_cells
+  real(kind=8),dimension(1:ndim,1:twotondim)::u_cells,kappa_num_cells,grad_phi_cells
   type(oct),pointer::gridp
   integer :: ipart,ind,idim,icell,k
   real(kind=8)::dx_loc,dt_level,rho,denom,fluxL,fluxR,jr,jl,noise_amp
@@ -1282,7 +1282,7 @@ subroutine cic_trace_gas_part_num(s,p,ilevel,action_part)
      vol = cic_weight(dl,dr)
 
      u_cells=0.d0
-     d_cells=0.d0
+     kappa_num_cells=0.d0
 
      hash_nbor(0)=ilevel+1
      do ind=1,twotondim
@@ -1299,29 +1299,29 @@ subroutine cic_trace_gas_part_num(s,p,ilevel,action_part)
               jr=max(fluxR,0.d0)
               jl=max(-fluxL,0.d0)
               u_cells(idim,ind)=(jr-jl)/denom
-              d_cells(idim,ind)=0.5d0*(jr+jl)/denom*dx_loc
+              kappa_num_cells(idim,ind)=0.5d0*(jr+jl)/denom*dx_loc
            end do
         end if
 #endif
      end do
 
      u_eff=0.d0
-     d_eff=0.d0
+     kappa_num=0.d0
      do ind=1,twotondim
         do idim=1,ndim
            u_eff(idim)=u_eff(idim)+u_cells(idim,ind)*vol(ind)
-           d_eff(idim)=d_eff(idim)+d_cells(idim,ind)*vol(ind)
+           kappa_num(idim)=kappa_num(idim)+kappa_num_cells(idim,ind)*vol(ind)
         end do
      end do
 
      do k=1,ndim
-      !   do ind=1,twotondim
-      !      phi_slice(ind)=d_cells(k,ind)
-      !   end do
-        !call compute_cell_gradients(phi_slice,dx_loc,grad_phi_cells)
-        !call interp_grad_at_pos(s,x,ilevel,grad_phi_cells,grad_at_p)
-        u_eff(k) = u_eff(k) !+ (r%tracer_schmidt_number - 1.0d0) * grad_at_p(k)
-        d_eff(k) = d_eff(k) * r%tracer_schmidt_number
+        do ind=1,twotondim
+           phi_slice(ind)=kappa_num_cells(k,ind)
+        end do
+        call compute_cell_gradients(phi_slice,dx_loc,grad_phi_cells)
+        call interp_grad_at_pos(s,x,ilevel,grad_phi_cells,grad_at_part)
+        u_eff(k) = u_eff(k) + (r%tracer_inverse_peclet_number - 1.0d0) * grad_at_part(k)
+        kappa_num(k) = kappa_num(k) * r%tracer_inverse_peclet_number
      end do
 
      if(action_part==action_kick_only)then
@@ -1334,7 +1334,7 @@ subroutine cic_trace_gas_part_num(s,p,ilevel,action_part)
      call sample_tracer_uniform(xi)
      do idim=1,ndim
         disp(idim)=u_eff(idim)*dt_level
-        noise_amp = sqrt(max(0.d0,2.d0*d_eff(idim)*dt_level))
+        noise_amp = sqrt(max(0.d0,2.d0*kappa_num(idim)*dt_level))
         disp(idim)=disp(idim)+noise_amp*xi(idim)
      end do
 
@@ -1379,7 +1379,7 @@ subroutine mc_trace_gas_part(s,p,ilevel,action_part)
   real(kind=8),dimension(1:6)::prob_face
   real(kind=8)::out_sum,scale,stay_prob,u,cum
   integer::ipart,idim,iface,selected,icell
-  real(kind=8)::rho_cell,denom,dx_loc
+  real(kind=8)::rho_cell,denom,dx_loc,dist_to_face
   type(oct),pointer::gridp
   type(msg_nvar_realdp)::dummy_nvar_realdp
   type(RngStream)::RngStream_CreateStream
@@ -1411,6 +1411,23 @@ subroutine mc_trace_gas_part(s,p,ilevel,action_part)
         x(idim)=(p%xp(ipart,idim)+m%skip(idim))/dx_loc
      end do
      call wrap_cell_coords(s,x,ilevel+1)
+
+     do idim=1,ndim
+        dist_to_face = abs(x(idim) - dble(nint(x(idim))))
+        if(dist_to_face < 0.01d0)then
+           if(RngStream_RandUni(tracer_rng) < 0.5d0)then
+              x(idim)=dble(nint(x(idim)))-0.5d0
+           else
+              x(idim)=dble(nint(x(idim)))+0.5d0
+           endif
+        else
+           x(idim)=dble(int(x(idim)))+0.5d0
+        endif
+     end do
+     call wrap_cell_coords(s,x,ilevel+1)
+     do idim=1,ndim
+        p%xp(ipart,idim)=x(idim)*dx_loc-m%skip(idim)
+     end do
 
      do idim=1,ndim
         icell_idx(idim)=int(x(idim))
@@ -1456,7 +1473,7 @@ subroutine mc_trace_gas_part(s,p,ilevel,action_part)
         if(prob_face(iface)>0.d0)out_sum=out_sum+prob_face(iface)
      end do
 
-     if(out_sum>1.d0)then
+     if(out_sum>1.d0)then ! Just for safety, as out_sum SHOULD be the probability of exiting the cell
         scale=1.d0/out_sum
         prob_face=prob_face*scale
         out_sum=1.d0
@@ -1474,10 +1491,7 @@ subroutine mc_trace_gas_part(s,p,ilevel,action_part)
            exit
         endif
      end do
-     if(selected==0)then
-        ! Remaining probability corresponds to staying in the host cell
-        if(u<out_sum+stay_prob)selected=0
-     endif
+     ! Remaining probability corresponds to staying in the host cell
 
      if(action_part==action_kick_only)then
         p%vp(ipart,1:ndim)=vel(1:ndim)
@@ -1488,22 +1502,11 @@ subroutine mc_trace_gas_part(s,p,ilevel,action_part)
      p%vp(ipart,1:ndim)=vel(1:ndim)
      p%levelp(ipart)=ilevel
 
-     select case(selected)
-     case(1)
-        p%xp(ipart,1)=p%xp(ipart,1)-dx_loc
-     case(2)
-        p%xp(ipart,1)=p%xp(ipart,1)+dx_loc
-     case(3)
-        p%xp(ipart,2)=p%xp(ipart,2)-dx_loc
-     case(4)
-        p%xp(ipart,2)=p%xp(ipart,2)+dx_loc
-     case(5)
-        p%xp(ipart,3)=p%xp(ipart,3)-dx_loc
-     case(6)
-        p%xp(ipart,3)=p%xp(ipart,3)+dx_loc
-     case default
-        continue
-     end select
+     if(selected>0)then
+        idim = (selected + 1) / 2 ! integer division.
+        p%xp(ipart,idim)=p%xp(ipart,idim)+ (-1)**selected * dx_loc
+     endif
+
   end do
 
   call close_cache(s,m%grid_dict)
@@ -1596,7 +1599,7 @@ subroutine gather_cic_state(st,x_cell,level_in,dx_cell,use_sgs_in,vel_out,kappa_
         momentum(1:ndim)=momentum(1:ndim)+gridp%uold(icell,2:ndim+1)*vol(ind)
         rho=rho+gridp%uold(icell,1)*vol(ind)
         if(use_sgs_in)then
-           kappa_sum=kappa_sum+tracer_cell_kappa(gridp%uold(icell,1),gridp%uold(icell,st%r%iturb),dx_cell,st%r%smallr,st%r%tracer_schmidt_number)*vol(ind)
+           kappa_sum=kappa_sum+tracer_cell_kappa(gridp%uold(icell,1),gridp%uold(icell,st%r%iturb),dx_cell,st%r%smallr,st%r%tracer_inverse_peclet_number)*vol(ind)
         end if
      end if
 #endif
@@ -1659,7 +1662,7 @@ subroutine gather_cic_scalar(st,x_cell,level_in,dx_cell,use_sgs_in,phi_cells)
      call get_parent_cell(st,hash_nbor,st%m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
 #ifdef HYDRO
      if(associated(gridp))then
-        phi_cells(ind)=tracer_cell_kappa(gridp%uold(icell,1),gridp%uold(icell,st%r%iturb),dx_cell,st%r%smallr,st%r%tracer_schmidt_number)
+        phi_cells(ind)=tracer_cell_kappa(gridp%uold(icell,1),gridp%uold(icell,st%r%iturb),dx_cell,st%r%smallr,st%r%tracer_inverse_peclet_number)
      end if
 #endif
   end do
@@ -1747,15 +1750,15 @@ subroutine interp_grad_at_pos(st,x_cell,level_in,grad_cells,grad_out)
   end do
 end subroutine interp_grad_at_pos
 
-real(kind=8) function tracer_cell_kappa(dens_in,eturb_in,dx_in,smallr_in,schmidt_in) result(kappa_val)
+real(kind=8) function tracer_cell_kappa(dens_in,eturb_in,dx_in,smallr_in,inverse_peclet_in) result(kappa_val)
   implicit none
-  real(kind=8),intent(in)::dens_in,eturb_in,dx_in,smallr_in,schmidt_in
+  real(kind=8),intent(in)::dens_in,eturb_in,dx_in,smallr_in,inverse_peclet_in
   real(kind=8)::rho_eff,sigma_sq
 
   rho_eff = max(dens_in,smallr_in)
   sigma_sq = max(2.0d0*max(eturb_in,0.0d0)/rho_eff,0.0d0)
   if(sigma_sq>0.0d0)then
-     kappa_val = schmidt_in*dx_in*sqrt(sigma_sq)
+     kappa_val = inverse_peclet_in*dx_in*sqrt(sigma_sq)
   else
      kappa_val = 0.0d0
   end if

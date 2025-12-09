@@ -97,7 +97,7 @@ module amr_commons
      integer :: tree_mass_deposition_scheme=1     ! tree mass deposition schemes
      integer :: tree_force_interpolation_scheme=1 ! tree force interpolation schemes
      integer :: trac_interpolation_scheme=1 ! tracer force interpolation schemes
-     real(kind=8) :: tracer_schmidt_number=1.0d-2 ! tracer turbulent Schmidt number for SGS diffusion
+     real(kind=8) :: tracer_inverse_peclet_number=1.0d-2 ! tracer turbulent Schmidt number for SGS diffusion
      integer :: dust_mass_deposition_scheme=1 ! dust mass deposition schemes
      integer :: dust_force_interpolation_scheme=1 ! dust force interpolation schemes
 
