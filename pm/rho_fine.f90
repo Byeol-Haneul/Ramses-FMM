@@ -1469,6 +1469,16 @@ subroutine split_part(s,p,ilevel)
            p%idt(ipart)=p%idt(jpart)
            p%idt(jpart)=idp_tmp
         endif
+        if(allocated(p%size))then
+           mp_tmp=p%size(ipart)
+           p%size(ipart)=p%size(jpart)
+           p%size(jpart)=mp_tmp
+        endif
+        if(allocated(p%charge))then
+           mp_tmp=p%charge(ipart)
+           p%charge(ipart)=p%charge(jpart)
+           p%charge(jpart)=mp_tmp
+        endif
      end do
   end do
 

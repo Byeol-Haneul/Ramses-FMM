@@ -18,6 +18,7 @@ module ramses_commons
      type(part_t)::sink
      type(part_t)::tree
      type(part_t)::trac
+     type(part_t)::dust
      type(part_t)::gas
      type(clump_t)::c
      type(turb_t)::turb
@@ -423,6 +424,14 @@ subroutine open_part_file(s,p,filename,nskip,ilun)
         ivar=ivar+1
         nskip(ivar+1)=nskip(ivar)+i8b*npart
      endif
+     if(allocated(p%size))then
+        ivar=ivar+1
+        nskip(ivar+1)=nskip(ivar)+4*npart
+     endif
+     if(allocated(p%charge))then
+        ivar=ivar+1
+        nskip(ivar+1)=nskip(ivar)+4*npart
+     endif
 
   elseif(g%myid.GT.istart(ifile))then
 
@@ -553,6 +562,14 @@ subroutine close_part_file(s,p,filename,nskip,ilun)
      if(allocated(p%idt))then
         ivar=ivar+1
         nskip(ivar)=nskip(ivar)+i8b*p%npart
+     endif
+     if(allocated(p%size))then
+        ivar=ivar+1
+        nskip(ivar)=nskip(ivar)+4*p%npart
+     endif
+     if(allocated(p%charge))then
+        ivar=ivar+1
+        nskip(ivar)=nskip(ivar)+4*p%npart
      endif
 
 #ifndef WITHOUTMPI

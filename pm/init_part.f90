@@ -36,6 +36,9 @@ recursive subroutine r_init_part(pst)
      if(pst%s%r%trac)then
         call init_trac(pst%s%r,pst%s%g,pst%s%trac)
      end if
+     if(pst%s%r%dust)then
+        call init_dust(pst%s%r,pst%s%g,pst%s%dust)
+     end if
   endif
 
 end subroutine r_init_part
@@ -257,6 +260,37 @@ subroutine init_trac(r,g,p)
 end subroutine init_trac
 !#########################################################################
 !#########################################################################
+!#########################################################################
+!#########################################################################
+subroutine init_dust(r,g,p)
+  use amr_parameters, only: ndim
+  use amr_commons, only: run_t,global_t
+  use pm_parameters, only: DUST_TYPE
+  use pm_commons, only: part_t
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(part_t)::p
+  !-----------------------------------
+  ! Allocate dust particle variables
+  !------------------------------------
+  p%type=DUST_TYPE
+  allocate(p%xp    (r%ndustmax,ndim))
+  allocate(p%vp    (r%ndustmax,ndim))
+  allocate(p%mp    (r%ndustmax))
+  allocate(p%levelp(r%ndustmax))
+  allocate(p%idp   (r%ndustmax))
+  allocate(p%size  (r%ndustmax))
+  allocate(p%charge(r%ndustmax)) 
+  p%nvaralloc=2*ndim+5
+
+  allocate(p%sortp (r%ndustmax))
+  allocate(p%workp (r%ndustmax))
+  allocate(p%headp(r%levelmin:r%nlevelmax))
+  allocate(p%tailp(r%levelmin:r%nlevelmax))
+  p%headp=1
+  p%tailp=0
+end subroutine init_dust
 !#########################################################################
 !#########################################################################
 subroutine allocate_gas(r,g,p)

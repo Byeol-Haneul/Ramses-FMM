@@ -25,6 +25,7 @@ module amr_commons
      logical::sink    =.false.   ! Sinks and sink formation activated
      logical::tree    =.false.   ! Merger tree particles activated
      logical::trac    =.false.   ! Tracer particles activated
+     logical::dust    =.false.   ! Dust particles activated
      logical::orphan  =.false.   ! Orphan particles activated
      logical::verbose =.false.   ! Write everything
      logical::debug   =.false.   ! Debug mode activated
@@ -53,6 +54,10 @@ module amr_commons
      integer::bkp_modulo=0       ! Use modulo for backup file count
      integer::nfile=1            ! Number of file used per snapshot. Use -1 for nfile=ncpu
 
+     ! Trajectory output parameters (per-step particle traces)
+     integer::ntrajectories=0
+     integer,dimension(1:MAXOUT)::trajectories=0
+
      ! Mesh parameters
      integer::levelmin=1         ! Full refinement up to levelmin
      integer::nlevelmax=1        ! Maximum number of level
@@ -63,6 +68,14 @@ module amr_commons
      integer::nsinkmax=0         ! Maximum number of sink particles
      integer::ntreemax=0         ! Maximum number of tree particles
      integer::ntracmax=0         ! Maximum number of tracer particles
+     integer::ndustmax=0         ! Maximum number of dust particles
+     integer::ntrac_per_cell=1   ! Number of tracer particles per cell in ICs
+     integer::ndust_per_cell=1   ! Number of dust particles per cell in ICs
+     real(kind=8)::dust_to_gas_mass_ratio=0.0d0   ! Dust to gas mass ratio
+     real(kind=8)::grain_size_parameter=0.0d0   ! Dust particle size parameter (dimensionless)
+     real(kind=8)::grain_charge_parameter=0.0d0  ! Dust particle charge-to-mass ratio (dimensionless)
+     real(kind=8)::dust_gyro_factor=0.1d0  ! Fraction of gyro period allowed per step
+     logical :: analytic_dust_force = .false. ! If true use analytic drag+Lorentz
      integer,dimension(1:MAXLEVEL)::nexpand=1 ! Number of mesh expansion
      real(kind=8)::boxlen=1.0        ! Cell size at level 0 (total box size)
           
@@ -82,6 +95,8 @@ module amr_commons
      integer :: tree_mass_deposition_scheme=1     ! tree mass deposition schemes
      integer :: tree_force_interpolation_scheme=1 ! tree force interpolation schemes
      integer :: trac_interpolation_scheme=1 ! tracer force interpolation schemes
+     integer :: dust_mass_deposition_scheme=1 ! dust mass deposition schemes
+     integer :: dust_force_interpolation_scheme=1 ! dust force interpolation schemes
 
      ! Movie parameters
      integer::levelmax_frame=0
@@ -328,6 +343,7 @@ module amr_commons
      logical::output_peak_sink=.false.
      logical::output_peak_tree=.false.
      logical::output_peak_trac=.false.
+     logical::output_peak_dust=.false.
      integer::rho_type_clump=1
      real(kind=8)::relevance_threshold=2
      real(kind=8)::density_threshold=-1
