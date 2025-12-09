@@ -896,9 +896,9 @@ subroutine pack_fetch_kick_dust(grid,msg_size,msg_array)
 #endif
 #ifdef GRAV
   do ind=1,twotondim
-     msg%realdp_phi(ind)=grid%f(ind,1)
-     msg%realdp_phi_old(ind)=grid%f(ind,2)
-     msg%realdp_dis(ind)=grid%f(ind,3)
+     msg%realdp_poisson(ind,1)=grid%f(ind,1)
+     msg%realdp_poisson(ind,2)=grid%f(ind,2)
+     msg%realdp_poisson(ind,3)=grid%f(ind,3)
   end do
 #endif
 #ifdef RT
@@ -946,9 +946,9 @@ subroutine unpack_fetch_kick_dust(grid,msg_size,msg_array,hash_key)
 #endif
 #ifdef GRAV
   do ind=1,twotondim
-     grid%f(ind,1)=msg%realdp_phi(ind)
-     grid%f(ind,2)=msg%realdp_phi_old(ind)
-     grid%f(ind,3)=msg%realdp_dis(ind)
+     grid%f(ind,1)=msg%realdp_poisson(ind,1)
+     grid%f(ind,2)=msg%realdp_poisson(ind,2)
+     grid%f(ind,3)=msg%realdp_poisson(ind,3)
   end do
 #endif
 #ifdef RT
