@@ -279,6 +279,7 @@ subroutine m_read_params(pst)
   real(kind=8),dimension(1:3)::constant_gravity=0.0d0
   real(kind=8)::switch_llf_dmin=-1
   real(kind=8)::switch_llf_pmin=-1
+  real(kind=8)::smagorinsky_lilly_constant=1.0d0
 
   ! Non-thernal energies and passive scalars index
   integer ::inener,ientropy,imetal,iturb,ichem
@@ -575,7 +576,7 @@ subroutine m_read_params(pst)
   namelist/hydro_params/gamma,courant_factor,smallr,smallc &
        & ,slope_type,slope_mag_type,difmag,etamag,gamma_rad &
        & ,dual_energy,T2_fix,induction,entropy,sgs_turb,riemann,riemann2d,constant_gravity &
-       & ,niter_riemann,scheme,switch_llf_dmin,switch_llf_pmin
+       & ,niter_riemann,scheme,switch_llf_dmin,switch_llf_pmin,smagorinsky_lilly_constant
   ! Grid refinement parameters
   namelist/refine_params/x_refine,y_refine,z_refine,r_refine &
        & ,a_refine,b_refine,exp_refine,jeans_refine,mass_cut_refine &
@@ -1330,6 +1331,7 @@ subroutine m_read_params(pst)
 #endif
   s%r%switch_llf_dmin=switch_llf_dmin
   s%r%switch_llf_pmin=switch_llf_pmin
+  s%r%smagorinsky_lilly_constant=smagorinsky_lilly_constant
 
   s%r%units_density=units_density
   s%r%units_time=units_time

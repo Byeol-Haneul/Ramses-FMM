@@ -533,6 +533,8 @@ module amr_commons
      integer      :: turb_Ndt=100        ! Number of timesteps per autocorr. time
      real(kind=8) :: turb_rms=1.0        ! rms turbulent forcing acceleration
      real(kind=8) :: turb_min_rho=1d-50  ! Minimum density for turbulence
+     
+     real(kind=8) :: smagorinsky_lilly_constant=1.0d0 ! Smagorinsky-Lilly constant for SGS turbulence
 
   end type run_t
 

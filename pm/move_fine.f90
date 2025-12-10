@@ -1491,7 +1491,7 @@ subroutine mc_trace_gas_part(s,p,ilevel,action_part)
            exit
         endif
      end do
-     ! Remaining probability corresponds to staying in the host cell
+        ! Remaining probability corresponds to staying in the host cell
 
      if(action_part==action_kick_only)then
         p%vp(ipart,1:ndim)=vel(1:ndim)
