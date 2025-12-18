@@ -3,6 +3,16 @@ module move_fine_module
   use rng
   type(RngStream), save :: tracer_rng
   logical, save :: tracer_rng_ready = .false.
+
+abstract interface
+  function phi_accessor_if(gridp,icell) result(phi_val)
+    use oct_commons, only: oct
+    implicit none
+    type(oct),pointer::gridp
+    integer,intent(in)::icell
+    real(kind=8)::phi_val
+  end function phi_accessor_if
+end interface
 contains
 !################################################################
 !################################################################
@@ -1128,9 +1138,13 @@ subroutine cic_trace_gas_part_ito(s,p,ilevel,action_part)
   integer::ilevel
   integer::action_part
   real(kind=8),dimension(1:ndim)::x,x_mid,v_pred,vel,vel_mid,disp,xi
+  real(kind=8),dimension(1:ndim)::dl,dr
+  integer,dimension(1:ndim)::il,ir
+  integer,dimension(1:ndim,1:twotondim)::ckey
   real(kind=8),dimension(1:twotondim)::kappa_cells
   real(kind=8),dimension(1:ndim,1:twotondim)::grad_kappa_cells
-  real(kind=8)::dx_loc,dt_level,kappa_mid,noise_amp
+  real(kind=8)::dx_loc,dt_level,kappa_mid,noise_amp,smallr_loc,inv_pec_loc
+  integer :: iturb_loc
   logical :: use_sgs
   type(msg_nvar_realdp)::dummy_nvar_realdp
   type(RngStream),external::RngStream_CreateStream
@@ -1138,6 +1152,7 @@ subroutine cic_trace_gas_part_ito(s,p,ilevel,action_part)
   integer(kind=8)::stream_skip
   external :: RngStream_SetPackageSeed, RngStream_AdvanceState, gaussdev
   integer :: ipart,idim,ic
+  procedure(phi_accessor_if),pointer :: phi_kappa => null()
 
   associate(r=>s%r,g=>s%g,m=>s%m)
   if(p%static)return
@@ -1145,6 +1160,9 @@ subroutine cic_trace_gas_part_ito(s,p,ilevel,action_part)
 
   dx_loc=r%boxlen/2**ilevel
   dt_level=g%dtnew(ilevel)
+  smallr_loc = r%smallr
+  inv_pec_loc = r%tracer_inverse_peclet_number
+  iturb_loc = r%iturb
   use_sgs = r%sgs_turb .and. (r%iturb>0)
   if(use_sgs .and. .not. tracer_rng_ready)then
      call RngStream_SetPackageSeed(r%seed)
@@ -1172,7 +1190,22 @@ subroutine cic_trace_gas_part_ito(s,p,ilevel,action_part)
         kappa_cells(ic)=0.d0
      end do
      call gather_cic_scalar(s,x,ilevel,dx_loc,use_sgs,kappa_cells)
-     call compute_cell_gradients(kappa_cells,dx_loc,grad_kappa_cells)
+     do idim=1,ndim
+        dr(idim)=x(idim)+0.5d0
+        ir(idim)=int(dr(idim))
+        dr(idim)=dr(idim)-ir(idim)
+        dl(idim)=1.0d0-dr(idim)
+        il(idim)=ir(idim)-1
+     end do
+     do idim=1,ndim
+        if(r%periodic(idim))then
+           if(il(idim)< m%box_ckey_min(idim,ilevel+1))il(idim)=m%box_ckey_max(idim,ilevel+1)-1
+           if(ir(idim)>=m%box_ckey_max(idim,ilevel+1))ir(idim)=m%box_ckey_min(idim,ilevel+1)
+        endif
+     enddo
+     ckey = cic_index(il,ir)
+     phi_kappa => phi_kappa_cell
+     call compute_cell_gradients(s,ckey,ilevel,dx_loc,kappa_cells,grad_kappa_cells,phi_kappa)
 
      if(action_part==action_kick_only)then
         p%vp(ipart,1:ndim)=vel(1:ndim)
@@ -1226,6 +1259,16 @@ subroutine cic_trace_gas_part_ito(s,p,ilevel,action_part)
   end if
 
   end associate
+
+contains
+
+  function phi_kappa_cell(gridp,icell) result(phi_val)
+    implicit none
+    type(oct),pointer::gridp
+    integer,intent(in)::icell
+    real(kind=8)::phi_val
+    phi_val = tracer_cell_kappa(gridp%uold(icell,1),gridp%uold(icell,iturb_loc),dx_loc,smallr_loc,inv_pec_loc)
+  end function phi_kappa_cell
 end subroutine cic_trace_gas_part_ito
 
 subroutine cic_trace_gas_part_num(s,p,ilevel,action_part)
@@ -1251,6 +1294,7 @@ subroutine cic_trace_gas_part_num(s,p,ilevel,action_part)
   integer,dimension(1:ndim,1:twotondim)::ckey
   integer(kind=8),dimension(0:ndim)::hash_nbor
   real(kind=8),dimension(1:ndim,1:twotondim)::u_cells,kappa_num_cells,grad_phi_cells
+  real(kind=8),dimension(1:ndim,1:twotondim)::fluxL_cells,fluxR_cells
   type(oct),pointer::gridp
   integer :: ipart,ind,idim,icell,k
   real(kind=8)::dx_loc,dt_level,rho,denom,fluxL,fluxR,jr,jl,noise_amp
@@ -1340,10 +1384,10 @@ subroutine cic_trace_gas_part_num(s,p,ilevel,action_part)
         do ind=1,twotondim
            phi_slice(ind)=kappa_num_cells(k,ind)
         end do
-        call compute_cell_gradients(phi_slice,dx_loc,grad_phi_cells)
+        call compute_cell_gradients(s,ckey,ilevel,dx_loc,phi_slice,grad_phi_cells)
         call interp_grad_at_pos(s,x,ilevel,grad_phi_cells,grad_at_part)
-        u_eff(k) = u_eff(k) + (r%tracer_inverse_peclet_number - 1.0d0) * grad_at_part(k)
-        kappa_num(k) = kappa_num(k) * r%tracer_inverse_peclet_number
+        u_eff(k) = u_eff(k) !+ grad_at_part(k)
+        kappa_num(k) = kappa_num(k) 
      end do
 
      if(action_part==action_kick_only)then
@@ -1401,15 +1445,15 @@ subroutine cic_trace_gas_part_slope_limit(s,p,ilevel,action_part)
   integer,dimension(1:ndim)::il,ir
   real(kind=8),dimension(1:twotondim)::vol,phi_slice,rho_cells
   integer,dimension(1:ndim,1:twotondim)::ckey
+  integer,dimension(1:ndim)::ckey_plus,ckey_minus
   integer(kind=8),dimension(0:ndim)::hash_nbor
   real(kind=8),dimension(1:ndim,1:twotondim)::u_cells,kappa_num_cells,grad_phi_cells
-  integer,parameter :: child_coord(3,8)=reshape(&
-       (/0,0,0, 1,0,0, 0,1,0, 1,1,0, 0,0,1, 1,0,1, 0,1,1, 1,1,1/),(/3,8/))
+  real(kind=8),dimension(1:ndim,1:twotondim)::fluxL_cells,fluxR_cells
   type(oct),pointer::gridp
-  integer :: ipart,ind,idim,icell,k,cx,cy,cz,plus_idx,minus_idx
+  integer :: ipart,ind,idim,icell,k
   integer :: slope_type
   real(kind=8)::dx_loc,dt_level,rho,denom,fluxL,fluxR,noise_amp
-  real(kind=8)::cfl_dim,one_minus_cfl,abs_fluxR,abs_fluxL
+  real(kind=8)::cfl_dim,one_minus_cfl,abs_fluxR,abs_fluxL,jr,jl
   real(kind=8)::rho_left,rho_right,dr_plus,dr_minus,r_ratio,phiR,phiL
   type(msg_nvar_realdp)::dummy_nvar_realdp
   type(RngStream),external::RngStream_CreateStream
@@ -1464,6 +1508,8 @@ subroutine cic_trace_gas_part_slope_limit(s,p,ilevel,action_part)
      u_cells=0.d0
      kappa_num_cells=0.d0
      rho_cells=0.d0
+     fluxL_cells=0.d0
+     fluxR_cells=0.d0
 
      hash_nbor(0)=ilevel+1
      do ind=1,twotondim
@@ -1473,6 +1519,10 @@ subroutine cic_trace_gas_part_slope_limit(s,p,ilevel,action_part)
         if(associated(gridp))then
            rho=gridp%uold(icell,1)
            rho_cells(ind)=rho
+           do idim=1,ndim
+              fluxL_cells(idim,ind)=gridp%mflux(icell,idim     )*dx_loc/dt_level
+              fluxR_cells(idim,ind)=gridp%mflux(icell,idim+ndim)*dx_loc/dt_level
+           end do
         end if
 #endif
      end do
@@ -1485,52 +1535,43 @@ subroutine cic_trace_gas_part_slope_limit(s,p,ilevel,action_part)
         if(associated(gridp))then
            rho=rho_cells(ind)
            denom=max(rho,r%smallr)
-           cx=child_coord(1,ind)
-           cy=child_coord(2,ind)
-           cz=child_coord(3,ind)
            do idim=1,ndim
-              ! mflux stores time-integrated flux ~ (dt/dx)*F; recover physical flux F with factor dx_loc/dt_level
-              fluxL=gridp%mflux(icell,idim     )*dx_loc/dt_level
-              fluxR=gridp%mflux(icell,idim+ndim)*dx_loc/dt_level
-              !jr=max(fluxR,0.d0)
-              !jl=max(-fluxL,0.d0)
-              !u_cells(idim,ind)=(jr-jl)/denom
-              !kappa_num_cells(idim,ind)=0.5d0*(jr+jl)/denom*dx_loc
-              u_cells(idim,ind)=0.5d0*(fluxR+fluxL)/denom
-              !kappa_num_cells(idim,ind)=0.25d0*(abs(fluxR)+abs(fluxL))/denom*dx_loc
-              ! Apply slope-limiting factor based on local CFL
+              fluxL=fluxL_cells(idim,ind)
+              fluxR=fluxR_cells(idim,ind)
+              jr=max(fluxR,0.d0)
+              jl=max(-fluxL,0.d0)
+              u_cells(idim,ind)=(jr-jl)/denom
               cfl_dim = abs(u_cells(idim,ind))*dt_level/dx_loc
-              one_minus_cfl = 1.0d0!max(0.d0,1.d0-cfl_dim)
+              one_minus_cfl = max(0.d0,1.d0-cfl_dim)
 
-              plus_idx=-1; minus_idx=-1
-              select case(idim)
-              case(1)
-                 if(cx==0) plus_idx = ind+1
-                 if(cx==1) minus_idx = ind-1
-              case(2)
-                 if(cy==0) plus_idx = ind+2
-                 if(cy==1) minus_idx = ind-2
-              case(3)
-                 if(cz==0) plus_idx = ind+4
-                 if(cz==1) minus_idx = ind-4
-              end select
+              ! Cross-oct neighbor densities for slope limiter
+              hash_nbor(0)=ilevel+1
+              ckey_plus = ckey(1:ndim,ind)
+              ckey_plus(idim)=ckey_plus(idim)+1
+              if(r%periodic(idim))then
+                 if(ckey_plus(idim)>=m%box_ckey_max(idim,ilevel+1))ckey_plus(idim)=m%box_ckey_min(idim,ilevel+1)
+              end if
+              hash_nbor(1:ndim)=ckey_plus(1:ndim)
+              rho_right = rho
+              call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+              if(associated(gridp))rho_right = gridp%uold(icell,1)
 
-              if(plus_idx>0 .and. plus_idx<=twotondim)then
-                 rho_right = rho_cells(plus_idx)
-              else
-                 rho_right = rho
+              hash_nbor(0)=ilevel+1
+              ckey_minus = ckey(1:ndim,ind)
+              ckey_minus(idim)=ckey_minus(idim)-1
+              if(r%periodic(idim))then
+                 if(ckey_minus(idim)<m%box_ckey_min(idim,ilevel+1))ckey_minus(idim)=m%box_ckey_max(idim,ilevel+1)-1
               end if
-              if(minus_idx>0 .and. minus_idx<=twotondim)then
-                 rho_left = rho_cells(minus_idx)
-              else
-                 rho_left = rho
-              end if
+              hash_nbor(1:ndim)=ckey_minus(1:ndim)
+              rho_left = rho
+              call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+              if(associated(gridp))rho_left = gridp%uold(icell,1)
 
               dr_plus  = rho_right - rho
               dr_minus = rho       - rho_left
 
-              phiR = 1.0d0 ! Default to no limiting
-              phiL = 1.0d0 ! Default to no limiting
+              phiR = 1.0d0
+              phiL = 1.0d0
               if(abs(dr_plus)>r%smallr)then
                  r_ratio = dr_minus/dr_plus
                  phiR = slope_limiter(r_ratio,slope_type)
@@ -1539,13 +1580,13 @@ subroutine cic_trace_gas_part_slope_limit(s,p,ilevel,action_part)
                  r_ratio = dr_plus/dr_minus
                  phiL = slope_limiter(r_ratio,slope_type)
               end if
-              phiR = 0.0d0!min(1.d0,max(0.d0,phiR))
-              phiL = 0.0d0!min(1.d0,max(0.d0,phiL))
+              phiR = min(1.d0,max(0.d0,phiR))
+              phiL = min(1.d0,max(0.d0,phiL))
 
-              abs_fluxR = abs(fluxR)
-              abs_fluxL = abs(fluxL)
+              !abs_fluxR = abs(fluxR)
+              !abs_fluxL = abs(fluxL)
               kappa_num_cells(idim,ind)=one_minus_cfl*&
-                   ((1.d0-phiR)*abs_fluxR + (1.d0-phiL)*abs_fluxL)*dx_loc/(4.d0*denom)
+                   ((1.d0-phiR)*jr + (1.d0-phiL)*jl)*dx_loc/(2.d0*denom)
            end do
         end if
 #endif
@@ -1564,7 +1605,7 @@ subroutine cic_trace_gas_part_slope_limit(s,p,ilevel,action_part)
         do ind=1,twotondim
            phi_slice(ind)=kappa_num_cells(k,ind)
         end do
-        call compute_cell_gradients(phi_slice,dx_loc,grad_phi_cells)
+        call compute_cell_gradients(s,ckey,ilevel,dx_loc,phi_slice,grad_phi_cells)
         call interp_grad_at_pos(s,x,ilevel,grad_phi_cells,grad_at_part)
         u_eff(k) = u_eff(k) + grad_at_part(k)
         kappa_num(k) = kappa_num(k)
@@ -1914,46 +1955,83 @@ subroutine gather_cic_scalar(st,x_cell,level_in,dx_cell,use_sgs_in,phi_cells)
   end do
 end subroutine gather_cic_scalar
 
-subroutine compute_cell_gradients(phi_cell,dx_cell,grad_phi)
+subroutine compute_cell_gradients(st,ckey_in,level_in,dx_cell,phi_cell,grad_phi,phi_accessor)
   use amr_parameters, only: ndim, twotondim
+  use ramses_commons, only: ramses_t
+  use oct_commons, only: oct
+  use nbors_utils
+  use cache_commons
+  use cache
   implicit none
-  real(kind=8),intent(in) :: phi_cell(1:twotondim)
+  type(ramses_t),intent(in)::st
+  integer,intent(in)::level_in
+  integer,dimension(1:ndim,1:twotondim),intent(in)::ckey_in
   real(kind=8),intent(in) :: dx_cell
+  real(kind=8),intent(in) :: phi_cell(1:twotondim)
   real(kind=8),intent(out):: grad_phi(1:ndim,1:twotondim)
-  integer,parameter :: child_coord(3,8)=reshape(&
-       (/0,0,0, 1,0,0, 0,1,0, 1,1,0, 0,0,1, 1,0,1, 0,1,1, 1,1,1/),(/3,8/))
-  integer :: c,d,plus_idx,minus_idx
-  integer :: cx,cy,cz
+  procedure(phi_accessor_if),pointer,optional::phi_accessor
+
+  integer :: c,d
+  integer(kind=8),dimension(0:ndim)::hash_nbor
+  integer,dimension(1:ndim)::ckey_plus,ckey_minus
+  type(oct),pointer::gridp
+  integer :: icell
+  integer :: nb
+  logical :: found_plus,found_minus
   real(kind=8) :: phi_plus,phi_minus
 
   grad_phi=0.d0
 
   do c=1,twotondim
-     cx=child_coord(1,c)
-     cy=child_coord(2,c)
-     cz=child_coord(3,c)
+     do d=1,ndim
+        ckey_plus = ckey_in(1:ndim,c)
+        ckey_minus= ckey_in(1:ndim,c)
+        ckey_plus(d)=ckey_plus(d)+1
+        ckey_minus(d)=ckey_minus(d)-1
 
-      do d=1,ndim
-        plus_idx=-1; minus_idx=-1
-        select case(d)
-        case(1)
-           if(cx==0) plus_idx = c+1
-           if(cx==1) minus_idx = c-1
-        case(2)
-           if(cy==0) plus_idx = c+2
-           if(cy==1) minus_idx = c-2
-        case(3)
-           if(cz==0) plus_idx = c+4
-           if(cz==1) minus_idx = c-4
-        end select
-
-        if(plus_idx>0 .and. plus_idx<=twotondim .and. minus_idx>0 .and. minus_idx<=twotondim)then
-           phi_plus = phi_cell(plus_idx)
-           phi_minus= phi_cell(minus_idx)
-           grad_phi(d,c) = (phi_plus-phi_minus)/(2.d0*dx_cell)
-        else
-           grad_phi(d,c) = 0.d0
+        if(st%r%periodic(d))then
+           if(ckey_plus(d)>=st%m%box_ckey_max(d,level_in+1))ckey_plus(d)=st%m%box_ckey_min(d,level_in+1)
+           if(ckey_minus(d)< st%m%box_ckey_min(d,level_in+1))ckey_minus(d)=st%m%box_ckey_max(d,level_in+1)-1
         end if
+
+        ! Right neighbor
+        hash_nbor(0)=level_in+1
+        hash_nbor(1:ndim)=ckey_plus(1:ndim)
+        phi_plus = phi_cell(c)
+        found_plus = .false.
+        do nb=1,twotondim
+           if(all(ckey_in(1:ndim,nb)==ckey_plus))then
+              phi_plus = phi_cell(nb)
+              found_plus = .true.
+              exit
+           end if
+        end do
+        if(.not.found_plus .and. present(phi_accessor))then
+           call get_parent_cell(st,hash_nbor,st%m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+           if(associated(gridp))then
+              phi_plus = phi_accessor(gridp,icell)
+           end if
+        end if
+
+        ! Left neighbor
+        hash_nbor(1:ndim)=ckey_minus(1:ndim)
+        phi_minus = phi_cell(c)
+        found_minus = .false.
+        do nb=1,twotondim
+           if(all(ckey_in(1:ndim,nb)==ckey_minus))then
+              phi_minus = phi_cell(nb)
+              found_minus = .true.
+              exit
+           end if
+        end do
+        if(.not.found_minus .and. present(phi_accessor))then
+          call get_parent_cell(st,hash_nbor,st%m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+          if(associated(gridp))then
+             phi_minus = phi_accessor(gridp,icell)
+          end if
+        end if
+
+        grad_phi(d,c) = (phi_plus-phi_minus)/(2.d0*dx_cell)
      end do
   end do
 end subroutine compute_cell_gradients
