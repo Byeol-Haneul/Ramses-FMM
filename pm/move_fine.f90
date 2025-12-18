@@ -8,6 +8,26 @@ contains
 !################################################################
 !################################################################
 !################################################################
+pure function slope_limiter(r,slope_type) result(phi)
+  implicit none
+  real(kind=8),intent(in)::r
+  integer,intent(in)::slope_type
+  real(kind=8)::phi
+
+  select case(slope_type)
+  case (0)
+     phi=0.0d0
+  case (1,2)
+     phi=max(0.0d0,min(real(slope_type,kind=8)*r,0.5d0*(1.0d0+r),real(slope_type,kind=8)))
+  case default
+     phi=0.0d0
+  end select
+
+end function slope_limiter
+!################################################################
+!################################################################
+!################################################################
+!################################################################
 subroutine m_kick_drift_part(pst,ilevel,action_part)
   use amr_parameters, only: ndim, twotondim
   use ramses_commons, only: pst_t
