@@ -1471,10 +1471,12 @@ subroutine cic_trace_gas_part_slope_limit(s,p,ilevel,action_part)
               ! mflux stores time-integrated flux ~ (dt/dx)*F; recover physical flux F with factor dx_loc/dt_level
               fluxL=gridp%mflux(icell,idim     )*dx_loc/dt_level
               fluxR=gridp%mflux(icell,idim+ndim)*dx_loc/dt_level
-              jr=max(fluxR,0.d0)
-              jl=max(-fluxL,0.d0)
-              u_cells(idim,ind)=(jr-jl)/denom
-              kappa_num_cells(idim,ind)=0.5d0*(jr+jl)/denom*dx_loc
+              !jr=max(fluxR,0.d0)
+              !jl=max(-fluxL,0.d0)
+              !u_cells(idim,ind)=(jr-jl)/denom
+              !kappa_num_cells(idim,ind)=0.5d0*(jr+jl)/denom*dx_loc
+              u_cells(idim,ind)=0.5d0*(fluxR+fluxL)/denom
+              kappa_num_cells(idim,ind)=0.25d0*(abs(fluxR)+abs(fluxL))/denom*dx_loc
               ! Apply slope-limiting factor based on local CFL
               cfl_dim = abs(u_cells(idim,ind))*dt_level/dx_loc
               one_minus_cfl = max(0.d0,1.d0-cfl_dim)
@@ -1499,8 +1501,8 @@ subroutine cic_trace_gas_part_slope_limit(s,p,ilevel,action_part)
         end do
         call compute_cell_gradients(phi_slice,dx_loc,grad_phi_cells)
         call interp_grad_at_pos(s,x,ilevel,grad_phi_cells,grad_at_part)
-        u_eff(k) = u_eff(k) + (r%tracer_inverse_peclet_number - 1.0d0) * grad_at_part(k)
-        kappa_num(k) = kappa_num(k) * r%tracer_inverse_peclet_number
+        u_eff(k) = u_eff(k) + grad_at_part(k)
+        kappa_num(k) = kappa_num(k)
      end do
 
      if(action_part==action_kick_only)then
