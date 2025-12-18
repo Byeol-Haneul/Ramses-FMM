@@ -1399,14 +1399,18 @@ subroutine cic_trace_gas_part_slope_limit(s,p,ilevel,action_part)
   real(kind=8),dimension(1:ndim)::dl,dr
   real(kind=8),dimension(1:ndim)::grad_at_part
   integer,dimension(1:ndim)::il,ir
-  real(kind=8),dimension(1:twotondim)::vol,phi_slice
+  real(kind=8),dimension(1:twotondim)::vol,phi_slice,rho_cells
   integer,dimension(1:ndim,1:twotondim)::ckey
   integer(kind=8),dimension(0:ndim)::hash_nbor
   real(kind=8),dimension(1:ndim,1:twotondim)::u_cells,kappa_num_cells,grad_phi_cells
+  integer,parameter :: child_coord(3,8)=reshape(&
+       (/0,0,0, 1,0,0, 0,1,0, 1,1,0, 0,0,1, 1,0,1, 0,1,1, 1,1,1/),(/3,8/))
   type(oct),pointer::gridp
-  integer :: ipart,ind,idim,icell,k
-  real(kind=8)::dx_loc,dt_level,rho,denom,fluxL,fluxR,jr,jl,noise_amp
-  real(kind=8)::cfl_dim,one_minus_cfl
+  integer :: ipart,ind,idim,icell,k,cx,cy,cz,plus_idx,minus_idx
+  integer :: slope_type
+  real(kind=8)::dx_loc,dt_level,rho,denom,fluxL,fluxR,noise_amp
+  real(kind=8)::cfl_dim,one_minus_cfl,abs_fluxR,abs_fluxL
+  real(kind=8)::rho_left,rho_right,dr_plus,dr_minus,r_ratio,phiR,phiL
   type(msg_nvar_realdp)::dummy_nvar_realdp
   type(RngStream),external::RngStream_CreateStream
   real(kind=8),external::RngStream_RandUni
@@ -1419,6 +1423,7 @@ subroutine cic_trace_gas_part_slope_limit(s,p,ilevel,action_part)
 
   dx_loc=r%boxlen/2**ilevel
   dt_level=g%dtnew(ilevel)
+  slope_type = r%slope_type
 
   if(.not.tracer_rng_ready)then
      call RngStream_SetPackageSeed(r%seed)
@@ -1458,6 +1463,7 @@ subroutine cic_trace_gas_part_slope_limit(s,p,ilevel,action_part)
 
      u_cells=0.d0
      kappa_num_cells=0.d0
+     rho_cells=0.d0
 
      hash_nbor(0)=ilevel+1
      do ind=1,twotondim
@@ -1466,7 +1472,22 @@ subroutine cic_trace_gas_part_slope_limit(s,p,ilevel,action_part)
 #ifdef HYDRO
         if(associated(gridp))then
            rho=gridp%uold(icell,1)
+           rho_cells(ind)=rho
+        end if
+#endif
+     end do
+
+     hash_nbor(0)=ilevel+1
+     do ind=1,twotondim
+        hash_nbor(1:ndim)=ckey(1:ndim,ind)
+        call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+#ifdef HYDRO
+        if(associated(gridp))then
+           rho=rho_cells(ind)
            denom=max(rho,r%smallr)
+           cx=child_coord(1,ind)
+           cy=child_coord(2,ind)
+           cz=child_coord(3,ind)
            do idim=1,ndim
               ! mflux stores time-integrated flux ~ (dt/dx)*F; recover physical flux F with factor dx_loc/dt_level
               fluxL=gridp%mflux(icell,idim     )*dx_loc/dt_level
@@ -1476,11 +1497,55 @@ subroutine cic_trace_gas_part_slope_limit(s,p,ilevel,action_part)
               !u_cells(idim,ind)=(jr-jl)/denom
               !kappa_num_cells(idim,ind)=0.5d0*(jr+jl)/denom*dx_loc
               u_cells(idim,ind)=0.5d0*(fluxR+fluxL)/denom
-              kappa_num_cells(idim,ind)=0.25d0*(abs(fluxR)+abs(fluxL))/denom*dx_loc
+              !kappa_num_cells(idim,ind)=0.25d0*(abs(fluxR)+abs(fluxL))/denom*dx_loc
               ! Apply slope-limiting factor based on local CFL
               cfl_dim = abs(u_cells(idim,ind))*dt_level/dx_loc
-              one_minus_cfl = max(0.d0,1.d0-cfl_dim)
-              kappa_num_cells(idim,ind)=kappa_num_cells(idim,ind)*one_minus_cfl
+              one_minus_cfl = 1.0d0!max(0.d0,1.d0-cfl_dim)
+
+              plus_idx=-1; minus_idx=-1
+              select case(idim)
+              case(1)
+                 if(cx==0) plus_idx = ind+1
+                 if(cx==1) minus_idx = ind-1
+              case(2)
+                 if(cy==0) plus_idx = ind+2
+                 if(cy==1) minus_idx = ind-2
+              case(3)
+                 if(cz==0) plus_idx = ind+4
+                 if(cz==1) minus_idx = ind-4
+              end select
+
+              if(plus_idx>0 .and. plus_idx<=twotondim)then
+                 rho_right = rho_cells(plus_idx)
+              else
+                 rho_right = rho
+              end if
+              if(minus_idx>0 .and. minus_idx<=twotondim)then
+                 rho_left = rho_cells(minus_idx)
+              else
+                 rho_left = rho
+              end if
+
+              dr_plus  = rho_right - rho
+              dr_minus = rho       - rho_left
+
+              phiR = 1.0d0 ! Default to no limiting
+              phiL = 1.0d0 ! Default to no limiting
+              if(abs(dr_plus)>r%smallr)then
+                 r_ratio = dr_minus/dr_plus
+                 phiR = slope_limiter(r_ratio,slope_type)
+              end if
+              if(abs(dr_minus)>r%smallr)then
+                 r_ratio = dr_plus/dr_minus
+                 phiL = slope_limiter(r_ratio,slope_type)
+              end if
+              phiR = 0.0d0!min(1.d0,max(0.d0,phiR))
+              phiL = 0.0d0!min(1.d0,max(0.d0,phiL))
+
+              abs_fluxR = abs(fluxR)
+              abs_fluxL = abs(fluxL)
+              kappa_num_cells(idim,ind)=one_minus_cfl*&
+                   ((1.d0-phiR)*abs_fluxR + (1.d0-phiL)*abs_fluxL)*dx_loc/(4.d0*denom)
            end do
         end if
 #endif
