@@ -1897,12 +1897,9 @@ subroutine tsc_trace_gas_part_slope_limit(s,p,ilevel,action_part)
      end do
 
      do k=1,ndim
-        do ind=1,threetondim
-           phi_slice(ind)=kappa_num_cells(k,ind)
-        end do
         grad_at_part(k)=0.d0
         do ind=1,threetondim
-           grad_at_part(k)=grad_at_part(k)+grad_vol(k,ind)*phi_slice(ind)
+           grad_at_part(k)=grad_at_part(k)+grad_vol(k,ind)*kappa_num_cells(k,ind)
         end do
         u_eff(k) = u_eff(k) + grad_at_part(k)
         kappa_num(k) = kappa_num(k)
@@ -2088,6 +2085,7 @@ subroutine mc_trace_gas_part(s,p,ilevel,action_part)
      if(selected>0)then
         idim = (selected + 1) / 2 ! integer division.
         p%xp(ipart,idim)=p%xp(ipart,idim)+ (-1)**selected * dx_loc
+        p%xp(ipart,idim)=(dble(int(p%xp(ipart,idim)/dx_loc))+0.5d0)*dx_loc ! Enforce cell-centered position
      endif
 
   end do
