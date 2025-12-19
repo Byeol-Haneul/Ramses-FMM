@@ -1589,7 +1589,7 @@ subroutine cic_trace_gas_part_slope_limit(s,p,ilevel,action_part)
               !u_cells(idim,ind)= u_cells(idim,ind)/denom
               u_cells(idim,ind)=(jr-jl)/denom
               cfl_dim = abs(u_cells(idim,ind))*dt_level/dx_loc
-              one_minus_cfl = 1.0d0 !max(0.d0,1.d0-cfl_dim)
+              one_minus_cfl = max(0.d0,1.d0-cfl_dim)
 
               !abs_fluxR = abs(fluxR)
               !abs_fluxL = abs(fluxL)
