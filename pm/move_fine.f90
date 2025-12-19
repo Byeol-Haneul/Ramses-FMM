@@ -138,6 +138,8 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
            call cic_trace_gas_part_ito(pst%s,pst%s%trac,ilevel,action_part) ! Ito formulation of the sgs driven diffusion tracer
         elseif(pst%s%r%trac_interpolation_scheme==6)then
            call cic_trace_gas_part_slope_limit(pst%s,pst%s%trac,ilevel,action_part) ! Flux-based Monte Carlo tracer with CFL-limited diffusion
+        elseif(pst%s%r%trac_interpolation_scheme==7)then
+           call tsc_trace_gas_part_slope_limit(pst%s,pst%s%trac,ilevel,action_part) ! Flux-based Monte Carlo tracer with CFL-limited diffusion
         endif
      endif
      if(pst%s%r%dust)then
@@ -147,6 +149,8 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
            call tsc_kick_drift_dust(pst%s,pst%s%dust,ilevel,action_part)
         elseif(pst%s%r%dust_force_interpolation_scheme==3)then
            call pcs_kick_drift_dust(pst%s,pst%s%dust,ilevel,action_part)
+        elseif(pst%s%r%dust_force_interpolation_scheme==4)then
+           call cic_kick_drift_dust_num_diff(pst%s,pst%s%dust,ilevel,action_part)
         endif
      endif
   endif
@@ -944,6 +948,7 @@ subroutine pack_fetch_kick_dust(grid,msg_size,msg_array)
      do ivar=1,nvar
         msg%realdp_hydro(ind,ivar)=grid%uold(ind,ivar)
      end do
+     msg%realdp_mflux(ind,1:6)=grid%mflux(ind,1:6)
   end do
 #endif
 #ifdef GRAV
@@ -994,6 +999,7 @@ subroutine unpack_fetch_kick_dust(grid,msg_size,msg_array,hash_key)
      do ivar=1,nvar
         grid%uold(ind,ivar)=msg%realdp_hydro(ind,ivar)
      end do
+     grid%mflux(ind,1:6)=msg%realdp_mflux(ind,1:6)
   end do
 #endif
 #ifdef GRAV
@@ -2907,6 +2913,397 @@ subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
   end associate
 end subroutine cic_kick_drift_dust
 
+subroutine cic_kick_drift_dust_num_diff(s,p,ilevel,action_part)
+  use amr_parameters, only: ndim, twotondim
+  use hydro_parameters, only: nener
+  use pm_parameters
+  use pm_commons, only: part_t
+  use oct_commons, only: oct
+  use ramses_commons, only: ramses_t
+  use rng
+  use nbors_utils
+  use cache_commons
+  use cache
+  implicit none
+  type(ramses_t)::s
+  type(part_t)::p
+  integer::ilevel
+  integer::action_part
+  real(kind=8),dimension(1:ndim)::x_main,x_mid,dr,dl,dr2,dl2
+  integer,dimension(1:ndim)::ir,il
+  integer,dimension(1:ndim)::ir2,il2
+  real(kind=8),dimension(1:twotondim)::vol,vol2
+  integer,dimension(1:ndim,1:twotondim)::ckey,ckey2
+  integer::icell,icell2
+  integer(kind=8),dimension(0:ndim)::hash_nbor
+  integer::ipart,ind,idim,irad
+  real(kind=8)::dx_loc,dt_level
+  real(kind=8),dimension(1:ndim)::ff,v_pred,uu
+#ifdef MHD
+  real(kind=8),dimension(1:3)::bb
+  real(kind=8)::emag
+#endif
+  real(kind=8)::rho_gas,c_sound,eint,coeff,wdrift2
+  real(kind=8)::nu_stop,dens,etot,ekin,erad,cs2,pi=4.0d0*atan(1.0d0)
+  real(kind=8),dimension(1:ndim)::what,wdrift,wdrift0
+  type(oct),pointer :: gridp
+  real(kind=8)::w0,a,g_par,g_perp
+  real(kind=8),dimension(1:ndim)::disp,xi,dx_noise
+  real(kind=8),dimension(1:ndim)::x_diff,dl_diff,dr_diff,u_eff,kappa_num,grad_at_part
+  integer,dimension(1:ndim)::il_diff,ir_diff
+  real(kind=8),dimension(1:twotondim)::vol_diff,phi_slice,rho_cells
+  integer,dimension(1:ndim,1:twotondim)::ckey_diff
+  integer,dimension(1:ndim)::ckey_plus,ckey_minus
+  real(kind=8),dimension(1:ndim,1:twotondim)::u_cells,kappa_num_cells,grad_phi_cells
+  real(kind=8),dimension(1:ndim,1:twotondim)::fluxL_cells,fluxR_cells
+  integer :: k,slope_type
+  real(kind=8)::rho,denom,fluxL,fluxR
+  real(kind=8)::cfl_dim,one_minus_cfl,jr,jl
+  real(kind=8)::rho_left,rho_right,dr_plus,dr_minus,r_ratio,phiR,phiL
+  type(msg_large_realdp)::dummy_large_realdp
+  type(RngStream),external::RngStream_CreateStream
+  real(kind=8),external::RngStream_RandUni
+  integer(kind=8)::stream_skip
+  external :: RngStream_SetPackageSeed, RngStream_AdvanceState, gaussdev
+
+  associate(r=>s%r,g=>s%g,m=>s%m)
+  if(p%static)return
+  dx_loc=r%boxlen/2**ilevel
+  dt_level=g%dtnew(ilevel)
+  slope_type = r%slope_type
+  if (p%type/=DUST_TYPE) return
+  coeff=9.0d0*pi*r%gamma/128.0d0
+
+  if(.not.tracer_rng_ready)then
+     call RngStream_SetPackageSeed(r%seed)
+     tracer_rng = RngStream_CreateStream('tracer_sgs')
+     stream_skip = int(2*g%myid,kind=8)
+     call RngStream_AdvanceState(tracer_rng,0_8,stream_skip)
+     tracer_rng_ready = .true.
+  end if
+
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                     hilbert=m%domain, pack_size=storage_size(dummy_large_realdp)/32,&
+                     pack=pack_fetch_kick_dust,unpack=unpack_fetch_kick_dust)
+
+  do ipart=p%headp(ilevel),p%tailp(ilevel)
+     ! Position in cell units and wrap (dust-centric)
+     do idim=1,ndim
+        x_main(idim)=p%xp(ipart,idim)/dx_loc
+     end do
+     do idim=1,ndim
+        if(x_main(idim)<0d0)x_main(idim)=x_main(idim)+dble(m%ckey_max(ilevel+1))
+        if(x_main(idim)>=dble(m%ckey_max(ilevel+1)))x_main(idim)=x_main(idim)-dble(m%ckey_max(ilevel+1))
+     end do
+
+     ! CIC weights/indices at x_main
+     do idim=1,ndim
+        dr(idim)=x_main(idim)+0.5D0
+        ir(idim)=int(dr(idim))
+        dr(idim)=dr(idim)-ir(idim)
+        dl(idim)=1.0D0-dr(idim)
+        il(idim)=ir(idim)-1
+     end do
+     do idim=1,ndim
+        if(il(idim)<0)il(idim)=m%ckey_max(ilevel+1)-1
+        if(ir(idim)==m%ckey_max(ilevel+1))ir(idim)=0
+     enddo
+     ckey = cic_index(il,ir)
+     vol = cic_weight(dl,dr)
+
+     if(action_part==action_kick_only)then
+        p%levelp(ipart)=ilevel
+        cycle
+     else if(action_part==action_kick_drift)then
+        ! Leapfrog-style sampling: half-step shift only on the first coarse step
+        v_pred(1:ndim)=p%vp(ipart,1:ndim)
+        if (g%nstep==0) then
+           do idim=1,ndim
+              x_mid(idim)=x_main(idim)+0.5d0*dt_level*v_pred(idim)/dx_loc
+           end do
+        else
+           do idim=1,ndim
+              x_mid(idim)=x_main(idim)
+           end do
+        endif
+        do idim=1,ndim
+           if(x_mid(idim)<0d0)x_mid(idim)=x_mid(idim)+dble(m%ckey_max(ilevel+1))
+           if(x_mid(idim)>=dble(m%ckey_max(ilevel+1)))x_mid(idim)=x_mid(idim)-dble(m%ckey_max(ilevel+1))
+        end do
+
+        ! CIC weights/indices at x_mid
+        do idim=1,ndim
+           dr2(idim)=x_mid(idim)+0.5D0
+           ir2(idim)=int(dr2(idim))
+           dr2(idim)=dr2(idim)-ir2(idim)
+           dl2(idim)=1.0D0-dr2(idim)
+           il2(idim)=ir2(idim)-1
+        end do
+        do idim=1,ndim
+           if(il2(idim)<0)il2(idim)=m%ckey_max(ilevel+1)-1
+           if(ir2(idim)==m%ckey_max(ilevel+1))ir2(idim)=0
+        enddo
+        ckey2 = cic_index(il2,ir2)
+        vol2 = cic_weight(dl2,dr2)
+
+        ! Gather hydro and forces at x_mid
+        ff(1:ndim)=0.0
+        uu(1:ndim)=0.0
+        rho_gas = 0.0
+        eint = 0.0
+#ifdef MHD
+        bb(1:3)=0.0
+        emag=0.0d0
+#endif
+        hash_nbor(0)=ilevel+1
+        do ind=1,twotondim
+           hash_nbor(1:ndim)=ckey2(1:ndim,ind)
+           call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
+#ifdef HYDRO
+           if(associated(gridp))then
+#ifdef GRAV
+              ff(1:ndim)=ff(1:ndim)+gridp%f(icell2,1:ndim)*vol2(ind)
+#endif
+              rho_gas = rho_gas + gridp%uold(icell2,1)*vol2(ind)
+              uu(1:ndim)=uu(1:ndim)+gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)*vol2(ind)
+#ifdef MHD
+              bb(1:3)=bb(1:3)+0.5d0*(gridp%bold(icell2,1:3)+gridp%bold(icell2,4:6))*vol2(ind)
+#endif
+              dens = max(dble(gridp%uold(icell2,1)), r%smallr)
+              etot = gridp%uold(icell2,5)
+              ekin = 0.0d0
+              do idim=1,ndim
+                 ekin = ekin + 0.5d0 * gridp%uold(icell2,1+idim)**2 / dens
+              end do
+              erad = 0.0d0
+#if NENER>0
+              do irad=1,nener
+                 erad = erad + gridp%uold(icell2,5+irad)
+              end do
+#endif
+#ifdef MHD
+              do idim=1,3
+                 emag = emag + 0.125d0*(gridp%bold(icell2,idim)+gridp%bold(icell2,ndim+idim))**2*vol2(ind)
+              end do
+              eint = eint - emag*vol2(ind)
+#endif
+              eint = eint + (etot - ekin - erad)*vol2(ind)
+           end if
+#endif
+        end do
+
+        cs2 = r%gamma * (r%gamma-1.0d0) * max(eint, r%smallc**2) / max(rho_gas, r%smallr)
+        c_sound = max(sqrt(cs2), r%smallc)
+        nu_stop = coeff*c_sound*rho_gas/p%size(ipart)
+        wdrift0(1:ndim)= v_pred(1:ndim) - uu(1:ndim)
+
+        ! Operator-split: drag(half) -> forces -> drag(half)
+        wdrift(1:ndim)=wdrift0(1:ndim)
+        call compute_drag_step(wdrift, c_sound, 0.5d0*dt_level, nu_stop, coeff, r%analytic_dust_force)
+#ifdef GRAV
+        wdrift(1:ndim)=wdrift(1:ndim)+ff(1:ndim)*0.5d0*dt_level
+#endif
+#ifdef MHD
+        if (ndim==3) then
+            call compute_lorentz_step(wdrift, bb(1:ndim), dt_level, p%charge(ipart), r%analytic_dust_force)
+        else
+            if(g%myid==1 .and. g%nstep==0)then
+               write(*,*) 'Warning: Lorentz force not implemented for NDIM != 3; proceeding without it.'
+            endif
+        endif
+#endif
+#ifdef GRAV
+        wdrift(1:ndim)=wdrift(1:ndim)+ff(1:ndim)*0.5d0*dt_level
+#endif
+        call compute_drag_step(wdrift, c_sound, 0.5d0*dt_level, nu_stop, coeff, r%analytic_dust_force)
+
+        p%vp(ipart,1:ndim)=uu(1:ndim)+wdrift(1:ndim)
+
+        ! Numerical diffusion ingredients (trace-like, using positions with skip)
+        do idim=1,ndim
+           x_diff(idim)=(p%xp(ipart,idim)+m%skip(idim))/dx_loc
+        end do
+        call wrap_cell_coords(s,x_diff,ilevel+1)
+
+        do idim=1,ndim
+           dr_diff(idim)=x_diff(idim)+0.5d0
+           ir_diff(idim)=int(dr_diff(idim))
+           dr_diff(idim)=dr_diff(idim)-ir_diff(idim)
+           dl_diff(idim)=1.0d0-dr_diff(idim)
+           il_diff(idim)=ir_diff(idim)-1
+        end do
+        do idim=1,ndim
+           if(r%periodic(idim))then
+              if(il_diff(idim)< m%box_ckey_min(idim,ilevel+1))il_diff(idim)=m%box_ckey_max(idim,ilevel+1)-1
+              if(ir_diff(idim)>=m%box_ckey_max(idim,ilevel+1))ir_diff(idim)=m%box_ckey_min(idim,ilevel+1)
+           endif
+        enddo
+
+        ckey_diff = cic_index(il_diff,ir_diff)
+        vol_diff = cic_weight(dl_diff,dr_diff)
+
+        u_cells=0.d0
+        kappa_num_cells=0.d0
+        rho_cells=0.d0
+        fluxL_cells=0.d0
+        fluxR_cells=0.d0
+
+        hash_nbor(0)=ilevel+1
+        do ind=1,twotondim
+           hash_nbor(1:ndim)=ckey_diff(1:ndim,ind)
+           call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+#ifdef HYDRO
+           if(associated(gridp))then
+              rho=gridp%uold(icell,1)
+              rho_cells(ind)=rho
+              do idim=1,ndim
+                 fluxL_cells(idim,ind)=gridp%mflux(icell,idim     )*dx_loc/dt_level
+                 fluxR_cells(idim,ind)=gridp%mflux(icell,idim+ndim)*dx_loc/dt_level
+              end do
+           end if
+#endif
+        end do
+
+        hash_nbor(0)=ilevel+1
+        do ind=1,twotondim
+           hash_nbor(1:ndim)=ckey_diff(1:ndim,ind)
+           call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+#ifdef HYDRO
+           if(associated(gridp))then
+              rho=rho_cells(ind)
+              denom=max(rho,r%smallr)
+              do idim=1,ndim
+                 fluxL=fluxL_cells(idim,ind)
+                 fluxR=fluxR_cells(idim,ind)
+                 jr=max(fluxR,0.d0)
+                 jl=max(-fluxL,0.d0)
+                
+
+                 ! Cross-oct neighbor densities for slope limiter
+                 hash_nbor(0)=ilevel+1
+                 ckey_plus = ckey_diff(1:ndim,ind)
+                 ckey_plus(idim)=ckey_plus(idim)+1
+                 if(r%periodic(idim))then
+                    if(ckey_plus(idim)>=m%box_ckey_max(idim,ilevel+1))ckey_plus(idim)=m%box_ckey_min(idim,ilevel+1)
+                 end if
+                 hash_nbor(1:ndim)=ckey_plus(1:ndim)
+                 rho_right = rho
+                 call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+                 if(associated(gridp))rho_right = gridp%uold(icell,1)
+
+                 hash_nbor(0)=ilevel+1
+                 ckey_minus = ckey_diff(1:ndim,ind)
+                 ckey_minus(idim)=ckey_minus(idim)-1
+                 if(r%periodic(idim))then
+                    if(ckey_minus(idim)<m%box_ckey_min(idim,ilevel+1))ckey_minus(idim)=m%box_ckey_max(idim,ilevel+1)-1
+                 end if
+                 hash_nbor(1:ndim)=ckey_minus(1:ndim)
+                 rho_left = rho
+                 call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+                 if(associated(gridp))rho_left = gridp%uold(icell,1)
+
+                 dr_plus  = rho_right - rho
+                 dr_minus = rho       - rho_left
+
+                 phiR = 1.0d0
+                 phiL = 1.0d0
+                 if(abs(dr_plus)>r%smallr)then
+                    r_ratio = dr_minus/dr_plus
+                    phiR = slope_limiter(r_ratio,slope_type)
+                 end if
+                 if(abs(dr_minus)>r%smallr)then
+                    r_ratio = dr_plus/dr_minus
+                    phiL = slope_limiter(r_ratio,slope_type)
+                 end if
+                 phiR = min(1.d0,max(0.d0,phiR))
+                 phiL = min(1.d0,max(0.d0,phiL))
+
+                 u_cells(idim,ind)=(jr-jl)/denom
+                 cfl_dim = abs(u_cells(idim,ind))*dt_level/dx_loc
+                 one_minus_cfl = max(0.d0,1.d0-cfl_dim)
+
+                 kappa_num_cells(idim,ind)=one_minus_cfl*&
+                      ((1.d0-phiR)*jr + (1.d0-phiL)*jl)*dx_loc/(2.d0*denom)
+              end do
+           end if
+#endif
+        end do
+
+        u_eff=0.d0
+        kappa_num=0.d0
+        do ind=1,twotondim
+           do idim=1,ndim
+              u_eff(idim)=u_eff(idim)+u_cells(idim,ind)*vol_diff(ind)
+              kappa_num(idim)=kappa_num(idim)+kappa_num_cells(idim,ind)*vol_diff(ind)
+           end do
+        end do
+
+        do k=1,ndim
+           do ind=1,twotondim
+              phi_slice(ind)=kappa_num_cells(k,ind)
+           end do
+           call compute_cell_gradients(s,ckey_diff,ilevel,dx_loc,phi_slice,grad_phi_cells)
+           call interp_grad_at_pos(s,x_diff,ilevel,grad_phi_cells,grad_at_part)
+           u_eff(k) = u_eff(k) + grad_at_part(k)
+           kappa_num(k) = kappa_num(k)
+        end do
+
+        call sample_tracer_uniform(xi)
+
+        ! Build anisotropic noise term
+        dx_noise(1:ndim)=0.d0
+        wdrift2 = dot_product(wdrift0(1:ndim), wdrift0(1:ndim))
+        if (wdrift2 > 0.d0) then
+           what(1:ndim) = wdrift0(1:ndim)/sqrt(wdrift2)
+           w0 = sqrt(wdrift2)
+        else
+           what(1:ndim) = 0.d0
+           w0 = 0.d0
+        end if
+
+        if (w0 > 0.d0 .and. nu_stop>0.d0) then
+           a = c_sound/sqrt(coeff)
+           call get_g_factors(dt_level, w0, a, nu_stop, g_par, g_perp)
+        else
+           g_par = 0.d0
+           g_perp = 0.d0
+        end if
+
+        do idim=1,ndim
+           do k=1,ndim
+              if (wdrift2 > 0.d0) then
+                 dx_noise(idim) = dx_noise(idim) + &
+                      (g_perp * merge(1.d0,0.d0,idim==k) + (g_par - g_perp)*what(idim)*what(k)) * &
+                      kappa_num(k) * xi(k)
+              else
+                 dx_noise(idim) = dx_noise(idim) + g_perp * merge(1.d0,0.d0,idim==k) * kappa_num(k) * xi(k)
+              end if
+           end do
+        end do
+
+        do idim=1,ndim
+           disp(idim)=p%vp(ipart,idim)*dt_level + dx_noise(idim)
+        end do
+
+        p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+disp(1:ndim)
+     endif
+  end do
+  call close_cache(s,m%grid_dict)
+  
+  if(action_part==action_kick_drift)then
+     do ipart=p%headp(ilevel),p%tailp(ilevel)
+        do idim=1,ndim
+           if(r%periodic(idim))then
+              if(p%xp(ipart,idim)< 0.0d0           )p%xp(ipart,idim)=p%xp(ipart,idim)+r%box_size(idim)
+              if(p%xp(ipart,idim)>=r%box_size(idim))p%xp(ipart,idim)=p%xp(ipart,idim)-r%box_size(idim)
+           endif
+        end do
+     end do
+  end if
+
+  end associate
+end subroutine cic_kick_drift_dust_num_diff
+
 subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
   use amr_parameters, only: ndim, threetondim
   use hydro_parameters, only: nener
@@ -3517,6 +3914,234 @@ subroutine compute_lorentz_analytic(driftvel, bfield, dt, charge_parameter)
   end if
 
 end subroutine compute_lorentz_analytic
+
+!#########################################################################
+!#########################################################################
+! Subroutines for Anisotropic Sub-Grid Noise Factors (Epstein Drag)
+!#########################################################################
+!#########################################################################
+subroutine get_g_factors(dt, w0, a, nu0, g_par, g_perp)
+  implicit none
+  real(kind=8), intent(in) :: dt, w0, a, nu0
+  real(kind=8), intent(out) :: g_par, g_perp
+  
+  real(kind=8) :: wt, kt, k0, k_inv_a, prefactor, w_thresh
+  real(kind=8) :: u_start, u_end
+  real(kind=8) :: val_base, val_tail
+  real(kind=8) :: g_par_sq, g_perp_sq
+  real(kind=8) :: zeta0, t_thresh_calc
+  
+  ! Constants
+  k_inv_a = 1.0d0/a
+  prefactor = (a**2)/nu0
+  w_thresh = 1.0d-12 * a 
+  
+  ! Determine wt
+  wt = w_det(dt, w0, a, nu0)
+  
+  ! Parallel Component (Analytic Formula)
+  g_par = get_g_parallel_analytic(dt, w0, a, nu0)
+  
+  ! Perpendicular Component (Log K-space integral)
+  if (wt < w_thresh .and. dt > 1.0d0) then
+     zeta0 = asinh(a/w0)
+     t_thresh_calc = (asinh(a/w_thresh) - zeta0) / nu0
+     if (t_thresh_calc < 0.0d0) t_thresh_calc = 0.0d0
+     
+     kt = 1.0d0/w_thresh
+     k0 = 1.0d0/w0
+     u_start = log(k0)
+     u_end = log(kt)
+     
+     val_base = integrate_g_perp_log(u_start, u_end, kt, k_inv_a) * prefactor
+     val_tail = (dt - t_thresh_calc) ! Slope is 1 in normalized units
+     
+     g_perp_sq = val_base + val_tail
+  else
+     if (wt <= 1.0d-20) then
+        kt = 1.0d20
+     else
+        kt = 1.0d0/wt
+     end if
+     k0 = 1.0d0/w0
+     u_start = log(k0)
+     u_end = log(kt)
+     
+     g_perp_sq = integrate_g_perp_log(u_start, u_end, kt, k_inv_a) * prefactor
+  end if
+  
+  if (g_perp_sq < 0.0d0) g_perp_sq = 0.0d0
+  g_perp = sqrt(g_perp_sq)/sqrt(dt)
+
+end subroutine get_g_factors
+
+function get_g_parallel_analytic(t, w0, a, nu0) result(val)
+  implicit none
+  real(kind=8), intent(in) :: t, w0, a, nu0
+  real(kind=8) :: val
+  real(kind=8) :: Pi_val, dtau, Q_val, Q2
+  real(kind=8) :: term_E_dtau, term_E_2dtau
+  real(kind=8) :: inner_most, middle_brack, outer_brack
+  real(kind=8) :: numerator_main, denom_main
+  
+  if (t == 0.0d0) then
+     val = 0.0d0
+     return
+  end if
+  
+  Pi_val = w0/a
+  dtau = nu0 * t
+  
+  Q_val = sqrt(1.0d0 + Pi_val**(-2)) + 1.0d0/Pi_val
+  Q2 = Q_val**2
+  
+  term_E_dtau = exp(dtau)
+  term_E_2dtau = exp(2.0d0*dtau)
+  
+  inner_most = 4.0d0 + (4.0d0 + (-3.0d0 + 2.0d0*dtau)*term_E_dtau) * Q2
+  middle_brack = -8.0d0*dtau + term_E_dtau*inner_most - Q2
+  
+  outer_brack = 1.0d0 + middle_brack * Q2
+  
+  numerator_main = 3.0d0 + 2.0d0*dtau + term_E_dtau*(-4.0d0*(1.0d0+Q2) + term_E_dtau*outer_brack)
+  
+  denom_main = dtau * (-1.0d0 + term_E_2dtau * Q2)**2
+  
+  if (numerator_main < 0.0d0) numerator_main = 0.0d0
+  
+  if (denom_main == 0.0d0) then
+       val = 0.0d0
+  else
+       val = sqrt(numerator_main / denom_main) / sqrt(2.0d0)
+  end if
+  
+end function get_g_parallel_analytic
+
+function w_det(t, w0, a, nu0) result(w)
+  implicit none
+  real(kind=8), intent(in) :: t, w0, a, nu0
+  real(kind=8) :: w
+  real(kind=8) :: arg
+  if (t == 0.0d0) then
+     w = w0
+     return
+  end if
+  arg = asinh(a/w0) + nu0*t
+  if (arg > 700.0d0) then
+     w = 0.0d0
+  else
+     w = a / sinh(arg)
+  end if
+end function w_det
+
+function integrate_g_par(t_end, w0, a, nu0) result(integral)
+  implicit none
+  real(kind=8), intent(in) :: t_end, w0, a, nu0
+  real(kind=8) :: integral
+  real(kind=8) :: t_mid, dt_half, s
+  real(kind=8) :: wt, ws, ratio
+  integer :: i
+  real(kind=8), dimension(10) :: x_gaus = (/ &
+       0.076526521133497d0, 0.227785851141645d0, 0.373706088715419d0, &
+       0.510867001950827d0, 0.636053680726515d0, 0.746331906460150d0, &
+       0.839116971822218d0, 0.912234428251325d0, 0.963971927277913d0, &
+       0.993128599185094d0 /)
+  real(kind=8), dimension(10) :: w_gaus = (/ &
+       0.152753387130725d0, 0.149172986472603d0, 0.142096109318382d0, &
+       0.131688638449176d0, 0.118194531961518d0, 0.101930119817240d0, &
+       0.083276741576704d0, 0.062672048334109d0, 0.040601429800386d0, &
+       0.017614007139152d0 /)
+
+  wt = w_det(t_end, w0, a, nu0)
+  t_mid = 0.5d0 * t_end
+  dt_half = 0.5d0 * t_end
+  
+  integral = 0.0d0
+  do i = 1, 10
+     s = t_mid + dt_half * x_gaus(i)
+     ws = w_det(s, w0, a, nu0)
+     if (ws > 0.0d0) then
+        ratio = wt/ws
+     else
+        ratio = 0.0d0
+     end if
+     integral = integral + w_gaus(i) * (1.0d0 - ratio)**2
+     
+     s = t_mid - dt_half * x_gaus(i)
+     ws = w_det(s, w0, a, nu0)
+     if (ws > 0.0d0) then
+        ratio = wt/ws
+     else
+        ratio = 0.0d0
+     end if
+     integral = integral + w_gaus(i) * (1.0d0 - ratio)**2
+  end do
+  integral = integral * dt_half
+end function integrate_g_par
+
+function integrate_g_perp_log(u_start, u_end, kt, k_inv_a) result(integral)
+  implicit none
+  real(kind=8), intent(in) :: u_start, u_end, kt, k_inv_a
+  real(kind=8) :: integral
+  real(kind=8) :: u_mid, du_half, u, k_val, term_val
+  integer :: i
+  real(kind=8), dimension(10) :: x_gaus = (/ &
+       0.076526521133497d0, 0.227785851141645d0, 0.373706088715419d0, &
+       0.510867001950827d0, 0.636053680726515d0, 0.746331906460150d0, &
+       0.839116971822218d0, 0.912234428251325d0, 0.963971927277913d0, &
+       0.993128599185094d0 /)
+  real(kind=8), dimension(10) :: w_gaus = (/ &
+       0.152753387130725d0, 0.149172986472603d0, 0.142096109318382d0, &
+       0.131688638449176d0, 0.118194531961518d0, 0.101930119817240d0, &
+       0.083276741576704d0, 0.062672048334109d0, 0.040601429800386d0, &
+       0.017614007139152d0 /)
+
+  u_mid = 0.5d0 * (u_start + u_end)
+  du_half = 0.5d0 * (u_end - u_start)
+  
+  integral = 0.0d0
+  do i = 1, 10
+     u = u_mid + du_half * x_gaus(i)
+     k_val = exp(u)
+     term_val = integrand_perp_log_eval(k_val, kt, k_inv_a)
+     integral = integral + w_gaus(i) * term_val
+     
+     u = u_mid - du_half * x_gaus(i)
+     k_val = exp(u)
+     term_val = integrand_perp_log_eval(k_val, kt, k_inv_a)
+     integral = integral + w_gaus(i) * term_val
+  end do
+  integral = integral * du_half
+end function integrate_g_perp_log
+
+function integrand_perp_log_eval(k_val, kt, k_inv_a) result(val)
+  implicit none
+  real(kind=8), intent(in) :: k_val, kt, k_inv_a
+  real(kind=8) :: val
+  real(kind=8) :: term_sqrt_k, term_sqrt_kt
+  real(kind=8) :: diff_linear, diff_sqrt_num, diff_sqrt_den, diff_sqrt
+  real(kind=8) :: num_minus_den, den, r_minus_1, log_term
+  
+  term_sqrt_k = sqrt(k_val**2 + k_inv_a**2)
+  term_sqrt_kt = sqrt(kt**2 + k_inv_a**2)
+  
+  diff_linear = k_inv_a * (kt - k_val)
+  diff_sqrt_num = (k_inv_a**2) * (kt - k_val) * (kt + k_val)
+  diff_sqrt_den = kt * term_sqrt_k + k_val * term_sqrt_kt
+  diff_sqrt = diff_sqrt_num / diff_sqrt_den
+  
+  num_minus_den = diff_linear + diff_sqrt
+  den = k_val * (k_inv_a + term_sqrt_kt)
+  
+  r_minus_1 = num_minus_den / den
+  
+  if (abs(r_minus_1) < 1.0d-8) then
+     log_term = r_minus_1 - 0.5d0*r_minus_1**2 + (1.0d0/3.0d0)*r_minus_1**3
+  else
+     log_term = log(1.0d0 + r_minus_1)
+  end if
+  val = term_sqrt_k * (log_term**2) * k_val
+end function integrand_perp_log_eval
 
 !#########################################################################
 !#########################################################################

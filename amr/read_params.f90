@@ -308,7 +308,7 @@ subroutine m_read_params(pst)
   integer :: trac_interpolation_scheme=1 ! tracer force interpolation schemes (0: MC, 1: CIC, 2: TSC, 3: PCS, 4: flux-based Ito, 5: SGS Ito, 6: flux-based CFL-limited)
   real(kind=8) :: tracer_inverse_peclet_number=1.0d-2 ! tracer turbulent Schmidt number for SGS diffusion
   integer :: dust_mass_deposition_scheme=1 ! dust mass deposition schemes
-  integer :: dust_force_interpolation_scheme=1 ! dust force interpolation schemes
+  integer :: dust_force_interpolation_scheme=1 ! dust force interpolation schemes (1: CIC, 2: TSC, 3: PCS, 4: CIC with num-diff stochastic kick)
 
   ! Boundary conditions parameters
   integer::nbound=0
