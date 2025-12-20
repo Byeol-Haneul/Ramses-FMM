@@ -1445,7 +1445,7 @@ subroutine cic_trace_gas_part_slope_limit(s,p,ilevel,action_part)
   type(part_t)::p
   integer::ilevel
   integer::action_part
-  real(kind=8),dimension(1:ndim)::x,disp,xi,u_eff,kappa_num
+  real(kind=8),dimension(1:ndim)::x,disp,xi,u_eff,kappa_num,phi_L, phi_R,kappa_num_L,kappa_num_R
   real(kind=8),dimension(1:ndim)::dl,dr
   real(kind=8),dimension(1:ndim)::grad_at_part
   integer,dimension(1:ndim)::il,ir
@@ -1453,8 +1453,8 @@ subroutine cic_trace_gas_part_slope_limit(s,p,ilevel,action_part)
   integer,dimension(1:ndim,1:twotondim)::ckey
   integer,dimension(1:ndim)::ckey_plus,ckey_minus
   integer(kind=8),dimension(0:ndim)::hash_nbor
-  real(kind=8),dimension(1:ndim,1:twotondim)::u_cells,kappa_num_cells,grad_phi_cells
-  real(kind=8),dimension(1:ndim,1:twotondim)::fluxL_cells,fluxR_cells
+  real(kind=8),dimension(1:ndim,1:twotondim)::u_cells,kappa_num_cells_L,kappa_num_cells_R,grad_phi_cells
+  real(kind=8),dimension(1:ndim,1:twotondim)::fluxL_cells,fluxR_cells,phi_cells_L,phi_cells_R
   type(oct),pointer::gridp
   integer :: ipart,ind,idim,icell,k
   integer :: slope_type
@@ -1512,7 +1512,8 @@ subroutine cic_trace_gas_part_slope_limit(s,p,ilevel,action_part)
      vol = cic_weight(dl,dr)
 
      u_cells=0.d0
-     kappa_num_cells=0.d0
+     kappa_num_cells_L=0.d0
+     kappa_num_cells_R=0.d0
      rho_cells=0.d0
      fluxL_cells=0.d0
      fluxR_cells=0.d0
@@ -1586,7 +1587,8 @@ subroutine cic_trace_gas_part_slope_limit(s,p,ilevel,action_part)
               end if
               phiR = min(1.d0,max(0.d0,phiR))
               phiL = min(1.d0,max(0.d0,phiL))
-
+              phi_cells_L(idim,ind)=phiL
+              phi_cells_R(idim,ind)=phiR
               !u_cells(idim,ind)=(jr-jl)/denom
               !u_cells(idim,ind)=0.5d0*(fluxR+fluxL)/denom
               ! Trying flux-limiting type approach; doesn't seem to work well.
@@ -1600,30 +1602,48 @@ subroutine cic_trace_gas_part_slope_limit(s,p,ilevel,action_part)
               !abs_fluxR = abs(fluxR)
               !abs_fluxL = abs(fluxL)
               ! For kappa, high resolution means no diffusion. 
-              kappa_num_cells(idim,ind)=one_minus_cfl*&
-                   ((1.d0-phiR)*jr + (1.d0-phiL)*jl)*dx_loc/(2.d0*denom)
+              !kappa_num_cells(idim,ind)=one_minus_cfl*&
+               !    ((1.d0-phiR)*jr + (1.d0-phiL)*jl)*dx_loc/(2.d0*denom)
+              kappa_num_cells_L(idim,ind)=one_minus_cfl*&
+                   (jr)*dx_loc/(2.d0*denom)
+              kappa_num_cells_R(idim,ind)=one_minus_cfl*&
+                   (jl)*dx_loc/(2.d0*denom)
            end do
         end if
 #endif
      end do
 
      u_eff=0.d0
-     kappa_num=0.d0
+     kappa_num_L=0.d0
+     kappa_num_R=0.d0
+     phi_L=0.d0
+     phi_R=0.d0
      do ind=1,twotondim
         do idim=1,ndim
            u_eff(idim)=u_eff(idim)+u_cells(idim,ind)*vol(ind)
-           kappa_num(idim)=kappa_num(idim)+kappa_num_cells(idim,ind)*vol(ind)
+           kappa_num_L(idim)=kappa_num_L(idim)+kappa_num_cells_L(idim,ind)*vol(ind)
+           kappa_num_R(idim)=kappa_num_R(idim)+kappa_num_cells_R(idim,ind)*vol(ind)
+           phi_L(idim)=phi_L(idim)+phi_cells_L(idim,ind)*vol(ind)
+           phi_R(idim)=phi_R(idim)+phi_cells_R(idim,ind)*vol(ind)
         end do
      end do
 
      do k=1,ndim
         do ind=1,twotondim
-           phi_slice(ind)=kappa_num_cells(k,ind)
+           phi_slice(ind)=kappa_num_cells_L(k,ind)
         end do
         call compute_cell_gradients(s,ckey,ilevel,dx_loc,phi_slice,grad_phi_cells)
         call interp_grad_at_pos(s,x,ilevel,grad_phi_cells,grad_at_part)
-        u_eff(k) = u_eff(k) + grad_at_part(k)
-        kappa_num(k) = kappa_num(k)
+        u_eff(k) = u_eff(k) + (1.0d0-phi_L(k))*grad_at_part(k)
+        do ind=1,twotondim
+           phi_slice(ind)=kappa_num_cells_R(k,ind)
+        end do
+        call compute_cell_gradients(s,ckey,ilevel,dx_loc,phi_slice,grad_phi_cells)
+        call interp_grad_at_pos(s,x,ilevel,grad_phi_cells,grad_at_part)
+        u_eff(k) = u_eff(k) + (1.0d0-phi_R(k))*grad_at_part(k)
+        kappa_num_L(k) = kappa_num_L(k)* (1.0d0-phi_L(k))
+        kappa_num_R(k) = kappa_num_R(k)* (1.0d0-phi_R(k))
+        kappa_num(k) = kappa_num_L(k) + kappa_num_R(k)
      end do
 
      if(action_part==action_kick_only)then
