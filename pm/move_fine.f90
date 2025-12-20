@@ -3010,7 +3010,7 @@ end subroutine cic_kick_drift_dust
 
 
 ! This is missing some key things. 
-! First, we need dx_noise (which should be renamed to dx_ito)
+! First, we need dx_ito (which should be renamed to dx_ito)
 ! to include a grad(kappa).
 ! Second, we need to have the noise logic be like sqrt(2*kappa*dt).
 subroutine cic_kick_drift_dust_num_diff(s,p,ilevel,action_part)
@@ -3047,7 +3047,7 @@ subroutine cic_kick_drift_dust_num_diff(s,p,ilevel,action_part)
   real(kind=8),dimension(1:ndim)::what,wdrift,wdrift0
   type(oct),pointer :: gridp
   real(kind=8)::w0,a,g_par,g_perp
-  real(kind=8),dimension(1:ndim)::disp,xi,dx_noise
+  real(kind=8),dimension(1:ndim)::disp,xi,dx_ito
   real(kind=8),dimension(1:ndim)::x_diff,dl_diff,dr_diff,u_eff,kappa_num,grad_at_part
   integer,dimension(1:ndim)::il_diff,ir_diff
   real(kind=8),dimension(1:twotondim)::vol_diff,phi_slice,rho_cells
@@ -3381,19 +3381,19 @@ subroutine cic_kick_drift_dust_num_diff(s,p,ilevel,action_part)
            g_perp = 0.d0
         end if
 
-        dx_noise(1:ndim)=0.d0
+        dx_ito(1:ndim)=0.d0
         do idim=1,ndim
            do k=1,ndim
               if (wdrift2 > 0.d0) then
-                 dx_noise(idim) = dx_noise(idim) + &
+                 dx_ito(idim) = dx_ito(idim) + &
                       (g_perp * merge(1.d0,0.d0,idim==k) + (g_par - g_perp)*what(idim)*what(k)) * &
-                      sqrt(2.d0*kappa_num(k)*dt_level) * xi(k) + grad_at_part(k) * dt_level
+                      &(sqrt(2.d0*kappa_num(k)*dt_level) * xi(k) + grad_at_part(k) * dt_level)
               end if
            end do
         end do
         
         do idim=1,ndim
-           disp(idim)=p%vp(ipart,idim)*dt_level + dx_noise(idim)
+           disp(idim)=p%vp(ipart,idim)*dt_level + dx_ito(idim)
         end do
 
         p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+disp(1:ndim)
@@ -3447,7 +3447,7 @@ subroutine tsc_kick_drift_dust_num_diff(s,p,ilevel,action_part)
   real(kind=8)::rho_gas,c_sound,eint,coeff
   real(kind=8)::nu_stop,dens,etot,ekin,erad,cs2,pi
   real(kind=8),dimension(1:ndim)::what,wdrift,wdrift0
-  real(kind=8),dimension(1:ndim)::disp,xi,dx_noise
+  real(kind=8),dimension(1:ndim)::disp,xi,dx_ito
   real(kind=8),dimension(1:ndim)::x_diff,grad_at_part,u_eff,kappa_num
   integer,dimension(1:ndim)::il,ic,ir
   integer,dimension(1:ndim)::ind_minus,ind_plus
@@ -3848,18 +3848,18 @@ subroutine tsc_kick_drift_dust_num_diff(s,p,ilevel,action_part)
            g_perp = 0.d0
         end if
 
-        dx_noise(1:ndim)=0.d0
+        dx_ito(1:ndim)=0.d0
         do idim=1,ndim
            do k=1,ndim
               if (wdrift2 > 0.d0) then
-                 dx_noise(idim) = dx_noise(idim) + &
+                 dx_ito(idim) = dx_ito(idim) + &
                       (g_perp * merge(1.d0,0.d0,idim==k) + (g_par - g_perp)*what(idim)*what(k)) * &
-                      sqrt(2.d0*kappa_num(k)*dt_level) * xi(k) + grad_at_part(k) * dt_level
+                      (sqrt(2.d0*kappa_num(k)*dt_level) * xi(k) + grad_at_part(k) * dt_level)
               end if
            end do
         end do
 
-        disp(1:ndim)=disp(1:ndim)+dx_noise(1:ndim)
+        disp(1:ndim)=disp(1:ndim)+dx_ito(1:ndim)
 
         p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+disp(1:ndim)
      endif
