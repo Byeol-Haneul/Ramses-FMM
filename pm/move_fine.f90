@@ -151,6 +151,8 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
            call pcs_kick_drift_dust(pst%s,pst%s%dust,ilevel,action_part)
         elseif(pst%s%r%dust_force_interpolation_scheme==4)then
            call cic_kick_drift_dust_num_diff(pst%s,pst%s%dust,ilevel,action_part)
+        elseif(pst%s%r%dust_force_interpolation_scheme==5)then
+           call tsc_kick_drift_dust_num_diff(pst%s,pst%s%dust,ilevel,action_part)
         endif
      endif
   endif
@@ -2840,9 +2842,8 @@ subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
   integer,dimension(1:ndim)::ir2,il2
   real(kind=8),dimension(1:twotondim)::vol,vol2
   integer,dimension(1:ndim,1:twotondim)::ckey,ckey2
-  integer::icell,icell2
   integer(kind=8),dimension(0:ndim)::hash_nbor
-  integer::ipart,ind,idim,irad
+  integer::ipart,ind,idim,irad,icell,icell2,ix,iy,iz
   real(kind=8)::dx_loc,vol_loc
   real(kind=8),dimension(1:ndim)::ff,v_pred
   real(kind=8),dimension(1:ndim)::uu
@@ -3007,6 +3008,11 @@ subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
   end associate
 end subroutine cic_kick_drift_dust
 
+
+! This is missing some key things. 
+! First, we need dx_noise (which should be renamed to dx_ito)
+! to include a grad(kappa).
+! Second, we need to have the noise logic be like sqrt(2*kappa*dt).
 subroutine cic_kick_drift_dust_num_diff(s,p,ilevel,action_part)
   use amr_parameters, only: ndim, twotondim
   use hydro_parameters, only: nener
@@ -3028,9 +3034,8 @@ subroutine cic_kick_drift_dust_num_diff(s,p,ilevel,action_part)
   integer,dimension(1:ndim)::ir2,il2
   real(kind=8),dimension(1:twotondim)::vol,vol2
   integer,dimension(1:ndim,1:twotondim)::ckey,ckey2
-  integer::icell,icell2
   integer(kind=8),dimension(0:ndim)::hash_nbor
-  integer::ipart,ind,idim,irad
+  integer::ipart,ind,idim,irad,icell,icell2,ix,iy,iz
   real(kind=8)::dx_loc,dt_level
   real(kind=8),dimension(1:ndim)::ff,v_pred,uu
 #ifdef MHD
@@ -3051,7 +3056,7 @@ subroutine cic_kick_drift_dust_num_diff(s,p,ilevel,action_part)
   real(kind=8),dimension(1:ndim,1:twotondim)::u_cells,kappa_num_cells,grad_phi_cells
   real(kind=8),dimension(1:ndim,1:twotondim)::fluxL_cells,fluxR_cells
   integer :: k,slope_type
-  real(kind=8)::rho,denom,fluxL,fluxR
+  real(kind=8)::rho,denom,fluxL,fluxR,xl,xc,xr
   real(kind=8)::cfl_dim,one_minus_cfl,jr,jl
   real(kind=8)::rho_left,rho_right,dr_plus,dr_minus,r_ratio,phiR,phiL
   type(msg_large_realdp)::dummy_large_realdp
@@ -3169,7 +3174,7 @@ subroutine cic_kick_drift_dust_num_diff(s,p,ilevel,action_part)
                  fluxR = gridp%mflux(icell2,idim+ndim)*dx_loc/dt_level
                  jr = max(fluxR,0.d0)
                  jl = max(-fluxL,0.d0)
-                 uu(idim)=uu(idim)+((jr-jl)/rho)*vol2(ind)
+                 uu(idim)=uu(idim)+((jr-jl)/dens)*vol2(ind)
               end do
               etot = gridp%uold(icell2,5)
               ekin = 0.0d0
@@ -3352,7 +3357,6 @@ subroutine cic_kick_drift_dust_num_diff(s,p,ilevel,action_part)
         call sample_tracer_uniform(xi)
 
         ! Build anisotropic noise term
-        dx_noise(1:ndim)=0.d0
         wdrift2 = dot_product(wdrift0(1:ndim), wdrift0(1:ndim))
         if (wdrift2 > 0.d0) then
            what(1:ndim) = wdrift0(1:ndim)/sqrt(wdrift2)
@@ -3364,24 +3368,30 @@ subroutine cic_kick_drift_dust_num_diff(s,p,ilevel,action_part)
 
         if (w0 > 0.d0 .and. nu_stop>0.d0) then
            a = c_sound/sqrt(coeff)
-           call get_g_factors(dt_level, w0, a, nu_stop, g_par, g_perp)
+           if(dt_level*nu_stop < 1.d1)then
+              call get_g_factors(dt_level, w0, a, nu_stop, g_par, g_perp)
+           else
+              g_par = sqrt(1.d0-3.d0/(2.d0*dt_level*nu_stop) &
+              &- exp(-2.d0*dt_level*nu_stop)/(2.d0*dt_level*nu_stop) &
+              &+ 2.d0*exp(-(dt_level*nu_stop))/(dt_level*nu_stop))
+              g_perp = g_par
+           end if
         else
            g_par = 0.d0
            g_perp = 0.d0
         end if
 
+        dx_noise(1:ndim)=0.d0
         do idim=1,ndim
            do k=1,ndim
               if (wdrift2 > 0.d0) then
                  dx_noise(idim) = dx_noise(idim) + &
                       (g_perp * merge(1.d0,0.d0,idim==k) + (g_par - g_perp)*what(idim)*what(k)) * &
-                      kappa_num(k) * xi(k)
-              else
-                 dx_noise(idim) = dx_noise(idim) + g_perp * merge(1.d0,0.d0,idim==k) * kappa_num(k) * xi(k)
+                      sqrt(2.d0*kappa_num(k)*dt_level) * xi(k) + grad_at_part(k) * dt_level
               end if
            end do
         end do
-
+        
         do idim=1,ndim
            disp(idim)=p%vp(ipart,idim)*dt_level + dx_noise(idim)
         end do
@@ -3404,6 +3414,471 @@ subroutine cic_kick_drift_dust_num_diff(s,p,ilevel,action_part)
 
   end associate
 end subroutine cic_kick_drift_dust_num_diff
+
+subroutine tsc_kick_drift_dust_num_diff(s,p,ilevel,action_part)
+  use amr_parameters, only: ndim, threetondim
+  use hydro_parameters, only: nener
+  use pm_parameters
+  use pm_commons, only: part_t
+  use oct_commons, only: oct
+  use ramses_commons, only: ramses_t
+  use rng
+  use nbors_utils
+  use cache_commons
+  use cache
+  implicit none
+  type(ramses_t)::s
+  type(part_t)::p
+  integer::ilevel
+  integer::action_part
+  real(kind=8),dimension(1:ndim)::x_main,x_mid
+  real(kind=8),dimension(1:ndim)::wl,wc,wr,wl2,wc2,wr2
+  integer,dimension(1:ndim)::cl,cc,cr,cl2,cc2,cr2
+  real(kind=8),dimension(1:threetondim)::vol_main,vol2
+  integer,dimension(1:ndim,1:threetondim)::ckey,ckey2
+  integer(kind=8),dimension(0:ndim)::hash_nbor
+  integer::ipart,ind,idim,irad,icell,icell2,ix,iy,iz
+  real(kind=8)::dx_loc,dt_level
+  real(kind=8),dimension(1:ndim)::ff,v_pred,uu
+#ifdef MHD
+  real(kind=8),dimension(1:3)::bb
+  real(kind=8)::emag
+#endif
+  real(kind=8)::rho_gas,c_sound,eint,coeff
+  real(kind=8)::nu_stop,dens,etot,ekin,erad,cs2,pi
+  real(kind=8),dimension(1:ndim)::what,wdrift,wdrift0
+  real(kind=8),dimension(1:ndim)::disp,xi,dx_noise
+  real(kind=8),dimension(1:ndim)::x_diff,grad_at_part,u_eff,kappa_num
+  integer,dimension(1:ndim)::il,ic,ir
+  integer,dimension(1:ndim)::ind_minus,ind_plus
+  integer :: center_ind
+  real(kind=8),dimension(1:threetondim)::vol_diff,rho_cells
+  integer,dimension(1:ndim,1:threetondim)::ckey_diff
+  real(kind=8),dimension(1:ndim,1:threetondim)::u_cells,kappa_num_cells_L,kappa_num_cells_R,grad_vol
+  real(kind=8),dimension(1:ndim,1:threetondim)::fluxL_cells,fluxR_cells
+  real(kind=8),dimension(1:ndim,1:3)::w1d,dw1d
+  real(kind=8),dimension(1:ndim)::phiL,phiR
+  real(kind=8)::wdrift2,w0,a,g_par,g_perp
+  type(oct),pointer :: gridp
+  real(kind=8)::x_rel,weight,xd
+  integer :: k,slope_type
+  real(kind=8)::rho,denom,fluxL,fluxR,xl,xc,xr
+  real(kind=8)::cfl_dim,one_minus_cfl,jr,jl
+  real(kind=8)::rho_left,rho_right,dr_plus,dr_minus,r_ratio
+  type(msg_large_realdp)::dummy_large_realdp
+  type(RngStream),external::RngStream_CreateStream
+  real(kind=8),external::RngStream_RandUni
+  integer(kind=8)::stream_skip
+  external :: RngStream_SetPackageSeed, RngStream_AdvanceState, gaussdev
+
+  associate(r=>s%r,g=>s%g,m=>s%m)
+  if(p%static)return
+  dx_loc=r%boxlen/2**ilevel
+  dt_level=g%dtnew(ilevel)
+  slope_type = r%slope_type
+  if (p%type/=DUST_TYPE) return
+  pi=4.0d0*atan(1.0d0)
+  coeff=9.0d0*pi*r%gamma/128.0d0
+
+  if(.not.tracer_rng_ready)then
+     call RngStream_SetPackageSeed(r%seed)
+     tracer_rng = RngStream_CreateStream('tracer_sgs')
+     stream_skip = int(2*g%myid,kind=8)
+     call RngStream_AdvanceState(tracer_rng,0_8,stream_skip)
+     tracer_rng_ready = .true.
+  end if
+
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                     hilbert=m%domain, pack_size=storage_size(dummy_large_realdp)/32,&
+                     pack=pack_fetch_kick_dust,unpack=unpack_fetch_kick_dust)
+
+  do ipart=p%headp(ilevel),p%tailp(ilevel)
+     do idim=1,ndim
+        x_main(idim)=p%xp(ipart,idim)/dx_loc
+     end do
+     do idim=1,ndim
+        if(x_main(idim)<0d0)x_main(idim)=x_main(idim)+dble(m%ckey_max(ilevel+1))
+        if(x_main(idim)>=dble(m%ckey_max(ilevel+1)))x_main(idim)=x_main(idim)-dble(m%ckey_max(ilevel+1))
+     end do
+
+     do idim=1,ndim
+        cl(idim)=int(x_main(idim))-1
+        cc(idim)=int(x_main(idim))
+        cr(idim)=int(x_main(idim))+1
+        x_rel = x_main(idim)
+        wl(idim)=0.5D0*(1.5D0-abs(x_rel-(dble(cl(idim))+0.5d0)))**2
+        wc(idim)=0.75D0-         (x_rel-(dble(cc(idim))+0.5d0)) **2
+        wr(idim)=0.5D0*(1.5D0-abs(x_rel-(dble(cr(idim))+0.5d0)))**2
+     end do
+     do idim=1,ndim
+        if(cl(idim)<0)cl(idim)=m%ckey_max(ilevel+1)-1
+        if(cr(idim)==m%ckey_max(ilevel+1))cr(idim)=0
+     enddo
+     ckey = tsc_index(cl,cc,cr)
+     vol_main = tsc_weight(wl,wc,wr)
+
+     if(action_part==action_kick_only)then
+        p%levelp(ipart)=ilevel
+        cycle
+     else if(action_part==action_kick_drift)then
+        v_pred(1:ndim)=p%vp(ipart,1:ndim)
+        if (g%nstep==0) then
+           do idim=1,ndim
+              x_mid(idim)=x_main(idim)+0.5d0*dt_level*v_pred(idim)/dx_loc
+           end do
+        else
+           do idim=1,ndim
+              x_mid(idim)=x_main(idim)
+           end do
+        endif
+        do idim=1,ndim
+           if(x_mid(idim)<0d0)x_mid(idim)=x_mid(idim)+dble(m%ckey_max(ilevel+1))
+           if(x_mid(idim)>=dble(m%ckey_max(ilevel+1)))x_mid(idim)=x_mid(idim)-dble(m%ckey_max(ilevel+1))
+        end do
+
+        do idim=1,ndim
+           cl2(idim)=int(x_mid(idim))-1
+           cc2(idim)=int(x_mid(idim))
+           cr2(idim)=int(x_mid(idim))+1
+           xl=dble(cl2(idim))+0.5D0
+           xc=dble(cc2(idim))+0.5D0
+           xr=dble(cr2(idim))+0.5D0
+           wl2(idim)=0.5D0*(1.5D0-abs(x_mid(idim)-xl))**2
+           wc2(idim)=0.75D0-         (x_mid(idim)-xc) **2
+           wr2(idim)=0.5D0*(1.5D0-abs(x_mid(idim)-xr))**2
+        end do
+        do idim=1,ndim
+           if(cl2(idim)<0)cl2(idim)=m%ckey_max(ilevel+1)-1
+           if(cr2(idim)==m%ckey_max(ilevel+1))cr2(idim)=0
+        enddo
+        ckey2 = tsc_index(cl2,cc2,cr2)
+        vol2 = tsc_weight(wl2,wc2,wr2)
+
+        ff(1:ndim)=0.0
+        uu(1:ndim)=0.0
+        rho_gas = 0.0
+        eint = 0.0
+#ifdef MHD
+        bb(1:3)=0.0
+        emag=0.0d0
+#endif
+        hash_nbor(0)=ilevel+1
+        do ind=1,threetondim
+           hash_nbor(1:ndim)=ckey2(1:ndim,ind)
+           call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
+#ifdef HYDRO
+           if(associated(gridp))then
+#ifdef GRAV
+              ff(1:ndim)=ff(1:ndim)+gridp%f(icell2,1:ndim)*vol2(ind)
+#endif
+              rho_gas = rho_gas + gridp%uold(icell2,1)*vol2(ind)
+#ifdef MHD
+              bb(1:3)=bb(1:3)+0.5d0*(gridp%bold(icell2,1:3)+gridp%bold(icell2,4:6))*vol2(ind)
+#endif
+              dens = max(dble(gridp%uold(icell2,1)), r%smallr)
+
+              do idim=1,ndim
+                 fluxL = gridp%mflux(icell2,idim     )*dx_loc/dt_level
+                 fluxR = gridp%mflux(icell2,idim+ndim)*dx_loc/dt_level
+                 jr = max(fluxR,0.d0)
+                 jl = max(-fluxL,0.d0)
+                 uu(idim)=uu(idim)+((jr-jl)/dens)*vol2(ind)
+              end do
+              etot = gridp%uold(icell2,5)
+              ekin = 0.0d0
+              do idim=1,ndim
+                 ekin = ekin + 0.5d0 * gridp%uold(icell2,1+idim)**2 / dens
+              end do
+              erad = 0.0d0
+#if NENER>0
+              do irad=1,nener
+                 erad = erad + gridp%uold(icell2,5+irad)
+              end do
+#endif
+#ifdef MHD
+              do idim=1,3
+                 emag = emag + 0.125d0*(gridp%bold(icell2,idim)+gridp%bold(icell2,ndim+idim))**2*vol2(ind)
+              end do
+              eint = eint - emag*vol2(ind)
+#endif
+              eint = eint + (etot - ekin - erad)*vol2(ind)
+           end if
+#endif
+        end do
+
+        cs2 = r%gamma * (r%gamma-1.0d0) * max(eint, r%smallc**2) / max(rho_gas, r%smallr)
+        c_sound = max(sqrt(cs2), r%smallc)
+        nu_stop = coeff*c_sound*rho_gas/p%size(ipart)
+        wdrift0(1:ndim)= v_pred(1:ndim) - uu(1:ndim)
+      !   if(dt_level*nu_stop > 1.d1)then
+      !      wdrift0(1:ndim) = 0.d0
+      !   end if
+        wdrift(1:ndim)=wdrift0(1:ndim)
+        call compute_drag_step(wdrift, c_sound, 0.5d0*dt_level, nu_stop, coeff, r%analytic_dust_force)
+#ifdef GRAV
+        wdrift(1:ndim)=wdrift(1:ndim)+ff(1:ndim)*0.5d0*dt_level
+#endif
+#ifdef MHD
+        if (ndim==3) then
+            call compute_lorentz_step(wdrift, bb(1:ndim), dt_level, p%charge(ipart), r%analytic_dust_force)
+        else
+            if(g%myid==1 .and. g%nstep==0)then
+               write(*,*) 'Warning: Lorentz force not implemented for NDIM != 3; proceeding without it.'
+            endif
+        endif
+#endif
+#ifdef GRAV
+        wdrift(1:ndim)=wdrift(1:ndim)+ff(1:ndim)*0.5d0*dt_level
+#endif
+        call compute_drag_step(wdrift, c_sound, 0.5d0*dt_level, nu_stop, coeff, r%analytic_dust_force)
+
+        p%vp(ipart,1:ndim)=uu(1:ndim)+wdrift(1:ndim)
+
+        do idim=1,ndim
+           x_diff(idim)=(p%xp(ipart,idim)+m%skip(idim))/dx_loc
+        end do
+        call wrap_cell_coords(s,x_diff,ilevel+1)
+
+        do idim=1,ndim
+           xd = x_diff(idim)
+           il(idim)=int(xd)-1
+           ic(idim)=int(xd)
+           ir(idim)=int(xd)+1
+           x_rel = xd-(dble(il(idim))+0.5d0)
+           if(abs(x_rel)<=1.5d0)then
+              w1d(idim,1)=0.5d0*(1.5d0-abs(x_rel))**2
+              dw1d(idim,1)=-(1.5d0-abs(x_rel))*sign(1.d0,x_rel)
+           else
+              w1d(idim,1)=0.d0
+              dw1d(idim,1)=0.d0
+           end if
+           x_rel = xd-(dble(ic(idim))+0.5d0)
+           if(abs(x_rel)<=0.5d0)then
+              w1d(idim,2)=0.75d0 - x_rel*x_rel
+              dw1d(idim,2)=-2.d0*x_rel
+           else
+              w1d(idim,2)=0.d0
+              dw1d(idim,2)=0.d0
+           end if
+           x_rel = xd-(dble(ir(idim))+0.5d0)
+           if(abs(x_rel)<=1.5d0)then
+              w1d(idim,3)=0.5d0*(1.5d0-abs(x_rel))**2
+              dw1d(idim,3)=-(1.5d0-abs(x_rel))*sign(1.d0,x_rel)
+           else
+              w1d(idim,3)=0.d0
+              dw1d(idim,3)=0.d0
+           end if
+        end do
+        do idim=1,ndim
+           if(r%periodic(idim))then
+              if(il(idim)< m%box_ckey_min(idim,ilevel+1))il(idim)=m%box_ckey_max(idim,ilevel+1)-1
+              if(ir(idim)>=m%box_ckey_max(idim,ilevel+1))ir(idim)=m%box_ckey_min(idim,ilevel+1)
+           endif
+        enddo
+
+        center_ind=0
+        ind_minus=0
+        ind_plus=0
+        vol_diff=0.d0; grad_vol=0.d0
+        ind=0
+        do iz=1,3
+           do iy=1,3
+              do ix=1,3
+                 ind=ind+1
+                 select case(ix)
+                 case(1); ckey_diff(1,ind)=il(1)
+                 case(2); ckey_diff(1,ind)=ic(1)
+                 case(3); ckey_diff(1,ind)=ir(1)
+                 end select
+                 select case(iy)
+                 case(1); ckey_diff(2,ind)=il(2)
+                 case(2); ckey_diff(2,ind)=ic(2)
+                 case(3); ckey_diff(2,ind)=ir(2)
+                 end select
+                 select case(iz)
+                 case(1); ckey_diff(3,ind)=il(3)
+                 case(2); ckey_diff(3,ind)=ic(3)
+                 case(3); ckey_diff(3,ind)=ir(3)
+                 end select
+                 weight = w1d(1,ix)*w1d(2,iy)*w1d(3,iz)
+                 vol_diff(ind)=weight
+                 grad_vol(1,ind)=dw1d(1,ix)*w1d(2,iy)*w1d(3,iz)
+                 grad_vol(2,ind)=w1d(1,ix)*dw1d(2,iy)*w1d(3,iz)
+                 grad_vol(3,ind)=w1d(1,ix)*w1d(2,iy)*dw1d(3,iz)
+                 if(iy==2 .and. iz==2)then
+                    if(ix==1)ind_minus(1)=ind
+                    if(ix==2)center_ind=ind
+                    if(ix==3)ind_plus(1)=ind
+                 end if
+                 if(ix==2 .and. iz==2)then
+                    if(iy==1)ind_minus(2)=ind
+                    if(iy==3)ind_plus(2)=ind
+                 end if
+                 if(ix==2 .and. iy==2)then
+                    if(iz==1)ind_minus(3)=ind
+                    if(iz==3)ind_plus(3)=ind
+                 end if
+              end do
+           end do
+        end do
+
+        u_cells=0.d0
+        kappa_num_cells_L=0.d0
+        kappa_num_cells_R=0.d0
+        rho_cells=0.d0
+        fluxL_cells=0.d0
+        fluxR_cells=0.d0
+        phiL=1.d0
+        phiR=1.d0
+
+        hash_nbor(0)=ilevel+1
+        do ind=1,threetondim
+           hash_nbor(1:ndim)=ckey_diff(1:ndim,ind)
+           call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+#ifdef HYDRO
+           if(associated(gridp))then
+              rho=gridp%uold(icell,1)
+              rho_cells(ind)=rho
+              do idim=1,ndim
+                 fluxL_cells(idim,ind)=gridp%mflux(icell,idim     )*dx_loc/dt_level
+                 fluxR_cells(idim,ind)=gridp%mflux(icell,idim+ndim)*dx_loc/dt_level
+              end do
+           end if
+#endif
+        end do
+
+#ifdef HYDRO
+        rho = rho_cells(center_ind)
+        do idim=1,ndim
+           rho_right = rho_cells(ind_plus(idim))
+           rho_left  = rho_cells(ind_minus(idim))
+           dr_plus  = rho_right - rho
+           dr_minus = rho       - rho_left
+
+           phiR(idim) = 1.0d0
+           phiL(idim) = 1.0d0
+           if(abs(dr_plus)>r%smallr)then
+              r_ratio = dr_minus/dr_plus
+              phiR(idim) = slope_limiter(r_ratio,slope_type)
+           end if
+           if(abs(dr_minus)>r%smallr)then
+             r_ratio = dr_plus/dr_minus
+              phiL(idim) = slope_limiter(r_ratio,slope_type)
+           end if
+           phiR(idim) = min(1.d0,max(0.d0,phiR(idim)))
+           phiL(idim) = min(1.d0,max(0.d0,phiL(idim)))
+           phiL(idim) = 0.d0
+           phiR(idim) = 0.d0
+        end do
+#endif
+
+        hash_nbor(0)=ilevel+1
+        do ind=1,threetondim
+           hash_nbor(1:ndim)=ckey_diff(1:ndim,ind)
+           call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+#ifdef HYDRO
+           if(associated(gridp))then
+              rho=rho_cells(ind)
+              denom=max(rho,r%smallr)
+              do idim=1,ndim
+                 fluxL=fluxL_cells(idim,ind)
+                 fluxR=fluxR_cells(idim,ind)
+                 jr=max(fluxR,0.d0)
+                 jl=max(-fluxL,0.d0)
+                 u_cells(idim,ind)=(jr-jl)/denom
+                 cfl_dim = abs(u_cells(idim,ind))*dt_level/dx_loc
+                 one_minus_cfl = max(0.d0,1.d0-cfl_dim)
+                 kappa_num_cells_R(idim,ind)=one_minus_cfl*jr*dx_loc/(2.d0*denom)
+                 kappa_num_cells_L(idim,ind)=one_minus_cfl*jl*dx_loc/(2.d0*denom)
+              end do
+           end if
+#endif
+        end do
+
+        u_eff=0.d0
+        kappa_num=0.d0
+        do ind=1,threetondim
+           do idim=1,ndim
+              u_eff(idim)=u_eff(idim)+u_cells(idim,ind)*vol_diff(ind)
+              kappa_num(idim)=kappa_num(idim)+&
+                   ((1.d0-phiR(idim))*kappa_num_cells_R(idim,ind)+&
+                    (1.d0-phiL(idim))*kappa_num_cells_L(idim,ind))*vol_diff(ind)
+           end do
+        end do
+
+        do k=1,ndim
+           grad_at_part(k)=0.d0
+           do ind=1,threetondim
+              grad_at_part(k)=grad_at_part(k)+grad_vol(k,ind)*&
+                   ((1.d0-phiR(k))*kappa_num_cells_R(k,ind)+&
+                    (1.d0-phiL(k))*kappa_num_cells_L(k,ind))
+           end do
+           u_eff(k) = u_eff(k) + grad_at_part(k)
+           kappa_num(k) = kappa_num(k)
+        end do
+
+        call sample_tracer_uniform(xi)
+
+        disp(1:ndim)=0.d0
+        do idim=1,ndim
+           disp(idim)=u_eff(idim)*dt_level
+        end do
+
+        wdrift2 = dot_product(wdrift0(1:ndim), wdrift0(1:ndim))
+        if (wdrift2 > 0.d0) then
+           what(1:ndim) = wdrift0(1:ndim)/sqrt(wdrift2)
+           w0 = sqrt(wdrift2)
+        else
+           what(1:ndim) = 0.d0
+           w0 = 0.d0
+        end if
+
+        if (nu_stop>0.d0 .and. w0 > 0.d0) then
+           a = c_sound/sqrt(coeff)
+           if(dt_level*nu_stop < 1.d2)then
+              call get_g_factors(dt_level, w0, a, nu_stop, g_par, g_perp)
+           else
+              g_par = sqrt(1.d0-3.d0/(2.d0*dt_level*nu_stop) &
+              &- exp(-2.d0*dt_level*nu_stop)/(2.d0*dt_level*nu_stop) &
+              &+ 2.d0*exp(-(dt_level*nu_stop))/(dt_level*nu_stop))
+              g_perp = g_par
+           end if
+        else
+           g_par = 0.d0
+           g_perp = 0.d0
+        end if
+
+        dx_noise(1:ndim)=0.d0
+        do idim=1,ndim
+           do k=1,ndim
+              if (wdrift2 > 0.d0) then
+                 dx_noise(idim) = dx_noise(idim) + &
+                      (g_perp * merge(1.d0,0.d0,idim==k) + (g_par - g_perp)*what(idim)*what(k)) * &
+                      sqrt(2.d0*kappa_num(k)*dt_level) * xi(k) + grad_at_part(k) * dt_level
+              end if
+           end do
+        end do
+
+        disp(1:ndim)=disp(1:ndim)+dx_noise(1:ndim)
+
+        p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+disp(1:ndim)
+     endif
+  end do
+  call close_cache(s,m%grid_dict)
+
+  if(action_part==action_kick_drift)then
+     do ipart=p%headp(ilevel),p%tailp(ilevel)
+        do idim=1,ndim
+           if(r%periodic(idim))then
+              if(p%xp(ipart,idim)< 0.0d0           )p%xp(ipart,idim)=p%xp(ipart,idim)+r%box_size(idim)
+              if(p%xp(ipart,idim)>=r%box_size(idim))p%xp(ipart,idim)=p%xp(ipart,idim)-r%box_size(idim)
+           endif
+        end do
+     end do
+  end if
+
+  end associate
+end subroutine tsc_kick_drift_dust_num_diff
 
 subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
   use amr_parameters, only: ndim, threetondim
