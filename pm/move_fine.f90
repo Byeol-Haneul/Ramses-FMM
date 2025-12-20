@@ -2948,7 +2948,6 @@ subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
               ff(1:ndim)=ff(1:ndim)+gridp%f(icell2,1:ndim)*vol2(ind)
 #endif
               rho_gas = rho_gas + gridp%uold(icell2,1)*vol2(ind)
-              uu(1:ndim)=uu(1:ndim)+gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)*vol2(ind)
 #ifdef MHD
               bb(1:3)=bb(1:3)+0.5d0*(gridp%bold(icell2,1:3)+gridp%bold(icell2,4:6))*vol2(ind)
 #endif
@@ -3160,11 +3159,18 @@ subroutine cic_kick_drift_dust_num_diff(s,p,ilevel,action_part)
               ff(1:ndim)=ff(1:ndim)+gridp%f(icell2,1:ndim)*vol2(ind)
 #endif
               rho_gas = rho_gas + gridp%uold(icell2,1)*vol2(ind)
-              uu(1:ndim)=uu(1:ndim)+gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)*vol2(ind)
 #ifdef MHD
               bb(1:3)=bb(1:3)+0.5d0*(gridp%bold(icell2,1:3)+gridp%bold(icell2,4:6))*vol2(ind)
 #endif
               dens = max(dble(gridp%uold(icell2,1)), r%smallr)
+
+              do idim=1,ndim
+                 fluxL = gridp%mflux(icell2,idim     )*dx_loc/dt_level
+                 fluxR = gridp%mflux(icell2,idim+ndim)*dx_loc/dt_level
+                 jr = max(fluxR,0.d0)
+                 jl = max(-fluxL,0.d0)
+                 uu(idim)=uu(idim)+((jr-jl)/rho)*vol2(ind)
+              end do
               etot = gridp%uold(icell2,5)
               ekin = 0.0d0
               do idim=1,ndim
