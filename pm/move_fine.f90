@@ -1812,6 +1812,7 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
            end if
 
         ! Need to add MHD support here
+#endif
         end do
         cs2 = r%gamma * (r%gamma-1.0d0) * max(eint, r%smallc**2) / max(rho_gas, r%smallr)
         c_sound = max(sqrt(cs2), r%smallc)
@@ -1833,8 +1834,7 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
         p%vp(ipart,1:ndim)=uu(1:ndim)+wdrift(1:ndim)
         ! Leapfrog drift: advance positions using time-centered velocity
         p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
-#endif
-                ! Trajectory output for selected particles
+        ! Trajectory output for selected particles
         if(s%r%ntrajectories>0)then
          do ii=1,s%r%ntrajectories
             if(s%r%trajectories(ii)==p%idp(ipart))then
