@@ -424,7 +424,7 @@ subroutine sink_in_peak(s,reset_sink_pos,count_sink)
   integer(kind=8)::global_peak_id,merge_to
   type(msg_sink_clump)::dummy_sink_clump
 
-  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c,p=>s%sink)
+  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c,p=>s%sink,mdl=>s%mdl)
 
   if(p%norphan_peak>0)then
      write(*,*)'CREATE_SINK: SINK OUTSIDE PEAKS',p%norphan_peak
@@ -443,8 +443,8 @@ subroutine sink_in_peak(s,reset_sink_pos,count_sink)
   ! Reset sink position to peak position
   !-------------------------------------
   if(reset_sink_pos)then
-     call open_cache_clump(s,pack_size=storage_size(dummy_sink_clump)/32,&
-          pack=pack_fetch_sink,unpack=unpack_fetch_sink)
+     call open_cache_clump(mdl, c, pack_size=storage_size(dummy_sink_clump)/32, &
+          pack=pack_fetch_sink, unpack=unpack_fetch_sink)
      do i=1+p%norphan_peak,p%npart
         ipart=p%sortp(i)
         global_peak_id=p%workp(i)
@@ -462,7 +462,7 @@ subroutine sink_in_peak(s,reset_sink_pos,count_sink)
         p%fp(ipart,2)=c%peak_acc(peak_nr,2)
         p%fp(ipart,3)=c%peak_acc(peak_nr,3)
      end do
-     call close_cache(s,m%grid_dict)
+     call close_cache(mdl)
   endif
 
   !------------------------------------
@@ -471,19 +471,19 @@ subroutine sink_in_peak(s,reset_sink_pos,count_sink)
   if(count_sink)then
      ! Count sinks in each peak
      c%nsink=0
-     call open_cache_clump(s,pack_size=storage_size(dummy_sink_clump)/32,&
-          init=init_flush_sink,flush=pack_flush_sink,combine=unpack_flush_sink)
+     call open_cache_clump(mdl, c, pack_size=storage_size(dummy_sink_clump)/32, &
+          init=init_flush_sink, flush=pack_flush_sink, combine=unpack_flush_sink)
      do i=1+p%norphan_peak,p%npart
         global_peak_id=p%workp(i)
         call get_peak(s,global_peak_id,peak_nr,fetch_cache=.false.,flush_cache=.true.)
         c%nsink(peak_nr)=c%nsink(peak_nr)+1
      end do
-     call close_cache(s,m%grid_dict)
+     call close_cache(mdl)
      ! Count sinks hierarchically in each halo
      if(c%saddle_threshold>0)then
         do ilev=0,c%merge_levelmax
-           call open_cache_clump(s,pack_size=storage_size(dummy_sink_clump)/32,&
-                init=init_flush_sink,flush=pack_flush_sink,combine=unpack_flush_sink)
+           call open_cache_clump(mdl, c, pack_size=storage_size(dummy_sink_clump)/32, &
+                init=init_flush_sink, flush=pack_flush_sink, combine=unpack_flush_sink)
            do ipeak=1,c%npeak
               if(c%lev_peak(ipeak)==ilev)then
                  merge_to=c%new_peak(ipeak)
@@ -493,7 +493,7 @@ subroutine sink_in_peak(s,reset_sink_pos,count_sink)
                  endif
               endif
            end do
-           call close_cache(s,m%grid_dict)
+           call close_cache(mdl)
         end do
      endif
   endif

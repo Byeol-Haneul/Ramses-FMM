@@ -38,15 +38,14 @@ end subroutine r_thermal_feedback
 !##############################################################################
 subroutine thermal_feedback(s,p,ilevel,msn_loc)
   use amr_parameters, only: ndim, twotondim
-  use amr_commons, only: oct
   use ramses_commons, only: ramses_t
   use pm_commons, only: part_t
   use nbors_utils
   use cache_commons
   use cache
-  use marshal, only: pack_fetch_refine,unpack_fetch_refine
+  use godunov_fine_module, only: init_flush_godunov, pack_flush_godunov, unpack_flush_godunov
+  use marshal, only: pack_fetch_refine, unpack_fetch_refine
   use boundaries, only: init_bound_refine
-  use godunov_fine_module, only: init_flush_godunov,pack_flush_godunov,unpack_flush_godunov
   use hilbert
   implicit none
   type(ramses_t)::s
@@ -62,18 +61,17 @@ subroutine thermal_feedback(s,p,ilevel,msn_loc)
   ! Local variables
   integer,dimension(1:ndim)::ckey
   integer(kind=8),dimension(0:ndim)::hash_cell
-  integer::i,ipart,icellp,ind,idim
+  integer::i,ipart,icell,igrid,ind,idim
   real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
   real(kind=8)::dx_loc,vol_loc,vol_cell
   real(kind=8)::mejecta,dloss,dzloss,zloss,ekinetic,ethermal
   real(kind=8)::birth_time,t_sn,e_sn,dteff,dold
-  type(oct),pointer::gridp
   type(msg_large_realdp)::dummy_large_realdp
   logical::ok_level,ok_leaf
 
 #ifdef HYDRO
 #if NDIM==3
-  associate(r=>s%r,g=>s%g,m=>s%m)
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
   ! Conversion factor from user units to cgs units
   call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
@@ -92,11 +90,10 @@ subroutine thermal_feedback(s,p,ilevel,msn_loc)
   msn_loc=0d0
 
   ! Open cache for array uold (fetch) and unew (flush)
-  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-                hilbert=m%domain,pack_size=storage_size(dummy_large_realdp)/32,&
-                pack=pack_fetch_refine,unpack=unpack_fetch_refine,&
-                init=init_flush_godunov, flush=pack_flush_godunov,&
-                combine=unpack_flush_godunov, bound=init_bound_refine)
+  call open_cache(mdl, m, pack_size=storage_size(dummy_large_realdp)/32, &
+       pack=pack_fetch_refine, unpack=unpack_fetch_refine, &
+       init=init_flush_godunov, flush=pack_flush_godunov, &
+       combine=unpack_flush_godunov, bound=init_bound_refine)
 
   ! Loop over particles in Hilbert order
   do ipart=p%headp(ilevel),p%tailp(ilevel)
@@ -122,10 +119,10 @@ subroutine thermal_feedback(s,p,ilevel,msn_loc)
      ! Get parent cell at level ilevel using cache
      hash_cell(0)=ilevel+1
      hash_cell(1:ndim)=ckey(1:ndim)
-     call get_parent_cell(s,hash_cell,m%grid_dict,gridp,icellp,flush_cache=.true.,fetch_cache=.true.)
+     call get_parent_cell(s,hash_cell,igrid,icell,flush_cache=.true.,fetch_cache=.true.)
 
      ! If cell does not exist at current level, then find cell at coarser level
-     if(.not.associated(gridp))then
+     if(igrid==0)then
 
         ! NGP at level ilevel-1
         do idim=1,ndim
@@ -138,8 +135,8 @@ subroutine thermal_feedback(s,p,ilevel,msn_loc)
         ! Get parent cell at level ilevel-1 using cache
         hash_cell(0)=ilevel
         hash_cell(1:ndim)=ckey(1:ndim)
-        call get_parent_cell(s,hash_cell,m%grid_dict,gridp,icellp,flush_cache=.true.,fetch_cache=.true.)
-        if(.not.associated(gridp))ok_level=.false.
+        call get_parent_cell(s,hash_cell,igrid,icell,flush_cache=.true.,fetch_cache=.true.)
+        if(igrid==0)ok_level=.false.
 
      end if
 
@@ -149,7 +146,7 @@ subroutine thermal_feedback(s,p,ilevel,msn_loc)
         stop
      endif
 
-     ok_leaf = .not. gridp%refined(icellp)
+     ok_leaf = .not. m%grid(igrid)%refined(icell)
      if(.not. ok_leaf)then
         write(*,*)"Something went wrong in thermal_feedback"
         write(*,*)"Cell should be a leaf cell..."
@@ -165,17 +162,17 @@ subroutine thermal_feedback(s,p,ilevel,msn_loc)
      dzloss=dloss*zloss
 
      ! Update unew
-     gridp%unew(icellp,1)=gridp%unew(icellp,1)+dloss
-     gridp%unew(icellp,2)=gridp%unew(icellp,2)+dloss*p%vp(ipart,1)
-     gridp%unew(icellp,3)=gridp%unew(icellp,3)+dloss*p%vp(ipart,2)
-     gridp%unew(icellp,4)=gridp%unew(icellp,4)+dloss*p%vp(ipart,3)
-     gridp%unew(icellp,5)=gridp%unew(icellp,5)+ekinetic+ethermal
-     if(r%metal)gridp%unew(icellp,r%imetal)=gridp%unew(icellp,r%imetal)+dzloss
+     m%unew(icell,1,igrid)=m%unew(icell,1,igrid)+dloss
+     m%unew(icell,2,igrid)=m%unew(icell,2,igrid)+dloss*p%vp(ipart,1)
+     m%unew(icell,3,igrid)=m%unew(icell,3,igrid)+dloss*p%vp(ipart,2)
+     m%unew(icell,4,igrid)=m%unew(icell,4,igrid)+dloss*p%vp(ipart,3)
+     m%unew(icell,5,igrid)=m%unew(icell,5,igrid)+ekinetic+ethermal
+     if(r%metal)m%unew(icell,r%imetal,igrid)=m%unew(icell,r%imetal,igrid)+dzloss
 
      ! If dual energy scheme is activated, update entropy
      if(r%entropy.and.r%dual_energy.GE.0)then
-        dold = gridp%uold(icellp,1)
-        gridp%unew(icellp,r%ientropy)=gridp%unew(icellp,r%ientropy)+ethermal/dold**(r%gamma-1)*(r%gamma-1)
+        dold = m%uold(icell,1,igrid)
+        m%unew(icell,r%ientropy,igrid)=m%unew(icell,r%ientropy,igrid)+ethermal/dold**(r%gamma-1)*(r%gamma-1)
      endif
 
      ! Update particle mass
@@ -187,7 +184,7 @@ subroutine thermal_feedback(s,p,ilevel,msn_loc)
   end do
   ! End loop over particles
 
-  call close_cache(s,m%grid_dict)
+  call close_cache(mdl)
 
 end associate
 #endif  
@@ -254,15 +251,14 @@ end subroutine r_mechanical_feedback
 subroutine mechanical_feedback(s,p,ilevel,msn_loc)
   use amr_parameters, only: ndim, twotondim
   use hydro_parameters, only: nvar
-  use amr_commons, only: nbor, oct
   use ramses_commons, only: ramses_t
   use pm_commons, only: part_t
   use nbors_utils
   use cache_commons
   use cache
-  use marshal, only: pack_fetch_refine,unpack_fetch_refine
+  use godunov_fine_module, only: init_flush_godunov, pack_flush_godunov, unpack_flush_godunov
+  use marshal, only: pack_fetch_refine, unpack_fetch_refine
   use boundaries, only: init_bound_refine
-  use godunov_fine_module, only: init_flush_godunov,pack_flush_godunov,unpack_flush_godunov
   use hilbert
   implicit none
   type(ramses_t)::s
@@ -300,7 +296,9 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
   real(kind=8)::f_LOAD,f_CANCEL,f_ESN,f_LOAD_CEN
   integer,dimension(1:ndim)::ckey,ckey_ref,ckey_nbor
   integer(kind=8),dimension(0:ndim)::hash_cell,hash_nbor
-  integer::i,j,k,ipart,icellp,icelln,ind,idim,ivar,ipart_ref
+  integer::i,j,k,ipart,ind,idim,ivar,ipart_ref
+  integer::igrid,igridn,icell,icelln
+  integer,dimension(1:nSNnei)::igrid_nbor,icell_nbor,level_nbor
   integer,dimension(1:ndim)::ix
   real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
   real(kind=8)::dx_loc,vol_loc,vol_cell
@@ -308,16 +306,12 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
   real(kind=8)::birth_time,t_sn,e_sn,dteff,dold,num_SN
   real(kind=8),dimension(1:3)::xcen,xnei
   real(kind=8),dimension(1:nvar)::q
-  integer,dimension(1:nSNnei)::icell_nbor,level_nbor
-  type(nbor),dimension(1:nSNnei)::grid_nbor
-  type(oct),pointer::gridp,gridn
   type(msg_large_realdp)::dummy_large_realdp
   logical::ok_level,ok_leaf,ok
 
-
 #ifdef HYDRO
 #if NDIM==3
-  associate(r=>s%r,g=>s%g,m=>s%m)
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
   ! Mechanical feedback parameters
   f_LOAD = nSNnei / dble(nSNcen + nSNnei) ! mass loading factor of the ejecta
@@ -372,11 +366,10 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
   msn_loc=0d0
 
   ! Open cache for array uold (fetch) and unew (flush)
-  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-                hilbert=m%domain,pack_size=storage_size(dummy_large_realdp)/32,&
-                pack=pack_fetch_refine,unpack=unpack_fetch_refine,&
-                init=init_flush_godunov, flush=pack_flush_godunov,&
-                combine=unpack_flush_godunov, bound=init_bound_refine)
+  call open_cache(mdl, m, pack_size=storage_size(dummy_large_realdp)/32, &
+       pack=pack_fetch_refine, unpack=unpack_fetch_refine, &
+       init=init_flush_godunov, flush=pack_flush_godunov, &
+       combine=unpack_flush_godunov, bound=init_bound_refine)
 
   ! Loop over particles in Hilbert order
   do ipart=p%headp(ilevel),p%tailp(ilevel)
@@ -403,10 +396,10 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
      ! Get parent cell at level ilevel using cache
      hash_cell(0)=ilevel+1
      hash_cell(1:ndim)=ckey(1:ndim)
-     call get_parent_cell(s,hash_cell,m%grid_dict,gridp,icellp,flush_cache=.true.,fetch_cache=.true.)
+     call get_parent_cell(s,hash_cell,igrid,icell,flush_cache=.true.,fetch_cache=.true.)
 
      ! If cell does not exist at current level, then find cell at coarser level
-     if(.not.associated(gridp))then
+     if(igrid==0)then
 
         ! NGP at level ilevel-1
         do idim=1,ndim
@@ -420,13 +413,13 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
         ! Get parent cell at level ilevel-1 using cache
         hash_cell(0)=ilevel
         hash_cell(1:ndim)=ckey(1:ndim)
-        call get_parent_cell(s,hash_cell,m%grid_dict,gridp,icellp,flush_cache=.true.,fetch_cache=.true.)
-        if(.not.associated(gridp))ok_level=.false.
+        call get_parent_cell(s,hash_cell,igrid,icell,flush_cache=.true.,fetch_cache=.true.)
+        if(igrid==0)ok_level=.false.
 
      end if
 
      ! Lock grid in cache
-     call lock_cache(s,gridp)
+     call lock_cache(m,igrid)
 
      if(.not. ok_level)then
         write(*,*)"Something went wrong in mechanical_feedback"
@@ -434,7 +427,7 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
         stop
      endif
 
-     ok_leaf = .not. gridp%refined(icellp)
+     ok_leaf = .not. m%grid(igrid)%refined(icell)
      if(.not. ok_leaf)then
         write(*,*)"Something went wrong in mechanical_feedback"
         write(*,*)"Cell should be a leaf cell..."
@@ -453,15 +446,15 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
      num_sn=mejecta/m_SN
 
      ! Compute central cell properties
-     d=max(dble(gridp%uold(icellp,1)),r%smallr)
-     u=gridp%uold(icellp,2)/d
-     v=gridp%uold(icellp,3)/d
-     w=gridp%uold(icellp,4)/d
-     e=gridp%uold(icellp,5)
+     d=max(dble(m%uold(icell,1,igrid)),r%smallr)
+     u=m%uold(icell,2,igrid)/d
+     v=m%uold(icell,3,igrid)/d
+     w=m%uold(icell,4,igrid)/d
+     e=m%uold(icell,5,igrid)
      ekk=0.5*d*(u**2+v**2+w**2)
      eth=e-ekk
      T2=eth/d*scale_T2*(r%gamma-1)
-     if(r%metal)z=gridp%uold(icellp,r%imetal)/d
+     if(r%metal)z=m%uold(icell,r%imetal,igrid)/d
 
      ! Collect all neighboring cell from hash table
      do j=1,nSNnei
@@ -480,47 +473,47 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
         ckey_nbor(1:ndim)=int(xnei(1:ndim))
         hash_nbor(0)=hash_cell(0)
         hash_nbor(1:ndim)=ckey_nbor(1:ndim)
-        call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.true.,fetch_cache=.true.)
+        call get_parent_cell(s,hash_nbor,igridn,icelln,flush_cache=.true.,fetch_cache=.true.)
 
         ! If missing, get neighboring cell at current level - 1
-        if(.not.associated(gridn))then
+        if(igridn==0)then
            ckey_nbor(1:ndim)=int(xnei(1:ndim)/2.0)
            hash_nbor(0)=hash_cell(0)-1
            hash_nbor(1:ndim)=ckey_nbor(1:ndim)
-           call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.true.,fetch_cache=.true.)
+           call get_parent_cell(s,hash_nbor,igridn,icelln,flush_cache=.true.,fetch_cache=.true.)
 
         ! If refined, get neighboring cell at current level + 1
-        else if (gridn%refined(icelln))then
+        else if (m%grid(igridn)%refined(icelln))then
            ckey_nbor(1:ndim)=int(xnei(1:ndim)*2.0)
            hash_nbor(0)=hash_cell(0)+1
            hash_nbor(1:ndim)=ckey_nbor(1:ndim)
-           call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.true.,fetch_cache=.true.)
+           call get_parent_cell(s,hash_nbor,igridn,icelln,flush_cache=.true.,fetch_cache=.true.)
         endif
 
         ! Lock grid in cache
-        call lock_cache(s,gridn)
+        call lock_cache(m,igridn)
 
-        grid_nbor(j)%p => gridn
+        igrid_nbor(j) = igridn
         icell_nbor(j) = icelln
         level_nbor(j) = hash_nbor(0)-1
 
      end do
 
      ! Update unew in central cell
-     gridp%unew(icellp,1)=gridp%unew(icellp,1)+dloss-dloss*f_LOAD-d*f_LOAD_CEN
-     gridp%unew(icellp,2)=gridp%unew(icellp,2)+dloss*up-dloss*up*f_LOAD-d*u*f_LOAD_CEN
-     gridp%unew(icellp,3)=gridp%unew(icellp,3)+dloss*vp-dloss*vp*f_LOAD-d*v*f_LOAD_CEN
-     gridp%unew(icellp,4)=gridp%unew(icellp,4)+dloss*wp-dloss*wp*f_LOAD-d*w*f_LOAD_CEN
-     gridp%unew(icellp,5)=gridp%unew(icellp,5)+ekloss-ekloss*f_LOAD-(ekk+eth)*f_LOAD_CEN
+     m%unew(icell,1,igrid)=m%unew(icell,1,igrid)+dloss-dloss*f_LOAD-d*f_LOAD_CEN
+     m%unew(icell,2,igrid)=m%unew(icell,2,igrid)+dloss*up-dloss*up*f_LOAD-d*u*f_LOAD_CEN
+     m%unew(icell,3,igrid)=m%unew(icell,3,igrid)+dloss*vp-dloss*vp*f_LOAD-d*v*f_LOAD_CEN
+     m%unew(icell,4,igrid)=m%unew(icell,4,igrid)+dloss*wp-dloss*wp*f_LOAD-d*w*f_LOAD_CEN
+     m%unew(icell,5,igrid)=m%unew(icell,5,igrid)+ekloss-ekloss*f_LOAD-(ekk+eth)*f_LOAD_CEN
 
      ! Update metals
-     if(r%metal)gridp%unew(icellp,r%imetal)=gridp%unew(icellp,r%imetal)+dzloss-dzloss*f_LOAD-d*z*f_LOAD_CEN
+     if(r%metal)m%unew(icell,r%imetal,igrid)=m%unew(icell,r%imetal,igrid)+dzloss-dzloss*f_LOAD-d*z*f_LOAD_CEN
 
      ! Update passive scalars so that they don't change
      do ivar=6,nvar
         if(r%metal.and.ivar==r%imetal)cycle
-        q(ivar)=gridp%uold(icellp,ivar)/max(dble(gridp%uold(icellp,1)),r%smallr)
-        gridp%unew(icellp,ivar)=gridp%unew(icellp,ivar)+(dloss-dloss*f_LOAD-d*f_LOAD_CEN)*q(ivar)
+        q(ivar)=m%uold(icell,ivar,igrid)/max(dble(m%uold(icell,1,igrid)),r%smallr)
+        m%unew(icell,ivar,igrid)=m%unew(icell,ivar,igrid)+(dloss-dloss*f_LOAD-d*f_LOAD_CEN)*q(ivar)
      end do
 
      ! Update conservative variables in neighboring cells
@@ -531,14 +524,14 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
      do j=1,nSNnei
 
         ! Gather neighboring grid
-        gridn => grid_nbor(j)%p
+        igridn = igrid_nbor(j)
         icelln = icell_nbor(j)
 
         ! Neighboring cell properties
         vol_nei = dble(twotondim)**(hash_cell(0)-1-level_nbor(j))
         Z_nei = r%z_ave*0.02
-        d_nei = max(dble(gridn%uold(icelln,1)),r%smallr)
-        if(r%metal) Z_nei = gridn%uold(icelln,r%imetal)/d_nei
+        d_nei = max(dble(m%uold(icelln,1,igridn)),r%smallr)
+        if(r%metal) Z_nei = m%uold(icelln,r%imetal,igridn)/d_nei
 
         ! Compute actual mass ratio
         f_w_cell = (dm_load+d_nei/8d0)/dm_ejecta - 1d0
@@ -566,37 +559,37 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
         ek_solid = p_solid*(vload*f_LOAD)/2d0
 
         ! Add mass, momentum and energy coming from central cell loading
-        gridn%unew(icelln,1)=gridn%unew(icelln,1)+(dloss*f_LOAD+d*f_LOAD_CEN)/dble(nSNnei)/vol_nei
-        gridn%unew(icelln,2)=gridn%unew(icelln,2)+(dloss*up*f_LOAD+d*u*f_LOAD_CEN)/dble(nSNnei)/vol_nei
-        gridn%unew(icelln,3)=gridn%unew(icelln,3)+(dloss*vp*f_LOAD+d*v*f_LOAD_CEN)/dble(nSNnei)/vol_nei
-        gridn%unew(icelln,4)=gridn%unew(icelln,4)+(dloss*wp*f_LOAD+d*w*f_LOAD_CEN)/dble(nSNnei)/vol_nei
-        gridn%unew(icelln,5)=gridn%unew(icelln,5)+(ekloss*f_LOAD+(ekk+eth)*f_LOAD_CEN)/dble(nSNnei)/vol_nei
+        m%unew(icelln,1,igridn)=m%unew(icelln,1,igridn)+(dloss*f_LOAD+d*f_LOAD_CEN)/dble(nSNnei)/vol_nei
+        m%unew(icelln,2,igridn)=m%unew(icelln,2,igridn)+(dloss*up*f_LOAD+d*u*f_LOAD_CEN)/dble(nSNnei)/vol_nei
+        m%unew(icelln,3,igridn)=m%unew(icelln,3,igridn)+(dloss*vp*f_LOAD+d*v*f_LOAD_CEN)/dble(nSNnei)/vol_nei
+        m%unew(icelln,4,igridn)=m%unew(icelln,4,igridn)+(dloss*wp*f_LOAD+d*w*f_LOAD_CEN)/dble(nSNnei)/vol_nei
+        m%unew(icelln,5,igridn)=m%unew(icelln,5,igridn)+(ekloss*f_LOAD+(ekk+eth)*f_LOAD_CEN)/dble(nSNnei)/vol_nei
 
         ! Add metals
         if(r%metal)then
-           gridn%unew(icelln,r%imetal)=gridn%unew(icelln,r%imetal)+(dzloss*f_LOAD+d*z*f_LOAD_CEN)/dble(nSNnei)/vol_nei
+           m%unew(icelln,r%imetal,igridn)=m%unew(icelln,r%imetal,igridn)+(dzloss*f_LOAD+d*z*f_LOAD_CEN)/dble(nSNnei)/vol_nei
         endif
 
         ! Update passive scalars coming from central cell loading
         do ivar=6,nvar
            if(r%metal.and.ivar==r%imetal)cycle
-           gridn%unew(icelln,ivar)=gridn%unew(icelln,ivar)+(dloss*f_LOAD+d*f_LOAD_CEN)*q(ivar)/dble(nSNnei)/vol_nei
+           m%unew(icelln,ivar,igridn)=m%unew(icelln,ivar,igridn)+(dloss*f_LOAD+d*f_LOAD_CEN)*q(ivar)/dble(nSNnei)/vol_nei
         end do
 
         ! Add momentum and energy coming from the cold shell
-        gridn%unew(icelln,2)=gridn%unew(icelln,2)+p_solid*vSNnei(1,j)/vol_nei
-        gridn%unew(icelln,3)=gridn%unew(icelln,3)+p_solid*vSNnei(2,j)/vol_nei
-        gridn%unew(icelln,4)=gridn%unew(icelln,4)+p_solid*vSNnei(3,j)/vol_nei
-        gridn%unew(icelln,5)=gridn%unew(icelln,5)+ek_solid/vol_nei
+        m%unew(icelln,2,igridn)=m%unew(icelln,2,igridn)+p_solid*vSNnei(1,j)/vol_nei
+        m%unew(icelln,3,igridn)=m%unew(icelln,3,igridn)+p_solid*vSNnei(2,j)/vol_nei
+        m%unew(icelln,4,igridn)=m%unew(icelln,4,igridn)+p_solid*vSNnei(3,j)/vol_nei
+        m%unew(icelln,5,igridn)=m%unew(icelln,5,igridn)+ek_solid/vol_nei
 
      end do
      ! End loop over solid angle
 
      ! Unlock all octs
-     call unlock_cache(s,gridp)
+     call unlock_cache(m,igrid)
      do j=1,nSNnei
-        gridn => grid_nbor(j)%p
-        call unlock_cache(s,gridn)
+        igridn = igrid_nbor(j)
+        call unlock_cache(m,igridn)
      end do
 
      ! Update particle mass
@@ -608,7 +601,7 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
   end do
   ! End loop over particles
 
-  call close_cache(s,m%grid_dict)
+  call close_cache(mdl)
 
 end associate
 #endif

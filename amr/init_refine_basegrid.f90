@@ -276,7 +276,7 @@ subroutine init_refine_basegrid(s,ilevel)
 #endif
         ! Insert new grid in main array
         igrid=igrid+1
-        if(igrid.GT.r%ngridmax)then
+        if(igrid.GT.m%ngridmax)then
            write(*,*)'No more free memory'
            write(*,*)'Increase ngridmax'
            call mdl_abort(mdl)
@@ -292,7 +292,7 @@ subroutine init_refine_basegrid(s,ilevel)
         ! Insert new grid in hash table
         hash_key(0)=ilevel
         hash_key(1:ndim)=ix(1:ndim)
-        call hash_setp(m%grid_dict,hash_key,m%grid(igrid))
+        call hash_setp(m%grid_dict,hash_key,igrid)
      endif
 #if NDIM>1
      endif

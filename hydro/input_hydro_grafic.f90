@@ -219,7 +219,7 @@ subroutine input_hydro_grafic(mdl,r,g,m,ilevel)
 #endif
 #ifdef HYDRO
            ! Scatter to corresponding primitive variable
-           m%grid(igrid)%uold(ind,ivar)=init_array(i1,i2,i3)
+           m%uold(ind,ivar,igrid)=init_array(i1,i2,i3)
 #endif
         end do
      end do
@@ -289,7 +289,7 @@ subroutine input_hydro_grafic(mdl,r,g,m,ilevel)
 #if NDIM>2
            i3=int(xx3)+1
 #endif
-           m%grid(igrid)%bold(ind,ivar)=init_array(i1,i2,i3)
+           m%bold(ind,ivar,igrid)=init_array(i1,i2,i3)
         end do
      end do
   end do
@@ -309,10 +309,10 @@ subroutine input_hydro_grafic(mdl,r,g,m,ilevel)
         do ind=1,twotondim
 #ifdef HYDRO
            ! Prevent negative densities
-           rr=max(dble(m%grid(igrid)%uold(ind,1)),0.1*g%omega_b/g%omega_m)
-           m%grid(igrid)%uold(ind,1)=rr
+           rr=max(dble(m%uold(ind,1,igrid)),0.1*g%omega_b/g%omega_m)
+           m%uold(ind,1,igrid)=rr
            ! Compute pressure from temperature and density
-           m%grid(igrid)%uold(ind,5)=m%grid(igrid)%uold(ind,1)*m%grid(igrid)%uold(ind,5)
+           m%uold(ind,5,igrid)=m%uold(ind,1,igrid)*m%uold(ind,5,igrid)
 #endif
         end do
         ! End loop over cells
@@ -330,7 +330,7 @@ subroutine input_hydro_grafic(mdl,r,g,m,ilevel)
         do ind=1,twotondim
 #ifdef HYDRO
            ! Compute entropy from pressure and density
-           m%grid(igrid)%uold(ind,r%ientropy)=m%grid(igrid)%uold(ind,5)/m%grid(igrid)%uold(ind,1)**r%gamma
+           m%uold(ind,r%ientropy,igrid)=m%uold(ind,5,igrid)/m%uold(ind,1,igrid)**r%gamma
 #endif
         end do
         ! End loop over cells
@@ -351,13 +351,13 @@ subroutine input_hydro_grafic(mdl,r,g,m,ilevel)
            ! Compute initial refinement map for zoom-in simulations
            ! only if next level file exists
            if(r%initfile(ilevel+1) .ne.' ')then
-              if(m%grid(igrid)%uold(ind,r%ivar_refine)>r%var_cut_refine)then
-                 m%grid(igrid)%nref(ind)=r%m_refine(ilevel)*1.1d0
+              if(m%uold(ind,r%ivar_refine,igrid)>r%var_cut_refine)then
+                 m%nref(ind,igrid)=r%m_refine(ilevel)*1.1d0
               else
-                 m%grid(igrid)%nref(ind)=0.0d0
+                 m%nref(ind,igrid)=0.0d0
               endif
            else
-              m%grid(igrid)%nref(ind)=0.0d0
+              m%nref(ind,igrid)=0.0d0
            endif
         end do
         ! End loop over cells
@@ -376,32 +376,32 @@ subroutine input_hydro_grafic(mdl,r,g,m,ilevel)
      do ind=1,twotondim
 #ifdef HYDRO
         ! Compute total energy density
-        rr=m%grid(igrid)%uold(ind,1)
-        vx=m%grid(igrid)%uold(ind,2)
-        vy=m%grid(igrid)%uold(ind,3)
-        vz=m%grid(igrid)%uold(ind,4)
-        pp=m%grid(igrid)%uold(ind,5)
+        rr=m%uold(ind,1,igrid)
+        vx=m%uold(ind,2,igrid)
+        vy=m%uold(ind,3,igrid)
+        vz=m%uold(ind,4,igrid)
+        pp=m%uold(ind,5,igrid)
         ek=0.5d0*rr*(vx**2+vy**2+vz**2)
         ei=pp/(r%gamma-1.0)
 #ifdef MHD
         ! Add magnetic energy using face-averaged, cell-centered B
-        bx=0.5d0*(m%grid(igrid)%bold(ind,1)+m%grid(igrid)%bold(ind,4))
-        by=0.5d0*(m%grid(igrid)%bold(ind,2)+m%grid(igrid)%bold(ind,5))
-        bz=0.5d0*(m%grid(igrid)%bold(ind,3)+m%grid(igrid)%bold(ind,6))
-        m%grid(igrid)%uold(ind,5)=ei+ek+0.5d0*(bx*bx+by*by+bz*bz)
+        bx=0.5d0*(m%bold(ind,1,igrid)+m%bold(ind,4,igrid))
+        by=0.5d0*(m%bold(ind,2,igrid)+m%bold(ind,5,igrid))
+        bz=0.5d0*(m%bold(ind,3,igrid)+m%bold(ind,6,igrid))
+        m%uold(ind,5,igrid)=ei+ek+0.5d0*(bx*bx+by*by+bz*bz)
 #else
-        m%grid(igrid)%uold(ind,5)=ei+ek
+        m%uold(ind,5,igrid)=ei+ek
 #endif
         ! Compute momentum density
         do idim=1,3
-           rr=m%grid(igrid)%uold(ind,1)
-           m%grid(igrid)%uold(ind,idim+1)=rr*m%grid(igrid)%uold(ind,idim+1)
+           rr=m%uold(ind,1,igrid)
+           m%uold(ind,idim+1,igrid)=rr*m%uold(ind,idim+1,igrid)
         end do
 #if NVAR>5
         ! Compute passive scalar density
         do ivar=6,nvar
-           rr=m%grid(igrid)%uold(ind,1)
-           m%grid(igrid)%uold(ind,ivar)=rr*m%grid(igrid)%uold(ind,ivar)
+           rr=m%uold(ind,1,igrid)
+           m%uold(ind,ivar,igrid)=rr*m%uold(ind,ivar,igrid)
         enddo
 #endif
 #endif
@@ -560,9 +560,9 @@ subroutine input_refmap_grafic(mdl,r,g,m,ilevel)
 #ifdef GRAV
         ! Scatter to corresponding refinement variable
         if(r%initfile(ilevel+1) .ne.' ')then
-           m%grid(igrid)%nref(ind)=init_array(i1,i2,i3)*r%m_refine(ilevel)*1.1d0
+           m%nref(ind,igrid)=init_array(i1,i2,i3)*r%m_refine(ilevel)*1.1d0
         else
-           m%grid(igrid)%nref(ind)=0d0
+           m%nref(ind,igrid)=0d0
         endif
 #endif
      end do

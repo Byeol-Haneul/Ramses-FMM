@@ -1,7 +1,6 @@
 module hydro_commons
   use amr_parameters
   use hydro_parameters
-  use oct_commons
 
   type hydro_kernel_t
      integer::iu1,iu2,ju1,ju2,ku1,ku2
@@ -19,11 +18,11 @@ module hydro_commons
      real(kind=8),dimension(:,:,:,:),allocatable::fx
      real(kind=8),dimension(:,:,:,:),allocatable::tx
      real(kind=8),dimension(:,:,:),allocatable::divu
-     logical ,dimension(:,:,:),allocatable::okloc
-     integer ,dimension(:,:,:),allocatable::cellloc
-     type(nbor),dimension(:,:,:),allocatable::childloc
-     type(nbor),dimension(:,:,:),allocatable::gridloc
-     type(nbor),dimension(:,:,:,:),allocatable::nborloc
+     logical,dimension(:,:,:),allocatable::okloc
+     integer,dimension(:,:,:),allocatable::cellloc
+     integer,dimension(:,:,:),allocatable::childloc
+     integer,dimension(:,:,:),allocatable::gridloc
+     integer,dimension(:,:,:,:),allocatable::nborloc
 #ifdef MHD
      real(kind=8),dimension(:,:,:,:),allocatable::bloc
      real(kind=8),dimension(:,:,:),allocatable::emfx
@@ -38,7 +37,7 @@ module hydro_commons
      real(kind=8),dimension(:,:,:,:,:),allocatable::qRB
      real(kind=8),dimension(:,:,:,:,:),allocatable::qLT
      real(kind=8),dimension(:,:,:,:,:),allocatable::qLB
-     type(nbor),dimension(:,:,:,:),allocatable::nborsonloc
+     integer,dimension(:,:,:,:),allocatable::nborsonloc
 #endif
    contains
      procedure :: init => init_hydro_kernel

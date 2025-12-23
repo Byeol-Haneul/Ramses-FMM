@@ -60,7 +60,7 @@ subroutine output_rt(s,filename)
   do ilevel=r%levelmin,r%nlevelmax
      write(ilun,POS=nskip(ilevel))
      do igrid=m%head(ilevel),m%tail(ilevel)
-        rtuold=m%grid(igrid)%rtuold
+        rtuold=m%rtuold(:,:,igrid)
         do ind=1,twotondim
             do igrp = 1, nrtgrp
               qold(ind,1+(igrp-1)*(ndim+1)) = rtuold(ind,1+(igrp-1)*(ndim+1))*g%rt_c(ilevel)
@@ -121,7 +121,7 @@ subroutine backup_rt(r,g,m,mdl,filename)
   enddo
   do ilevel=r%levelmin,r%nlevelmax
      do igrid=m%head(ilevel),m%tail(ilevel)
-        write(ilun)m%grid(igrid)%rtuold
+        write(ilun)m%rtuold(:,:,igrid)
      end do
   enddo
   close(ilun)

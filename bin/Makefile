@@ -210,8 +210,8 @@ MODOBJ += rtz_coolrates_module.o rtz_cooling_module.o
 else
 MODOBJ += neq_cooling_module.o 
 endif
-MODOBJ += init_neq_chem.o \
-	 mdl_commons.o mdl.o cross_sections_module.o rt_spectra.o clfind_commons.o turb_commons.o \
+MODOBJ += init_neq_chem.o clfind_commons.o turb_commons.o mdl_commons.o mdl.o \
+	 cross_sections_module.o rt_spectra.o  \
 	 ramses_commons.o call_back.o cache_commons.o cache.o gadgetreadfile.o \
 	 boundaries.o output_hydro.o output_poisson.o output_part.o output_rt.o output_amr.o movie.o \
 	 sort.o nbors_utils.o hydro_flag.o multigrid_fine_coarse.o rho_fine.o marshal.o upload.o init_xion.o
@@ -226,7 +226,7 @@ MODOBJ += rt_flux_module.o rt_godunov_fine.o rt_input_condinit.o rt_init_flow_fi
 	 init_rt.o input_part_grafic.o input_part_zoom.o input_part_ascii.o \
 	 input_part_restart.o input_part_ramses.o input_part_gadget.o input_part.o input_hydro_grafic.o \
 	 interpol_hydro.o update_time.o timer.o init_refine_basegrid.o load_balance.o refine_utils.o \
-	 grav_ana.o phi_fine_cg.o interpol_phi.o force_fine.o poisson_flag.o multigrid_fine_commons.o \
+	 grav_ana.o interpol_phi.o phi_fine_cg.o force_fine.o poisson_flag.o multigrid_fine_commons.o \
 	 boundana.o godunov_utils.o write_screen.o courant_fine.o newdt_fine.o \
 	 godunov_fine.o umuscl.o synchro_hydro_fine.o source_hydro_fine.o cooling_fine.o \
 	 input_hydro_condinit.o input_hydro_gadget.o init_flow_fine.o \

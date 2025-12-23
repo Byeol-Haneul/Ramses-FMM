@@ -135,11 +135,11 @@ subroutine star_formation(r,g,m,s,ilevel,mstar_loc)
         ! Select leaf cells
         ok = .not. m%grid(igrid)%refined(ind)
         ! Select dense enough cells
-        d = m%grid(igrid)%uold(ind,1)
+        d = m%uold(ind,1,igrid)
         ok = ok .and. d > d0
         ! Select cells in zoom region
         if(r%ivar_refine>0)then
-           mask = m%grid(igrid)%uold(ind,r%ivar_refine)
+           mask = m%uold(ind,r%ivar_refine,igrid)
            ok = ok .and. mask > r%var_cut_refine
         endif
         ! Count number of random numbers
@@ -188,20 +188,20 @@ subroutine star_formation(r,g,m,s,ilevel,mstar_loc)
         ! Select leaf cells
         ok = .not. m%grid(igrid)%refined(ind)
         ! Select dense enough cells
-        d = m%grid(igrid)%uold(ind,1)
+        d = m%uold(ind,1,igrid)
         ok = ok .and. d > d0
         ! Select cells in zoom region
         if(r%ivar_refine>0)then
-           mask = m%grid(igrid)%uold(ind,r%ivar_refine)
+           mask = m%uold(ind,r%ivar_refine,igrid)
            ok = ok .and. mask > r%var_cut_refine
         endif
         ! Compute sound speed squared
-        p = m%grid(igrid)%uold(ind,5)
+        p = m%uold(ind,5,igrid)
         cs2 = max(dble(r%gamma)*p/d,dble(r%smallc)**2)
         ! Turbulence 1D velocity dispersion
         sigma2 = 0d0
         if(r%sgs_turb)then
-           sigma2 = m%grid(igrid)%uold(ind,r%iturb)*2d0/3d0
+           sigma2 = m%uold(ind,r%iturb,igrid)*2d0/3d0
         endif
 
         ! Draw Poisson process based on local SF rate
@@ -260,14 +260,14 @@ subroutine star_formation(r,g,m,s,ilevel,mstar_loc)
               s%xp(s%npart,2)=(2*m%grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5)*dx-m%skip(2)
               s%xp(s%npart,3)=(2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5)*dx-m%skip(3)
               ! Compute star particle velocity from gas velocity
-              s%vp(s%npart,1)=m%grid(igrid)%uold(ind,2)
-              s%vp(s%npart,2)=m%grid(igrid)%uold(ind,3)
-              s%vp(s%npart,3)=m%grid(igrid)%uold(ind,4)
+              s%vp(s%npart,1)=m%uold(ind,2,igrid)
+              s%vp(s%npart,2)=m%uold(ind,3,igrid)
+              s%vp(s%npart,3)=m%uold(ind,4,igrid)
 #ifdef GRAV
               ! Remove half a kick (will be added later)
-              s%vp(s%npart,1)=s%vp(s%npart,1)-m%grid(igrid)%f(ind,1)*0.5d0*g%dtnew(ilevel)
-              s%vp(s%npart,2)=s%vp(s%npart,2)-m%grid(igrid)%f(ind,2)*0.5d0*g%dtnew(ilevel)
-              s%vp(s%npart,3)=s%vp(s%npart,3)-m%grid(igrid)%f(ind,3)*0.5d0*g%dtnew(ilevel)
+              s%vp(s%npart,1)=s%vp(s%npart,1)-m%f(ind,1,igrid)*0.5d0*g%dtnew(ilevel)
+              s%vp(s%npart,2)=s%vp(s%npart,2)-m%f(ind,2,igrid)*0.5d0*g%dtnew(ilevel)
+              s%vp(s%npart,3)=s%vp(s%npart,3)-m%f(ind,3,igrid)*0.5d0*g%dtnew(ilevel)
 #endif
               ! Compute star particle mass
               s%mp(s%npart)=nstar*mstar
@@ -275,19 +275,19 @@ subroutine star_formation(r,g,m,s,ilevel,mstar_loc)
               s%tp(s%npart)=g%texp+Rand*g%dtnew(ilevel)*g%aexp**2
               ! Compute star particle metallicity
               if(r%metal)then
-                 s%zp(s%npart)=m%grid(igrid)%uold(ind,r%imetal)/d
+                 s%zp(s%npart)=m%uold(ind,r%imetal,igrid)/d
               else
                  s%zp(s%npart)=r%z_ave*0.02
               endif
               ! Compute level
               s%levelp(s%npart)=ilevel
               ! Remove corresponding mass from gas mass density
-              m%grid(igrid)%uold(ind,1)=d-dstar
+              m%uold(ind,1,igrid)=d-dstar
               ! Star formation is isothermal, adjust pressure
-              m%grid(igrid)%uold(ind,5)=m%grid(igrid)%uold(ind,1)*p/d
+              m%uold(ind,5,igrid)=m%uold(ind,1,igrid)*p/d
               ! If dual energy, adjust entropy
               if(r%entropy.and.r%dual_energy.GE.0)then
-                 m%grid(igrid)%uold(ind,r%ientropy)=m%grid(igrid)%uold(ind,5)/m%grid(igrid)%uold(ind,1)**r%gamma
+                 m%uold(ind,r%ientropy,igrid)=m%uold(ind,5,igrid)/m%uold(ind,1,igrid)**r%gamma
               endif
            endif
         endif

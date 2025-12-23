@@ -278,9 +278,9 @@ subroutine output_clump_field(s,filename)
   do ilevel=r%levelmin,r%nlevelmax
      write(ilun,POS=nskip(ilevel))
      do igrid=m%head(ilevel),m%tail(ilevel)
-        rho=real(m%grid(igrid)%rho,kind=4)
-        flg1=real(m%grid(igrid)%flag1,kind=4)
-        flg2=real(m%grid(igrid)%flag2,kind=4)
+        rho(1:twotondim)=real(m%rho(1:twotondim,igrid),kind=4)
+        flg1=real(m%flag1(1:twotondim,igrid),kind=4)
+        flg2=real(m%flag2(1:twotondim,igrid),kind=4)
         write(ilun)flg1
         write(ilun)flg2
         write(ilun)rho

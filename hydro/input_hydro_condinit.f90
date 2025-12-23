@@ -73,24 +73,24 @@ subroutine input_hydro_condinit(r,g,m,ilevel)
         ! Scatter primitive variables to main memory
         do ivar=1,nvar
            do i=1,ngrid
-              m%grid(igrid+i-1)%uold(ind,ivar)=qq(i,ivar)
+              m%uold(ind,ivar,igrid+i-1)=qq(i,ivar)
            end do
         end do
 #ifdef MHD
 #if NDIM==1
         do i=1,ngrid
-           m%grid(igrid+i-1)%bold(ind,1)=r%A_ave
-           m%grid(igrid+i-1)%bold(ind,4)=r%A_ave
-           m%grid(igrid+i-1)%bold(ind,2)=qq(i,nvar+1)
-           m%grid(igrid+i-1)%bold(ind,5)=qq(i,nvar+1)
-           m%grid(igrid+i-1)%bold(ind,3)=qq(i,nvar+2)
-           m%grid(igrid+i-1)%bold(ind,6)=qq(i,nvar+2)
+           m%bold(ind,1,igrid+i-1)=r%A_ave
+           m%bold(ind,4,igrid+i-1)=r%A_ave
+           m%bold(ind,2,igrid+i-1)=qq(i,nvar+1)
+           m%bold(ind,5,igrid+i-1)=qq(i,nvar+1)
+           m%bold(ind,3,igrid+i-1)=qq(i,nvar+2)
+           m%bold(ind,6,igrid+i-1)=qq(i,nvar+2)
         end do
 #endif
 #if NDIM==2
         do i=1,ngrid
-           m%grid(igrid+i-1)%bold(ind,3)=qq(i,nvar+1)
-           m%grid(igrid+i-1)%bold(ind,6)=qq(i,nvar+1)
+           m%bold(ind,3,igrid+i-1)=qq(i,nvar+1)
+           m%bold(ind,6,igrid+i-1)=qq(i,nvar+1)
         end do
 #endif
 #endif
@@ -162,11 +162,11 @@ subroutine input_hydro_vecpot(r,g,m,ilevel)
            call vecpotentialinit(r,g,xrr,azrr,3,ngrid)
            do i=1,ngrid
               ! bx = d Az / dy
-              m%grid(igrid+i-1)%bold(ind,1)=(azlr(i)-azll(i))/dx
-              m%grid(igrid+i-1)%bold(ind,4)=(azrr(i)-azrl(i))/dx
+              m%bold(ind,1,igrid+i-1)=(azlr(i)-azll(i))/dx
+              m%bold(ind,4,igrid+i-1)=(azrr(i)-azrl(i))/dx
               ! by = - d Az / dx
-              m%grid(igrid+i-1)%bold(ind,2)=-(azrl(i)-azll(i))/dx
-              m%grid(igrid+i-1)%bold(ind,5)=-(azrr(i)-azlr(i))/dx
+              m%bold(ind,2,igrid+i-1)=-(azrl(i)-azll(i))/dx
+              m%bold(ind,5,igrid+i-1)=-(azrr(i)-azlr(i))/dx
            end do
         end do
      end do ! End loop over cells
@@ -268,14 +268,14 @@ subroutine input_hydro_vecpot(r,g,m,ilevel)
               end do
               do i=1,ngrid
                  ! bx = d Az / dy - d Ay /dz
-                 m%grid(igrid+i-1)%bold(ind,1)=r%A_ave+(azlr(i)-azll(i)-(aylr(i)-ayll(i)))/dx
-                 m%grid(igrid+i-1)%bold(ind,4)=r%A_ave+(azrr(i)-azrl(i)-(ayrr(i)-ayrl(i)))/dx
+                 m%bold(ind,1,igrid+i-1)=r%A_ave+(azlr(i)-azll(i)-(aylr(i)-ayll(i)))/dx
+                 m%bold(ind,4,igrid+i-1)=r%A_ave+(azrr(i)-azrl(i)-(ayrr(i)-ayrl(i)))/dx
                  ! by = d Ax / dz - d Az /dx
-                 m%grid(igrid+i-1)%bold(ind,2)=r%B_ave+(axlr(i)-axll(i)-(azrl(i)-azll(i)))/dx
-                 m%grid(igrid+i-1)%bold(ind,5)=r%B_ave+(axrr(i)-axrl(i)-(azrr(i)-azlr(i)))/dx
+                 m%bold(ind,2,igrid+i-1)=r%B_ave+(axlr(i)-axll(i)-(azrl(i)-azll(i)))/dx
+                 m%bold(ind,5,igrid+i-1)=r%B_ave+(axrr(i)-axrl(i)-(azrr(i)-azlr(i)))/dx
                  ! bz = d Ay / dx - d Ax /dy
-                 m%grid(igrid+i-1)%bold(ind,3)=r%C_ave+(ayrl(i)-ayll(i)-(axrl(i)-axll(i)))/dx
-                 m%grid(igrid+i-1)%bold(ind,6)=r%C_ave+(ayrr(i)-aylr(i)-(axrr(i)-axlr(i)))/dx
+                 m%bold(ind,3,igrid+i-1)=r%C_ave+(ayrl(i)-ayll(i)-(axrl(i)-axll(i)))/dx
+                 m%bold(ind,6,igrid+i-1)=r%C_ave+(ayrr(i)-aylr(i)-(axrr(i)-axlr(i)))/dx
               end do
            end do
         end do
@@ -316,39 +316,39 @@ subroutine cons_from_prim(r,g,m,ilevel)
      do ind=1,twotondim
 
         ! Compute kinetic and internal energy densities
-        rr=m%grid(igrid)%uold(ind,1)
-        vx=m%grid(igrid)%uold(ind,2)
-        vy=m%grid(igrid)%uold(ind,3)
-        vz=m%grid(igrid)%uold(ind,4)
-        pp=m%grid(igrid)%uold(ind,5)
+        rr=m%uold(ind,1,igrid)
+        vx=m%uold(ind,2,igrid)
+        vy=m%uold(ind,3,igrid)
+        vz=m%uold(ind,4,igrid)
+        pp=m%uold(ind,5,igrid)
         ekin=0.5d0*rr*(vx**2+vy**2+vz**2)
         eint=pp/(r%gamma-1.0)
         emag=0.0d0
 #ifdef MHD
         ! Compute magnetic energy for all cells
-        bx=0.5d0*(m%grid(igrid)%bold(ind,1)+m%grid(igrid)%bold(ind,4))
-        by=0.5d0*(m%grid(igrid)%bold(ind,2)+m%grid(igrid)%bold(ind,5))
-        bz=0.5d0*(m%grid(igrid)%bold(ind,3)+m%grid(igrid)%bold(ind,6))
+        bx=0.5d0*(m%bold(ind,1,igrid)+m%bold(ind,4,igrid))
+        by=0.5d0*(m%bold(ind,2,igrid)+m%bold(ind,5,igrid))
+        bz=0.5d0*(m%bold(ind,3,igrid)+m%bold(ind,6,igrid))
         emag=0.5d0*(bx**2+by**2+bz**2)
 #endif
         erad=0.0d0
 #if NENER>0
         ! Compute non-thermal energy densities
         do irad=1,nener
-           m%grid(igrid)%uold(ind,5+irad)=m%grid(igrid)%uold(ind,5+irad)/(r%gamma_rad(irad)-1.0d0)
-           erad=erad+m%grid(igrid)%uold(ind,5+irad)
+           m%uold(ind,5+irad,igrid)=m%uold(ind,5+irad,igrid)/(r%gamma_rad(irad)-1.0d0)
+           erad=erad+m%uold(ind,5+irad,igrid)
         end do
 #endif
         ! Compute total fluid energy density
-        m%grid(igrid)%uold(ind,5)=eint+ekin+erad+emag
+        m%uold(ind,5,igrid)=eint+ekin+erad+emag
         ! Compute momentum density
         do idim=1,3
-           m%grid(igrid)%uold(ind,idim+1)=rr*m%grid(igrid)%uold(ind,idim+1)
+           m%uold(ind,idim+1,igrid)=rr*m%uold(ind,idim+1,igrid)
         end do
 #if NVAR>5+NENER
         ! Compute passive scalar density
         do ivar=6+nener,nvar
-           m%grid(igrid)%uold(ind,ivar)=rr*m%grid(igrid)%uold(ind,ivar)
+           m%uold(ind,ivar,igrid)=rr*m%uold(ind,ivar,igrid)
         enddo
 #endif
      end do
@@ -387,40 +387,40 @@ subroutine prim_from_cons(r,g,m,ilevel)
      ! Loop over cells
      do ind=1,twotondim
         ! Compute velocities and kinetic energy density
-        rr=m%grid(igrid)%uold(ind,1)
-        vx=m%grid(igrid)%uold(ind,2)/rr
-        vy=m%grid(igrid)%uold(ind,3)/rr
-        vz=m%grid(igrid)%uold(ind,4)/rr
+        rr=m%uold(ind,1,igrid)
+        vx=m%uold(ind,2,igrid)/rr
+        vy=m%uold(ind,3,igrid)/rr
+        vz=m%uold(ind,4,igrid)/rr
         ekin=0.5d0*rr*(vx**2+vy**2+vz**2)
-        m%grid(igrid)%uold(ind,2)=vx
-        m%grid(igrid)%uold(ind,3)=vy
-        m%grid(igrid)%uold(ind,4)=vz
+        m%uold(ind,2,igrid)=vx
+        m%uold(ind,3,igrid)=vy
+        m%uold(ind,4,igrid)=vz
         emag=0.0d0
 #ifdef MHD
         ! Compute magnetic energy for all cells
-        bx=0.5d0*(m%grid(igrid)%bold(ind,1)+m%grid(igrid)%bold(ind,4))
-        by=0.5d0*(m%grid(igrid)%bold(ind,2)+m%grid(igrid)%bold(ind,5))
-        bz=0.5d0*(m%grid(igrid)%bold(ind,3)+m%grid(igrid)%bold(ind,6))
+        bx=0.5d0*(m%bold(ind,1,igrid)+m%bold(ind,4,igrid))
+        by=0.5d0*(m%bold(ind,2,igrid)+m%bold(ind,5,igrid))
+        bz=0.5d0*(m%bold(ind,3,igrid)+m%bold(ind,6,igrid))
         emag=0.5d0*(bx**2+by**2+bz**2)
 #endif
         erad=0.0d0
 #if NENER>0
         ! Compute non-thermal pressures
         do irad=1,nener
-           erad=erad+m%grid(igrid)%uold(ind,5+irad)
-           m%grid(igrid)%uold(ind,5+irad)=m%grid(igrid)%uold(ind,5+irad)*(r%gamma_rad(irad)-1.0d0)
+           erad=erad+m%uold(ind,5+irad,igrid)
+           m%uold(ind,5+irad,igrid)=m%uold(ind,5+irad,igrid)*(r%gamma_rad(irad)-1.0d0)
         end do
 #endif
         ! Compute internal energy
-        etot=m%grid(igrid)%uold(ind,5)
+        etot=m%uold(ind,5,igrid)
         eint=etot-ekin-emag-erad
         ! Compute thermal pressure
         pp=(r%gamma-1.0)*eint
-        m%grid(igrid)%uold(ind,5)=pp
+        m%uold(ind,5,igrid)=pp
 #if NVAR>5+NENER
         ! Compute passive scalar mass fraction
         do ivar=6+nener,nvar
-           m%grid(igrid)%uold(ind,ivar)=m%grid(igrid)%uold(ind,ivar)/rr
+           m%uold(ind,ivar,igrid)=m%uold(ind,ivar,igrid)/rr
         enddo
 #endif
      end do

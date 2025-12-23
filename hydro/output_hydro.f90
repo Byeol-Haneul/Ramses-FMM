@@ -68,9 +68,9 @@ subroutine output_hydro(s,filename)
 
      do igrid=m%head(ilevel),m%tail(ilevel)
 
-        uold=m%grid(igrid)%uold
+        uold=m%uold(:,:,igrid)
 #ifdef MHD
-        bold=m%grid(igrid)%bold
+        bold=m%bold(:,:,igrid)
 #endif
         do ind=1,twotondim
 
@@ -185,9 +185,9 @@ subroutine backup_hydro(r,g,m,mdl,filename)
   enddo
   do ilevel=r%levelmin,r%nlevelmax
      do igrid=m%head(ilevel),m%tail(ilevel)
-        write(ilun)m%grid(igrid)%uold
+        write(ilun)m%uold(:,:,igrid)
 #ifdef MHD
-        write(ilun)m%grid(igrid)%bold
+        write(ilun)m%bold(:,:,igrid)
 #endif
      end do
   enddo

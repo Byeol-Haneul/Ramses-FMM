@@ -72,7 +72,7 @@ subroutine init_part(r,g,p)
   ! ALlocate workspace variables
   allocate(p%sortp (r%npartmax))
   allocate(p%workp (r%npartmax))
-  ! Allocate pointers to particle levels
+  ! Allocate head and tail of particle levels
   if(ANY(.not.r%periodic(1:ndim)))then
      allocate(p%headp(r%levelmin-1:r%nlevelmax))
      allocate(p%tailp(r%levelmin-1:r%nlevelmax))
@@ -116,7 +116,7 @@ subroutine init_star(r,g,p)
   ! Allocate workspace variables
   allocate(p%sortp (r%nstarmax))
   allocate(p%workp (r%nstarmax))
-  ! Allocate pointers to particle levels
+  ! Allocate head and tail of particle levels
   if(ANY(.not.r%periodic(1:ndim)))then
      allocate(p%headp(r%levelmin-1:r%nlevelmax))
      allocate(p%tailp(r%levelmin-1:r%nlevelmax))
@@ -162,7 +162,7 @@ subroutine init_sink(r,g,p)
   ! Allocate workspace variables
   allocate(p%sortp (r%nsinkmax))
   allocate(p%workp (r%nsinkmax))
-  ! Allocate pointers to particle levels
+  ! Allocate head and tail of particle levels
   if(ANY(.not.r%periodic(1:ndim)))then
      allocate(p%headp(r%levelmin-1:r%nlevelmax))
      allocate(p%tailp(r%levelmin-1:r%nlevelmax))
@@ -210,7 +210,7 @@ subroutine init_tree(r,g,p)
   ! Allocate workspace variables
   allocate(p%sortp (r%ntreemax))
   allocate(p%workp (r%ntreemax))
-  ! Allocate pointers to particle levels
+  ! Allocate head and tail of particle levels
   if(ANY(.not.r%periodic(1:ndim)))then
      allocate(p%headp(r%levelmin-1:r%nlevelmax))
      allocate(p%tailp(r%levelmin-1:r%nlevelmax))
@@ -314,7 +314,7 @@ subroutine allocate_gas(r,g,p)
   ! Allocate workspace variables
   allocate(p%sortp (p%npart))
   allocate(p%workp (p%npart))
-  ! Allocate pointers to particle levels
+  ! Allocate head and tail of particle levels
   if(ANY(.not.r%periodic(1:ndim)))then
      allocate(p%headp(r%levelmin-1:r%nlevelmax))
      allocate(p%tailp(r%levelmin-1:r%nlevelmax))

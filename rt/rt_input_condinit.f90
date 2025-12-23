@@ -68,7 +68,7 @@ subroutine rt_input_condinit(r,g,m,ilevel)
         do ivar=1,nrtvar
            do i=1,ngrid
 #ifdef RT
-              m%grid(igrid+i-1)%rtuold(ind,ivar)=qq(i,ivar)
+              m%rtuold(ind,ivar,igrid+i-1)=qq(i,ivar)
 #endif
            end do
         end do
@@ -257,7 +257,7 @@ subroutine rt_input_source_regions(r,g,m,ilevel)
         do ivar=1,nrtvar
            do i=1,ngrid
 #ifdef RT
-              qq(i,ivar) = m%grid(igrid+i-1)%rtunew(ind,ivar)
+              qq(i,ivar) = m%rtunew(ind,ivar,igrid+i-1)
 #endif
            end do
         end do
@@ -269,7 +269,7 @@ subroutine rt_input_source_regions(r,g,m,ilevel)
         do ivar=1,nrtvar
            do i=1,ngrid
 #ifdef RT
-              m%grid(igrid+i-1)%rtunew(ind,ivar)=qq(i,ivar)
+              m%rtunew(ind,ivar,igrid+i-1)=qq(i,ivar)
 #endif
            end do
         end do
