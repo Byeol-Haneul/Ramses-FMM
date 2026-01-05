@@ -178,7 +178,8 @@ subroutine pack_flush_upload_rt(grid,msg_size,msg_array)
      end do
   end do
 #ifdef HYDRO
-  msg%realdp_mflux=grid%mflux
+  ! mflux is hydro book-keeping; RT upload must not propagate it.
+  msg%realdp_mflux=0.0d0
 #endif
   msg_array=transfer(msg,msg_array)
 
@@ -212,9 +213,7 @@ subroutine unpack_flush_upload_rt(grid,msg_size,msg_array,hash_key)
         endif
      end do
   end do
-#ifdef HYDRO
-  grid%mflux=msg%realdp_mflux
-#endif
+  ! NOTE: mflux must not be modified here (book-keeping from hydro only).
 end subroutine unpack_flush_upload_rt
 !##########################################################################
 !##########################################################################

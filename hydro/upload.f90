@@ -99,6 +99,13 @@ subroutine upload_fine(s,ilevel)
            endif
         end do
      end do
+#ifdef HYDRO
+     do ind=1,twotondim
+        if(m%grid(ioct)%refined(ind))then
+           m%grid(ioct)%mflux(ind,1:6)=0.0d0
+        endif
+     end do
+#endif
 #ifdef MHD
      do ivar=1,6
         do ind=1,twotondim
@@ -131,6 +138,24 @@ subroutine upload_fine(s,ilevel)
         end do
         ! Scatter result to parent cell
         gridp%uold(icell,ivar)=average/dble(twotondim)
+     end do
+
+     ! Average face-centered time-integrated mass flux (book-keeping, like face-centered B)
+     ! mflux(:,1:ndim)   : left faces
+     ! mflux(:,4:3+ndim) : right faces
+     do idim=1,ndim
+        ! Left face in parent cell
+        average=0.0d0
+        do ind=1,twotondim/2
+           average=average+m%grid(ioct)%mflux(hh(2*idim-1,ind),idim)
+        end do
+        gridp%mflux(icell,idim)=average/dble(twotondim/2)
+        ! Right face in parent cell
+        average=0.0d0
+        do ind=1,twotondim/2
+           average=average+m%grid(ioct)%mflux(hh(2*idim,ind),idim+3)
+        end do
+        gridp%mflux(icell,idim+3)=average/dble(twotondim/2)
      end do
 
      ! Average cell-centered magnetic field
