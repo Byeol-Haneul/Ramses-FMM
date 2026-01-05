@@ -75,7 +75,7 @@ contains
 
 #ifdef HYDRO
 #if NDIM==3
-    associate(r=>s%r,g=>s%g,m=>s%m)
+    associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
     if(r%verbose)write(*,*)'Entering sink_evolution...'
 
@@ -157,10 +157,9 @@ contains
     ! Open Cache
     !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     ! Open cache for array uold (fetch) and unew (flush)
-    call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-         hilbert=m%domain,pack_size=storage_size(dummy_large_realdp)/32,&
-         pack=pack_fetch_refine,unpack=unpack_fetch_refine,&
-         init=init_flush_godunov, flush=pack_flush_godunov,&
+    call open_cache(mdl, m, pack_size=storage_size(dummy_large_realdp)/32, &
+         pack=pack_fetch_refine, unpack=unpack_fetch_refine, &
+         init=init_flush_godunov, flush=pack_flush_godunov, &
          combine=unpack_flush_godunov, bound=init_bound_refine)
 
     !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -221,7 +220,7 @@ contains
     !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     ! Close cache
     !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    call close_cache(s,m%grid_dict)
+    call close_cache(mdl)
 
     end associate
 #endif
@@ -237,7 +236,6 @@ contains
     use constants
     use amr_parameters, only: ndim, twotondim
     use hydro_parameters, only: nvar, nener
-    use amr_commons, only: nbor, oct
     use ramses_commons, only: ramses_t
     use pm_commons, only: part_t, cross
     use params_module
@@ -267,10 +265,9 @@ contains
     real(kind=8)::m_acc,e_acc
     real(kind=8),dimension(1:ndim)::p_acc,l_acc,vel_gas
     real(kind=8),dimension(1:nvar)::passive_acc
-    integer::i,j,k,ii,jj,kk,icelln,ind,idim,ivar
+    integer::i,j,k,ii,jj,kk,icelln,igridn,ind,idim,ivar
     real(kind=8)::d,e,ethermal,r2_sink,v_bondi,cs,rho_gas,velocity
     real(kind=8)::weight,r_rel
-    type(oct),pointer::gridn
     real(kind=8)::d_acc,m_gas,bondi_mass
     real(kind=8)::weighted_bondi,dMdt_freefall,t_ff
     real(kind=8)::div_cell,total_divergence,div_right,div_left
@@ -324,27 +321,27 @@ contains
 
        ! Get neighboring cell at current level
        hash_nbor(1:ndim)  = ckeynei(1:ndim,j)
-       call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.true.,fetch_cache=.true.)
+       call get_parent_cell(s,hash_nbor,igridn,icelln,flush_cache=.true.,fetch_cache=.true.)
 
        ! If missing then cycle
-       if(.not.associated(gridn))cycle
+       if(igridn==0)cycle
 
        ! Get the B-spline weights for this cell (they should already be normalised)
        weight = vol(j)
 
        ! Get physical information
-       d                = max(dble(gridn%uold(icelln,1)),r%smallr)
-       vv(1)            = gridn%uold(icelln,2)/d
-       vv(2)            = gridn%uold(icelln,3)/d
-       vv(3)            = gridn%uold(icelln,4)/d
-       e                = gridn%uold(icelln,5)
+       d                = max(dble(m%uold(icelln,1,igridn)),r%smallr)
+       vv(1)            = m%uold(icelln,2,igridn)/d
+       vv(2)            = m%uold(icelln,3,igridn)/d
+       vv(3)            = m%uold(icelln,4,igridn)/d
+       e                = m%uold(icelln,5,igridn)
       
        ! We need to remove all non-thermal energies as they are not accreted
 #ifdef MHD
        ! Deal with MHD
-       bx=0.5d0*(gridn%bold(icelln,1) + gridn%bold(icelln,4))
-       by=0.5d0*(gridn%bold(icelln,2) + gridn%bold(icelln,5))
-       bz=0.5d0*(gridn%bold(icelln,3) + gridn%bold(icelln,6))
+       bx=0.5d0*(m%bold(icelln,1,igridn) + m%bold(icelln,4,igridn))
+       by=0.5d0*(m%bold(icelln,2,igridn) + m%bold(icelln,5,igridn))
+       bz=0.5d0*(m%bold(icelln,3,igridn) + m%bold(icelln,6,igridn))
        emag=0.5d0*(bx**2+by**2+bz**2)
        e = e - emag
 #endif
@@ -353,7 +350,7 @@ contains
        ! Deal with RT
        erad = 0.0d0
        do irad=1,nener
-          erad = erad + gridn%uold(icelln,5+irad)
+          erad = erad + m%uold(icelln,5+irad,igridn)
        end do
        e = e - erad
 #endif
@@ -368,7 +365,7 @@ contains
        cs_gas           = cs_gas          + cs         * weight
        m_gas            = m_gas           + d          * weight * vol_loc
 #ifdef GRAV
-       rho_av_all       = rho_av_all      + gridn%rho(icelln) * weight
+       rho_av_all       = rho_av_all      + m%rho(icelln,igridn) * weight
 #endif
        if(r%accretion_type==2)then
           ! Compute local mass divergence for Bleuler+14 flux accretion
@@ -380,12 +377,12 @@ contains
 
              ! Get the cell information
              hash_nbor(1:ndim)  = ckey_div(1:ndim)
-             call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.true.,fetch_cache=.true.)
+             call get_parent_cell(s,hash_nbor,igridn,icelln,flush_cache=.true.,fetch_cache=.true.)
              ! If missing then cycle
-             if(.not.associated(gridn))cycle
+             if(igridn==0)cycle
 
              ! Compute the 'Right' contribution
-             div_right = (gridn%uold(icelln,1+idim) - max(dble(gridn%uold(icelln,1)),r%smallr)*p%vp(ipart,idim))/dx_loc
+             div_right = (m%uold(icelln,1+idim,igridn) - max(dble(m%uold(icelln,1,igridn)),r%smallr)*p%vp(ipart,idim))/dx_loc
 
              ! 'Left' value
              ckey_div(1:ndim) = ckeynei(1:ndim,j)
@@ -393,12 +390,12 @@ contains
 
              ! Get the cell information
              hash_nbor(1:ndim)  = ckey_div(1:ndim)
-             call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.true.,fetch_cache=.true.)
+             call get_parent_cell(s,hash_nbor,igridn,icelln,flush_cache=.true.,fetch_cache=.true.)
              ! If missing then cycle
-             if(.not.associated(gridn))cycle
+             if(igridn==0)cycle
 
              ! Compute the 'Left' contribution
-             div_left = (gridn%uold(icelln,1+idim) - max(dble(gridn%uold(icelln,1)),r%smallr)*p%vp(ipart,idim))/dx_loc
+             div_left = (m%uold(icelln,1+idim,igridn) - max(dble(m%uold(icelln,1,igridn)),r%smallr)*p%vp(ipart,idim))/dx_loc
 
              ! Compute the 'Total' contribution
              div_cell = (div_right - div_left)
@@ -529,22 +526,22 @@ contains
 
        ! Get neighboring cell at current level
        hash_nbor(1:ndim)  = ckeynei(1:ndim,j)
-       call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.true.,fetch_cache=.true.)
+       call get_parent_cell(s,hash_nbor,igridn,icelln,flush_cache=.true.,fetch_cache=.true.)
 
        ! If missing cycle
-       if(.not.associated(gridn))cycle
+       if(igridn==0)cycle
 
        ! Get physical information
-       d          = max(dble(gridn%uold(icelln,1)),r%smallr)
-       vv(1:ndim) = gridn%uold(icelln,2:ndim+1)/d
-       e          = gridn%uold(icelln,5)/d
+       d          = max(dble(m%uold(icelln,1,igridn)),r%smallr)
+       vv(1:ndim) = m%uold(icelln,2:ndim+1,igridn)/d
+       e          = m%uold(icelln,5,igridn)/d
 
        ! We need to remove all non-thermal energies as they are not accreted
 #ifdef MHD
        ! Deal with MHD
-       bx = 0.5d0*(gridn%bold(icelln,1) + gridn%bold(icelln,4))
-       by = 0.5d0*(gridn%bold(icelln,2) + gridn%bold(icelln,5))
-       bz = 0.5d0*(gridn%bold(icelln,3) + gridn%bold(icelln,6))
+       bx = 0.5d0*(m%bold(icelln,1,igridn) + m%bold(icelln,4,igridn))
+       by = 0.5d0*(m%bold(icelln,2,igridn) + m%bold(icelln,5,igridn))
+       bz = 0.5d0*(m%bold(icelln,3,igridn) + m%bold(icelln,6,igridn))
        emag = 0.5d0*(bx**2 + by**2 + bz**2)
        e = e - emag/d
 #endif
@@ -552,7 +549,7 @@ contains
        ! Deal with non-thermal energies
        erad = 0.0d0
        do irad = 1, nener
-          erad = erad + gridn%uold(icelln,5+irad)
+          erad = erad + m%uold(icelln,5+irad,igridn)
        end do
        e = e - erad/d
 #endif
@@ -567,14 +564,14 @@ contains
        d_acc = max(d_acc, 0.0d0)
 
        ! Accrete from the cell
-       gridn%unew(icelln,1)          = gridn%unew(icelln,1)          - d_acc
-       gridn%unew(icelln,2:(ndim+1)) = gridn%unew(icelln,2:(ndim+1)) - d_acc * vv(1:ndim)
-       gridn%unew(icelln,5)          = gridn%unew(icelln,5)          - d_acc * e
+       m%unew(icelln,1,igridn)          = m%unew(icelln,1,igridn)          - d_acc
+       m%unew(icelln,2:(ndim+1),igridn) = m%unew(icelln,2:(ndim+1),igridn) - d_acc * vv(1:ndim)
+       m%unew(icelln,5,igridn)          = m%unew(icelln,5,igridn)          - d_acc * e
 
        ! Accrete passive scalars
 #if NVAR>5+NENER
        do ivar = 6 + nener, nvar
-          gridn%unew(icelln,ivar) = gridn%unew(icelln,ivar) - d_acc*gridn%uold(icelln,ivar)/d
+          m%unew(icelln,ivar,igridn) = m%unew(icelln,ivar,igridn) - d_acc*m%uold(icelln,ivar,igridn)/d
        end do
 #endif
        ! Proceed with accretion
@@ -603,7 +600,7 @@ contains
 #if NVAR>NENER+6
        if(r%agn)then
           do ivar = 6 + nener, nvar
-             passive_acc(ivar) = passive_acc(ivar) + d_acc * gridn%uold(icelln,ivar) / d * vol_loc
+             passive_acc(ivar) = passive_acc(ivar) + d_acc * m%uold(icelln,ivar,igridn) / d * vol_loc
           end do
        end if
 #endif
@@ -676,7 +673,6 @@ contains
     use constants
     use amr_parameters, only: ndim, twotondim
     use hydro_parameters, only: nvar, nener
-    use amr_commons, only: nbor, oct
     use ramses_commons, only: ramses_t
     use pm_commons, only: part_t, cross
     use params_module
@@ -701,10 +697,9 @@ contains
     real(kind=8),dimension(1:nBH_fb_nei)::weight_fb_nei
     real(kind=8),dimension(1:ndim)::xcen,xnei,x_rel
     integer(kind=8),dimension(0:ndim)::hash_nbor
-    integer::i,j,k,ii,jj,kk,icelln,ind,idim,ivar,iBHnei
+    integer::i,j,k,ii,jj,kk,icelln,igridn,ind,idim,ivar,iBHnei
     real(kind=8)::d,e,ethermal,r_rel,rho_gas_fb,energy_agn
     real(kind=8),dimension(1:ndim)::vv
-    type(oct),pointer::gridn
     logical::ok,ok_blast_agn
     real(kind=8)::acc_ratio,jet_mass,local_weight,total_weight,jet_speed
     real(kind=8)::fbk_mass_agn_loc,fbk_mom_agn_loc,fbk_ener_agn_loc
@@ -787,12 +782,12 @@ contains
                       total_weight = total_weight + local_weight
 
                       hash_nbor(1:ndim)  = ckey_fb_nei(1:ndim,iBHnei)
-                      call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.true.,fetch_cache=.true.)
+                      call get_parent_cell(s,hash_nbor,igridn,icelln,flush_cache=.true.,fetch_cache=.true.)
 
                       ! If missing cycle
-                      if(.not.associated(gridn))cycle
+                      if(igridn==0)cycle
 
-                      d = max(dble(gridn%uold(icelln,1)), r%smallr)
+                      d = max(dble(m%uold(icelln,1,igridn)), r%smallr)
                       rho_gas_fb = rho_gas_fb + d * local_weight
                    end if
 
@@ -834,14 +829,14 @@ contains
 
              ! Get neighboring cell at current level
              hash_nbor(1:ndim)  = ckeyCIC(1:ndim,j)
-             call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.true.,fetch_cache=.true.)
+             call get_parent_cell(s,hash_nbor,igridn,icelln,flush_cache=.true.,fetch_cache=.true.)
 
              ! If missing cycle
-             if(.not.associated(gridn))cycle
+             if(igridn==0)cycle
 
              ! Get the local gas properties
-             d = max(dble(gridn%uold(icelln,1)),r%smallr)
-             vv(1:ndim) = gridn%uold(icelln,2:ndim+1)/d
+             d = max(dble(m%uold(icelln,1,igridn)),r%smallr)
+             vv(1:ndim) = m%uold(icelln,2:ndim+1,igridn)/d
 
              ! Get the weight
              weight = volCIC(j) * weight_fb_nei(iBHnei)
@@ -855,7 +850,7 @@ contains
                 fbk_ener_agn_loc = fbk_ener_agn * weight / vol_loc
 
                 ! Now we inject the actual feedback
-                gridn%unew(icelln,5) = gridn%unew(icelln,5) + fbk_ener_agn_loc
+                m%unew(icelln,5,igridn) = m%unew(icelln,5,igridn) + fbk_ener_agn_loc
 
              else
                 ! Radio mode (momentum and associated work)
@@ -863,8 +858,8 @@ contains
                 fbk_mom_agn_loc  = fbk_mom_agn  * weight / vol_loc
 
                 ! Now we inject the actual feedback (note, all energy is due to work done)
-                gridn%unew(icelln,2:4) = gridn%unew(icelln,2:4) + fbk_mom_agn_loc*dot_product(jet_direction(:),x_rel(:))*jet_direction(1:ndim)/(r_rel+tiny(0.0d0))
-                gridn%unew(icelln,5)   = gridn%unew(icelln,5)   + fbk_mom_agn_loc*dot_product(jet_direction(:),x_rel(:)/(r_rel+tiny(0.0d0)))*dot_product(jet_direction(1:ndim), vv(1:ndim))
+                m%unew(icelln,2:4,igridn) = m%unew(icelln,2:4,igridn) + fbk_mom_agn_loc*dot_product(jet_direction(:),x_rel(:))*jet_direction(1:ndim)/(r_rel+tiny(0.0d0))
+                m%unew(icelln,5,igridn)   = m%unew(icelln,5,igridn)   + fbk_mom_agn_loc*dot_product(jet_direction(:),x_rel(:)/(r_rel+tiny(0.0d0)))*dot_product(jet_direction(1:ndim), vv(1:ndim))
 
              end if
 

@@ -49,7 +49,7 @@ subroutine m_refine_fine(pst,ilevel)
 
   ! Get maximum used memory (only in master)
   call r_noct_used_max(pst,ilevel,1,s%m%noct_used_max,1)
-  
+
   ! Load balance all levels across cpus
   call m_load_balance(pst,ilevel)
 
@@ -114,9 +114,9 @@ end subroutine r_refine_fine
 !###############################################################
 !###############################################################
 subroutine refine_fine(s,ilevel,ncreate,nkill)
-  use amr_parameters, only: ndim,nhilbert,twotondim
-  use amr_commons, only: oct
+  use amr_parameters, only: ndim, nhilbert, twotondim
   use ramses_commons, only: ramses_t
+  use oct_commons, only: oct
   use marshal, only: pack_fetch_refine, unpack_fetch_refine, pack_fetch_flag, unpack_fetch_flag
   use boundaries, only: init_bound_refine
   use cache_commons
@@ -125,7 +125,8 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
   use hilbert
   use call_back, only: cache_f
   use nbors_utils
-  use hydro_parameters, only: nion
+  use hydro_parameters, only: nvar, nion
+  use rt_parameters, only: nrtvar
 #ifndef RTZ
   use init_xion_module, only: calc_equilibrium_xion
 #endif
@@ -145,7 +146,7 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
   integer::icell,i,j,ibit,ibucket,ilev,ind,inew,ioct
   integer::noct_zero,head_zero,indx_zero
   integer::skip_bit,ikey,true_level
-  integer::ind_cell,ind_parent
+  integer::ind_cell,igrid,ind_parent
   integer(kind=8),dimension(0:ndim)::hash_key
   integer(kind=8),dimension(1:nhilbert,1:s%r%nlevelmax)::key_ref
   integer(kind=8),dimension(1:nhilbert)::coarse_key
@@ -154,13 +155,29 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
   integer,dimension(:),allocatable::swap_table,swap_tmp
   integer,dimension(0:twotondim-1)::bucket_count,bucket_offset
   logical::ok
-  type(oct)::oct_tmp
-  type(oct),pointer::gridp
   type(msg_large_realdp)::dummy_large_realdp
   type(msg_int4)::dummy_int4
-  real(kind=8),dimension(nion)::xion
+  integer,dimension(1:twotondim)::flag1_tmp,flag2_tmp
+#ifdef HYDRO
+  real(kind=8),dimension(1:nion)::xion
+  real(kind=8),dimension(1:nvar)::uold
+  real(kind=8),dimension(1:twotondim,1:nvar)::uold_tmp
+#endif
+#ifdef MHD
+  real(kind=8),dimension(1:6)::bold
+  real(kind=8),dimension(1:twotondim,1:6)::bold_tmp
+#endif
+#ifdef RT
+  real(kind=8),dimension(1:nrtvar)::rtuold
+  real(kind=8),dimension(1:twotondim,1:nrtvar)::rtuold_tmp
+#endif
+#ifdef GRAV
+  real(kind=8),dimension(1:twotondim,1:3)::f_tmp
+  real(kind=8),dimension(1:twotondim)::phi_tmp,phi_old_tmp
+#endif
+  type(oct)::oct_tmp
 
-  associate(r=>s%r,g=>s%g,m=>s%m)
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
   !---------------------------------------------------
   ! Step 1: if a cell is flagged for refinement and
@@ -170,31 +187,30 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
   m%ifree=m%noct_used+1
   do ilev=ilevel,r%nlevelmax-1
 
-     call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-                        hilbert=m%domain, pack_size=storage_size(dummy_large_realdp)/32,&
-                        pack=pack_fetch_refine,unpack=unpack_fetch_refine,&
-                        flush=pack_flush_refine, combine=unpack_flush_refine,&
-                        bound=init_bound_refine)
+     call open_cache(mdl, m, pack_size=storage_size(dummy_large_realdp)/32, &
+          pack=pack_fetch_refine, unpack=unpack_fetch_refine, &
+          flush=pack_flush_refine, combine=unpack_flush_refine, &
+          bound=init_bound_refine)
 
      do ioct=m%head(ilev),m%tail(ilev)
         do ind=1,twotondim
-           ok   = m%grid(ioct)%flag1(ind)==1 .and. &
+           ok   = m%flag1(ind,ioct)==1 .and. &
                 & .not.m%grid(ioct)%refined(ind)
            if(ok)then
               ind_parent=ioct
               ind_cell=ind
-              call make_new_oct(s,m%grid(ind_parent),ind_cell,ilev+1)
+              call make_new_oct(s,ind_parent,ind_cell,ilev+1)
               g%ncreate=g%ncreate+1
            endif
         end do
      end do
 
-     call close_cache(s,m%grid_dict)
+     call close_cache(mdl)
 
      ! Set status of parent cell to "refined"
      do ioct=m%head(ilev),m%tail(ilev)
         do ind=1,twotondim
-           ok   = m%grid(ioct)%flag1(ind)==1 .and. &
+           ok   = m%flag1(ind,ioct)==1 .and. &
                 & .not.m%grid(ioct)%refined(ind)
            if(ok)then
               m%grid(ioct)%refined(ind)=.true.
@@ -214,13 +230,25 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
      do ilev=ilevel,r%nlevelmax-1
         do ioct=m%head(ilev),m%tail(ilev)
            do ind=1,twotondim
-              ok   = m%grid(ioct)%flag1(ind)==0 .and. &
+              ok   = m%flag1(ind,ioct)==0 .and. &
                    & m%grid(ioct)%refined(ind)
               if(ok)then
-                 ind_cell=ind
-                 gridp=>m%grid(ioct)
-                 call calc_equilibrium_xion(s, gridp, ind_cell, ilev, xion)
-                 m%grid(ioct)%uold(ind,r%iIons:r%iIons+nion-1)=xion*m%grid(ioct)%uold(ind,1)
+                 uold=m%uold(ind,1:nvar,ioct)
+#ifdef MHD
+                 bold=m%bold(ind,1:6,ioct)
+#endif
+#ifdef RT
+                 rtuold=m%rtuold(ind,1:nrtvar,ioct)
+#endif
+                 call calc_equilibrium_xion(s, uold, &
+#ifdef MHD
+                      & bold, &
+#endif
+#ifdef RT
+                      & rtuold, &
+#endif
+                      & ilev, xion)
+                 m%uold(ind,r%iIons:r%iIons+nion-1,ioct)=xion*m%uold(ind,1,ioct)
               endif
            end do
         end do
@@ -236,34 +264,33 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
   g%nkill=0
   do ilev=r%nlevelmax,ilevel+1,-1
 
-     call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-                hilbert=m%domain,pack_size=storage_size(dummy_int4)/32,&
-                pack=pack_fetch_flag,unpack=unpack_fetch_flag,&
-                init=init_flush_derefine,flush=pack_flush_derefine,combine=unpack_flush_derefine)
+     call open_cache(mdl, m, pack_size=storage_size(dummy_int4)/32, &
+          pack=pack_fetch_flag, unpack=unpack_fetch_flag, &
+          init=init_flush_derefine, flush=pack_flush_derefine, combine=unpack_flush_derefine)
 
      hash_key(0)=ilev
      do ioct=m%head(ilev),m%tail(ilev)
         hash_key(1:ndim)=m%grid(ioct)%ckey(1:ndim)
         ! Get parent cell using a read-write cache
-        call get_parent_cell(s,hash_key,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.true.)
-        if (.not.associated(gridp)) then
+        call get_parent_cell(s,hash_key,igrid,icell,flush_cache=.true.,fetch_cache=.true.)
+        if (igrid==0) then
           write(*,*) 'FATAL: no parent',hash_key
           stop
         endif
-        ok   = gridp%flag1(icell)==0 .and. &
-             & gridp%refined(icell)
+        ok   = m%flag1(icell,igrid)==0 .and. &
+             & m%grid(igrid)%refined(icell)
         if(ok)then
            ! Set grid level to zero
            m%grid(ioct)%lev=0
            ! Set parent cell to "unrefined" status
-           gridp%refined(icell)=.false.
+           m%grid(igrid)%refined(icell)=.false.
            ! Free grid from hash table
            call hash_free(m%grid_dict,hash_key)
            g%nkill=g%nkill+1
         end if
      end do
 
-     call close_cache(s,m%grid_dict)
+     call close_cache(mdl)
 
   end do
   nkill=g%nkill
@@ -375,25 +402,73 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
         hash_key(1:ndim)=m%grid(j)%ckey(1:ndim)
         if(m%grid(j)%lev>0)call hash_free(m%grid_dict,hash_key)
         oct_tmp=m%grid(j)
+        flag1_tmp=m%flag1(:,j)
+        flag2_tmp=m%flag2(:,j)
+#ifdef HYDRO
+        uold_tmp=m%uold(:,:,j)
+#endif
+#ifdef MHD
+        bold_tmp=m%bold(:,:,j)
+#endif
+#ifdef RT
+        rtuold_tmp=m%rtuold(:,:,j)
+#endif
+#ifdef GRAV
+        f_tmp=m%f(:,:,j)
+        phi_tmp=m%phi(:,j)
+        phi_old_tmp=m%phi_old(:,j)
+#endif
         i=j
         inew=swap_table(j)
         do while(inew.NE.j)
            m%grid(i)=m%grid(inew)
+           m%flag1(:,i)=m%flag1(:,inew)
+           m%flag2(:,i)=m%flag2(:,inew)
+#ifdef HYDRO
+           m%uold(:,:,i)=m%uold(:,:,inew)
+#endif
+#ifdef MHD
+           m%bold(:,:,i)=m%bold(:,:,inew)
+#endif
+#ifdef RT
+           m%rtuold(:,:,i)=m%rtuold(:,:,inew)
+#endif
+#ifdef GRAV
+           m%f(:,:,i)=m%f(:,:,inew)
+           m%phi(:,i)=m%phi(:,inew)
+           m%phi_old(:,i)=m%phi_old(:,inew)
+#endif
            hash_key(0)=m%grid(inew)%lev
            hash_key(1:ndim)=m%grid(inew)%ckey(1:ndim)
            if(m%grid(inew)%lev>0)then
               call hash_free(m%grid_dict,hash_key)
-              call hash_setp(m%grid_dict,hash_key,m%grid(i))
+              call hash_setp(m%grid_dict,hash_key,i)
            endif
            swap_table(i)=i
            i=inew
            inew=swap_table(inew)
         end do
         m%grid(i)=oct_tmp
+        m%flag1(:,i)=flag1_tmp
+        m%flag2(:,i)=flag2_tmp
+#ifdef HYDRO
+        m%uold(:,:,i)=uold_tmp
+#endif
+#ifdef MHD
+        m%bold(:,:,i)=bold_tmp
+#endif
+#ifdef RT
+        m%rtuold(:,:,i)=rtuold_tmp
+#endif
+#ifdef GRAV
+        m%f(:,:,i)=f_tmp
+        m%phi(:,i)=phi_tmp
+        m%phi_old(:,i)=phi_old_tmp
+#endif
         hash_key(0)=m%grid(i)%lev
         hash_key(1:ndim)=m%grid(i)%ckey(1:ndim)
         if(m%grid(i)%lev>0)then
-           call hash_setp(m%grid_dict,hash_key,m%grid(i))
+           call hash_setp(m%grid_dict,hash_key,i)
         end if
         swap_table(i)=i
      endif
@@ -447,13 +522,14 @@ end subroutine refine_fine
 !###############################################################
 !###############################################################
 !###############################################################
-subroutine pack_flush_refine(grid,msg_size,msg_array)
-  use amr_parameters, only: ndim,twotondim
+subroutine pack_flush_refine(mesh,igrid,msg_size,msg_array)
+  use amr_parameters, only: ndim, twotondim
   use hydro_parameters, only: nvar
-  use amr_commons, only: oct
-  use cache_commons, only: msg_large_realdp
   use rt_parameters, only: nrtvar
-  type(oct)::grid
+  use amr_commons, only: mesh_t
+  use cache_commons, only: msg_large_realdp
+  type(mesh_t)::mesh
+  integer::igrid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
 
@@ -463,31 +539,35 @@ subroutine pack_flush_refine(grid,msg_size,msg_array)
 #ifdef HYDRO
   do ivar=1,nvar
      do ind=1,twotondim
-        msg%realdp_hydro(ind,ivar)=grid%uold(ind,ivar)
+        msg%realdp_hydro(ind,ivar)=mesh%uold(ind,ivar,igrid)
      end do
   end do
 #endif
   
 #ifdef MHD
-  msg%realdp_mhd=grid%bold
+  do ivar=1,6
+     do ind=1,twotondim
+        msg%realdp_mhd(ind,ivar)=mesh%bold(ind,ivar,igrid)
+     end do
+  end do
 #endif
 
 #ifdef GRAV
   do idim=1,ndim
      do ind=1,twotondim
-        msg%realdp_poisson(ind,idim)=grid%f(ind,idim)
+        msg%realdp_poisson(ind,idim)=mesh%f(ind,idim,igrid)
      end do
   end do
   do ind=1,twotondim
-     msg%realdp_poisson(ind,ndim+1)=grid%phi(ind)
-     msg%realdp_poisson(ind,ndim+2)=grid%phi_old(ind)
+     msg%realdp_poisson(ind,ndim+1)=mesh%phi(ind,igrid)
+     msg%realdp_poisson(ind,ndim+2)=mesh%phi_old(ind,igrid)
   end do
 #endif
 
 #ifdef RT
   do ivar=1,nrtvar
      do ind=1,twotondim
-        msg%realdp_rt(ind,ivar)=grid%rtuold(ind,ivar)
+        msg%realdp_rt(ind,ivar)=mesh%rtuold(ind,ivar,igrid)
      end do
   end do
 #endif
@@ -499,13 +579,14 @@ end subroutine pack_flush_refine
 !###############################################################
 !###############################################################
 !###############################################################
-subroutine unpack_flush_refine(grid,msg_size,msg_array,hash_key)
-  use amr_parameters, only: ndim,twotondim
+subroutine unpack_flush_refine(mesh,igrid,msg_size,msg_array,hash_key)
+  use amr_parameters, only: ndim, twotondim
   use hydro_parameters, only: nvar
-  use amr_commons, only: oct
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_large_realdp
   use rt_parameters, only: nrtvar
-  type(oct)::grid
+  type(mesh_t)::mesh
+  integer::igrid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
   integer(kind=8),dimension(0:ndim)::hash_key
@@ -513,40 +594,46 @@ subroutine unpack_flush_refine(grid,msg_size,msg_array,hash_key)
   integer::ind,ivar,idim
   type(msg_large_realdp)::msg
 
-  grid%lev=hash_key(0)
-  grid%ckey(1:ndim)=hash_key(1:ndim)
+  mesh%grid(igrid)%lev=hash_key(0)
+  mesh%grid(igrid)%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
 
   do ind=1,twotondim
-     grid%refined(ind)=.false.
+     mesh%grid(igrid)%refined(ind)=.false.
   end do
   
 #ifdef HYDRO
-  do ind=1,twotondim
-     do ivar=1,nvar
-        grid%uold(ind,ivar)=msg%realdp_hydro(ind,ivar)
+  do ivar=1,nvar
+     do ind=1,twotondim
+        mesh%uold(ind,ivar,igrid)=msg%realdp_hydro(ind,ivar)
      end do
   end do
 #endif
   
 #ifdef MHD
-  grid%bold=msg%realdp_mhd
+  do ivar=1,6
+     do ind=1,twotondim
+        mesh%bold(ind,ivar,igrid)=msg%realdp_mhd(ind,ivar)
+     end do
+  end do
 #endif
 
 #ifdef GRAV
-  do ind=1,twotondim
-     do idim=1,ndim
-        grid%f(ind,idim)=msg%realdp_poisson(ind,idim)
+  do idim=1,ndim
+     do ind=1,twotondim
+        mesh%f(ind,idim,igrid)=msg%realdp_poisson(ind,idim)
      end do
-     grid%phi(ind)=msg%realdp_poisson(ind,ndim+1)
-     grid%phi_old(ind)=msg%realdp_poisson(ind,ndim+2)
+  end do
+  do ind=1,twotondim
+     mesh%phi(ind,igrid)=msg%realdp_poisson(ind,ndim+1)
+     mesh%phi_old(ind,igrid)=msg%realdp_poisson(ind,ndim+2)
   end do
 #endif
 
 #ifdef RT
-  do ind=1,twotondim
-     do ivar=1,nrtvar
-        grid%rtuold(ind,ivar)=msg%realdp_rt(ind,ivar)
+  do ivar=1,nrtvar
+     do ind=1,twotondim
+        mesh%rtuold(ind,ivar,igrid)=msg%realdp_rt(ind,ivar)
      end do
   end do
 #endif
@@ -556,26 +643,28 @@ end subroutine unpack_flush_refine
 !###############################################################
 !###############################################################
 !###############################################################
-subroutine init_flush_derefine(grid,hash_key)
-  use amr_parameters, only: ndim,twotondim
-  use amr_commons, only: oct
-  type(oct)::grid
+subroutine init_flush_derefine(mesh,igrid,hash_key)
+  use amr_parameters, only: ndim, twotondim
+  use amr_commons, only: mesh_t
+  type(mesh_t)::mesh
+  integer::igrid
   integer(kind=8),dimension(0:ndim)::hash_key
 
-  grid%lev=hash_key(0)
-  grid%ckey(1:ndim)=hash_key(1:ndim)
-  grid%refined(1:twotondim)=.true.
+  mesh%grid(igrid)%lev=hash_key(0)
+  mesh%grid(igrid)%ckey(1:ndim)=hash_key(1:ndim)
+  mesh%grid(igrid)%refined(1:twotondim)=.true.
   
 end subroutine init_flush_derefine
 !###############################################################
 !###############################################################
 !###############################################################
 !###############################################################
-subroutine pack_flush_derefine(grid,msg_size,msg_array)
+subroutine pack_flush_derefine(mesh,igrid,msg_size,msg_array)
   use amr_parameters, only: twotondim
-  use amr_commons, only: oct
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_int4
-  type(oct)::grid
+  type(mesh_t)::mesh
+  integer::igrid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
 
@@ -583,7 +672,7 @@ subroutine pack_flush_derefine(grid,msg_size,msg_array)
   type(msg_int4)::msg
 
   do ind=1,twotondim     
-     if(grid%refined(ind))then
+     if(mesh%grid(igrid)%refined(ind))then
         msg%int4(ind)=1
      else
         msg%int4(ind)=0
@@ -596,11 +685,12 @@ end subroutine pack_flush_derefine
 !###############################################################
 !###############################################################
 !###############################################################
-subroutine unpack_flush_derefine(grid,msg_size,msg_array,hash_key)
-  use amr_parameters, only: ndim,twotondim
-  use amr_commons, only: oct
+subroutine unpack_flush_derefine(mesh,igrid,msg_size,msg_array,hash_key)
+  use amr_parameters, only: ndim, twotondim
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_int4
-  type(oct)::grid
+  type(mesh_t)::mesh
+  integer::igrid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
   integer(kind=8),dimension(0:ndim)::hash_key
@@ -608,13 +698,13 @@ subroutine unpack_flush_derefine(grid,msg_size,msg_array,hash_key)
   integer::ind
   type(msg_int4)::msg
 
-  grid%lev=hash_key(0)
-  grid%ckey(1:ndim)=hash_key(1:ndim)
+  mesh%grid(igrid)%lev=hash_key(0)
+  mesh%grid(igrid)%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
   do ind=1,twotondim
-     if(grid%refined(ind))then
+     if(mesh%grid(igrid)%refined(ind))then
         if(msg%int4(ind)==0)then
-           grid%refined(ind)=.false.
+           mesh%grid(igrid)%refined(ind)=.false.
         endif
      endif
   end do
@@ -624,11 +714,9 @@ end subroutine unpack_flush_derefine
 !###############################################################
 !###############################################################
 !###############################################################
-subroutine make_new_oct(s,parent,icell,ilevel)
-  USE, INTRINSIC :: ISO_C_BINDING, ONLY: c_associated
+subroutine make_new_oct(s,iparent,icell,ilevel)
   use mdl_module
-  use amr_parameters, only: ndim,nhilbert,twotondim,twondim,nvector
-  use amr_commons, only:nbor,oct
+  use amr_parameters, only: ndim, nhilbert, twotondim, twondim, nvector
   use hydro_parameters, only: nvar
   use ramses_commons, only: ramses_t
   use nbors_utils
@@ -641,9 +729,7 @@ subroutine make_new_oct(s,parent,icell,ilevel)
   use rt_parameters, only: nrtvar, smallnp
   implicit none
   type(ramses_t)::s
-  integer::ilevel
-  integer::icell
-  type(oct)::parent
+  integer::iparent,icell,ilevel
   !--------------------------------------------------------------
   ! This routine creates a children oct at level ilevel.
   ! ilevel is thus the level of the new children oct.
@@ -651,11 +737,18 @@ subroutine make_new_oct(s,parent,icell,ilevel)
   ! The parent cell is labeled with the parent oct index iparent
   ! and the cell index icell (from 1 to 8).
   !--------------------------------------------------------------
-  integer::idim,ivar,ind,inbor,nstride,grid_cpu
+  integer::idim,ivar,ind,ichild,inbor,nstride,grid_cpu
   integer(kind=8),dimension(1:nhilbert)::hk
   integer(kind=8),dimension(1:ndim)::ix
   integer(kind=8),dimension(1:ndim)::cart_key
   integer(kind=8),dimension(0:ndim)::hash_key
+  integer,dimension(0:twondim)::ind_nbor
+  integer,dimension(0:twondim)::igrid_nbor
+  logical::ok
+#ifdef HYDRO
+  real(kind=8),dimension(0:twondim,1:nvar)::u1
+  real(kind=8),dimension(1:twotondim,1:nvar)::u2
+#endif
 #ifdef MHD
   real(kind=8),dimension(0:twondim,1:6)::b1
   real(kind=8),dimension(1:twotondim,1:6)::b2
@@ -664,25 +757,19 @@ subroutine make_new_oct(s,parent,icell,ilevel)
   integer,dimension(1:3,1:6),save::shift=reshape(&
        & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
   integer(kind=8),dimension(0:ndim)::hash_nbor
-  type(oct),pointer::gridn
+  integer::igridn
 #endif
 #ifdef RT
   real(kind=8),dimension(0:twondim  ,1:nrtvar)::rtu1
   real(kind=8),dimension(1:twotondim,1:nrtvar)::rtu2
 #endif
-  integer,dimension(0:twondim)::ind_nbor
-  real(kind=8),dimension(0:twondim,1:nvar)::u1
-  real(kind=8),dimension(1:twotondim,1:nvar)::u2
-  type(nbor),dimension(0:twondim)::grid_nbor
-  type(oct),pointer::child
-  logical::ok
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
 #ifndef WITHOUTMPI
   ! If counter is good, check on incoming messages and perform actions
   if(mdl%mail_counter==32)then
-     call check_mail(s,MPI_REQUEST_NULL,m%grid_dict)
+     call check_mail(mdl,MPI_REQUEST_NULL)
      mdl%mail_counter=0
   endif
   mdl%mail_counter=mdl%mail_counter+1
@@ -694,7 +781,7 @@ subroutine make_new_oct(s,parent,icell,ilevel)
   ! Compute Cartesian keys of new octs
   do idim=1,ndim
      nstride=2**(idim-1)
-     cart_key(idim)=2*parent%ckey(idim)+MOD((icell-1)/nstride,2)
+     cart_key(idim)=2*m%grid(iparent)%ckey(idim)+MOD((icell-1)/nstride,2)
   end do
   hash_key(0)=ilevel
   hash_key(1:ndim)=cart_key(1:ndim)
@@ -707,82 +794,87 @@ subroutine make_new_oct(s,parent,icell,ilevel)
   if (m%domain(ilevel)%in_rank(hk)) then
 
      ! Set grid index to a virtual grid in local main memory
-     child => m%grid(m%ifree)
+     ichild=m%ifree
+
+     ! Insert new grid in hash table
+     call hash_setp(m%grid_dict,hash_key,ichild)
 
      ! Go to next main memory free line
      m%ifree=m%ifree+1
-     if(m%ifree.GT.r%ngridmax)then
+     if(m%ifree.GT.m%ngridmax)then
         write(*,*)'No more free memory'
         write(*,*)'Increase ngridmax'
         call mdl_abort(mdl)
      end if
 
-     ! Insert new grid in hash table
-     call hash_setp(m%grid_dict,hash_key,child)
-
   ! Otherwise, determine parent processor and use the cache
   else
-     grid_cpu = m%domain(ilevel)%get_rank(hk)
+
+     grid_cpu=m%domain(ilevel)%get_rank(hk)
 
      ! If next cache line is occupied, free it.
-     if(m%occupied(m%free_cache))call destage(s,r%ngridmax+m%free_cache,m%grid_dict)
+     if(m%occupied(m%free_cache))call destage(mdl,m%ngridmax+m%free_cache)
 
      ! Set grid index to a virtual grid in local cache memory
-     child => m%grid(r%ngridmax+m%free_cache)
+     ichild=m%ngridmax+m%free_cache
      m%occupied(m%free_cache)=.true.
      m%parent_cpu(m%free_cache)=grid_cpu
      m%dirty(m%free_cache)=.true.
      m%ghost_parent_grid(m%free_cache)=0
      m%ghost_parent_cell(m%free_cache)=0
 
+     ! Insert new grid in hash table
+     call hash_setp(m%grid_dict,hash_key,ichild)
+
      ! Go to next free cache line
      m%free_cache=m%free_cache+1
      m%ncache=m%ncache+1
-     if(m%free_cache.GT.r%ncachemax)m%free_cache=1
-     if(m%ncache.GT.r%ncachemax)m%ncache=r%ncachemax
+     if(m%free_cache.GT.m%ncachemax)m%free_cache=1
+     if(m%ncache.GT.m%ncachemax)m%ncache=m%ncachemax
 
-     ! Insert new grid in hash table
-     call hash_setp(m%grid_dict,hash_key,child)
   endif
 
-  child%lev=ilevel
-  child%ckey(1:ndim)=int(cart_key(1:ndim),kind=4)
-  child%hkey(1:nhilbert)=hk(1:nhilbert)
-  child%refined(1:twotondim)=.false.
-  child%flag1(1:twotondim)=0
-  child%flag2(1:twotondim)=0
-  child%superoct=1
+  ! Set oct properties
+  m%grid(ichild)%lev=ilevel
+  m%grid(ichild)%ckey(1:ndim)=int(cart_key(1:ndim),kind=4)
+  m%grid(ichild)%hkey(1:nhilbert)=hk(1:nhilbert)
+  m%grid(ichild)%refined(1:twotondim)=.false.
+  m%grid(ichild)%superoct=1
 
-  !====================================
-  ! Interplotate parent hydro variables
-  !====================================
+  ! Set flag arrays to zero
+  m%flag1(1:twotondim,ichild)=0
+  m%flag2(1:twotondim,ichild)=0
+
+  !===================================
+  ! Interpolate parent hydro variables
+  !===================================
 #ifdef HYDRO
   ! Get 2ndim neighboring father cells with read-only cache
-  call get_twondim_nbor_parent_cell(s,hash_key,m%grid_dict,grid_nbor,ind_nbor,flush_cache=.false.,fetch_cache=.true.)
+  call get_twondim_nbor_parent_cell(s,hash_key,igrid_nbor,ind_nbor,flush_cache=.false.,fetch_cache=.true.)
   ok=.true.
   do inbor=0,twondim
-     ok=ok.and.associated(grid_nbor(inbor)%p)
+     ok=ok.and.(igrid_nbor(inbor)>0)
   end do
   if(.not. ok)then
      write(*,*)"OUPS parent neighbors should exist"
      write(*,*)hash_key
-     write(*,*)associated(grid_nbor(0)%p)
+     write(*,*)igrid_nbor(0)
      do idim=1,ndim
-        write(*,*)associated(grid_nbor(2*idim-1)%p)
-        write(*,*)associated(grid_nbor(2*idim)%p)
+        write(*,*)igrid_nbor(2*idim-1)
+        write(*,*)igrid_nbor(2*idim)
      end do
      call mdl_abort(mdl)
   endif
   ! Store parent cell hydro variables
   do inbor=0,twondim
      do ivar=1,nvar
-        u1(inbor,ivar)=grid_nbor(inbor)%p%uold(ind_nbor(inbor),ivar)
+        u1(inbor,ivar)=m%uold(ind_nbor(inbor),ivar,igrid_nbor(inbor))
      end do
   end do
 #ifdef RT
   do inbor=0,twondim
      do ivar=1,nrtvar
-        rtu1(inbor,ivar)=grid_nbor(inbor)%p%rtuold(ind_nbor(inbor),ivar)
+        rtu1(inbor,ivar)=m%rtuold(ind_nbor(inbor),ivar,igrid_nbor(inbor))
      end do
   end do
 #endif
@@ -790,7 +882,7 @@ subroutine make_new_oct(s,parent,icell,ilevel)
   ! Store parent cell MHD variables
   do inbor=0,twondim
      do ivar=1,6
-        b1(inbor,ivar)=grid_nbor(inbor)%p%bold(ind_nbor(inbor),ivar)
+        b1(inbor,ivar)=m%bold(ind_nbor(inbor),ivar,igrid_nbor(inbor))
      end do
   end do
   ! Get neighboring children grids
@@ -804,15 +896,15 @@ subroutine make_new_oct(s,parent,icell,ilevel)
            if(hash_nbor(idim)>=m%box_ckey_max(idim,ilevel))hash_nbor(idim)=m%box_ckey_min(idim,ilevel)
         endif
      enddo
-     nullify(gridn)
-     if(grid_nbor(inbor)%p%refined(ind_nbor(inbor)))then
-        call get_grid(s,hash_nbor,m%grid_dict,gridn,flush_cache=.false.,fetch_cache=.true.)
+     igridn=0
+     if(m%grid(igrid_nbor(inbor))%refined(ind_nbor(inbor)))then
+        call get_grid(s,hash_nbor,igridn,flush_cache=.false.,fetch_cache=.true.)
      endif
-     refined(inbor)=associated(gridn)
+     refined(inbor)=(igridn>0)
      if(refined(inbor))then
         do ind=1,twotondim
            do ivar=1,6
-              b3(inbor,ind,ivar)=gridn%bold(ind,ivar)
+              b3(inbor,ind,ivar)=m%bold(ind,ivar,igridn)
            end do
         end do
      endif
@@ -826,15 +918,15 @@ subroutine make_new_oct(s,parent,icell,ilevel)
   ! Store children cell hydro variables
   do ivar=1,nvar
      do ind=1,twotondim
-        child%uold(ind,ivar)=u2(ind,ivar)
-     enddo
+        m%uold(ind,ivar,ichild)=u2(ind,ivar)
+     end do
   end do
 #ifdef MHD
   ! Store children cell MHD variables
   do ivar=1,6
      do ind=1,twotondim
-        child%bold(ind,ivar)=b2(ind,ivar)
-     enddo
+        m%bold(ind,ivar,ichild)=b2(ind,ivar)
+     end do
   end do
 #endif
 #ifdef RT
@@ -843,31 +935,28 @@ subroutine make_new_oct(s,parent,icell,ilevel)
   ! Store children cell rt variables
   do ivar=1,nrtvar
      do ind=1,twotondim
-        child%rtuold(ind,ivar)=rtu2(ind,ivar)
+        m%rtuold(ind,ivar,ichild)=rtu2(ind,ivar)
         ! Rescale according to speed of light difference
-        if (mod(ivar,ndim+1).eq.1) &
-          child%rtuold(ind,ivar) = child%rtuold(ind,ivar) * g%rt_c(ilevel-1)/g%rt_c(ilevel)
-     enddo
+        if(mod(ivar,ndim+1).eq.1)then
+           m%rtuold(ind,ivar,ichild) = m%rtuold(ind,ivar,ichild) * g%rt_c(ilevel-1)/g%rt_c(ilevel)
+        end if
+     end do
   end do
 #endif
   do inbor=1,twondim
-     call unlock_cache(s,grid_nbor(inbor)%p)
+     call unlock_cache(m,igrid_nbor(inbor))
   end do
-
 #endif
-  
+
   !================================
   ! Inject parent gravity variables
   !================================
-#ifdef GRAV
-  
-  ! Straight injection for gravity variables
+#ifdef GRAV  
   do ind=1,twotondim
-     child%f(ind,1:ndim)=parent%f(icell,1:ndim)
-     child%phi(ind)=parent%phi(icell)
-     child%phi_old(ind)=parent%phi_old(icell)
-  enddo
-  
+     m%f(ind,1:ndim,ichild)=m%f(icell,1:ndim,iparent)
+     m%phi(ind,ichild)=m%phi(icell,iparent)
+     m%phi_old(ind,ichild)=m%phi_old(icell,iparent)
+  end do
 #endif
 
   end associate
@@ -915,7 +1004,13 @@ subroutine clean_dirty(s,ilevel)
   ! inter-level communications. Clean octs have all
   ! their 26 neighbors around them.
   !-------------------------------------------------
-  integer::ioct,ilev,i1,j1,k1
+  integer::ioct,ilev,i1
+#if NDIM>1
+  integer::j1
+#endif
+#if NDIM>2
+  integer::k1
+#endif
   logical::clean
 
   integer(kind=8),dimension(0:ndim)::hash_key

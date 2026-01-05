@@ -60,8 +60,8 @@ subroutine output_poisson(s,filename)
   do ilevel=r%levelmin,r%nlevelmax
      write(ilun,POS=nskip(ilevel))
      do igrid=m%head(ilevel),m%tail(ilevel)
-        phi=real(m%grid(igrid)%phi,kind=4)
-        f(1:twotondim,1:ndim)=real(m%grid(igrid)%f(1:twotondim,1:ndim),kind=4)
+        phi(1:twotondim)=real(m%phi(1:twotondim,igrid),kind=4)
+        f(1:twotondim,1:ndim)=real(m%f(1:twotondim,1:ndim,igrid),kind=4)
         write(ilun)phi
         write(ilun)f
      end do
@@ -114,8 +114,8 @@ subroutine backup_poisson(r,g,m,mdl,filename)
 #ifdef GRAV
   do ilevel=r%levelmin,r%nlevelmax
      do igrid=m%head(ilevel),m%tail(ilevel)
-        write(ilun)m%grid(igrid)%phi
-        write(ilun)m%grid(igrid)%f
+        write(ilun)m%phi(:,igrid)
+        write(ilun)m%f(:,:,igrid)
      end do
   enddo
 #endif

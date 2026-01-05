@@ -33,12 +33,14 @@ module cache_commons
   end type msg_int4
   type msg_realdp
      integer(kind=4),dimension(1:twotondim)::int4
+#ifdef HYDRO
      real(kind=8),dimension(1:twotondim,1:nvar)::realdp
-#ifdef RT
-     real(kind=8),dimension(1:twotondim,1:nrtvar)::realdp_rt
 #endif
 #ifdef MHD
      real(kind=8),dimension(1:twotondim,1:6)::realdp_mhd
+#endif
+#ifdef RT
+     real(kind=8),dimension(1:twotondim,1:nrtvar)::realdp_rt
 #endif
   end type msg_realdp
   type msg_small_realdp
@@ -63,7 +65,9 @@ module cache_commons
   end type msg_nvar_realdp
   type msg_large_realdp
      integer(kind=4),dimension(1:twotondim)::int4
+#ifdef HYDRO
      real(kind=8),dimension(1:twotondim,1:nvar)::realdp_hydro
+#endif
 #ifdef RT
      real(kind=8),dimension(1:twotondim,1:nrtvar)::realdp_rt
 #endif

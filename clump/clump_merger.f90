@@ -39,7 +39,7 @@ subroutine get_peak(s,global_peak_id,local_peak_id,flush_cache,fetch_cache,lock)
 #ifndef WITHOUTMPI
   ! If counter is good, check on incoming messages and perform actions
   if(mdl%mail_counter==32)then
-     call check_mail(s,MPI_REQUEST_NULL,m%grid_dict)
+     call check_mail(mdl,MPI_REQUEST_NULL)
      mdl%mail_counter=0
   endif
   mdl%mail_counter=mdl%mail_counter+1
@@ -58,8 +58,8 @@ subroutine get_peak(s,global_peak_id,local_peak_id,flush_cache,fetch_cache,lock)
      ! Get position in cache memory from hash table
      local_peak_id = hash_getp_simple(c%peak_dict,global_peak_id)
 
-     if(present(lock).and.local_peak_id>0)then
-        if(lock)call lock_cache_clump(s,local_peak_id)
+     if(present(lock))then
+        if(lock)call lock_cache_clump(c,local_peak_id)
      endif
 
      ! If peak exists, all good
@@ -80,7 +80,7 @@ subroutine get_peak(s,global_peak_id,local_peak_id,flush_cache,fetch_cache,lock)
         call MPI_ISEND(mdl%send_request_array_clump,mdl%size_request_array_clump,MPI_INTEGER,peak_cpu-1,request_tag_clump,MPI_COMM_WORLD,send_request_id_clump,info)
 
         ! While waiting for reply, check on incoming messages and perform actions
-        call check_mail(s,response_id_clump,m%grid_dict)
+        call check_mail(mdl,response_id_clump)
 
         ! Wait for ISEND completion to free memory in corresponding MPI buffer
         call MPI_WAIT(send_request_id_clump,send_request_status_clump,info)
@@ -115,7 +115,7 @@ subroutine get_peak(s,global_peak_id,local_peak_id,flush_cache,fetch_cache,lock)
            lpid=c%npeak+c%free_cache
 
            ! If cache line is occupied, free it.
-           if(c%occupied(c%free_cache))call destage_clump(s,lpid,m%grid_dict)
+           if(c%occupied(c%free_cache))call destage_clump(mdl,lpid)
 
            ! Get global peak id from message header
            gpid=transfer(mdl%recv_fetch_array_clump(iskip:iskip+1),gpid)
@@ -179,7 +179,7 @@ subroutine get_peak(s,global_peak_id,local_peak_id,flush_cache,fetch_cache,lock)
         local_peak_id=c%npeak+c%free_cache
 
         ! If cache line is occupied, free it.
-        if(c%occupied(c%free_cache))call destage_clump(s,local_peak_id,m%grid_dict)
+        if(c%occupied(c%free_cache))call destage_clump(mdl,local_peak_id)
 
         ! Insert local peak id in hash table
         call hash_setp_simple(c%peak_dict,global_peak_id,local_peak_id)
@@ -202,8 +202,8 @@ subroutine get_peak(s,global_peak_id,local_peak_id,flush_cache,fetch_cache,lock)
 
      endif
 
-     if(present(lock).and.local_peak_id>0)then
-        if(lock)call lock_cache_clump(s,local_peak_id)
+     if(present(lock))then
+        if(lock)call lock_cache_clump(c,local_peak_id)
      endif
 
 #endif
@@ -216,37 +216,37 @@ end subroutine get_peak
 !###############################################################
 !###############################################################
 !###############################################################
-subroutine lock_cache_clump(s,local_peak_id)
-  use ramses_commons, only: ramses_t
+subroutine lock_cache_clump(c,local_peak_id)
+  use clfind_commons, only: clump_t
   implicit none
-  type(ramses_t)::s
+  type(clump_t)::c
   integer::local_peak_id
   !----------------------------------------------------
   ! This routine locks a cache line because
   ! it will be updated later.
   !----------------------------------------------------
   integer::icache
-  if(local_peak_id<=s%c%npeak)return
-  icache=local_peak_id-s%c%npeak
-  s%c%locked(icache)=.true.
+  if(local_peak_id<=c%npeak)return
+  icache=local_peak_id-c%npeak
+  c%locked(icache)=.true.
 end subroutine lock_cache_clump
 !##############################################################
 !##############################################################
 !##############################################################
 !##############################################################
-subroutine unlock_cache_clump(s,local_peak_id)
-  use ramses_commons, only: ramses_t
+subroutine unlock_cache_clump(c,local_peak_id)
+  use clfind_commons, only: clump_t
   implicit none
-  type(ramses_t)::s
+  type(clump_t)::c
   integer::local_peak_id
   !----------------------------------------------------
   ! This routine unlocks a cache line because
   ! it has been updated and can be flushed.
   !----------------------------------------------------
   integer::icache
-  if(local_peak_id<=s%c%npeak)return
-  icache=local_peak_id-s%c%npeak
-  s%c%locked(icache)=.false.
+  if(local_peak_id<=c%npeak)return
+  icache=local_peak_id-c%npeak
+  c%locked(icache)=.false.
 end subroutine unlock_cache_clump
 !################################################################
 !################################################################
@@ -541,8 +541,7 @@ end subroutine deallocate_peak_patch_arrays
 !#########################################################################
 !#########################################################################
 subroutine collect_saddle(s)
-  use amr_parameters, only: twotondim,ndim
-  use amr_commons, only: oct,nbor
+  use amr_parameters, only: twotondim, ndim
   use ramses_commons, only: ramses_t
   use cache_commons
   use cache
@@ -556,10 +555,8 @@ subroutine collect_saddle(s)
   !-------------------------------------------------------------------
   type(msg_int4_small_realdp)::dummy_int4_small_realdp
   type(msg_saddle_clump)::dummy_saddle_clump
-  type(oct),pointer::gridn
-  integer::ilevel
-  integer::icpu,next_level,now_level,icelln,idim,j,jpeak,k
-  integer::ipart,jpart,ip,i,icellp,icellpm,ipeak,itest,igrid,ind,peak_cen,peak_nbor
+  integer::ilevel,icpu,next_level,now_level,icelln,igridn,idim,j,jpeak,k
+  integer::ipart,jpart,ip,i,ipeak,itest,igrid,ind,peak_cen,peak_nbor
   integer(kind=8),dimension(1:s%g%ncpu)::npeak_cpu,npeak_cpu_all
   integer,dimension(1:ndim)::ckey,ckey_nbor
   integer(kind=8),dimension(0:ndim)::hash_cell,hash_nbor
@@ -567,12 +564,12 @@ subroutine collect_saddle(s)
   real(kind=8),dimension(1:ndim)::xcen,xnei
   integer,parameter::nSnei=56
   real(kind=8),dimension(1:ndim,1:nSnei)::xSnei
-  type(nbor),dimension(1:nSnei) :: grid_nbor
-  integer(kind=8),dimension(1:nSnei)::icell_nbor
+  integer,dimension(1:nSnei)::igrid_nbor
+  integer,dimension(1:nSnei)::icell_nbor
   integer(kind=8)::global_peak_id
   logical::ok
 
-  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
+  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c,mdl=>s%mdl)
 
   !--------------------------------------------------------
   ! Arrays to define neighbors (center=[0,0,0])
@@ -605,11 +602,10 @@ subroutine collect_saddle(s)
   !----------------------------------------------------
   ! Compute densest saddle point and associated peak id
   !----------------------------------------------------
-  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-       hilbert=m%domain,pack_size=storage_size(dummy_int4_small_realdp)/32,&
+  call open_cache(mdl, m, pack_size=storage_size(dummy_int4_small_realdp)/32, &
        pack=pack_fetch_saddle, unpack=unpack_fetch_saddle)
 
-  call open_cache_clump(s,pack_size=storage_size(dummy_saddle_clump)/32,&
+  call open_cache_clump(mdl, c, pack_size=storage_size(dummy_saddle_clump)/32, &
        init=init_flush_saddle,flush=pack_flush_saddle,combine=unpack_flush_saddle)
 
   c%saddle_dens = c%density_threshold
@@ -620,15 +616,15 @@ subroutine collect_saddle(s)
      igrid=c%grid(itest)
      ind=c%cell(itest)
 
-     peak_cen = m%grid(igrid)%flag1(ind)
+     peak_cen = m%flag1(ind,igrid)
 #ifdef GRAV
-     dens_cen = m%grid(igrid)%rho(ind)
+     dens_cen = m%rho(ind,igrid)
 #endif
-     ! Set pointers to null
+     ! Set grid index to null
      icelln=0
-     nullify(gridn)
+     igridn=0
      do j=1,nSnei
-        nullify(grid_nbor(j)%p)
+        igrid_nbor(j)=0
      end do
 
      xcen(1)=2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5
@@ -655,39 +651,39 @@ subroutine collect_saddle(s)
         ckey_nbor(1:ndim)=int(xnei(1:ndim))
         hash_nbor(0)=ilevel+1
         hash_nbor(1:ndim)=ckey_nbor(1:ndim)
-        call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.false.,fetch_cache=.true.)
+        call get_parent_cell(s,hash_nbor,igridn,icelln,flush_cache=.false.,fetch_cache=.true.)
 
         ! If missing, get neighboring cell at ilevel-1
-        if(.not.associated(gridn))then
+        if(igridn==0)then
            ckey_nbor(1:ndim)=int(xnei(1:ndim)/2.0)
            hash_nbor(0)=ilevel
            hash_nbor(1:ndim)=ckey_nbor(1:ndim)
-           call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.false.,fetch_cache=.true.)
+           call get_parent_cell(s,hash_nbor,igridn,icelln,flush_cache=.false.,fetch_cache=.true.)
 
            ! If refined, get neighboring cell at ilevel+1
-        else if (gridn%refined(icelln))then
+        else if (m%grid(igridn)%refined(icelln))then
            ckey_nbor(1:ndim)=int(xnei(1:ndim)*2.0)
            hash_nbor(0)=ilevel+2
            hash_nbor(1:ndim)=ckey_nbor(1:ndim)
-           call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.false.,fetch_cache=.true.)
+           call get_parent_cell(s,hash_nbor,igridn,icelln,flush_cache=.false.,fetch_cache=.true.)
         endif
 
         ! Lock grid in cache
-        call lock_cache(s,gridn)
+        call lock_cache(m,igridn)
 
-        grid_nbor(j)%p => gridn
+        igrid_nbor(j) = igridn
         icell_nbor(j) = icelln
 
      end do
 
      do j=1,nSnei
-        gridn => grid_nbor(j)%p ! Gather neighboring grid
+        igridn = igrid_nbor(j) ! Gather neighboring grid
         icelln = icell_nbor(j)
 
-        if(associated(gridn))then
-           peak_nbor = gridn%flag1(icelln)
+        if(igridn>0)then
+           peak_nbor = m%flag1(icelln,igridn)
 #ifdef GRAV
-           dens_nbor = gridn%rho(icelln)
+           dens_nbor = m%rho(icelln,igridn)
 #endif
            ok = peak_cen/=0
            ok = ok .and. peak_nbor/=0
@@ -708,13 +704,13 @@ subroutine collect_saddle(s)
 
      ! Unlock neighboring grids
      do j=1,nSnei
-        gridn => grid_nbor(j)%p
-        call unlock_cache(s,gridn)
+        igridn = igrid_nbor(j)
+        call unlock_cache(m,igridn)
      end do
 
   end do
 
-  call close_cache(s,m%grid_dict)
+  call close_cache(mdl)
 
   end associate
 
@@ -723,11 +719,12 @@ end subroutine collect_saddle
 !################################################################
 !################################################################
 !################################################################
-subroutine pack_fetch_saddle(grid,msg_size,msg_array)
+subroutine pack_fetch_saddle(mesh,igrid,msg_size,msg_array)
   use amr_parameters, only: twotondim
-  use amr_commons, only: oct
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_int4_small_realdp
-  type(oct)::grid
+  type(mesh_t)::mesh
+  integer::igrid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
 
@@ -735,18 +732,20 @@ subroutine pack_fetch_saddle(grid,msg_size,msg_array)
   type(msg_int4_small_realdp)::msg
 
   do ind=1,twotondim
-     msg%flg(ind)=grid%flag1(ind)
+     msg%flg(ind)=mesh%flag1(ind,igrid)
   end do
+
   do ind=1,twotondim
-     if(grid%refined(ind))then
+     if(mesh%grid(igrid)%refined(ind))then
         msg%ref(ind)=1
      else
         msg%ref(ind)=0
      endif
   end do
+
 #ifdef GRAV
   do ind=1,twotondim
-     msg%realdp(ind)=grid%rho(ind)
+     msg%realdp(ind)=mesh%rho(ind,igrid)
   end do
 #endif
 
@@ -757,11 +756,12 @@ end subroutine pack_fetch_saddle
 !################################################################
 !################################################################
 !################################################################
-subroutine unpack_fetch_saddle(grid,msg_size,msg_array,hash_key)
-  use amr_parameters, only: ndim,twotondim
-  use amr_commons, only: oct
+subroutine unpack_fetch_saddle(mesh,igrid,msg_size,msg_array,hash_key)
+  use amr_parameters, only: ndim, twotondim
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_int4_small_realdp
-  type(oct)::grid
+  type(mesh_t)::mesh
+  integer::igrid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
   integer(kind=8),dimension(0:ndim)::hash_key
@@ -769,23 +769,25 @@ subroutine unpack_fetch_saddle(grid,msg_size,msg_array,hash_key)
   integer::ind
   type(msg_int4_small_realdp)::msg
 
-  grid%lev=hash_key(0)
-  grid%ckey(1:ndim)=hash_key(1:ndim)
+  mesh%grid(igrid)%lev=hash_key(0)
+  mesh%grid(igrid)%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
 
   do ind=1,twotondim
-     grid%flag1(ind)=msg%flg(ind)
+     mesh%flag1(ind,igrid)=msg%flg(ind)
   end do
+
   do ind=1,twotondim
      if(msg%ref(ind)==1)then
-        grid%refined(ind)=.true.
+        mesh%grid(igrid)%refined(ind)=.true.
      else
-        grid%refined(ind)=.false.
+        mesh%grid(igrid)%refined(ind)=.false.
      endif
   end do
+
 #ifdef GRAV
   do ind=1,twotondim
-     grid%rho(ind)=msg%realdp(ind)
+     mesh%rho(ind,igrid)=msg%realdp(ind)
   end do
 #endif
 
@@ -885,7 +887,7 @@ subroutine merge_clumps(s,action)
   integer::nmove_all,nsurvive_all,nzero_all
 #endif
 
-  associate(g=>s%g,r=>s%r,m=>s%m,c=>s%c)
+  associate(g=>s%g,r=>s%r,m=>s%m,c=>s%c,mdl=>s%mdl)
 
   if (r%verbose.and.g%myid==1)then
      if(action.EQ.'relevance')then
@@ -931,8 +933,8 @@ subroutine merge_clumps(s,action)
      iter=0
      do while(nmove>0)
 
-        call open_cache_clump(s,pack_size=storage_size(dummy_merge_clump)/32,&
-             pack=pack_fetch_merge,unpack=unpack_fetch_merge)
+        call open_cache_clump(mdl, c, pack_size=storage_size(dummy_merge_clump)/32, &
+             pack=pack_fetch_merge, unpack=unpack_fetch_merge)
 
         nmove=0
         do i=c%npeak,1,-1
@@ -965,7 +967,7 @@ subroutine merge_clumps(s,action)
            endif
         end do
 
-        call close_cache(s,m%grid_dict)
+        call close_cache(mdl)
 
         iter=iter+1
 #ifndef WITHOUTMPI
@@ -976,18 +978,18 @@ subroutine merge_clumps(s,action)
      end do
 
      ! Update flag1 field
-     call open_cache_clump(s,pack_size=storage_size(dummy_merge_clump)/32,&
-          pack=pack_fetch_merge,unpack=unpack_fetch_merge)
+     call open_cache_clump(mdl, c, pack_size=storage_size(dummy_merge_clump)/32, &
+          pack=pack_fetch_merge, unpack=unpack_fetch_merge)
      do itest=1,c%ntest
         igrid=c%grid(itest)
         ind=c%cell(itest)
-        global_peak_id=m%grid(igrid)%flag1(ind)
+        global_peak_id=m%flag1(ind,igrid)
         if (global_peak_id>0)then
            call get_peak(s,global_peak_id,ipeak,flush_cache=.false.,fetch_cache=.true.)
-           m%grid(igrid)%flag1(ind)=c%new_peak(ipeak)
+           m%flag1(ind,igrid)=c%new_peak(ipeak)
         end if
      end do
-     call close_cache(s,m%grid_dict)
+     call close_cache(mdl)
 
      ! Compute new saddle points and corresponding nboring peaks.
      call collect_saddle(s)
@@ -1056,8 +1058,8 @@ subroutine merge_clumps(s,action)
 
      ! Merge all peaks to deepest level
      do ilev=idepth-2,0,-1
-        call open_cache_clump(s,pack_size=storage_size(dummy_merge_clump)/32,&
-             pack=pack_fetch_merge,unpack=unpack_fetch_merge)
+        call open_cache_clump(mdl, c, pack_size=storage_size(dummy_merge_clump)/32, &
+             pack=pack_fetch_merge, unpack=unpack_fetch_merge)
         do ipeak=1,c%npeak
            if(c%lev_peak(ipeak)==ilev)then
               merge_to=c%new_peak(ipeak)
@@ -1065,7 +1067,7 @@ subroutine merge_clumps(s,action)
               c%new_peak(ipeak)=c%new_peak(jpeak)
            endif
         end do
-        call close_cache(s,m%grid_dict)
+        call close_cache(mdl)
      end do
 
   endif
@@ -1077,8 +1079,8 @@ subroutine merge_clumps(s,action)
         c%ind_halo(ipeak)=c%new_peak(ipeak)
      end do
      do ilev=idepth-2,0,-1
-        call open_cache_clump(s,pack_size=storage_size(dummy_halo_clump)/32,&
-             pack=pack_fetch_halo,unpack=unpack_fetch_halo)
+        call open_cache_clump(mdl, c, pack_size=storage_size(dummy_halo_clump)/32, &
+             pack=pack_fetch_halo, unpack=unpack_fetch_halo)
         do ipeak=1,c%npeak
            if(c%lev_peak(ipeak)==ilev)then
               merge_to=c%ind_halo(ipeak)
@@ -1086,7 +1088,7 @@ subroutine merge_clumps(s,action)
               c%ind_halo(ipeak)=c%ind_halo(jpeak)
            endif
         end do
-        call close_cache(s,m%grid_dict)
+        call close_cache(mdl)
      end do
 
      ! Set merging level of halos to idepth-1
@@ -1098,29 +1100,29 @@ subroutine merge_clumps(s,action)
 
      ! Compute halo mass
      c%halo_mass=0
-     call open_cache_clump(s,pack_size=storage_size(dummy_halo_clump)/32,&
-          init=init_flush_halo,flush=pack_flush_halo,combine=unpack_flush_halo)
+     call open_cache_clump(mdl, c, pack_size=storage_size(dummy_halo_clump)/32, &
+          init=init_flush_halo, flush=pack_flush_halo, combine=unpack_flush_halo)
      do ipeak=1,c%npeak
         merge_to=c%ind_halo(ipeak)
         call get_peak(s,merge_to,jpeak,flush_cache=.true.,fetch_cache=.false.)
         c%halo_mass(jpeak)=c%halo_mass(jpeak)+c%clump_mass(ipeak)
      end do
-     call close_cache(s,m%grid_dict)
+     call close_cache(mdl)
 
      ! Assign back halo mass to peak
-     call open_cache_clump(s,pack_size=storage_size(dummy_halo_clump)/32,&
-          pack=pack_fetch_halo,unpack=unpack_fetch_halo)
+     call open_cache_clump(mdl, c, pack_size=storage_size(dummy_halo_clump)/32, &
+          pack=pack_fetch_halo, unpack=unpack_fetch_halo)
      do ipeak=1,c%npeak
         merge_to=c%ind_halo(ipeak)
         call get_peak(s,merge_to,jpeak,flush_cache=.false.,fetch_cache=.true.)
         c%halo_mass(ipeak)=c%halo_mass(jpeak)
      end do
-     call close_cache(s,m%grid_dict)
+     call close_cache(mdl)
 
      ! Compute hierarchical clump properties
      do ilev=0,idepth-2
-        call open_cache_clump(s,pack_size=storage_size(dummy_prop_clump)/32,&
-             init=init_flush_prop,flush=pack_flush_prop,combine=unpack_flush_prop)
+        call open_cache_clump(mdl, c, pack_size=storage_size(dummy_prop_clump)/32, &
+             init=init_flush_prop, flush=pack_flush_prop, combine=unpack_flush_prop)
         do ipeak=1,c%npeak
            if(c%lev_peak(ipeak)==ilev)then
               ! If clump is too massive, then it does not merge
@@ -1138,7 +1140,7 @@ subroutine merge_clumps(s,action)
               endif
            endif
         end do
-        call close_cache(s,m%grid_dict)
+        call close_cache(mdl)
      end do
 
   endif
@@ -1312,7 +1314,7 @@ subroutine compute_clump_properties(s,rtype)
   real(kind=8)::tot_mass_tot
 #endif
 
-  associate(g=>s%g,r=>s%r,m=>s%m,c=>s%c)
+  associate(g=>s%g,r=>s%r,m=>s%m,c=>s%c,mdl=>s%mdl)
 
   if(g%myid==1.and.r%verbose)write(*,*)'Entering compute clump properties'
 
@@ -1340,11 +1342,11 @@ subroutine compute_clump_properties(s,rtype)
      c%peak_pos(ipeak,1:ndim)=xcell(1:ndim)
 #ifdef HYDRO
      if (r%hydro.AND.rtype.eq.4)then
-        c%peak_vel(ipeak,1:ndim)=m%grid(igrid)%uold(ind,2:ndim+1)/m%grid(igrid)%uold(ind,1)
+        c%peak_vel(ipeak,1:ndim)=m%uold(ind,2:ndim+1,igrid)/m%uold(ind,1,igrid)
      endif
 #endif
 #ifdef GRAV
-     c%peak_acc(ipeak,1:ndim)=m%grid(igrid)%f(ind,1:ndim)
+     c%peak_acc(ipeak,1:ndim)=m%f(ind,1:ndim,igrid)
 #endif
   end do
 
@@ -1354,24 +1356,24 @@ subroutine compute_clump_properties(s,rtype)
   c%min_dens=huge(zero); c%n_cells=0
   c%clump_mass=0d0; c%clump_vol=0d0
 
-  call open_cache_clump(s,storage_size(dummy_prop_clump)/32,&
-       init=init_flush_prop,flush=pack_flush_prop,combine=unpack_flush_prop)
+  call open_cache_clump(mdl, c, storage_size(dummy_prop_clump)/32, &
+       init=init_flush_prop, flush=pack_flush_prop, combine=unpack_flush_prop)
   do itest=1,c%ntest
      ilevel=c%level(itest)
      igrid=c%grid(itest)
      ind=c%cell(itest)
-     global_peak_id=m%grid(igrid)%flag1(ind)
+     global_peak_id=m%flag1(ind,igrid)
 
      ! Save peak patch id into flag2 because flag1 will become halo patch id
-     m%grid(igrid)%flag2(ind)=m%grid(igrid)%flag1(ind)
+     m%flag2(ind,igrid)=m%flag1(ind,igrid)
 
      if (global_peak_id /=0 ) then
         call get_peak(s,global_peak_id,peak_nr,flush_cache=.true.,fetch_cache=.false.)
 
         ! Cell density
 #ifdef GRAV
-        d=m%grid(igrid)%rho(ind)
-        nref=m%grid(igrid)%nref(ind)
+        d=m%rho(ind,igrid)
+        nref=m%nref(ind,igrid)
 #endif
         ! Cell volume
         dx_loc=r%boxlen/2**ilevel
@@ -1391,7 +1393,7 @@ subroutine compute_clump_properties(s,rtype)
 
      end if
   end do
-  call close_cache(s,m%grid_dict)
+  call close_cache(mdl)
 
   ! Calculate clump tidal radius
   do ipeak=1,c%npeak
@@ -1505,7 +1507,7 @@ subroutine trim_clumps(s)
   integer(kind=8),dimension(0:s%g%ncpu)::nfinal_cum
   integer::icpu,ipeak,jpeak,igrid,ilevel,ind,itest
 
-  associate(g=>s%g,r=>s%r,m=>s%m,c=>s%c)
+  associate(g=>s%g,r=>s%r,m=>s%m,c=>s%c,mdl=>s%mdl)
 
   if(g%myid==1.and.r%verbose)write(*,*)'Entering trim_clumps'
 
@@ -1547,8 +1549,8 @@ subroutine trim_clumps(s)
   end do
 
   ! Change other important peak indices
-  call open_cache_clump(s,storage_size(dummy_prop_clump)/32,&
-       pack=pack_fetch_prop,unpack=unpack_fetch_prop)
+  call open_cache_clump(mdl, c, storage_size(dummy_prop_clump)/32, &
+       pack=pack_fetch_prop, unpack=unpack_fetch_prop)
   do ipeak=1,c%npeak
      if( c%clump_mass(ipeak) > c%mass_threshold.AND. &
           & c%relevance(ipeak) > c%relevance_threshold.AND. &
@@ -1561,7 +1563,7 @@ subroutine trim_clumps(s)
         c%ind_halo(ipeak)=c%ind_final(jpeak)
      endif
   end do
-  call close_cache(s,m%grid_dict)
+  call close_cache(mdl)
 
   ! Modify particle peak ids accordingly
   if(s%r%part)then
@@ -1578,38 +1580,38 @@ subroutine trim_clumps(s)
   endif
 
   ! Modify flag1 and flag2 accordingly
-  call open_cache_clump(s,storage_size(dummy_prop_clump)/32,&
-       pack=pack_fetch_prop,unpack=unpack_fetch_prop)
+  call open_cache_clump(mdl, c, storage_size(dummy_prop_clump)/32, &
+       pack=pack_fetch_prop, unpack=unpack_fetch_prop)
   do itest=1,c%ntest
      ilevel=c%level(itest)
      igrid=c%grid(itest)
      ind=c%cell(itest)
-     global_peak_id=m%grid(igrid)%flag2(ind)
+     global_peak_id=m%flag2(ind,igrid)
      if (global_peak_id /=0 ) then
         call get_peak(s,global_peak_id,ipeak,flush_cache=.false.,fetch_cache=.true.)
         if( c%clump_mass(ipeak) > c%mass_threshold.AND. &
              & c%relevance(ipeak) > c%relevance_threshold.AND. &
              & c%npart(ipeak) > 0 ) then
-           m%grid(igrid)%flag2(ind)=c%ind_final(ipeak)
+           m%flag2(ind,igrid)=c%ind_final(ipeak)
         else
-           m%grid(igrid)%flag2(ind)=0
+           m%flag2(ind,igrid)=0
         endif
      endif
      if(c%saddle_threshold>0)then
-        global_halo_id=m%grid(igrid)%flag1(ind)
+        global_halo_id=m%flag1(ind,igrid)
         if (global_halo_id /=0 ) then
            call get_peak(s,global_halo_id,ipeak,flush_cache=.false.,fetch_cache=.true.)
            if( c%clump_mass(ipeak) > c%mass_threshold.AND. &
                 & c%relevance(ipeak) > c%relevance_threshold.AND. &
                 & c%npart(ipeak) > 0 ) then
-              m%grid(igrid)%flag1(ind)=c%ind_final(ipeak)
+              m%flag1(ind,igrid)=c%ind_final(ipeak)
            else
-              m%grid(igrid)%flag1(ind)=0
+              m%flag1(ind,igrid)=0
            endif
         endif
      endif
   end do
-  call close_cache(s,m%grid_dict)
+  call close_cache(mdl)
 
   end associate
 
@@ -1636,10 +1638,10 @@ subroutine trim_particles(s,p)
   integer::ipeak,ipart
   integer(kind=8)::global_peak_id
 
-  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
+  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c,mdl=>s%mdl)
 
-  call open_cache_clump(s,storage_size(dummy_prop_clump)/32,&
-       pack=pack_fetch_prop,unpack=unpack_fetch_prop)
+  call open_cache_clump(mdl, c, storage_size(dummy_prop_clump)/32, &
+       pack=pack_fetch_prop, unpack=unpack_fetch_prop)
   do ipart=1,p%npart
      global_peak_id=p%pid(ipart)
      if (global_peak_id /=0 ) then
@@ -1653,7 +1655,7 @@ subroutine trim_particles(s,p)
         endif
      endif
   end do
-  call close_cache(s,m%grid_dict)
+  call close_cache(mdl)
 
   end associate
 
@@ -1728,7 +1730,7 @@ subroutine particle_clump_properties(s,p)
   real(kind=8)::xx,rad,dx_loc,r2,core_radius
   real(kind=8),dimension(1:ndim)::xpart
 
-  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
+  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c,mdl=>s%mdl)
 
   !--------------------------------------------
   ! Sort particles according to global clump id
@@ -1746,9 +1748,9 @@ subroutine particle_clump_properties(s,p)
   c%peak_vel=0
   c%peak_com=0
   c%npart=0
-  call open_cache_clump(s,storage_size(dummy_prop_clump)/32,&
-       pack=pack_fetch_part,unpack=unpack_fetch_part,&
-       init=init_flush_part,flush=pack_flush_part,combine=unpack_flush_part)
+  call open_cache_clump(mdl, c, storage_size(dummy_prop_clump)/32, &
+       pack=pack_fetch_part, unpack=unpack_fetch_part, &
+       init=init_flush_part, flush=pack_flush_part, combine=unpack_flush_part)
   do i=1+p%norphan_peak,p%npart
      ! Get peak id
      ipart=p%sortp(i)
@@ -1778,7 +1780,7 @@ subroutine particle_clump_properties(s,p)
         endif
      endif
   end do
-  call close_cache(s,m%grid_dict)
+  call close_cache(mdl)
 
   ! Compute specific quantities
   do ipeak=1,c%npeak
@@ -1932,7 +1934,7 @@ subroutine particle_potential(s,p)
   real(kind=8)::pi,grav,rad,dist,dr
   real(kind=8),dimension(1:ndim)::xpart,vpart
 
-  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
+  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c,mdl=>s%mdl)
 
   ! Constants
   pi=ACOS(-1.0D0)
@@ -1951,9 +1953,9 @@ subroutine particle_potential(s,p)
   c%npart=0
   do ilevel=0,c%merge_levelmax+1
      ! Open cache
-     call open_cache_clump(s,storage_size(dummy_mbin_clump)/32,&
-          pack=pack_fetch_mbin,unpack=unpack_fetch_mbin,&
-          init=init_flush_mbin,flush=pack_flush_mbin,combine=unpack_flush_mbin)
+     call open_cache_clump(mdl, c, storage_size(dummy_mbin_clump)/32, &
+          pack=pack_fetch_mbin, unpack=unpack_fetch_mbin, &
+          init=init_flush_mbin, flush=pack_flush_mbin, combine=unpack_flush_mbin)
      do i=1+p%norphan_peak,p%npart
         ! Get peak id
         ipart=p%sortp(i)
@@ -1988,7 +1990,7 @@ subroutine particle_potential(s,p)
            p%pid(ipart)=c%new_peak(ipeak)
         endif
      end do
-     call close_cache(s,m%grid_dict)
+     call close_cache(mdl)
   end do
   ! End loop over levels
 
@@ -2053,7 +2055,7 @@ subroutine particle_unbind(s,p)
   real(kind=8)::pi,rad,vel,bound
   real(kind=8),dimension(1:ndim)::xpart,vpart
 
-  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
+  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c,mdl=>s%mdl)
 
   ! Constants
   pi=ACOS(-1.0D0)
@@ -2068,8 +2070,8 @@ subroutine particle_unbind(s,p)
   ! Loop over merging hierarchy levels
   do ilevel=0,c%merge_levelmax
      ! Demote particles to parent clump if unbound
-     call open_cache_clump(s,storage_size(dummy_unbind_clump)/32,&
-          pack=pack_fetch_unbind,unpack=unpack_fetch_unbind)
+     call open_cache_clump(mdl, c, storage_size(dummy_unbind_clump)/32, &
+          pack=pack_fetch_unbind, unpack=unpack_fetch_unbind)
      do i=1+p%norphan_peak,p%npart
         ! Get peak id
         ipart=p%sortp(i)
@@ -2089,7 +2091,7 @@ subroutine particle_unbind(s,p)
            endif
         endif
      end do
-     call close_cache(s,m%grid_dict)
+     call close_cache(mdl)
   end do
   ! End loop over levels
 
@@ -2174,7 +2176,7 @@ subroutine mass_profile(s,p)
   real(kind=8)::pi,rad,dist,dr
   real(kind=8),dimension(1:ndim)::xpart,vpart
 
-  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
+  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c,mdl=>s%mdl)
 
   ! Constants
   pi=ACOS(-1.0D0)
@@ -2191,9 +2193,9 @@ subroutine mass_profile(s,p)
   !--------------------------------------------------------
   ! Compute particle mass profile around their central peak
   !--------------------------------------------------------
-  call open_cache_clump(s,storage_size(dummy_mbin_clump)/32,&
-       pack=pack_fetch_mbin,unpack=unpack_fetch_mbin,&
-       init=init_flush_mbin,flush=pack_flush_mbin,combine=unpack_flush_mbin)
+  call open_cache_clump(mdl, c, storage_size(dummy_mbin_clump)/32, &
+       pack=pack_fetch_mbin, unpack=unpack_fetch_mbin, &
+       init=init_flush_mbin, flush=pack_flush_mbin, combine=unpack_flush_mbin)
   c%mass_bin=0d0
   c%npart=0
   do i=1+p%norphan_peak,p%npart
@@ -2227,7 +2229,7 @@ subroutine mass_profile(s,p)
         end do
      endif
   end do
-  call close_cache(s,m%grid_dict)
+  call close_cache(mdl)
 
   !------------------------
   ! Compute cumulative mass
@@ -2437,7 +2439,6 @@ end subroutine unpack_flush_mbin
 !##############################################################################
 subroutine particle_peak_id(s,p)
   use amr_parameters, only: ndim, nbin, twotondim
-  use amr_commons, only: oct
   use ramses_commons, only: ramses_t
   use pm_commons, only: part_t
   use nbors_utils
@@ -2455,22 +2456,20 @@ subroutine particle_peak_id(s,p)
   !-------------------------------------------------------------------
   integer,dimension(1:ndim)::ckey
   integer(kind=8),dimension(0:ndim)::hash_cell
-  integer::i,ipart,icell,ind,idim,ibin,ilevel
+  integer::i,ipart,icell,igrid,ind,idim,ibin,ilevel
   integer(kind=8)::global_peak_id
   integer::local_peak_id,ipeak,jpeak,merge_to
   integer::halo_nr,peak_nr
   real(kind=8)::dx_loc,rmin,rmax,xx
-  type(oct),pointer::gridp
   type(msg_int4)::dummy_int4
   logical::ok_level,ok_leaf
   integer::no_peak
 
-  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
+  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c,mdl=>s%mdl)
 
   ! Open cache for array flag1 (fetch)
-  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-       hilbert=m%domain,pack_size=storage_size(dummy_int4)/32,&
-       pack=pack_fetch_flag2,unpack=unpack_fetch_flag2)
+  call open_cache(mdl, m, pack_size=storage_size(dummy_int4)/32, &
+       pack=pack_fetch_flag2, unpack=unpack_fetch_flag2)
 
   ! Loop over particles
   no_peak=0
@@ -2492,12 +2491,12 @@ subroutine particle_peak_id(s,p)
         ! Get parent cell at level ilevel using cache
         hash_cell(0)=ilevel+1
         hash_cell(1:ndim)=ckey(1:ndim)
-        call get_parent_cell(s,hash_cell,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+        call get_parent_cell(s,hash_cell,igrid,icell,flush_cache=.false.,fetch_cache=.true.)
 
         ! Read flag2 value
         global_peak_id=0
-        if(associated(gridp))global_peak_id=gridp%flag2(icell)
-        if (global_peak_id==0)no_peak=no_peak+1
+        if(igrid>0)global_peak_id=m%flag2(icell,igrid)
+        if(global_peak_id==0)no_peak=no_peak+1
 
         ! Store global peak id in pid array
         p%pid(ipart)=global_peak_id
@@ -2507,7 +2506,7 @@ subroutine particle_peak_id(s,p)
   end do
   ! End loop over levels
 
-  call close_cache(s,m%grid_dict)
+  call close_cache(mdl)
 
   p%norphan_peak=no_peak
 
@@ -2520,7 +2519,6 @@ end subroutine particle_peak_id
 !##############################################################################
 subroutine particle_halo_id(s,p)
   use amr_parameters, only: ndim, nbin, twotondim
-  use amr_commons, only: oct
   use ramses_commons, only: ramses_t
   use pm_commons, only: part_t
   use nbors_utils
@@ -2539,22 +2537,20 @@ subroutine particle_halo_id(s,p)
   !------------------------------------------------------------------
   integer,dimension(1:ndim)::ckey
   integer(kind=8),dimension(0:ndim)::hash_cell
-  integer::i,ipart,icell,ind,idim,ibin,ilevel
+  integer::i,ipart,icell,igrid,ind,idim,ibin,ilevel
   integer(kind=8)::global_halo_id
   integer::local_peak_id,ipeak,jpeak,merge_to
   integer::halo_nr,peak_nr
   real(kind=8)::dx_loc,rmin,rmax,xx
-  type(oct),pointer::gridp
   type(msg_int4)::dummy_int4
   logical::ok_level,ok_leaf
   integer::no_halo
 
-  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
+  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c,mdl=>s%mdl)
 
   ! Open cache for array flag1 (fetch)
-  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-       hilbert=m%domain,pack_size=storage_size(dummy_int4)/32,&
-       pack=pack_fetch_flag,unpack=unpack_fetch_flag,bound=init_bound_flag)
+  call open_cache(mdl, m, pack_size=storage_size(dummy_int4)/32, &
+       pack=pack_fetch_flag, unpack=unpack_fetch_flag, bound=init_bound_flag)
 
   ! Loop over particles
   no_halo=0
@@ -2576,12 +2572,12 @@ subroutine particle_halo_id(s,p)
         ! Get parent cell at level ilevel using cache
         hash_cell(0)=ilevel+1
         hash_cell(1:ndim)=ckey(1:ndim)
-        call get_parent_cell(s,hash_cell,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+        call get_parent_cell(s,hash_cell,igrid,icell,flush_cache=.false.,fetch_cache=.true.)
 
         ! Read flag1 value
         global_halo_id=0
-        if(associated(gridp))global_halo_id=gridp%flag1(icell)
-        if (global_halo_id==0)no_halo=no_halo+1
+        if(igrid>0)global_halo_id=m%flag1(icell,igrid)
+        if(global_halo_id==0)no_halo=no_halo+1
 
         ! Store global halo id in hid array
         p%hid(ipart)=global_halo_id
@@ -2591,7 +2587,7 @@ subroutine particle_halo_id(s,p)
   end do
   ! End loop over levels
 
-  call close_cache(s,m%grid_dict)
+  call close_cache(mdl)
 
   p%norphan_halo=no_halo
 

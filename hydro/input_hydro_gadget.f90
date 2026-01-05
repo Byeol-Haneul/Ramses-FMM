@@ -30,7 +30,6 @@ end subroutine r_input_hydro_gadget
 !#########################################################################
 subroutine input_hydro_gadget(s,ilevel)
   use amr_parameters, only: ndim, twotondim
-  use amr_commons, only: oct
   use hydro_parameters, only: nvar
   use ramses_commons, only: ramses_t
   use nbors_utils
@@ -54,19 +53,18 @@ subroutine input_hydro_gadget(s,ilevel)
   integer::igrid,ipart,icell,ind,idim,ivar
   real(kind=8)::scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2,scale_m
   real(kind=8)::dx_loc,vol_loc,ekin
-  type(oct),pointer::gridp
   type(msg_large_realdp)::dummy_large_realdp
 
-  associate(r=>s%r,g=>s%g,m=>s%m,p=>s%gas)
+  associate(r=>s%r,g=>s%g,m=>s%m,p=>s%gas,mdl=>s%mdl)
 
-  if(m%noct(ilevel)==0)return
+  if(m%noct_tot(ilevel)==0)return
 
 #ifdef HYDRO
   !------------------------------------
   ! Reset conservative variables unew
   !------------------------------------
   do igrid=m%head(ilevel),m%tail(ilevel)
-     m%grid(igrid)%unew=0.0
+     m%unew(:,:,igrid)=0.0
   end do
 
   !----------------------------------------------
@@ -81,11 +79,9 @@ subroutine input_hydro_gadget(s,ilevel)
 
   ! Open write-only cache for array rho
   hash_nbor(0)=ilevel+1
-  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-       & hilbert=m%domain,pack_size=storage_size(dummy_large_realdp)/32,&
-       & pack=pack_fetch_refine,unpack=unpack_fetch_refine,&
-       & init=init_flush_godunov,flush=pack_flush_godunov,&
-       & combine=unpack_flush_godunov,bound=init_bound_refine)
+  call open_cache(mdl, m, pack_size=storage_size(dummy_large_realdp)/32, &
+       & init=init_flush_godunov, flush=pack_flush_godunov, &
+       & combine=unpack_flush_godunov, bound=init_bound_refine)
 
   ! Loop over gas particles
   do ipart=1,p%npart
@@ -158,15 +154,15 @@ subroutine input_hydro_gadget(s,ilevel)
      do ind=1,twotondim
         hash_nbor(1:ndim)=ckey(1:ndim,ind)
         ! Get parent cell using write-only cache
-        call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
-        if(associated(gridp))then
-           gridp%unew(icell,1)=gridp%unew(icell,1)+p%mp(ipart)*vol(ind)/vol_loc
+        call get_parent_cell(s,hash_nbor,igrid,icell,flush_cache=.true.,fetch_cache=.false.)
+        if(igrid>0)then
+           m%unew(icell,1,igrid)=m%unew(icell,1,igrid)+p%mp(ipart)*vol(ind)/vol_loc
            do idim=1,3
-              gridp%unew(icell,idim+1)=gridp%unew(icell,idim+1)+p%mp(ipart)*p%vp(ipart,idim)*vol(ind)/vol_loc
+              m%unew(icell,idim+1,igrid)=m%unew(icell,idim+1,igrid)+p%mp(ipart)*p%vp(ipart,idim)*vol(ind)/vol_loc
            end do
-           gridp%unew(icell,5)=gridp%unew(icell,5)+p%mp(ipart)*p%up(ipart)*vol(ind)/vol_loc
+           m%unew(icell,5,igrid)=m%unew(icell,5,igrid)+p%mp(ipart)*p%up(ipart)*vol(ind)/vol_loc
            if(r%metal) then
-              gridp%unew(icell,r%imetal)=gridp%unew(icell,r%imetal)+p%mp(ipart)*p%zp(ipart)*vol(ind)/vol_loc
+              m%unew(icell,r%imetal,igrid)=m%unew(icell,r%imetal,igrid)+p%mp(ipart)*p%zp(ipart)*vol(ind)/vol_loc
            endif
         endif
      end do
@@ -174,13 +170,13 @@ subroutine input_hydro_gadget(s,ilevel)
   end do
   ! End loop over particles
 
-  call close_cache(s,m%grid_dict)
+  call close_cache(mdl)
 
   !--------------------
   ! Set uold to unew
   !--------------------
   do igrid=m%head(ilevel),m%tail(ilevel)
-     m%grid(igrid)%uold=m%grid(igrid)%unew
+     m%uold(:,:,igrid)=m%unew(:,:,igrid)
   end do
 
   !----------------------------------------------
@@ -194,12 +190,12 @@ subroutine input_hydro_gadget(s,ilevel)
   do igrid=m%head(ilevel),m%tail(ilevel)
      do ind=1,twotondim
         do ivar=nvar,1,-1
-           if(m%grid(igrid)%uold(ind,1)<r%IG_rho/scale_nH)then
-              m%grid(igrid)%uold(ind,ivar)=0.0
-              if(ivar.eq.1)m%grid(igrid)%uold(ind,ivar)=max(dble(r%IG_rho)/scale_nH,dble(r%smallr))
-              if(ivar.eq.5)m%grid(igrid)%uold(ind,ivar)=r%IG_T2/scale_T2/(r%gamma-1)*max(dble(r%IG_rho)/scale_nH,dble(r%smallr))
+           if(m%uold(ind,1,igrid)<r%IG_rho/scale_nH)then
+              m%uold(ind,ivar,igrid)=0.0
+              if(ivar.eq.1)m%uold(ind,ivar,igrid)=max(dble(r%IG_rho)/scale_nH,dble(r%smallr))
+              if(ivar.eq.5)m%uold(ind,ivar,igrid)=r%IG_T2/scale_T2/(r%gamma-1)*max(dble(r%IG_rho)/scale_nH,dble(r%smallr))
               if(r%metal)then
-                 if(ivar.eq.r%imetal)m%grid(igrid)%uold(ind,ivar)=r%IG_metal*max(dble(r%IG_rho)/scale_nH,dble(r%smallr))
+                 if(ivar.eq.r%imetal)m%uold(ind,ivar,igrid)=r%IG_metal*max(dble(r%IG_rho)/scale_nH,dble(r%smallr))
               endif
            endif
         end do
@@ -213,17 +209,17 @@ subroutine input_hydro_gadget(s,ilevel)
      do ind=1,twotondim
         ! From momentum to velocity
         do idim=1,3
-           m%grid(igrid)%uold(ind,idim+1)=m%grid(igrid)%uold(ind,idim+1)/m%grid(igrid)%uold(ind,1)
+           m%uold(ind,idim+1,igrid)=m%uold(ind,idim+1,igrid)/m%uold(ind,1,igrid)
         end do
         ! From internal energy density to pressure
-        m%grid(igrid)%uold(ind,5)=(r%gamma-1)*m%grid(igrid)%uold(ind,5)
+        m%uold(ind,5,igrid)=(r%gamma-1)*m%uold(ind,5,igrid)
         ! From metal mass density to metal mass fraction
         if(r%metal) then
-           m%grid(igrid)%uold(ind,r%imetal)=m%grid(igrid)%uold(ind,r%imetal)/m%grid(igrid)%uold(ind,1)
+           m%uold(ind,r%imetal,igrid)=m%uold(ind,r%imetal,igrid)/m%uold(ind,1,igrid)
         endif
         ! Compute entropy from pressure
         if(r%entropy) then
-           m%grid(igrid)%uold(ind,r%ientropy)=m%grid(igrid)%uold(ind,5)/m%grid(igrid)%uold(ind,1)**r%gamma
+           m%uold(ind,r%ientropy,igrid)=m%uold(ind,5,igrid)/m%uold(ind,1,igrid)**r%gamma
         endif
      end do
   end do

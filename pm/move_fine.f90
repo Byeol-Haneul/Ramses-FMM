@@ -119,7 +119,6 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
   use amr_parameters, only: ndim, twotondim, nvector
   use pm_parameters
   use pm_commons, only: part_t
-  use amr_commons, only: nbor
   use ramses_commons, only: ramses_t
   use nbors_utils
   use cache_commons
@@ -135,7 +134,7 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
   integer,dimension(1:ndim)::ir,il
   real(kind=8),dimension(1:twotondim)::vol
   integer,dimension(1:ndim,1:twotondim)::ckey
-  integer,dimension(1:twotondim)::icell
+  integer,dimension(1:twotondim)::icell,igrid
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer::ipart,ind,idim
   real(kind=8)::dx_loc,vol_loc,dteff
@@ -144,10 +143,9 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
   logical::ok_level
   real(kind=8),dimension(1:nvector,1:ndim)::xana
   real(kind=8),dimension(1:nvector,1:ndim)::fana
-  type(nbor),dimension(1:twotondim)::gridp
   type(msg_three_realdp)::dummy_three_realdp
 
-  associate(r=>s%r,g=>s%g,m=>s%m)
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
   if(p%static)then
      ! We still need to set the particle levels correctly, even if they are not moved
@@ -205,8 +203,7 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
   endif
 
   ! Open read-only cache
-  call open_cache(s,table=m%grid_dict, data_size=storage_size(m%grid(1))/32,&
-       hilbert=m%domain, pack_size=storage_size(dummy_three_realdp)/32,&
+  call open_cache(mdl, m, pack_size=storage_size(dummy_three_realdp)/32, &
        pack=pack_fetch_kick, unpack=unpack_fetch_kick)
 
   ! Loop over particles
@@ -243,13 +240,13 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
      icell=0
      do ind=1,twotondim
         hash_nbor(1:ndim)=ckey(1:ndim,ind)
-        call get_parent_cell(s,hash_nbor,m%grid_dict,gridp(ind)%p,icell(ind),flush_cache=.false.,fetch_cache=.true.,lock=.true.)
-        if(.not.associated(gridp(ind)%p))then
+        call get_parent_cell(s,hash_nbor,igrid(ind),icell(ind),flush_cache=.false.,fetch_cache=.true.,lock=.true.)
+        if(igrid(ind)==0)then
            ok_level=.false.
         end if
      end do
      do ind=1,twotondim
-        call unlock_cache(s,gridp(ind)%p)
+        call unlock_cache(m,igrid(ind))
      end do
 
      ! If cloud is not fully inside level ilevel, re-do CIC at coarser level
@@ -286,13 +283,13 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
         icell=0
         do ind=1,twotondim
            hash_nbor(1:ndim)=ckey(1:ndim,ind)
-           call get_parent_cell(s,hash_nbor,m%grid_dict,gridp(ind)%p,icell(ind),flush_cache=.false.,fetch_cache=.true.,lock=.true.)
-           if(.not.associated(gridp(ind)%p))then
+           call get_parent_cell(s,hash_nbor,igrid(ind),icell(ind),flush_cache=.false.,fetch_cache=.true.,lock=.true.)
+           if(igrid(ind)==0)then
               ok_level=.false.
            end if
         end do
         do ind=1,twotondim
-           call unlock_cache(s,gridp(ind)%p)
+           call unlock_cache(m,igrid(ind))
         end do
      end if
 
@@ -304,13 +301,13 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
      if(ok_level)then
 #ifdef GRAV
         do ind=1,twotondim
-           ff(1:ndim)=ff(1:ndim)+gridp(ind)%p%f(icell(ind),1:ndim)*vol(ind)
+           ff(1:ndim)=ff(1:ndim)+m%f(icell(ind),1:ndim,igrid(ind))*vol(ind)
         end do
         ! Store potential
         if(allocated(p%phip))then
            p%phip(ipart)=0.0
            do ind=1,twotondim
-              p%phip(ipart)=p%phip(ipart)+gridp(ind)%p%phi(icell(ind))*vol(ind)
+              p%phip(ipart)=p%phip(ipart)+m%phi(icell(ind),igrid(ind))*vol(ind)
            end do
         endif
         ! Store old force
@@ -378,7 +375,7 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
   end do
   ! End loop over particles
 
-  call close_cache(s,m%grid_dict)
+  call close_cache(mdl)
 
   ! Periodic boundary conditions
   if(action_part==action_kick_drift)then
@@ -403,7 +400,6 @@ subroutine tsc_kick_drift_part(s,p,ilevel,action_part)
   use amr_parameters, only: ndim, threetondim
   use pm_parameters
   use pm_commons, only: part_t
-  use oct_commons, only: oct
   use ramses_commons, only: ramses_t
   use nbors_utils
   use cache_commons
@@ -420,16 +416,15 @@ subroutine tsc_kick_drift_part(s,p,ilevel,action_part)
   real(kind=8),dimension(1:threetondim)::vol
   integer,dimension(1:ndim,1:threetondim)::ckey
   integer(kind=8),dimension(0:ndim)::hash_nbor
-  integer::ipart,icell,ind,idim
+  integer::ipart,icell,igrid,ind,idim
   real(kind=8)::xl,xc,xr
   real(kind=8)::dx_loc,vol_loc,dteff
   real(kind=8)::gamma,norm2,fnorm,delta
   real(kind=8),dimension(1:ndim)::ff
   logical::ok_level
-  type(oct),pointer::gridp
   type(msg_three_realdp)::dummy_three_realdp
 
-  associate(r=>s%r,g=>s%g,m=>s%m)
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
   if(p%static)then
      ! We still need to set the particle levels correctly, even if they are not moved
@@ -444,9 +439,8 @@ subroutine tsc_kick_drift_part(s,p,ilevel,action_part)
   vol_loc=dx_loc**ndim
 
   ! Open read-only cache
-  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-                     hilbert=m%domain, pack_size=storage_size(dummy_three_realdp)/32,&
-                     pack=pack_fetch_kick,unpack=unpack_fetch_kick)
+  call open_cache(mdl, m, pack_size=storage_size(dummy_three_realdp)/32, &
+       pack=pack_fetch_kick, unpack=unpack_fetch_kick)
 
   ! Loop over particles
   do ipart=p%headp(ilevel),p%tailp(ilevel)
@@ -489,10 +483,10 @@ subroutine tsc_kick_drift_part(s,p,ilevel,action_part)
      do ind=1,threetondim
         hash_nbor(1:ndim)=ckey(1:ndim,ind)
         ! Get parent cell at level ilevel using read-only cache
-        call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+        call get_parent_cell(s,hash_nbor,igrid,icell,flush_cache=.false.,fetch_cache=.true.)
 #ifdef GRAV
-        if(associated(gridp))then
-           ff(1:ndim)=ff(1:ndim)+gridp%f(icell,1:ndim)*vol(ind)
+        if(igrid>0)then
+           ff(1:ndim)=ff(1:ndim)+m%f(icell,1:ndim,igrid)*vol(ind)
         end if
 #endif
      end do
@@ -559,7 +553,7 @@ subroutine tsc_kick_drift_part(s,p,ilevel,action_part)
   end do
   ! End loop over particles
 
-  call close_cache(s,m%grid_dict)
+  call close_cache(mdl)
 
   ! Periodic boundary conditions
   if(action_part==action_kick_drift)then
@@ -584,7 +578,6 @@ subroutine pcs_kick_drift_part(s,p,ilevel,action_part)
   use amr_parameters, only: ndim, fourtondim
   use pm_parameters
   use pm_commons, only: part_t
-  use oct_commons, only: oct
   use ramses_commons, only: ramses_t
   use nbors_utils
   use cache_commons
@@ -601,16 +594,15 @@ subroutine pcs_kick_drift_part(s,p,ilevel,action_part)
   real(kind=8),dimension(1:fourtondim)::vol
   integer,dimension(1:ndim,1:fourtondim)::ckey
   integer(kind=8),dimension(0:ndim)::hash_nbor
-  integer::ipart,icell,ind,idim
+  integer::ipart,icell,igrid,ind,idim
   real(kind=8)::xll,xl,xr,xrr
   real(kind=8)::dx_loc,vol_loc,dteff
   real(kind=8)::gamma,norm2,fnorm,delta
   real(kind=8),dimension(1:ndim)::ff
   logical::ok_level
-  type(oct),pointer::gridp
   type(msg_three_realdp)::dummy_three_realdp
 
-  associate(r=>s%r,g=>s%g,m=>s%m)
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
   if(p%static)then
      ! We still need to set the particle levels correctly, even if they are not moved
@@ -625,9 +617,8 @@ subroutine pcs_kick_drift_part(s,p,ilevel,action_part)
   vol_loc=dx_loc**ndim
 
   ! Open read-only cache
-  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-       hilbert=m%domain, pack_size=storage_size(dummy_three_realdp)/32,&
-       pack=pack_fetch_kick,unpack=unpack_fetch_kick)
+  call open_cache(mdl, m, pack_size=storage_size(dummy_three_realdp)/32, &
+       pack=pack_fetch_kick, unpack=unpack_fetch_kick)
 
   ! Loop over particles
   do ipart=p%headp(ilevel),p%tailp(ilevel)
@@ -675,10 +666,10 @@ subroutine pcs_kick_drift_part(s,p,ilevel,action_part)
      do ind=1,fourtondim
         hash_nbor(1:ndim)=ckey(1:ndim,ind)
         ! Get parent cell at level ilevel using read-only cache
-        call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+        call get_parent_cell(s,hash_nbor,igrid,icell,flush_cache=.false.,fetch_cache=.true.)
 #ifdef GRAV
-        if(associated(gridp))then
-           ff(1:ndim)=ff(1:ndim)+gridp%f(icell,1:ndim)*vol(ind)
+        if(igrid>0)then
+           ff(1:ndim)=ff(1:ndim)+m%f(icell,1:ndim,igrid)*vol(ind)
         end if
 #endif
      end do
@@ -745,7 +736,7 @@ subroutine pcs_kick_drift_part(s,p,ilevel,action_part)
   end do
   ! End loop over particles
 
-  call close_cache(s,m%grid_dict)
+  call close_cache(mdl)
 
   ! Periodic boundary conditions
   if(action_part==action_kick_drift)then
@@ -766,11 +757,12 @@ end subroutine pcs_kick_drift_part
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine pack_fetch_kick(grid,msg_size,msg_array)
+subroutine pack_fetch_kick(mesh,igrid,msg_size,msg_array)
   use amr_parameters, only: twotondim
-  use amr_commons, only: oct
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_three_realdp
-  type(oct)::grid
+  type(mesh_t)::mesh
+  integer::igrid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
 
@@ -779,9 +771,9 @@ subroutine pack_fetch_kick(grid,msg_size,msg_array)
 
 #ifdef GRAV
   do ind=1,twotondim
-     msg%realdp_phi(ind)=grid%f(ind,1)
-     msg%realdp_phi_old(ind)=grid%f(ind,2)
-     msg%realdp_dis(ind)=grid%f(ind,3)
+     msg%realdp_phi(ind)=mesh%f(ind,1,igrid)
+     msg%realdp_phi_old(ind)=mesh%f(ind,2,igrid)
+     msg%realdp_dis(ind)=mesh%f(ind,3,igrid)
   end do
 #endif
 
@@ -792,11 +784,12 @@ end subroutine pack_fetch_kick
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine unpack_fetch_kick(grid,msg_size,msg_array,hash_key)
-  use amr_parameters, only: ndim,twotondim
-  use amr_commons, only: oct
+subroutine unpack_fetch_kick(mesh,igrid,msg_size,msg_array,hash_key)
+  use amr_parameters, only: ndim, twotondim
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_three_realdp
-  type(oct)::grid
+  type(mesh_t)::mesh
+  integer::igrid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
   integer(kind=8),dimension(0:ndim)::hash_key
@@ -804,15 +797,15 @@ subroutine unpack_fetch_kick(grid,msg_size,msg_array,hash_key)
   integer::ind
   type(msg_three_realdp)::msg
 
-  grid%lev=hash_key(0)
-  grid%ckey(1:ndim)=hash_key(1:ndim)
+  mesh%grid(igrid)%lev=hash_key(0)
+  mesh%grid(igrid)%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
   
 #ifdef GRAV
   do ind=1,twotondim
-     grid%f(ind,1)=msg%realdp_phi(ind)
-     grid%f(ind,2)=msg%realdp_phi_old(ind)
-     grid%f(ind,3)=msg%realdp_dis(ind)
+     mesh%f(ind,1,igrid)=msg%realdp_phi(ind)
+     mesh%f(ind,2,igrid)=msg%realdp_phi_old(ind)
+     mesh%f(ind,3,igrid)=msg%realdp_dis(ind)
   end do
 #endif
 
@@ -823,22 +816,23 @@ end subroutine unpack_fetch_kick
 ! In general, different particle types may need different cache packs/unpacks
 !#########################################################################
 !#########################################################################
-subroutine pack_fetch_kick_trac(grid,msg_size,msg_array)
+subroutine pack_fetch_kick_trac(mesh,igrid,msg_size,msg_array)
   use amr_parameters, only: twotondim, ndim
   use hydro_parameters, only: nvar
-  use amr_commons, only: oct
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_nvar_realdp
-  type(oct)::grid
+  type(mesh_t)::mesh
+  integer::igrid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
 
-  integer::ind,ivar
+  integer::ind, ivar
   type(msg_nvar_realdp)::msg
 
 #ifdef HYDRO
   do ivar=1,nvar
      do ind=1,twotondim
-        msg%realdp_hydro(ind,ivar)=grid%uold(ind,ivar)
+        msg%realdp_hydro(ind,ivar)=mesh%uold(ind,ivar,igrid)
      end do
   end do
 #endif
@@ -848,26 +842,27 @@ subroutine pack_fetch_kick_trac(grid,msg_size,msg_array)
 end subroutine pack_fetch_kick_trac
 !#########################################################################
 !#########################################################################
-subroutine unpack_fetch_kick_trac(grid,msg_size,msg_array,hash_key)
-  use amr_parameters, only: ndim,twotondim
+subroutine unpack_fetch_kick_trac(mesh,igrid,msg_size,msg_array,hash_key)
+  use amr_parameters, only: ndim, twotondim
   use hydro_parameters, only: nvar
-  use amr_commons, only: oct
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_nvar_realdp
-  type(oct)::grid
+  type(mesh_t)::mesh
+  integer::igrid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
   integer(kind=8),dimension(0:ndim)::hash_key
   integer::ind,ivar
   type(msg_nvar_realdp)::msg
 
-  grid%lev=hash_key(0)
-  grid%ckey(1:ndim)=hash_key(1:ndim)
+  mesh%grid(igrid)%lev=hash_key(0)
+  mesh%grid(igrid)%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
-  
+
 #ifdef HYDRO
   do ivar=1,nvar
      do ind=1,twotondim
-        grid%uold(ind,ivar)=msg%realdp_hydro(ind,ivar)
+        mesh%uold(ind,ivar,igrid)=msg%realdp_hydro(ind,ivar)
      end do
   end do
 #endif
@@ -875,43 +870,44 @@ subroutine unpack_fetch_kick_trac(grid,msg_size,msg_array,hash_key)
 end subroutine unpack_fetch_kick_trac
 !#########################################################################
 !#########################################################################
-subroutine pack_fetch_kick_dust(grid,msg_size,msg_array)
+subroutine pack_fetch_kick_dust(mesh,igrid,msg_size,msg_array)
   use amr_parameters, only: twotondim
   use hydro_parameters, only: nvar
-  use amr_commons, only: oct
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_large_realdp
-  type(oct)::grid
+  type(mesh_t)::mesh
+  integer::igrid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
 
-  integer::ind,ivar
+  integer::ind, ivar
   type(msg_large_realdp)::msg
 
 #ifdef HYDRO
   do ind=1,twotondim
      do ivar=1,nvar
-        msg%realdp_hydro(ind,ivar)=grid%uold(ind,ivar)
+        msg%realdp_hydro(ind,ivar)=mesh%uold(ind,ivar,igrid)
      end do
   end do
 #endif
 #ifdef GRAV
   do ind=1,twotondim
-     msg%realdp_poisson(ind,1)=grid%f(ind,1)
-     msg%realdp_poisson(ind,2)=grid%f(ind,2)
-     msg%realdp_poisson(ind,3)=grid%f(ind,3)
+     msg%realdp_poisson(ind,1)=mesh%f(ind,1,igrid)
+     msg%realdp_poisson(ind,2)=mesh%f(ind,2,igrid)
+     msg%realdp_poisson(ind,3)=mesh%f(ind,3,igrid)
   end do
 #endif
 #ifdef RT
   do ind=1,twotondim
      do ivar=1,nrtvar
-        msg%realdp_rt(ind,ivar)=grid%rtuold(ind,ivar)
+        msg%realdp_rt(ind,ivar)=mesh%rtuold(ind,ivar,igrid)
      end do
   end do
 #endif
 #ifdef MHD
   do ivar=1,6
      do ind=1,twotondim
-        msg%realdp_mhd(ind,ivar)=grid%bold(ind,ivar)
+        msg%realdp_mhd(ind,ivar)=mesh%bold(ind,ivar,igrid)
      end do
   end do
 #endif
@@ -920,12 +916,13 @@ subroutine pack_fetch_kick_dust(grid,msg_size,msg_array)
 end subroutine pack_fetch_kick_dust
 !#########################################################################
 !#########################################################################
-subroutine unpack_fetch_kick_dust(grid,msg_size,msg_array,hash_key)
-  use amr_parameters, only: ndim,twotondim
+subroutine unpack_fetch_kick_dust(mesh,igrid,msg_size,msg_array,hash_key)
+  use amr_parameters, only: ndim, twotondim
   use hydro_parameters, only: nvar
-  use amr_commons, only: oct
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_large_realdp
-  type(oct)::grid
+  type(mesh_t)::mesh
+  integer::igrid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
   integer(kind=8),dimension(0:ndim)::hash_key
@@ -933,35 +930,35 @@ subroutine unpack_fetch_kick_dust(grid,msg_size,msg_array,hash_key)
   integer::ind,ivar
   type(msg_large_realdp)::msg
 
-  grid%lev=hash_key(0)
-  grid%ckey(1:ndim)=hash_key(1:ndim)
+  mesh%grid(igrid)%lev=hash_key(0)
+  mesh%grid(igrid)%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
 
 #ifdef HYDRO
   do ind=1,twotondim
      do ivar=1,nvar
-        grid%uold(ind,ivar)=msg%realdp_hydro(ind,ivar)
+        mesh%uold(ind,ivar,igrid)=msg%realdp_hydro(ind,ivar)
      end do
   end do
 #endif
 #ifdef GRAV
   do ind=1,twotondim
-     grid%f(ind,1)=msg%realdp_poisson(ind,1)
-     grid%f(ind,2)=msg%realdp_poisson(ind,2)
-     grid%f(ind,3)=msg%realdp_poisson(ind,3)
+     mesh%f(ind,1,igrid)=msg%realdp_poisson(ind,1)
+     mesh%f(ind,2,igrid)=msg%realdp_poisson(ind,2)
+     mesh%f(ind,3,igrid)=msg%realdp_poisson(ind,3)
   end do
 #endif
 #ifdef RT
   do ind=1,twotondim
      do ivar=1,nrtvar
-        grid%rtuold(ind,ivar)=msg%realdp_rt(ind,ivar)
+        mesh%rtuold(ind,ivar,igrid)=msg%realdp_rt(ind,ivar)
      end do
   end do
 #endif
 #ifdef MHD
   do ivar=1,6
      do ind=1,twotondim
-        grid%bold(ind,ivar)=msg%realdp_mhd(ind,ivar)
+        mesh%bold(ind,ivar,igrid)=msg%realdp_mhd(ind,ivar)
      end do
   end do
 #endif
@@ -975,7 +972,6 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
   use amr_parameters, only: ndim, twotondim
   use pm_parameters
   use pm_commons, only: part_t
-  use oct_commons, only: oct
   use ramses_commons, only: ramses_t
   use nbors_utils
   use cache_commons
@@ -990,24 +986,26 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
   integer,dimension(1:ndim)::ir2,il2
   real(kind=8),dimension(1:twotondim)::vol,vol2
   integer,dimension(1:ndim,1:twotondim)::ckey,ckey2
-  integer::icell,icell2
+  integer::icell,icell2,igrid
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer::ipart,ind,idim
   real(kind=8)::dx_loc,vol_loc
   real(kind=8),dimension(1:ndim)::ff,v_pred
-  type(oct),pointer :: gridp
   logical :: ok_level
   type(msg_three_realdp)::dummy_three_realdp
   type(msg_nvar_realdp)::dummy_nvar_realdp
-  associate(r=>s%r,g=>s%g,m=>s%m)
+
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
+
   if(p%static)return
+  if (p%type/=TRAC_TYPE) return
+
   dx_loc=r%boxlen/2**ilevel
   vol_loc=dx_loc**ndim
   if (p%type/=TRAC_TYPE) return
   ! Tracer hydro cache (uold only)
-  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-                     hilbert=m%domain, pack_size=storage_size(dummy_nvar_realdp)/32,&
-                     pack=pack_fetch_kick_trac,unpack=unpack_fetch_kick_trac)
+  call open_cache(mdl, m, pack_size=storage_size(dummy_nvar_realdp)/32, &
+       pack=pack_fetch_kick_trac, unpack=unpack_fetch_kick_trac)
   do ipart=p%headp(ilevel),p%tailp(ilevel)
      ! Position in cell units at current level
      do idim=1,ndim
@@ -1040,10 +1038,10 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
      hash_nbor(0)=ilevel+1
      do ind=1,twotondim
         hash_nbor(1:ndim)=ckey(1:ndim,ind)
-        call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+        call get_parent_cell(s,hash_nbor,igrid,icell,flush_cache=.false.,fetch_cache=.true.)
 #ifdef HYDRO
-        if(associated(gridp))then
-           ff(1:ndim)=ff(1:ndim)+gridp%uold(icell,2:ndim+1)/max(gridp%uold(icell,1), r%smallr)*vol(ind)
+        if(igrid>0)then
+           ff(1:ndim)=ff(1:ndim)+m%uold(icell,2:ndim+1,igrid)/max(m%uold(icell,1,igrid),r%smallr)*vol(ind)
         else
            ok_level=.false.
         end if
@@ -1072,10 +1070,10 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
         hash_nbor(0)=ilevel
         do ind=1,twotondim
            hash_nbor(1:ndim)=ckey(1:ndim,ind)
-           call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+           call get_parent_cell(s,hash_nbor,igrid,icell,flush_cache=.false.,fetch_cache=.true.)
 #ifdef HYDRO
-           if(associated(gridp))then
-              ff(1:ndim)=ff(1:ndim)+gridp%uold(icell,2:ndim+1)/max(gridp%uold(icell,1), r%smallr)*vol(ind)
+           if(igrid>0)then
+              ff(1:ndim)=ff(1:ndim)+m%uold(icell,2:ndim+1,igrid)/max(m%uold(icell,1,igrid),r%smallr)*vol(ind)
            end if
 #endif
         end do
@@ -1125,10 +1123,10 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
         hash_nbor(0)=ilevel+1
         do ind=1,twotondim
            hash_nbor(1:ndim)=ckey2(1:ndim,ind)
-           call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
+           call get_parent_cell(s,hash_nbor,igrid,icell2,flush_cache=.false.,fetch_cache=.true.)
 #ifdef HYDRO
-           if(associated(gridp))then
-              ff(1:ndim)=ff(1:ndim)+gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)*vol2(ind)
+           if(igrid>0)then
+              ff(1:ndim)=ff(1:ndim)+m%uold(icell2,2:ndim+1,igrid)/max(m%uold(icell2,1,igrid),r%smallr)*vol2(ind)
            else
               ok_level=.false.
            end if
@@ -1157,10 +1155,10 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
            hash_nbor(0)=ilevel
            do ind=1,twotondim
               hash_nbor(1:ndim)=ckey2(1:ndim,ind)
-              call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
+              call get_parent_cell(s,hash_nbor,igrid,icell2,flush_cache=.false.,fetch_cache=.true.)
 #ifdef HYDRO
-              if(associated(gridp))then
-                 ff(1:ndim)=ff(1:ndim)+gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)*vol2(ind)
+              if(igrid>0)then
+                 ff(1:ndim)=ff(1:ndim)+m%uold(icell2,2:ndim+1,igrid)/max(m%uold(icell2,1,igrid),r%smallr)*vol2(ind)
               end if
 #endif
            end do
@@ -1170,8 +1168,7 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
         p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
      endif
   end do
-  call close_cache(s,m%grid_dict)
-  
+  call close_cache(mdl)
   if(action_part==action_kick_drift)then
      do ipart=p%headp(ilevel),p%tailp(ilevel)
         do idim=1,ndim
@@ -1181,7 +1178,7 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
            endif
         end do
      end do
-   end if
+  end if
   end associate
 end subroutine cic_trace_gas_part
 
@@ -1189,7 +1186,6 @@ subroutine tsc_trace_gas_part(s,p,ilevel,action_part)
   use amr_parameters, only: ndim, threetondim
   use pm_parameters
   use pm_commons, only: part_t
-  use oct_commons, only: oct
   use ramses_commons, only: ramses_t
   use nbors_utils
   use cache_commons
@@ -1206,21 +1202,22 @@ subroutine tsc_trace_gas_part(s,p,ilevel,action_part)
   real(kind=8),dimension(1:threetondim)::vol,vol2
   integer,dimension(1:ndim,1:threetondim)::ckey,ckey2
   integer(kind=8),dimension(0:ndim)::hash_nbor
-  integer::ipart,icell,icell2,ind,idim
+  integer::ipart,icell,icell2,igrid,ind,idim
   real(kind=8)::xl,xc,xr
   real(kind=8)::dx_loc
   real(kind=8),dimension(1:ndim)::ff,v_pred
-  type(oct),pointer::gridp
   logical::ok_level
   type(msg_three_realdp)::dummy_three_realdp
   type(msg_nvar_realdp)::dummy_nvar_realdp
-  associate(r=>s%r,g=>s%g,m=>s%m)
+
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
+
   if(p%static)return
   if (p%type/=TRAC_TYPE) return
+
   dx_loc=r%boxlen/2**ilevel
-  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-                     hilbert=m%domain, pack_size=storage_size(dummy_nvar_realdp)/32,&
-                     pack=pack_fetch_kick_trac,unpack=unpack_fetch_kick_trac)
+  call open_cache(mdl, m, pack_size=storage_size(dummy_nvar_realdp)/32, &
+       pack=pack_fetch_kick_trac, unpack=unpack_fetch_kick_trac)
   do ipart=p%headp(ilevel),p%tailp(ilevel)
      do idim=1,ndim
         x(idim)=(p%xp(ipart,idim)+m%skip(idim))/dx_loc
@@ -1254,10 +1251,10 @@ subroutine tsc_trace_gas_part(s,p,ilevel,action_part)
      ff(1:ndim)=0.0
      do ind=1,threetondim
         hash_nbor(1:ndim)=ckey(1:ndim,ind)
-        call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+        call get_parent_cell(s,hash_nbor,igrid,icell,flush_cache=.false.,fetch_cache=.true.)
 #ifdef HYDRO
-        if(associated(gridp))then
-           ff(1:ndim)=ff(1:ndim)+gridp%uold(icell,2:ndim+1)/max(gridp%uold(icell,1), r%smallr)*vol(ind)
+        if(igrid>0)then
+           ff(1:ndim)=ff(1:ndim)+m%uold(icell,2:ndim+1,igrid)/max(m%uold(icell,1,igrid),r%smallr)*vol(ind)
         end if
 #endif
      end do
@@ -1306,10 +1303,10 @@ subroutine tsc_trace_gas_part(s,p,ilevel,action_part)
         ff(1:ndim)=0.0
         do ind=1,threetondim
            hash_nbor(1:ndim)=ckey2(1:ndim,ind)
-           call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
+           call get_parent_cell(s,hash_nbor,igrid,icell2,flush_cache=.false.,fetch_cache=.true.)
 #ifdef HYDRO
-           if(associated(gridp))then
-              ff(1:ndim)=ff(1:ndim)+gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)*vol2(ind)
+           if(igrid>0)then
+              ff(1:ndim)=ff(1:ndim)+m%uold(icell2,2:ndim+1,igrid)/max(m%uold(icell2,1,igrid),r%smallr)*vol2(ind)
            end if
 #endif
         end do
@@ -1317,7 +1314,7 @@ subroutine tsc_trace_gas_part(s,p,ilevel,action_part)
         p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
      endif
   end do
-  call close_cache(s,m%grid_dict)
+  call close_cache(mdl)
   if(action_part==action_kick_drift)then
      do ipart=p%headp(ilevel),p%tailp(ilevel)
         do idim=1,ndim
@@ -1335,7 +1332,6 @@ subroutine pcs_trace_gas_part(s,p,ilevel,action_part)
   use amr_parameters, only: ndim, fourtondim
   use pm_parameters
   use pm_commons, only: part_t
-  use oct_commons, only: oct
   use ramses_commons, only: ramses_t
   use nbors_utils
   use cache_commons
@@ -1352,20 +1348,21 @@ subroutine pcs_trace_gas_part(s,p,ilevel,action_part)
   real(kind=8),dimension(1:fourtondim)::vol,vol2
   integer,dimension(1:ndim,1:fourtondim)::ckey,ckey2
   integer(kind=8),dimension(0:ndim)::hash_nbor
-  integer::ipart,icell,icell2,ind,idim
+  integer::ipart,icell,icell2,igrid,ind,idim
   real(kind=8)::xll,xl,xr,xrr
   real(kind=8)::dx_loc
   real(kind=8),dimension(1:ndim)::ff,v_pred
-  type(oct),pointer::gridp
   type(msg_large_realdp)::dummy_large_realdp
   type(msg_nvar_realdp)::dummy_nvar_realdp
-  associate(r=>s%r,g=>s%g,m=>s%m)
+
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
+
   if(p%static)return
   if (p%type/=TRAC_TYPE) return
+
   dx_loc=r%boxlen/2**ilevel
-  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-       hilbert=m%domain, pack_size=storage_size(dummy_nvar_realdp)/32,&
-       pack=pack_fetch_kick_trac,unpack=unpack_fetch_kick_trac)
+  call open_cache(mdl, m, pack_size=storage_size(dummy_nvar_realdp)/32, &
+       pack=pack_fetch_kick_trac, unpack=unpack_fetch_kick_trac)
   do ipart=p%headp(ilevel),p%tailp(ilevel)
      do idim=1,ndim
         x(idim)=(p%xp(ipart,idim)+m%skip(idim))/dx_loc
@@ -1404,10 +1401,10 @@ subroutine pcs_trace_gas_part(s,p,ilevel,action_part)
      ff(1:ndim)=0.0
      do ind=1,fourtondim
         hash_nbor(1:ndim)=ckey(1:ndim,ind)
-        call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+        call get_parent_cell(s,hash_nbor,igrid,icell,flush_cache=.false.,fetch_cache=.true.)
 #ifdef HYDRO
-        if(associated(gridp))then
-           ff(1:ndim)=ff(1:ndim)+gridp%uold(icell,2:ndim+1)/max(gridp%uold(icell,1), r%smallr)*vol(ind)
+        if(igrid>0)then
+           ff(1:ndim)=ff(1:ndim)+m%uold(icell,2:ndim+1,igrid)/max(m%uold(icell,1,igrid),r%smallr)*vol(ind)
         end if
 #endif
      end do
@@ -1461,10 +1458,10 @@ subroutine pcs_trace_gas_part(s,p,ilevel,action_part)
         ff(1:ndim)=0.0
         do ind=1,fourtondim
            hash_nbor(1:ndim)=ckey2(1:ndim,ind)
-           call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
+           call get_parent_cell(s,hash_nbor,igrid,icell2,flush_cache=.false.,fetch_cache=.true.)
 #ifdef HYDRO
-           if(associated(gridp))then
-              ff(1:ndim)=ff(1:ndim)+gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)*vol2(ind)
+           if(igrid>0)then
+              ff(1:ndim)=ff(1:ndim)+m%uold(icell2,2:ndim+1,igrid)/max(m%uold(icell2,1,igrid),r%smallr)*vol2(ind)
            end if
 #endif
         end do
@@ -1472,7 +1469,7 @@ subroutine pcs_trace_gas_part(s,p,ilevel,action_part)
         p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
      endif
   end do
-  call close_cache(s,m%grid_dict)
+  call close_cache(mdl)
   if(action_part==action_kick_drift)then
      do ipart=p%headp(ilevel),p%tailp(ilevel)
         do idim=1,ndim
@@ -1494,7 +1491,6 @@ subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
   use hydro_parameters, only: nener
   use pm_parameters
   use pm_commons, only: part_t
-  use oct_commons, only: oct
   use ramses_commons, only: ramses_t
   use nbors_utils
   use cache_commons
@@ -1511,7 +1507,7 @@ subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
   integer,dimension(1:ndim)::ir2,il2
   real(kind=8),dimension(1:twotondim)::vol,vol2
   integer,dimension(1:ndim,1:twotondim)::ckey,ckey2
-  integer::icell,icell2
+  integer::icell,icell2,igrid
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer::ipart,ind,idim,irad
   real(kind=8)::dx_loc,vol_loc
@@ -1524,21 +1520,21 @@ subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
   real(kind=8)::rho_gas,c_sound,eint,coeff,wdrift2
   real(kind=8)::nu_stop,dens,etot,ekin,erad,cs2,pi=4.0d0*atan(1.0d0)
   real(kind=8),dimension(1:ndim)::what,wdrift ! drift velocity unit vector
-  type(oct),pointer :: gridp
   logical :: ok_level
   type(msg_large_realdp)::dummy_large_realdp
 
-  associate(r=>s%r,g=>s%g,m=>s%m)
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
+
   if(p%static)return
+  if (p%type/=DUST_TYPE) return
+
   dx_loc=r%boxlen/2**ilevel
   vol_loc=dx_loc**ndim
   if (p%type/=DUST_TYPE) return
   coeff=9.0d0*pi*r%gamma/128.0d0
   ! Dust hydro+gravity cache
-  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-                     hilbert=m%domain, pack_size=storage_size(dummy_large_realdp)/32,&
-                     pack=pack_fetch_kick_dust,unpack=unpack_fetch_kick_dust)
-
+  call open_cache(mdl, m, pack_size=storage_size(dummy_large_realdp)/32, &
+       pack=pack_fetch_kick_dust, unpack=unpack_fetch_kick_dust)
 #if NDIM==3
   do ipart=p%headp(ilevel),p%tailp(ilevel)
      ! Position in cell units and wrap
@@ -1611,32 +1607,32 @@ subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
         hash_nbor(0)=ilevel+1
         do ind=1,twotondim
            hash_nbor(1:ndim)=ckey2(1:ndim,ind)
-           call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
+           call get_parent_cell(s,hash_nbor,igrid,icell2,flush_cache=.false.,fetch_cache=.true.)
 #ifdef HYDRO
-           if(associated(gridp))then
+           if(igrid>0)then
 #ifdef GRAV
-              ff(1:ndim)=ff(1:ndim)+gridp%f(icell2,1:ndim)*vol2(ind)
+              ff(1:ndim)=ff(1:ndim)+m%f(icell2,1:ndim,igrid)*vol2(ind)
 #endif
-              rho_gas = rho_gas + gridp%uold(icell2,1)*vol2(ind)
-              uu(1:ndim)=uu(1:ndim)+gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)*vol2(ind)
+              rho_gas = rho_gas + m%uold(icell2,1,igrid)*vol2(ind)
+              uu(1:ndim)=uu(1:ndim)+m%uold(icell2,2:ndim+1,igrid)/max(m%uold(icell2,1,igrid),r%smallr)*vol2(ind)
 #ifdef MHD
-              bb(1:3)=bb(1:3)+0.5d0*(gridp%bold(icell2,1:3)+gridp%bold(icell2,4:6))*vol2(ind)
+              bb(1:3)=bb(1:3)+0.5d0*(m%bold(icell2,1:3,igrid)+m%bold(icell2,4:6,igrid))*vol2(ind)
 #endif
-              dens = max(dble(gridp%uold(icell2,1)), r%smallr)
-              etot = gridp%uold(icell2,5)
+              dens = max(dble(m%uold(icell2,1,igrid)), r%smallr)
+              etot = m%uold(icell2,5,igrid)
               ekin = 0.0d0
               do idim=1,ndim
-                 ekin = ekin + 0.5d0 * gridp%uold(icell2,1+idim)**2 / dens
+                 ekin = ekin + 0.5d0 * m%uold(icell2,1+idim,igrid)**2 / dens
               end do
               erad = 0.0d0
 #if NENER>0
               do irad=1,nener
-                 erad = erad + gridp%uold(icell2,5+irad)
+                 erad = erad + m%uold(icell2,5+irad,igrid)
               end do
 #endif
 #ifdef MHD
               do idim=1,3
-                 emag = emag + 0.125d0*(gridp%bold(icell2,idim)+gridp%bold(icell2,ndim+idim))**2*vol2(ind)
+                 emag = emag + 0.125d0*(m%bold(icell2,idim,igrid)+m%bold(icell2,3+idim,igrid))**2*vol2(ind)
               end do
               eint = eint - emag*vol2(ind)
 #endif
@@ -1668,8 +1664,7 @@ subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
      endif
   end do
 #endif
-  call close_cache(s,m%grid_dict)
-  
+  call close_cache(mdl)
   end associate
 end subroutine cic_kick_drift_dust
 
@@ -1678,7 +1673,6 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
   use hydro_parameters, only: nener
   use pm_parameters
   use pm_commons, only: part_t
-  use oct_commons, only: oct
   use ramses_commons, only: ramses_t
   use nbors_utils
   use cache_commons
@@ -1695,7 +1689,7 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
   real(kind=8),dimension(1:threetondim)::vol,vol2
   integer,dimension(1:ndim,1:threetondim)::ckey,ckey2
   integer(kind=8),dimension(0:ndim)::hash_nbor
-  integer::ipart,icell,icell2,ind,idim,irad
+  integer::ipart,icell,icell2,igrid,ind,idim,irad
   real(kind=8)::xl,xc,xr
   real(kind=8)::dx_loc
   real(kind=8),dimension(1:ndim)::ff,uu,v_pred,wdrift
@@ -1705,20 +1699,18 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
   integer :: ii
   character(LEN=80)::filename,fileloc
   character(LEN=5)::nchar
-  type(oct),pointer::gridp
   type(msg_large_realdp)::dummy_large_realdp
 
-  associate(r=>s%r,g=>s%g,m=>s%m)
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
+
   if(p%static)return
   if (p%type/=DUST_TYPE) return
+
   dx_loc=r%boxlen/2**ilevel
   pi=4.0d0*atan(1.0d0)
   coeff=9.0d0*pi*r%gamma/128.0d0
-
-  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-       hilbert=m%domain, pack_size=storage_size(dummy_large_realdp)/32,&
-       pack=pack_fetch_kick_dust,unpack=unpack_fetch_kick_dust)
-
+  call open_cache(mdl, m, pack_size=storage_size(dummy_large_realdp)/32, &
+       pack=pack_fetch_kick_dust, unpack=unpack_fetch_kick_dust)
 #if NDIM==3
   do ipart=p%headp(ilevel),p%tailp(ilevel)
      ! particle position in cell units and periodic wrap
@@ -1780,38 +1772,38 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
         hash_nbor(0)=ilevel+1
         do ind=1,threetondim
            hash_nbor(1:ndim)=ckey2(1:ndim,ind)
-           call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
+           call get_parent_cell(s,hash_nbor,igrid,icell2,flush_cache=.false.,fetch_cache=.true.)
 #ifdef HYDRO
-           if(associated(gridp))then
+           if(igrid>0)then
 #ifdef GRAV   
-              ff(1:ndim)=ff(1:ndim)+gridp%f(icell2,1:ndim)*vol2(ind)
+              ff(1:ndim)=ff(1:ndim)+m%f(icell2,1:ndim,igrid)*vol2(ind)
 #endif
-              rho_gas = rho_gas + gridp%uold(icell2,1)*vol2(ind)
-              uu(1:ndim)=uu(1:ndim)+gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)*vol2(ind)
+              rho_gas = rho_gas + m%uold(icell2,1,igrid)*vol2(ind)
+              uu(1:ndim)=uu(1:ndim)+m%uold(icell2,2:ndim+1,igrid)/max(m%uold(icell2,1,igrid),r%smallr)*vol2(ind)
 #ifdef MHD
-              bb(1:3)=bb(1:3)+0.5d0*(gridp%bold(icell2,1:3)+gridp%bold(icell2,4:6))*vol2(ind)
+              bb(1:3)=bb(1:3)+0.5d0*(m%bold(icell2,1:3,igrid)+m%bold(icell2,4:6,igrid))*vol2(ind)
 #endif
-              dens = max(dble(gridp%uold(icell2,1)), r%smallr)
-              etot = gridp%uold(icell2,5)
+              dens = max(dble(m%uold(icell2,1,igrid)), r%smallr)
+              etot = m%uold(icell2,5,igrid)
               ekin = 0.0d0
               do idim=1,ndim
-                 ekin = ekin + 0.5d0 * gridp%uold(icell2,1+idim)**2 / dens
+                 ekin = ekin + 0.5d0 * m%uold(icell2,1+idim,igrid)**2 / dens
               end do
               erad = 0.0d0
 #if NENER>0
               do irad=1,nener
-                 erad = erad + gridp%uold(icell2,5+irad)
+                 erad = erad + m%uold(icell2,5+irad,igrid)
               end do
 #endif
 #ifdef MHD
               do idim=1,3
-                 emag = emag + 0.125d0*(gridp%bold(icell2,idim)+gridp%bold(icell2,ndim+idim))**2*vol2(ind)
+                 emag = emag + 0.125d0*(m%bold(icell2,idim,igrid)+m%bold(icell2,3+idim,igrid))**2*vol2(ind)
               end do
 #endif
               eint = eint + (etot - ekin - erad - emag) * vol2(ind)
            end if
 
-        ! Need to add MHD support here
+           ! Need to add MHD support here
 #endif
         end do
         cs2 = r%gamma * (r%gamma-1.0d0) * max(eint, r%smallc**2) / max(rho_gas, r%smallr)
@@ -1836,26 +1828,26 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
         p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
         ! Trajectory output for selected particles
         if(s%r%ntrajectories>0)then
-         do ii=1,s%r%ntrajectories
-            if(s%r%trajectories(ii)==p%idp(ipart))then
-               call title(g%myid,nchar)
-               filename='trajectory.dat'
-               fileloc=TRIM(filename)//TRIM(nchar)
-               open(25+g%myid,file=fileloc,status='unknown',access='append')
-               write(25+g%myid,'(1PE15.7,1X,I12,1X,6(1PE15.7,1X),1PE15.7,1X,1PE15.7)') &
-                    g%t, p%idp(ipart), &
-                    p%xp(ipart,1),p%xp(ipart,2),p%xp(ipart,3), &
-                    p%vp(ipart,1),p%vp(ipart,2),p%vp(ipart,3), &
-                    p%charge(ipart), p%size(ipart)
-               close(25+g%myid)
-               exit
-            endif
-         end do
-      endif
+           do ii=1,s%r%ntrajectories
+              if(s%r%trajectories(ii)==p%idp(ipart))then
+                 call title(g%myid,nchar)
+                 filename='trajectory.dat'
+                 fileloc=TRIM(filename)//TRIM(nchar)
+                 open(25+g%myid,file=fileloc,status='unknown',access='append')
+                 write(25+g%myid,'(1PE15.7,1X,I12,1X,6(1PE15.7,1X),1PE15.7,1X,1PE15.7)') &
+                      g%t, p%idp(ipart), &
+                      p%xp(ipart,1),p%xp(ipart,2),p%xp(ipart,3), &
+                      p%vp(ipart,1),p%vp(ipart,2),p%vp(ipart,3), &
+                      p%charge(ipart), p%size(ipart)
+                 close(25+g%myid)
+                 exit
+              endif
+           end do
+        endif
      endif
   end do
 #endif
-  call close_cache(s,m%grid_dict)
+  call close_cache(mdl)
   if(action_part==action_kick_drift)then
      do ipart=p%headp(ilevel),p%tailp(ilevel)
         do idim=1,ndim
@@ -1872,7 +1864,6 @@ subroutine pcs_kick_drift_dust(s,p,ilevel,action_part)
   use hydro_parameters, only: nener
   use pm_parameters
   use pm_commons, only: part_t
-  use oct_commons, only: oct
   use ramses_commons, only: ramses_t
   use nbors_utils
   use cache_commons
@@ -1889,7 +1880,7 @@ subroutine pcs_kick_drift_dust(s,p,ilevel,action_part)
   real(kind=8),dimension(1:fourtondim)::vol,vol2
   integer,dimension(1:ndim,1:fourtondim)::ckey,ckey2
   integer(kind=8),dimension(0:ndim)::hash_nbor
-  integer::ipart,icell,icell2,ind,idim
+  integer::ipart,icell,icell2,igrid,ind,idim
   real(kind=8)::xll,xl,xr,xrr
   real(kind=8)::dx_loc
   real(kind=8),dimension(1:ndim)::ff,v_pred,uu,what,wdrift
@@ -1900,20 +1891,18 @@ subroutine pcs_kick_drift_dust(s,p,ilevel,action_part)
   real(kind=8)::rho_gas,c_sound,eint,coeff,wdrift2
   real(kind=8)::nu_stop,dens,etot,ekin,erad,cs2,pi
   integer::irad
-  type(oct),pointer::gridp
   type(msg_large_realdp)::dummy_large_realdp
 
-  associate(r=>s%r,g=>s%g,m=>s%m)
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
+
   if(p%static)return
   if (p%type/=DUST_TYPE) return
+
   dx_loc=r%boxlen/2**ilevel
   pi=4.0d0*atan(1.0d0)
   coeff=9.0d0*pi*r%gamma/128.0d0
-
-  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-       hilbert=m%domain, pack_size=storage_size(dummy_large_realdp)/32,&
-       pack=pack_fetch_kick_dust,unpack=unpack_fetch_kick_dust)
-
+  call open_cache(mdl, m, pack_size=storage_size(dummy_large_realdp)/32, &
+       pack=pack_fetch_kick_dust, unpack=unpack_fetch_kick_dust)
 #if NDIM==3
   do ipart=p%headp(ilevel),p%tailp(ilevel)
      do idim=1,ndim
@@ -1949,10 +1938,10 @@ subroutine pcs_kick_drift_dust(s,p,ilevel,action_part)
      ff(1:ndim)=0.0
      do ind=1,fourtondim
         hash_nbor(1:ndim)=ckey(1:ndim,ind)
-        call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+        call get_parent_cell(s,hash_nbor,igrid,icell,flush_cache=.false.,fetch_cache=.true.)
 #ifdef HYDRO
-        if(associated(gridp))then
-           ff(1:ndim)=ff(1:ndim)+gridp%uold(icell,2:ndim+1)/max(gridp%uold(icell,1), r%smallr)*vol(ind)
+        if(igrid>0)then
+           ff(1:ndim)=ff(1:ndim)+m%uold(icell,2:ndim+1,igrid)/max(m%uold(icell,1,igrid),r%smallr)*vol(ind)
         end if
 #endif
      end do
@@ -2008,32 +1997,32 @@ subroutine pcs_kick_drift_dust(s,p,ilevel,action_part)
 #endif
        do ind=1,fourtondim
           hash_nbor(1:ndim)=ckey2(1:ndim,ind)
-          call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
+          call get_parent_cell(s,hash_nbor,igrid,icell2,flush_cache=.false.,fetch_cache=.true.)
 #ifdef HYDRO
-          if(associated(gridp))then
+          if(igrid>0)then
 #ifdef GRAV
-             ff(1:ndim)=ff(1:ndim)+gridp%f(icell2,1:ndim)*vol2(ind)
+             ff(1:ndim)=ff(1:ndim)+m%f(icell2,1:ndim,igrid)*vol2(ind)
 #endif
-             rho_gas = rho_gas + gridp%uold(icell2,1)*vol2(ind)
-             uu(1:ndim)=uu(1:ndim)+gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)*vol2(ind)
+             rho_gas = rho_gas + m%uold(icell2,1,igrid)*vol2(ind)
+             uu(1:ndim)=uu(1:ndim)+m%uold(icell2,2:ndim+1,igrid)/max(m%uold(icell2,1,igrid), r%smallr)*vol2(ind)
 #ifdef MHD
-             bb(1:3)=bb(1:3)+0.5d0*(gridp%bold(icell2,1:3)+gridp%bold(icell2,4:6))*vol2(ind)
+             bb(1:3)=bb(1:3)+0.5d0*(m%bold(icell2,1:3,igrid)+m%bold(icell2,4:6,igrid))*vol2(ind)
 #endif
-             dens = max(dble(gridp%uold(icell2,1)), r%smallr)
-             etot = gridp%uold(icell2,5)
+             dens = max(dble(m%uold(icell2,1,igrid)),r%smallr)
+             etot = m%uold(icell2,5,igrid)
              ekin = 0.0d0
              do idim=1,ndim
-                ekin = ekin + 0.5d0 * gridp%uold(icell2,1+idim)**2 / dens
+                ekin = ekin + 0.5d0 * m%uold(icell2,1+idim,igrid)**2 / dens
              end do
              erad = 0.0d0
 #if NENER>0
              do irad=1,nener
-                erad = erad + gridp%uold(icell2,5+irad)
+                erad = erad + m%uold(icell2,5+irad,igrid)
              end do
 #endif
 #ifdef MHD
              do idim=1,3
-                emag = emag + 0.125d0*(gridp%bold(icell2,idim)+gridp%bold(icell2,ndim+idim))**2*vol2(ind)
+                emag = emag + 0.125d0*(m%bold(icell2,idim,igrid)+m%bold(icell2,3+idim,igrid))**2*vol2(ind)
              end do
              eint = eint - emag*vol2(ind)
 #endif
@@ -2062,7 +2051,7 @@ subroutine pcs_kick_drift_dust(s,p,ilevel,action_part)
     endif
   end do
 #endif
-  call close_cache(s,m%grid_dict)
+  call close_cache(mdl)
   if(action_part==action_kick_drift)then
      do ipart=p%headp(ilevel),p%tailp(ilevel)
         do idim=1,ndim
@@ -2073,7 +2062,6 @@ subroutine pcs_kick_drift_dust(s,p,ilevel,action_part)
   end if
   end associate
 end subroutine pcs_kick_drift_dust
-
 !#########################################################################
 !#########################################################################
 !#########################################################################

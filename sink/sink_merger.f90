@@ -139,7 +139,6 @@ contains
   !==============================================================================
   subroutine sink_id_deposition(s,p,ilevel,dx_loc,nBHnei) 
     use amr_parameters, only: ndim, twotondim
-    use amr_commons, only: oct
     use ramses_commons, only: ramses_t
     use pm_parameters
     use pm_commons, only: part_t
@@ -155,8 +154,7 @@ contains
 
     real(kind=8),dimension(1:ndim)::xcen
     integer(kind=8),dimension(0:ndim)::hash_nbor
-    integer::ipart,icelln,j
-    type(oct),pointer::gridn
+    integer::ipart,icelln,igridn,j
     
     real(kind=8),dimension(1:ndim,1:nBHnei)::xBHnei
     integer,dimension(1:ndim,1:nBHnei)::ckeynei
@@ -167,18 +165,16 @@ contains
 
 #ifdef HYDRO
 #if NDIM==3
-    associate(r=>s%r,g=>s%g,m=>s%m)
+    associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
     ! Set flag1 to max possible index
     do igrid=m%head(ilevel),m%tail(ilevel)
        do ind=1,twotondim
-          m%grid(igrid)%flag1(ind)=huge(1)
+          m%flag1(ind,igrid)=huge(1)
        end do
     end do
 
-    call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-         hilbert=m%domain,pack_size=storage_size(dummy_int4)/32,&
-         pack=pack_fetch_flag, unpack=unpack_fetch_flag,&
+    call open_cache(mdl, m, pack_size=storage_size(dummy_int4)/32, &
          init=init_flush_idsinkmin, flush=pack_flush_idsinkmin, combine=unpack_flush_idsinkmin)
 
     hash_nbor(0) = ilevel+1
@@ -197,20 +193,21 @@ contains
           if(vol(j) <= 0.0d0) cycle
 
           hash_nbor(1:ndim) = ckeynei(1:ndim,j)
-          call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.true.,fetch_cache=.false.)
+          call get_parent_cell(s,hash_nbor,igridn,icelln,flush_cache=.true.,fetch_cache=.false.)
 
-          if(.not.associated(gridn)) cycle
+          if(igridn==0)cycle
 
           weight = vol(j)
           if(weight > 0.0d0) then
              new_id = int(p%idp(ipart), kind=4)
-             if(new_id < gridn%flag1(icelln)) then
-                gridn%flag1(icelln) = new_id
+             if(new_id < m%flag1(icelln,igridn)) then
+                m%flag1(icelln,igridn) = new_id
              endif
           endif
        end do
     end do
-    call close_cache(s,m%grid_dict)
+
+    call close_cache(mdl)
 
     end associate
 #endif
@@ -220,46 +217,52 @@ contains
   !==============================================================================
   ! Cache initialization routines
   !==============================================================================
-  subroutine init_flush_idsinkmin(grid,hash_key)
-    use amr_parameters, only: ndim,twotondim
-    use amr_commons, only: oct
+  subroutine init_flush_idsinkmin(mesh,igrid,hash_key)
+    use amr_parameters, only: ndim, twotondim
+    use amr_commons, only: mesh_t
     use cache_commons, only: msg_int4
     implicit none
-    type(oct)::grid
+    type(mesh_t)::mesh
+    integer::igrid
     integer(kind=8),dimension(0:ndim)::hash_key
     integer::ind
-  
-    grid%lev=hash_key(0)
-    grid%ckey(1:ndim)=hash_key(1:ndim)
+
+    mesh%grid(igrid)%lev=hash_key(0)
+    mesh%grid(igrid)%ckey(1:ndim)=hash_key(1:ndim)
+
     do ind=1,twotondim
-       grid%flag1(ind)=huge(1)  ! Initialize all cells to large value
+       mesh%flag1(ind,igrid)=huge(1)  ! Initialize all cells to large value
     end do
+
   end subroutine init_flush_idsinkmin
 
-  subroutine pack_flush_idsinkmin(grid,msg_size,msg_array)
+  subroutine pack_flush_idsinkmin(mesh,igrid,msg_size,msg_array)
     use amr_parameters, only: twotondim
-    use amr_commons, only: oct
+    use amr_commons, only: mesh_t
     use cache_commons, only: msg_int4
     implicit none
-    type(oct)::grid
+    type(mesh_t)::mesh
+    integer::igrid
     integer::msg_size
     integer,dimension(1:msg_size),optional::msg_array
     integer::ind
     type(msg_int4)::msg
 
     do ind=1,twotondim
-       msg%int4(ind)=grid%flag1(ind)
+       msg%int4(ind)=mesh%flag1(ind,igrid)
     end do
-  
+
     msg_array=transfer(msg,msg_array)
+
   end subroutine pack_flush_idsinkmin
 
-  subroutine unpack_flush_idsinkmin(grid,msg_size,msg_array,hash_key)
+  subroutine unpack_flush_idsinkmin(mesh,igrid,msg_size,msg_array,hash_key)
     use amr_parameters, only: ndim,twotondim
-    use amr_commons, only: oct
+    use amr_commons, only: mesh_t
     use cache_commons, only: msg_int4
     implicit none
-    type(oct)::grid
+    type(mesh_t)::mesh
+    integer::igrid
     integer::msg_size
     integer,dimension(1:msg_size),optional::msg_array
     integer(kind=8),dimension(0:ndim)::hash_key
@@ -267,14 +270,15 @@ contains
     type(msg_int4)::msg
 
     msg=transfer(msg_array,msg)
-  
+
     do ind=1,twotondim
-       if(msg%int4(ind) < grid%flag1(ind)) then
-          grid%flag1(ind)=msg%int4(ind)  ! Take minimum sink ID
+       if(msg%int4(ind) < mesh%flag1(ind,igrid)) then
+          mesh%flag1(ind,igrid)=msg%int4(ind)  ! Take minimum sink ID
        endif
     end do
+
   end subroutine unpack_flush_idsinkmin
-  
+
   !==============================================================================
   ! Gather all collisions across MPI - FIXED VERSION
   !==============================================================================
@@ -655,8 +659,7 @@ contains
 
     real(kind=8),dimension(1:ndim)::xcen
     integer(kind=8),dimension(0:ndim)::hash_nbor
-    integer::ipart,icelln,j,my_id,neighbor_id
-    type(oct),pointer::gridn
+    integer::ipart,icelln,igridn,j,my_id,neighbor_id
 
     real(kind=8),dimension(1:ndim,1:nBHnei)::xBHnei
     integer,dimension(1:ndim,1:nBHnei)::ckeynei
@@ -665,7 +668,7 @@ contains
 
 #ifdef HYDRO
 #if NDIM==3
-    associate(r=>s%r,g=>s%g,m=>s%m)
+    associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
     if(s%r%accretion_type==0)return
 
@@ -674,9 +677,8 @@ contains
     n_local = 0
 
     hash_nbor(0) = ilevel+1
-    call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-         pack=pack_fetch_flag,unpack=unpack_fetch_flag,&
-         hilbert=m%domain,pack_size=storage_size(dummy_int4)/32)
+    call open_cache(mdl, m, pack_size=storage_size(dummy_int4)/32, &
+         pack=pack_fetch_flag, unpack=unpack_fetch_flag)
 
     do ipart = p%headp(r%nlevelmax), p%tailp(r%nlevelmax)
        my_id = p%idp(ipart)
@@ -694,10 +696,10 @@ contains
           if(vol(j) <= 0.0d0) cycle
 
           hash_nbor(1:ndim) = ckeynei(1:ndim,j)
-          call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.false.,fetch_cache=.true.)
+          call get_parent_cell(s,hash_nbor,igridn,icelln,flush_cache=.false.,fetch_cache=.true.)
 
-          if(associated(gridn)) then
-             neighbor_id = gridn%flag1(icelln)
+          if(igridn>0) then
+             neighbor_id = m%flag1(icelln,igridn)
 
              if(neighbor_id < my_id) then
                 n_local = n_local + 1
@@ -712,7 +714,7 @@ contains
        end do
     end do
 
-    call close_cache(s,m%grid_dict)
+    call close_cache(mdl)
 
     if(r%verbose .and. g%myid == 1)write(*,*)'Collected',n_local,'collision pairs'
 

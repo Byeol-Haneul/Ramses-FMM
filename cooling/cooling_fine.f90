@@ -115,13 +115,13 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
 
         ! Compute rho
         do i=1,nleaf
-           nH(i)=MAX(dble(m%grid(ind_leaf(i))%uold(ind,1)),r%smallr)
+           nH(i)=MAX(dble(m%uold(ind,1,ind_leaf(i))),r%smallr)
         end do
 
         ! Compute metallicity in solar units
         if(r%metal)then
            do i=1,nleaf
-              Zsolar(i)=m%grid(ind_leaf(i))%uold(ind,r%imetal)/nH(i)/0.02d0
+              Zsolar(i)=m%uold(ind,r%imetal,ind_leaf(i))/nH(i)/0.02d0
            end do
         else
            do i=1,nleaf
@@ -131,7 +131,7 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
 
         ! Total energy
         do i=1,nleaf
-           T2(i)=m%grid(ind_leaf(i))%uold(ind,5)
+           T2(i)=m%uold(ind,5,ind_leaf(i))
         end do
 
         ! Kinetic energy
@@ -140,7 +140,7 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
         end do
         do idim=1,3
            do i=1,nleaf
-              ekk(i)=ekk(i)+0.5d0*m%grid(ind_leaf(i))%uold(ind,idim+1)**2/nH(i)
+              ekk(i)=ekk(i)+0.5d0*m%uold(ind,idim+1,ind_leaf(i))**2/nH(i)
            end do
         end do
 
@@ -151,7 +151,7 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
 #if NENER>0
         do irad=1,nener
            do i=1,nleaf
-              err(i)=err(i)+m%grid(ind_leaf(i))%uold(ind,5+irad)
+              err(i)=err(i)+m%uold(ind,5+irad,ind_leaf(i))
            end do
         end do
 #endif
@@ -162,8 +162,8 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
 #ifdef MHD
         do idim=1,3
            do i=1,nleaf
-              emag(i)=emag(i)+0.125d0*(m%grid(ind_leaf(i))%bold(ind,idim) &
-                   &                  +m%grid(ind_leaf(i))%bold(ind,idim+3))**2
+              emag(i)=emag(i)+0.125d0*(m%bold(ind,idim,ind_leaf(i)) &
+                   &                  +m%bold(ind,idim+3,ind_leaf(i)))**2
            end do
         end do
 #endif
@@ -201,11 +201,11 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
            if (elements(ii)%atomic_number.gt.0) then
               do jj=1,elements(ii)%n_ions ! loop over ions
                  do i=1,nleaf !loop over leaf cells
-                    xion(ii,jj,i) = m%grid(ind_leaf(i))%uold(ind,r%iIons+counter) &
-                                   /m%grid(ind_leaf(i))%uold(ind,1)
+                    xion(ii,jj,i) = m%uold(ind,r%iIons+counter,ind_leaf(i)) &
+                                   /m%uold(ind,1,ind_leaf(i))
                     if (jj.eq.1) then
                        ! This gives us a number density [Atoms/cm^3]
-                       nElement(ii,i) = m%grid(ind_leaf(i))%uold(ind,r%ichem+e_counter) &
+                       nElement(ii,i) = m%uold(ind,r%ichem+e_counter,ind_leaf(i)) &
                                        *scale_nH / elements(ii)%atomic_mass
                     end if
                  end do ! end loop over leaf cells
@@ -218,8 +218,8 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
         ! deal with molecules separately
         if (elements(1)%atomic_number.gt.0 .and. r%isH2_rtz) then
            do i=1,nleaf !loop over leaf cells
-              xion(1,3,i) = m%grid(ind_leaf(i))%uold(ind,r%iIons+counter) &
-                           /m%grid(ind_leaf(i))%uold(ind,1)
+              xion(1,3,i) = m%uold(ind,r%iIons+counter,ind_leaf(i)) &
+                           /m%uold(ind,1,ind_leaf(i))
            end do ! end loop over leaf cells
            counter = counter + 1
         endif
@@ -227,8 +227,8 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
         if(r%neq_chem) then
            do ii=0,nIon-1
               do i=1,nleaf
-                 xion(1+ii,i) = m%grid(ind_leaf(i))%uold(ind,r%iIons+ii) &
-                      &        /m%grid(ind_leaf(i))%uold(ind,1)
+                 xion(1+ii,i) = m%uold(ind,r%iIons+ii,ind_leaf(i)) &
+                      &        /m%uold(ind,1,ind_leaf(i))
               end do
            end do
         endif
@@ -239,8 +239,8 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
         do ig=1,nrtgrp
            iNp=1+(ig-1)*(ndim+1)
            do i=1,nleaf
-              Np(ig,i)          = scale_Np * m%grid(ind_leaf(i))%rtuold(ind,iNp)
-              Fp(1:ndim, ig, i) = scale_Fp * m%grid(ind_leaf(i))%rtuold(ind,iNp+1:iNp+ndim)
+              Np(ig,i)          = scale_Np * m%rtuold(ind,iNp,ind_leaf(i))
+              Fp(1:ndim, ig, i) = scale_Fp * m%rtuold(ind,iNp+1:iNp+ndim,ind_leaf(i))
            enddo
         end do
 #endif
@@ -248,7 +248,7 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
         ! Compute gas momentum for radiation force
 #ifdef RT
         do i=1,nleaf
-           p_gas(1:ndim,i) = m%grid(ind_leaf(i))%uold(ind,2:1+ndim) * scale_d * scale_v
+           p_gas(1:ndim,i) = m%uold(ind,2:1+ndim,ind_leaf(i)) * scale_d * scale_v
         end do
 #endif
         !==========================================
@@ -292,7 +292,7 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
         ! Isotropic emission (star and sink particles) in cgs units
         do ig=1,nrtgrp
            do i=1,nleaf
-              dNpdt(ig,i) = m%grid(ind_leaf(i))%emissivity(ind,ig) * scale_Np / scale_t
+              dNpdt(ig,i) = m%emissivity(ind,ig,ind_leaf(i)) * scale_Np / scale_t
               dFpdt(:,ig,i) = 0
            end do
         end do
@@ -302,8 +302,8 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
            do ig=1,nrtgrp
               iNp=1+(ig-1)*(ndim+1)
               do i=1,nleaf ! Calc addition per sec to Np, Fp for current dt
-                 Npnew = scale_Np * m%grid(ind_leaf(i))%rtunew(ind,iNp)
-                 Fpnew = scale_Fp * m%grid(ind_leaf(i))%rtunew(ind,iNp+1:iNp+ndim)
+                 Npnew = scale_Np * m%rtunew(ind,iNp,ind_leaf(i))
+                 Fpnew = scale_Fp * m%rtunew(ind,iNp+1:iNp+ndim,ind_leaf(i))
                  dNpdt(ig,i) = dNpdt(ig,i) + (Npnew - Np(ig,i)) / dtcool
                  dFpdt(:,ig,i) = dFpdt(:,ig,i) + (Fpnew - Fp(:,ig,i)) / dtcool
               end do
@@ -368,14 +368,14 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
         ! Update fluid momentum and kinetic energy due to radiation force
 #ifdef RT
         do i=1,nleaf
-           m%grid(ind_leaf(i))%uold(ind,2:1+ndim) = p_gas(1:ndim,i) / scale_d / scale_v
+           m%uold(ind,2:1+ndim,ind_leaf(i)) = p_gas(1:ndim,i) / scale_d / scale_v
         end do
         do i=1,nleaf
            ekk(i)=0.0d0
         end do
         do idim=1,3
            do i=1,nleaf
-              ekk(i)=ekk(i)+0.5d0*m%grid(ind_leaf(i))%uold(ind,idim+1)**2/nH(i)
+              ekk(i)=ekk(i)+0.5d0*m%uold(ind,idim+1,ind_leaf(i))**2/nH(i)
            end do
         end do
 #endif
@@ -413,7 +413,7 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
            if (elements(ii)%atomic_number.gt.0) then
               do jj=1,elements(ii)%n_ions ! loop over ions
                  do i=1,nleaf !loop over leaf cells
-                    m%grid(ind_leaf(i))%uold(ind,r%iIons+counter) = xion(ii,jj,i)*nH(i)
+                    m%uold(ind,r%iIons+counter,ind_leaf(i)) = xion(ii,jj,i)*nH(i)
                  end do ! end loop over leaf cells
                  counter = counter + 1
               end do ! end loop over ions
@@ -423,7 +423,7 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
         ! deal with molecules separately
         if (elements(1)%atomic_number.gt.0 .and. r%isH2_rtz) then
            do i=1,nleaf !loop over leaf cells
-              m%grid(ind_leaf(i))%uold(ind,r%iIons+counter) = xion(1,3,i)*nH(i)
+              m%uold(ind,r%iIons+counter,ind_leaf(i)) = xion(1,3,i)*nH(i)
            end do ! end loop over leaf cells
            counter = counter + 1
         endif
@@ -431,7 +431,7 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
         if(r%neq_chem) then
            do ii=0,nion-1
               do i=1,nleaf
-                 m%grid(ind_leaf(i))%uold(ind,r%iIons+ii) = xion(1+ii,i)*nH(i)
+                 m%uold(ind,r%iIons+ii,ind_leaf(i)) = xion(1+ii,i)*nH(i)
               end do
            end do
         endif
@@ -441,11 +441,11 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
         if(r%entropy.and.r%dual_energy.GE.0)then
            if(r%isothermal)then ! use only polytrope energy
               do i=1,nleaf
-                 m%grid(ind_leaf(i))%uold(ind,r%ientropy) = (T2min(i))/nH(i)**(r%gamma-1)*(r%gamma-1)
+                 m%uold(ind,r%ientropy,ind_leaf(i)) = (T2min(i))/nH(i)**(r%gamma-1)*(r%gamma-1)
               end do
            else if(r%cooling.or.r%cooling_ism.or.r%neq_chem)then
               do i=1,nleaf
-                 m%grid(ind_leaf(i))%uold(ind,r%ientropy) = (T2(i) + T2min(i))/nH(i)**(r%gamma-1)*(r%gamma-1)
+                 m%uold(ind,r%ientropy,ind_leaf(i)) = (T2(i) + T2min(i))/nH(i)**(r%gamma-1)*(r%gamma-1)
               end do
            endif
         endif
@@ -453,11 +453,11 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
         ! Update total fluid energy
         if(r%isothermal)then ! use only polytrope energy
            do i=1,nleaf
-              m%grid(ind_leaf(i))%uold(ind,5) = T2min(i) + ekk(i) + err(i) + emag(i)
+              m%uold(ind,5,ind_leaf(i)) = T2min(i) + ekk(i) + err(i) + emag(i)
            end do
         else if(r%cooling.or.r%cooling_ism.or.r%neq_chem)then ! add polytrope to thermal energy
            do i=1,nleaf
-              m%grid(ind_leaf(i))%uold(ind,5) = T2(i) + T2min(i) + ekk(i) + err(i) + emag(i)
+              m%uold(ind,5,ind_leaf(i)) = T2(i) + T2min(i) + ekk(i) + err(i) + emag(i)
            end do
         endif
 
@@ -466,8 +466,8 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
         do ig=1,nrtgrp
            iNp=1+(ig-1)*(ndim+1)
            do i=1,nleaf
-              m%grid(ind_leaf(i))%rtuold(ind,iNp) = max(Np(ig,i)/scale_Np,smallNp)
-              m%grid(ind_leaf(i))%rtuold(ind,iNp+1:iNp+ndim) = Fp(1:ndim,ig,i)/scale_Fp
+              m%rtuold(ind,iNp,ind_leaf(i)) = max(Np(ig,i)/scale_Np,smallNp)
+              m%rtuold(ind,iNp+1:iNp+ndim,ind_leaf(i)) = Fp(1:ndim,ig,i)/scale_Fp
            enddo
         end do
 #endif

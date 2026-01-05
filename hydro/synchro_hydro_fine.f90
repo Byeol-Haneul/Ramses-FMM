@@ -80,28 +80,28 @@ subroutine synchro_hydro_fine(r,m,ilevel,dteff)
      do ind=1,twotondim
 
         ! Remove kinetic energy from total energy
-        ener=m%grid(igrid)%uold(ind,5)
+        ener=m%uold(ind,5,igrid)
         do idim=1,3
-           ener=ener-0.5d0*m%grid(igrid)%uold(ind,idim+1)**2/max(dble(m%grid(igrid)%uold(ind,1)),r%smallr)
+           ener=ener-0.5d0*m%uold(ind,idim+1,igrid)**2/max(dble(m%uold(ind,1,igrid)),r%smallr)
         end do
 
         ! Update momentum
 #ifdef GRAV
         do idim=1,ndim
-           m%grid(igrid)%uold(ind,idim+1)=m%grid(igrid)%uold(ind,idim+1)+&
-                & max(m%grid(igrid)%uold(ind,1),r%smallr)*m%grid(igrid)%f(ind,idim)*dteff
+           m%uold(ind,idim+1,igrid)=m%uold(ind,idim+1,igrid)+&
+                & max(m%uold(ind,1,igrid),r%smallr)*m%f(ind,idim,igrid)*dteff
         end do
 #else
         do idim=1,ndim
-           m%grid(igrid)%uold(ind,idim+1)=m%grid(igrid)%uold(ind,idim+1)+&
-                & max(dble(m%grid(igrid)%uold(ind,1)),r%smallr)*r%constant_gravity(idim)*dteff
+           m%uold(ind,idim+1,igrid)=m%uold(ind,idim+1,igrid)+&
+                & max(dble(m%uold(ind,1,igrid)),r%smallr)*r%constant_gravity(idim)*dteff
         end do        
 #endif
         ! Update total energy
         do idim=1,3
-           ener=ener+0.5d0*m%grid(igrid)%uold(ind,idim+1)**2/max(dble(m%grid(igrid)%uold(ind,1)),r%smallr)
+           ener=ener+0.5d0*m%uold(ind,idim+1,igrid)**2/max(dble(m%uold(ind,1,igrid)),r%smallr)
         end do
-        m%grid(igrid)%uold(ind,5)=ener
+        m%uold(ind,5,igrid)=ener
 
      end do
      ! End loop over cells
@@ -163,22 +163,22 @@ subroutine gravity_hydro_fine(r,g,m,ilevel)
   do igrid=m%head(ilevel),m%tail(ilevel)
      do ind=1,twotondim
 
-        d=max(dble(m%grid(igrid)%unew(ind,1)),r%smallr)
+        d=max(dble(m%unew(ind,1,igrid)),r%smallr)
         u=0.0d0; v=0.0d0; w=0.0d0
-        u=m%grid(igrid)%unew(ind,2)/d
-        v=m%grid(igrid)%unew(ind,3)/d
-        w=m%grid(igrid)%unew(ind,4)/d
+        u=m%unew(ind,2,igrid)/d
+        v=m%unew(ind,3,igrid)/d
+        w=m%unew(ind,4,igrid)/d
         e_kin=0.5d0*d*(u**2+v**2+w**2)
-        e_prim=m%grid(igrid)%unew(ind,5)-e_kin
-        d_old=max(dble(m%grid(igrid)%uold(ind,1)),r%smallr)
+        e_prim=m%unew(ind,5,igrid)-e_kin
+        d_old=max(dble(m%uold(ind,1,igrid)),r%smallr)
         fact=d_old/d*0.5d0*g%dtnew(ilevel)
 #ifdef GRAV
-        u=u+m%grid(igrid)%f(ind,1)*fact
+        u=u+m%f(ind,1,igrid)*fact
 #if NDIM>1
-        v=v+m%grid(igrid)%f(ind,2)*fact
+        v=v+m%f(ind,2,igrid)*fact
 #endif
 #if NDIM>2
-        w=w+m%grid(igrid)%f(ind,3)*fact
+        w=w+m%f(ind,3,igrid)*fact
 #endif
 #else
         u=u+r%constant_gravity(1)*fact
@@ -189,11 +189,11 @@ subroutine gravity_hydro_fine(r,g,m,ilevel)
         w=w+r%constant_gravity(3)*fact
 #endif
 #endif
-        m%grid(igrid)%unew(ind,2)=d*u
-        m%grid(igrid)%unew(ind,3)=d*v
-        m%grid(igrid)%unew(ind,4)=d*w
+        m%unew(ind,2,igrid)=d*u
+        m%unew(ind,3,igrid)=d*v
+        m%unew(ind,4,igrid)=d*w
         e_kin=0.5d0*d*(u**2+v**2+w**2)
-        m%grid(igrid)%unew(ind,5)=e_prim+e_kin
+        m%unew(ind,5,igrid)=e_prim+e_kin
      end do
   end do
 

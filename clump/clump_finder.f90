@@ -272,7 +272,6 @@ end subroutine clump_finder
 #if NDIM==3 && defined(GRAV)
 subroutine collect_test(s)
   use amr_parameters, only: twotondim, ndim
-  use amr_commons, only: oct
   use ramses_commons, only: ramses_t
   use multigrid_fine_coarse, only: pack_fetch_rho, unpack_fetch_rho
   use nbors_utils
@@ -299,7 +298,7 @@ subroutine collect_test(s)
   integer,dimension(1:s%g%ncpu)::ntest_cpu
   integer(kind=8),dimension(0:s%g%ncpu)::ntest_cum
   logical::verbose_all=.false.
-  integer::action,icell
+  integer::action,icellp,igridp
   logical::ok
   real(kind=8)::dx,vol
   real(kind=8)::d,dx_loc
@@ -307,12 +306,11 @@ subroutine collect_test(s)
   integer,allocatable,dimension(:)::isort
   integer,allocatable,dimension(:)::iswap
   integer(kind=8),dimension(0:ndim)::hash_key
-  type(oct),pointer::gridp
   type(msg_small_realdp)::dummy_small_realdp
 
 #ifdef GRAV
 
-  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
+  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c,mdl=>s%mdl)
 
   if(g%myid==1.and.r%verbose)write(*,*)'Entering collect_test'
 
@@ -320,19 +318,18 @@ subroutine collect_test(s)
   ! Make density field smooth, positive and monotonous.
   !---------------------------------------------------------
   do ilevel=r%levelmin+1,r%nlevelmax ! Loop over levels
-     call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-          hilbert=m%domain, pack_size=storage_size(dummy_small_realdp)/32,&
+     call open_cache(mdl, m, pack_size=storage_size(dummy_small_realdp)/32, &
           pack=pack_fetch_rho, unpack=unpack_fetch_rho)
      hash_key(0)=ilevel
      do igrid=m%head(ilevel),m%tail(ilevel) ! Loop over grids
         hash_key(1:ndim)=m%grid(igrid)%ckey(1:ndim) ! Get parent cell and grid index
-        call get_parent_cell(s,hash_key,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+        call get_parent_cell(s,hash_key,igridp,icellp,flush_cache=.false.,fetch_cache=.true.)
         do ind=1,twotondim ! Loop over cells
-           m%grid(igrid)%nref(ind) = m%grid(igrid)%rho(ind) ! Save for true mass later
-           m%grid(igrid)%rho(ind) = 0.5d0*m%grid(igrid)%rho(ind) + 0.5d0*gridp%rho(icell)
+           m%nref(ind,igrid) = m%rho(ind,igrid) ! Save for true mass later
+           m%rho(ind,igrid) = 0.5d0*m%rho(ind,igrid) + 0.5d0*m%rho(icellp,igridp)
         end do
      end do
-     call close_cache(s,m%grid_dict)
+     call close_cache(mdl)
   end do
 
   !---------------------------------------------------------
@@ -343,7 +340,7 @@ subroutine collect_test(s)
      do igrid=m%head(ilevel),m%tail(ilevel) ! Loop over grids
         do ind=1,twotondim ! Loop over cells
            ok = .not. m%grid(igrid)%refined(ind) ! Select leaf cells
-           d = m%grid(igrid)%rho(ind)
+           d = m%rho(ind,igrid)
            ok = ok .and. d > c%density_threshold
            if(ok)then
               c%ntest=c%ntest+1
@@ -388,7 +385,7 @@ subroutine collect_test(s)
         do igrid=m%head(ilevel),m%tail(ilevel) ! Loop over grids
            do ind=1,twotondim ! Loop over cells
               ok=.not.m%grid(igrid)%refined(ind) ! Select leaf cells
-              d=m%grid(igrid)%rho(ind)
+              d=m%rho(ind,igrid)
               ok=ok.and.d>c%density_threshold
               if(ok)then
                  itest=itest+1
@@ -441,8 +438,7 @@ end subroutine collect_test
 !###########################################################
 !###########################################################
 subroutine collect_peak(s)
-  use amr_parameters, only: twotondim,ndim
-  use amr_commons, only:oct,nbor
+  use amr_parameters, only: twotondim, ndim
   use ramses_commons, only: ramses_t
   use cache_commons
   use cache
@@ -465,7 +461,7 @@ subroutine collect_peak(s)
   integer,dimension(1:s%g%ncpu)::npeak_cpu_all
 #endif
   type(msg_int4_small_realdp)::dummy_int4_small_realdp
-  type(oct),pointer::gridn
+  integer::igridn
   integer::ilevel
   integer::icpu,next_level,now_level,icelln,idim,igrid,ind,itest,j,k
   integer::ipart,jpart,ip,i,icellp,icellpm,ipeak
@@ -473,14 +469,14 @@ subroutine collect_peak(s)
   integer,dimension(1:ndim)::ckey,ckey_nbor
   integer(kind=8),dimension(0:ndim)::hash_cell,hash_nbor
   real(kind=8),dimension(1:ndim)::xcen,xnei
-  integer, parameter::nSnei=56
-  type(nbor),dimension(1:nSnei) :: grid_nbor
+  integer,parameter::nSnei=56
+  integer,dimension(1:nSnei)::igrid_nbor
   integer(kind=8),dimension(1:nSnei)::icell_nbor,level_nbor
   real(kind=8),dimension(1:ndim,1:nSnei)::xSnei
   real(kind=8)::dens_nbor,density_max,x,y,z
   logical::ok,ok_peak
 
-  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)    
+  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c,mdl=>s%mdl)
 
   if(g%myid==1.and.r%verbose)write(*,*)'Entering collect_peak'
 
@@ -511,8 +507,7 @@ subroutine collect_peak(s)
   !----------------------------------------
   ! Compute hash key of densest neighbor
   !----------------------------------------
-  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-       hilbert=m%domain,pack_size=storage_size(dummy_int4_small_realdp)/32,&
+  call open_cache(mdl, m, pack_size=storage_size(dummy_int4_small_realdp)/32, &
        pack=pack_fetch_saddle, unpack=unpack_fetch_saddle)
 
   c%npeak=0
@@ -521,11 +516,11 @@ subroutine collect_peak(s)
      igrid=c%grid(itest)
      ind=c%cell(itest)
 
-     ! Set pointers to null
+     ! Set grid index to null
      icelln=0
-     nullify(gridn)
+     igridn=0
      do j=1,nSnei
-        nullify(grid_nbor(j)%p)
+        igrid_nbor(j)=0
      end do
 
      xcen(1)=2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5
@@ -552,51 +547,51 @@ subroutine collect_peak(s)
         ckey_nbor(1:ndim)=int(xnei(1:ndim))
         hash_nbor(0)=ilevel+1
         hash_nbor(1:ndim)=ckey_nbor(1:ndim)
-        call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.false.,fetch_cache=.true.)
+        call get_parent_cell(s,hash_nbor,igridn,icelln,flush_cache=.false.,fetch_cache=.true.)
 
         ! If missing, get neighboring cell at ilevel-1
-        if(.not.associated(gridn))then
+        if(igridn==0)then
            ckey_nbor(1:ndim)=int(xnei(1:ndim)/2.0)
            hash_nbor(0)=ilevel
            hash_nbor(1:ndim)=ckey_nbor(1:ndim)
-           call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.false.,fetch_cache=.true.)
+           call get_parent_cell(s,hash_nbor,igridn,icelln,flush_cache=.false.,fetch_cache=.true.)
 
            ! If refined, get neighboring cell at ilevel+1
-        else if (gridn%refined(icelln))then
+        else if (m%grid(igridn)%refined(icelln))then
            ckey_nbor(1:ndim)=int(xnei(1:ndim)*2.0)
            hash_nbor(0)=ilevel+2
            hash_nbor(1:ndim)=ckey_nbor(1:ndim)
-           call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.false.,fetch_cache=.true.)
+           call get_parent_cell(s,hash_nbor,igridn,icelln,flush_cache=.false.,fetch_cache=.true.)
         endif
 
         ! Lock grid in cache
-        call lock_cache(s,gridn)
+        call lock_cache(m,igridn)
 
-        grid_nbor(j)%p => gridn
+        igrid_nbor(j) = igridn
         icell_nbor(j) = icelln
         level_nbor(j) = hash_nbor(0)
 
      end do
 
-     density_max=1.0001*m%grid(igrid)%rho(ind)
+     density_max=1.0001*m%rho(ind,igrid)
      ok_peak=.true.
 
      do j=1,nSnei
-        gridn => grid_nbor(j)%p ! Gather neighboring grid
+        igridn = igrid_nbor(j) ! Gather neighboring grid
         icelln = icell_nbor(j)
-        if(associated(gridn))then
-           dens_nbor = gridn%rho(icelln)
+        if(igridn>0)then
+           dens_nbor = m%rho(icelln,igridn)
            if(dens_nbor > density_max)then
               ok_peak=.false.
               density_max=dens_nbor
               ! Store hash key of densest neighbor
               c%hash(itest,0)=level_nbor(j)
-              c%hash(itest,1)=2*gridn%ckey(1)+MOD((icelln-1)  ,2)
+              c%hash(itest,1)=2*m%grid(igridn)%ckey(1)+MOD((icelln-1)  ,2)
 #if NDIM>1
-              c%hash(itest,2)=2*gridn%ckey(2)+MOD((icelln-1)/2,2)
+              c%hash(itest,2)=2*m%grid(igridn)%ckey(2)+MOD((icelln-1)/2,2)
 #endif
 #if NDIM>2
-              c%hash(itest,3)=2*gridn%ckey(3)+MOD((icelln-1)/4,2)
+              c%hash(itest,3)=2*m%grid(igridn)%ckey(3)+MOD((icelln-1)/4,2)
 #endif
            endif
         endif
@@ -609,13 +604,13 @@ subroutine collect_peak(s)
 
      ! Unlock neighboring grids
      do j=1,nSnei
-        gridn => grid_nbor(j)%p
-        call unlock_cache(s,gridn)
+        igridn = igrid_nbor(j)
+        call unlock_cache(m,igridn)
      end do
 
   end do
 
-  call close_cache(s,m%grid_dict)
+  call close_cache(mdl)
 
   !------------------------------------------------
   ! Compute total number of peaks across all CPUs
@@ -649,7 +644,6 @@ end subroutine collect_peak
 !################################################################
 subroutine collect_patch(s)
   use amr_parameters, only: twotondim,ndim
-  use amr_commons,only: oct
   use ramses_commons, only: ramses_t
   use cache_commons
   use cache
@@ -677,11 +671,10 @@ subroutine collect_patch(s)
 #endif
   integer(kind=8),dimension(0:ndim)::hash_nbor
   type(msg_int4)::dummy_int4
-  type(oct),pointer::gridn
-  integer::icelln,igrid,ind,ipeak,istep,itest,nmove,nzero
+  integer::igridn,icelln,igrid,ind,ipeak,istep,itest,nmove,nzero
   integer(kind=8)::nmove_tot,nzero_tot
 
-  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
+  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c,mdl=>s%mdl)
 
   if(g%myid==1.and.r%verbose)write(*,*)'Entering collect_patch'
 
@@ -697,9 +690,9 @@ subroutine collect_patch(s)
   !-------------------------------------------------
   ! Flag peaks with global peak id using flag1 array
   !-------------------------------------------------
-  do igrid=1,r%ngridmax
-     m%grid(igrid)%flag1(1:twotondim)=0
-     m%grid(igrid)%flag2(1:twotondim)=0
+  do igrid=1,m%ngridmax
+     m%flag1(1:twotondim,igrid)=0
+     m%flag2(1:twotondim,igrid)=0
   end do
   ipeak = 0
   do itest=1,c%ntest
@@ -707,11 +700,11 @@ subroutine collect_patch(s)
         ipeak=ipeak+1
         igrid=c%grid(itest)
         ind=c%cell(itest)
-        m%grid(igrid)%flag1(ind)=ipeak+c%npeak_cum(g%myid-1)
+        m%flag1(ind,igrid)=ipeak+c%npeak_cum(g%myid-1)
         c%peak_grid(ipeak)=igrid
         c%peak_cell(ipeak)=ind
         c%peak_level(ipeak)=c%level(itest)
-        c%max_dens(ipeak)=m%grid(igrid)%rho(ind)
+        c%max_dens(ipeak)=m%rho(ind,igrid)
      endif
   end do
 
@@ -722,9 +715,8 @@ subroutine collect_patch(s)
   istep=0
   do while (nmove_tot.gt.0)
 
-     call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-          hilbert=m%domain,pack_size=storage_size(dummy_int4)/32,&
-          pack=pack_fetch_flag,unpack=unpack_fetch_flag,bound=init_bound_flag)
+     call open_cache(mdl, m, pack_size=storage_size(dummy_int4)/32, &
+          pack=pack_fetch_flag, unpack=unpack_fetch_flag, bound=init_bound_flag)
 
      nmove=0
      nzero=0
@@ -733,14 +725,14 @@ subroutine collect_patch(s)
         if(hash_nbor(0)>0)then
            igrid=c%grid(itest)
            ind=c%cell(itest)
-           call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.false.,fetch_cache=.true.)
-           if(m%grid(igrid)%flag1(ind).ne.gridn%flag1(icelln))nmove=nmove+1
-           m%grid(igrid)%flag1(ind)=gridn%flag1(icelln)
-           if(m%grid(igrid)%flag1(ind).eq.0)nzero=nzero+1
+           call get_parent_cell(s,hash_nbor,igridn,icelln,flush_cache=.false.,fetch_cache=.true.)
+           if(m%flag1(ind,igrid).ne.m%flag1(icelln,igridn))nmove=nmove+1
+           m%flag1(ind,igrid)=m%flag1(icelln,igridn)
+           if(m%flag1(ind,igrid).eq.0)nzero=nzero+1
         endif
      end do
 
-     call close_cache(s,m%grid_dict)
+     call close_cache(mdl)
 
      istep=istep+1
      nmove_tot=int(nmove,kind=8)

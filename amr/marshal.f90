@@ -4,13 +4,14 @@ contains
 !###############################################################
 !###############################################################
 !###############################################################
-subroutine pack_fetch_refine(grid,msg_size,msg_array)
-  use amr_parameters, only: ndim,twotondim
+subroutine pack_fetch_refine(mesh,igrid,msg_size,msg_array)
+  use amr_parameters, only: ndim, twotondim
   use hydro_parameters, only: nvar
   use rt_parameters, only: nrtvar
-  use amr_commons, only: oct
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_large_realdp
-  type(oct)::grid
+  type(mesh_t)::mesh
+  integer::igrid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
 
@@ -18,7 +19,7 @@ subroutine pack_fetch_refine(grid,msg_size,msg_array)
   type(msg_large_realdp)::msg
 
   do ind=1,twotondim
-     if(grid%refined(ind))then
+     if(mesh%grid(igrid)%refined(ind))then
         msg%int4(ind)=1
      else
         msg%int4(ind)=0
@@ -28,31 +29,35 @@ subroutine pack_fetch_refine(grid,msg_size,msg_array)
 #ifdef HYDRO
   do ivar=1,nvar
      do ind=1,twotondim
-        msg%realdp_hydro(ind,ivar)=grid%uold(ind,ivar)
+        msg%realdp_hydro(ind,ivar)=mesh%uold(ind,ivar,igrid)
      end do
   end do
 #endif
   
 #ifdef MHD
-  msg%realdp_mhd=grid%bold
+  do ivar=1,6
+     do ind=1,twotondim
+        msg%realdp_mhd(ind,ivar)=mesh%bold(ind,ivar,igrid)
+     end do
+  end do
 #endif
 
 #ifdef GRAV
   do idim=1,ndim
      do ind=1,twotondim
-        msg%realdp_poisson(ind,idim)=grid%f(ind,idim)
+        msg%realdp_poisson(ind,idim)=mesh%f(ind,idim,igrid)
      end do
   end do
   do ind=1,twotondim
-     msg%realdp_poisson(ind,ndim+1)=grid%phi(ind)
-     msg%realdp_poisson(ind,ndim+2)=grid%phi_old(ind)
+     msg%realdp_poisson(ind,ndim+1)=mesh%phi(ind,igrid)
+     msg%realdp_poisson(ind,ndim+2)=mesh%phi_old(ind,igrid)
   end do
 #endif
 
 #ifdef RT
   do ivar=1,nrtvar
      do ind=1,twotondim
-        msg%realdp_rt(ind,ivar)=grid%rtuold(ind,ivar)
+        msg%realdp_rt(ind,ivar)=mesh%rtuold(ind,ivar,igrid)
      end do
   end do
 #endif
@@ -64,13 +69,14 @@ end subroutine pack_fetch_refine
 !###############################################################
 !###############################################################
 !###############################################################
-subroutine unpack_fetch_refine(grid,msg_size,msg_array,hash_key)
-  use amr_parameters, only: ndim,twotondim
+subroutine unpack_fetch_refine(mesh,igrid,msg_size,msg_array,hash_key)
+  use amr_parameters, only: ndim, twotondim
   use hydro_parameters, only: nvar
   use rt_parameters, only: nrtvar
-  use amr_commons, only: oct
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_large_realdp
-  type(oct)::grid
+  type(mesh_t)::mesh
+  integer::igrid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
   integer(kind=8),dimension(0:ndim)::hash_key
@@ -78,46 +84,50 @@ subroutine unpack_fetch_refine(grid,msg_size,msg_array,hash_key)
   integer::idim,ind,ivar
   type(msg_large_realdp)::msg
 
-  grid%lev=hash_key(0)
-  grid%ckey(1:ndim)=hash_key(1:ndim)
+  mesh%grid(igrid)%lev=hash_key(0)
+  mesh%grid(igrid)%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
 
   do ind=1,twotondim
      if(msg%int4(ind)==1)then
-        grid%refined(ind)=.true.
+        mesh%grid(igrid)%refined(ind)=.true.
      else
-        grid%refined(ind)=.false.
+        mesh%grid(igrid)%refined(ind)=.false.
      endif
   end do
   
 #ifdef HYDRO
   do ivar=1,nvar
      do ind=1,twotondim
-        grid%uold(ind,ivar)=msg%realdp_hydro(ind,ivar)
+        mesh%uold(ind,ivar,igrid)=msg%realdp_hydro(ind,ivar)
      end do
   end do
 #endif
 
 #ifdef MHD
-  grid%bold=msg%realdp_mhd
+  do ivar=1,6
+     do ind=1,twotondim
+        mesh%bold(ind,ivar,igrid)=msg%realdp_mhd(ind,ivar)
+     end do
+  end do
 #endif
 
 #ifdef GRAV
   do idim=1,ndim
      do ind=1,twotondim
-        grid%f(ind,idim)=msg%realdp_poisson(ind,idim)
+        mesh%f(ind,idim,igrid)=msg%realdp_poisson(ind,idim)
      end do
   end do
   do ind=1,twotondim
-     grid%phi(ind)=msg%realdp_poisson(ind,ndim+1)
-     grid%phi_old(ind)=msg%realdp_poisson(ind,ndim+2)
+     mesh%phi(ind,igrid)=msg%realdp_poisson(ind,ndim+1)
+     mesh%phi_old(ind,igrid)=msg%realdp_poisson(ind,ndim+2)
   end do
 #endif
 
 #ifdef RT
   do ivar=1,nrtvar
      do ind=1,twotondim
-        grid%rtuold(ind,ivar)=msg%realdp_rt(ind,ivar)
+        mesh%rtuold(ind,ivar,igrid)=msg%realdp_rt(ind,ivar)
      end do
   end do
 #endif
@@ -128,11 +138,12 @@ end subroutine unpack_fetch_refine
 !################################################################
 !################################################################
 !################################################################
-subroutine pack_fetch_flag(grid,msg_size,msg_array)
+subroutine pack_fetch_flag(mesh,igrid,msg_size,msg_array)
   use amr_parameters, only: twotondim
-  use amr_commons, only: oct
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_int4
-  type(oct)::grid
+  type(mesh_t)::mesh
+  integer::igrid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
 
@@ -140,7 +151,7 @@ subroutine pack_fetch_flag(grid,msg_size,msg_array)
   type(msg_int4)::msg
 
   do ind=1,twotondim
-     msg%int4(ind)=grid%flag1(ind)
+     msg%int4(ind)=mesh%flag1(ind,igrid)
   end do
 
   msg_array=transfer(msg,msg_array)
@@ -150,11 +161,12 @@ end subroutine pack_fetch_flag
 !###############################################################
 !###############################################################
 !###############################################################
-subroutine unpack_fetch_flag(grid,msg_size,msg_array,hash_key)
-  use amr_parameters, only: ndim,twotondim
-  use amr_commons, only: oct
+subroutine unpack_fetch_flag(mesh,igrid,msg_size,msg_array,hash_key)
+  use amr_parameters, only: ndim, twotondim
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_int4
-  type(oct)::grid
+  type(mesh_t)::mesh
+  integer::igrid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
   integer(kind=8),dimension(0:ndim)::hash_key
@@ -162,12 +174,12 @@ subroutine unpack_fetch_flag(grid,msg_size,msg_array,hash_key)
   integer::ind
   type(msg_int4)::msg
 
-  grid%lev=hash_key(0)
-  grid%ckey(1:ndim)=hash_key(1:ndim)
+  mesh%grid(igrid)%lev=hash_key(0)
+  mesh%grid(igrid)%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
 
   do ind=1,twotondim
-     grid%flag1(ind)=msg%int4(ind)
+     mesh%flag1(ind,igrid)=msg%int4(ind)
   end do
   
 end subroutine unpack_fetch_flag
@@ -175,11 +187,12 @@ end subroutine unpack_fetch_flag
 !################################################################
 !################################################################
 !################################################################
-subroutine pack_fetch_flag2(grid,msg_size,msg_array)
+subroutine pack_fetch_flag2(mesh,igrid,msg_size,msg_array)
   use amr_parameters, only: twotondim
-  use amr_commons, only: oct
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_int4
-  type(oct)::grid
+  type(mesh_t)::mesh
+  integer::igrid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
 
@@ -187,7 +200,7 @@ subroutine pack_fetch_flag2(grid,msg_size,msg_array)
   type(msg_int4)::msg
 
   do ind=1,twotondim
-     msg%int4(ind)=grid%flag2(ind)
+     msg%int4(ind)=mesh%flag2(ind,igrid)
   end do
 
   msg_array=transfer(msg,msg_array)
@@ -197,11 +210,12 @@ end subroutine pack_fetch_flag2
 !###############################################################
 !###############################################################
 !###############################################################
-subroutine unpack_fetch_flag2(grid,msg_size,msg_array,hash_key)
+subroutine unpack_fetch_flag2(mesh,igrid,msg_size,msg_array,hash_key)
   use amr_parameters, only: ndim,twotondim
-  use amr_commons, only: oct
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_int4
-  type(oct)::grid
+  type(mesh_t)::mesh
+  integer::igrid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
   integer(kind=8),dimension(0:ndim)::hash_key
@@ -209,12 +223,12 @@ subroutine unpack_fetch_flag2(grid,msg_size,msg_array,hash_key)
   integer::ind
   type(msg_int4)::msg
 
-  grid%lev=hash_key(0)
-  grid%ckey(1:ndim)=hash_key(1:ndim)
+  mesh%grid(igrid)%lev=hash_key(0)
+  mesh%grid(igrid)%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
 
   do ind=1,twotondim
-     grid%flag2(ind)=msg%int4(ind)
+     mesh%flag2(ind,igrid)=msg%int4(ind)
   end do
   
 end subroutine unpack_fetch_flag2
