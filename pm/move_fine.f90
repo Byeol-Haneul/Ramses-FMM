@@ -4,36 +4,7 @@ module move_fine_module
   type(RngStream), save :: tracer_rng
   logical, save :: tracer_rng_ready = .false.
 
-abstract interface
-  function phi_accessor_if(gridp,icell) result(phi_val)
-    use oct_commons, only: oct
-    implicit none
-    type(oct),pointer::gridp
-    integer,intent(in)::icell
-    real(kind=8)::phi_val
-  end function phi_accessor_if
-end interface
 contains
-!################################################################
-!################################################################
-!################################################################
-!################################################################
-pure function slope_limiter(r,slope_type) result(phi)
-  implicit none
-  real(kind=8),intent(in)::r
-  integer,intent(in)::slope_type
-  real(kind=8)::phi
-
-  select case(slope_type)
-  case (0)
-     phi=0.0d0
-  case (1,2)
-     phi=max(0.0d0,min(real(slope_type,kind=8)*r,0.5d0*(1.0d0+r),real(slope_type,kind=8)))
-  case default
-     phi=0.0d0
-  end select
-
-end function slope_limiter
 !################################################################
 !################################################################
 !################################################################
@@ -1134,7 +1105,6 @@ subroutine cic_trace_gas_part_ito(s,p,ilevel,action_part)
   use amr_parameters, only: ndim, twotondim
   use pm_parameters
   use pm_commons, only: part_t
-  use oct_commons, only: oct
   use ramses_commons, only: ramses_t
   use rng
   use nbors_utils
@@ -1147,20 +1117,21 @@ subroutine cic_trace_gas_part_ito(s,p,ilevel,action_part)
   integer::action_part
   real(kind=8),dimension(1:ndim)::x,x_mid,v_pred,vel,vel_mid,disp,xi
   real(kind=8),dimension(1:ndim)::dl,dr
-  integer,dimension(1:ndim)::il,ir
-  integer,dimension(1:ndim,1:twotondim)::ckey
+  integer,dimension(1:ndim)::ir
   real(kind=8),dimension(1:twotondim)::kappa_cells
-  real(kind=8),dimension(1:ndim,1:twotondim)::grad_kappa_cells
-  real(kind=8)::dx_loc,dt_level,kappa_mid,noise_amp,smallr_loc,inv_pec_loc
-  integer :: iturb_loc
+  real(kind=8)::dx_loc,dt_level,kappa_mid,noise_amp
   logical :: use_sgs
   type(msg_nvar_realdp)::dummy_nvar_realdp
   type(RngStream),external::RngStream_CreateStream
   real(kind=8),external::RngStream_RandUni
   integer(kind=8)::stream_skip
   external :: RngStream_SetPackageSeed, RngStream_AdvanceState, gaussdev
-  integer :: ipart,idim,ic
-  procedure(phi_accessor_if),pointer :: phi_kappa => null()
+  integer :: ipart,idim,ic,ind,jd
+  real(kind=8) :: xd,weight
+  real(kind=8),dimension(1:ndim)::grad_at_part
+  real(kind=8),dimension(1:ndim,1:2)::w1d,dw1d
+  real(kind=8),dimension(1:twotondim)::vol_diff
+  real(kind=8),dimension(1:ndim,1:twotondim)::grad_vol
 
   associate(r=>s%r,g=>s%g,m=>s%m)
   if(p%static)return
@@ -1168,9 +1139,6 @@ subroutine cic_trace_gas_part_ito(s,p,ilevel,action_part)
 
   dx_loc=r%boxlen/2**ilevel
   dt_level=g%dtnew(ilevel)
-  smallr_loc = r%smallr
-  inv_pec_loc = r%tracer_inverse_peclet_number
-  iturb_loc = r%iturb
   use_sgs = r%sgs_turb .and. (r%iturb>0)
   if(use_sgs .and. .not. tracer_rng_ready)then
      call RngStream_SetPackageSeed(r%seed)
@@ -1193,28 +1161,6 @@ subroutine cic_trace_gas_part_ito(s,p,ilevel,action_part)
 
      call gather_cic_state(s,x,ilevel,dx_loc,use_sgs,vel,kappa_mid)
 
-     ! also gather cell-centered kappa for gradient estimates
-     do ic=1,twotondim
-        kappa_cells(ic)=0.d0
-     end do
-     call gather_cic_scalar(s,x,ilevel,dx_loc,use_sgs,kappa_cells)
-     do idim=1,ndim
-        dr(idim)=x(idim)+0.5d0
-        ir(idim)=int(dr(idim))
-        dr(idim)=dr(idim)-ir(idim)
-        dl(idim)=1.0d0-dr(idim)
-        il(idim)=ir(idim)-1
-     end do
-     do idim=1,ndim
-        if(r%periodic(idim))then
-           if(il(idim)< m%box_ckey_min(idim,ilevel+1))il(idim)=m%box_ckey_max(idim,ilevel+1)-1
-           if(ir(idim)>=m%box_ckey_max(idim,ilevel+1))ir(idim)=m%box_ckey_min(idim,ilevel+1)
-        endif
-     enddo
-     ckey = cic_index(il,ir)
-     phi_kappa => phi_kappa_cell
-     call compute_cell_gradients(s,ckey,ilevel,dx_loc,kappa_cells,grad_kappa_cells,phi_kappa)
-
      if(action_part==action_kick_only)then
         p%vp(ipart,1:ndim)=vel(1:ndim)
         p%levelp(ipart)=ilevel
@@ -1234,9 +1180,65 @@ subroutine cic_trace_gas_part_ito(s,p,ilevel,action_part)
 
      call gather_cic_state(s,x_mid,ilevel,dx_loc,use_sgs,vel_mid,kappa_mid)
 
-     ! interpolate grad(kappa) at midpoint
+     ! Ito drift: use CIC kernel gradient (first-order / piecewise-constant derivative)
+     ! ∇kappa(x) ≈ Σ_i kappa_i ∇W_i(x), with CIC weights W_i.
      disp(1:ndim)=0.d0
-     call interp_grad_at_pos(s,x_mid,ilevel,grad_kappa_cells,disp)
+     if(use_sgs)then
+        kappa_cells(1:twotondim)=0.d0
+        call gather_cic_scalar(s,x_mid,ilevel,dx_loc,use_sgs,kappa_cells)
+
+        ! Build 1D CIC weights and derivatives (keep syntax close to TSC code)
+        do idim=1,ndim
+           xd = x_mid(idim)
+           dr(idim)=xd+0.5d0
+           ir(idim)=int(dr(idim))
+           dr(idim)=dr(idim)-ir(idim)
+           dl(idim)=1.0d0-dr(idim)
+           w1d (idim,1)=dl(idim)
+           w1d (idim,2)=dr(idim)
+           dw1d(idim,1)=-1.d0
+           dw1d(idim,2)=+1.d0
+        end do
+
+        ! Build neighbor list, weights and derivatives (twotondim=2^ndim)
+        vol_diff=0.d0; grad_vol=0.d0
+        do ind=1,twotondim
+           weight = 1.d0
+           do jd=1,ndim
+              if(btest(ind-1,jd-1))then
+                 weight = weight*w1d(jd,2)
+              else
+                 weight = weight*w1d(jd,1)
+              endif
+           end do
+           vol_diff(ind)=weight
+           do idim=1,ndim
+              if(btest(ind-1,idim-1))then
+                 grad_vol(idim,ind)=dw1d(idim,2)
+              else
+                 grad_vol(idim,ind)=dw1d(idim,1)
+              endif
+              do jd=1,ndim
+                 if(jd==idim)cycle
+                 if(btest(ind-1,jd-1))then
+                    grad_vol(idim,ind)=grad_vol(idim,ind)*w1d(jd,2)
+                 else
+                    grad_vol(idim,ind)=grad_vol(idim,ind)*w1d(jd,1)
+                 endif
+              end do
+           end do
+        end do
+
+        grad_at_part(1:ndim)=0.d0
+        do idim=1,ndim
+           do ind=1,twotondim
+              grad_at_part(idim)=grad_at_part(idim)+grad_vol(idim,ind)*kappa_cells(ind)
+           end do
+        end do
+
+        ! Convert from cell-units gradient to physical gradient
+        disp(1:ndim)=grad_at_part(1:ndim)/dx_loc
+     end if
 
      ! Ito drift: u + grad(kappa)
      do idim=1,ndim
@@ -1267,16 +1269,6 @@ subroutine cic_trace_gas_part_ito(s,p,ilevel,action_part)
   end if
 
   end associate
-
-contains
-
-  function phi_kappa_cell(gridp,icell) result(phi_val)
-    implicit none
-    type(oct),pointer::gridp
-    integer,intent(in)::icell
-    real(kind=8)::phi_val
-    phi_val = tracer_cell_kappa(gridp%uold(icell,1),gridp%uold(icell,iturb_loc),dx_loc,smallr_loc,inv_pec_loc)
-  end function phi_kappa_cell
 end subroutine cic_trace_gas_part_ito
 
 subroutine cic_trace_gas_part_num(s,p,ilevel,action_part)
@@ -1642,14 +1634,14 @@ subroutine tsc_trace_gas_part_slope_limit(s,p,ilevel,action_part)
 
               phiR = 1.0d0
               phiL = 1.0d0
-              if(abs(dr_plus)>r%smallr)then
-                 r_ratio = dr_minus/dr_plus
-                 phiR = slope_limiter(r_ratio,slope_type)
-              end if
-              if(abs(dr_minus)>r%smallr)then
-                 r_ratio = dr_plus/dr_minus
-                 phiL = slope_limiter(r_ratio,slope_type)
-              end if
+            !   if(abs(dr_plus)>r%smallr)then
+            !      r_ratio = dr_minus/dr_plus
+            !      phiR = slope_limiter(r_ratio,slope_type)
+            !   end if
+            !   if(abs(dr_minus)>r%smallr)then
+            !      r_ratio = dr_plus/dr_minus
+            !      phiL = slope_limiter(r_ratio,slope_type)
+            !   end if
               phiR = min(1.d0,max(0.d0,phiR))
               phiL = min(1.d0,max(0.d0,phiL))
 
@@ -3030,14 +3022,14 @@ subroutine tsc_kick_drift_dust_num_diff(s,p,ilevel,action_part)
 
            phiR(idim) = 1.0d0
            phiL(idim) = 1.0d0
-           if(abs(dr_plus)>r%smallr)then
-              r_ratio = dr_minus/dr_plus
-              phiR(idim) = slope_limiter(r_ratio,slope_type)
-           end if
-           if(abs(dr_minus)>r%smallr)then
-             r_ratio = dr_plus/dr_minus
-              phiL(idim) = slope_limiter(r_ratio,slope_type)
-           end if
+         !   if(abs(dr_plus)>r%smallr)then
+         !      r_ratio = dr_minus/dr_plus
+         !      phiR(idim) = slope_limiter(r_ratio,slope_type)
+         !   end if
+         !   if(abs(dr_minus)>r%smallr)then
+         !     r_ratio = dr_plus/dr_minus
+         !      phiL(idim) = slope_limiter(r_ratio,slope_type)
+         !   end if
            phiR(idim) = min(1.d0,max(0.d0,phiR(idim)))
            phiL(idim) = min(1.d0,max(0.d0,phiL(idim)))
            phiL(idim) = 0.d0
