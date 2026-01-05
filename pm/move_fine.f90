@@ -107,8 +107,8 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
            call cic_trace_gas_part_num(pst%s,pst%s%trac,ilevel,action_part) ! Ito formulation of the flux-based Monte Carlo tracer
         elseif(pst%s%r%trac_interpolation_scheme==5)then
            call cic_trace_gas_part_ito(pst%s,pst%s%trac,ilevel,action_part) ! Ito formulation of the sgs driven diffusion tracer
-        elseif(pst%s%r%trac_interpolation_scheme==6)then
-           call cic_trace_gas_part_slope_limit(pst%s,pst%s%trac,ilevel,action_part) ! Flux-based Monte Carlo tracer with CFL-limited diffusion
+      !   elseif(pst%s%r%trac_interpolation_scheme==6)then
+      !      call cic_trace_gas_part_slope_limit(pst%s,pst%s%trac,ilevel,action_part) ! Flux-based Monte Carlo tracer with CFL-limited diffusion
         elseif(pst%s%r%trac_interpolation_scheme==7)then
            call tsc_trace_gas_part_slope_limit(pst%s,pst%s%trac,ilevel,action_part) ! Flux-based Monte Carlo tracer with CFL-limited diffusion
         endif
@@ -120,8 +120,8 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
            call tsc_kick_drift_dust(pst%s,pst%s%dust,ilevel,action_part)
         elseif(pst%s%r%dust_force_interpolation_scheme==3)then
            call pcs_kick_drift_dust(pst%s,pst%s%dust,ilevel,action_part)
-        elseif(pst%s%r%dust_force_interpolation_scheme==4)then
-           call cic_kick_drift_dust_num_diff(pst%s,pst%s%dust,ilevel,action_part)
+      !   elseif(pst%s%r%dust_force_interpolation_scheme==4)then
+      !      call cic_kick_drift_dust_num_diff(pst%s,pst%s%dust,ilevel,action_part)
         elseif(pst%s%r%dust_force_interpolation_scheme==5)then
            call tsc_kick_drift_dust_num_diff(pst%s,pst%s%dust,ilevel,action_part)
         endif
@@ -1115,10 +1115,11 @@ subroutine cic_trace_gas_part_ito(s,p,ilevel,action_part)
   type(part_t)::p
   integer::ilevel
   integer::action_part
-  real(kind=8),dimension(1:ndim)::x,x_mid,v_pred,vel,vel_mid,disp,xi
-  real(kind=8),dimension(1:ndim)::dl,dr
+  real(kind=8),dimension(1:ndim)::x,x_mid,v_pred,u_eff,u_mid,disp,xi
+  real(kind=8),dimension(1:ndim)::dl,dr,grad_at_part
   integer,dimension(1:ndim)::ir
   real(kind=8),dimension(1:twotondim)::kappa_cells
+  real(kind=8),dimension(1:ndim,1:twotondim)::grad_vol
   real(kind=8)::dx_loc,dt_level,kappa_mid,noise_amp
   logical :: use_sgs
   type(msg_nvar_realdp)::dummy_nvar_realdp
@@ -1126,12 +1127,7 @@ subroutine cic_trace_gas_part_ito(s,p,ilevel,action_part)
   real(kind=8),external::RngStream_RandUni
   integer(kind=8)::stream_skip
   external :: RngStream_SetPackageSeed, RngStream_AdvanceState, gaussdev
-  integer :: ipart,idim,ic,ind,jd
-  real(kind=8) :: xd,weight
-  real(kind=8),dimension(1:ndim)::grad_at_part
-  real(kind=8),dimension(1:ndim,1:2)::w1d,dw1d
-  real(kind=8),dimension(1:twotondim)::vol_diff
-  real(kind=8),dimension(1:ndim,1:twotondim)::grad_vol
+  integer :: ipart,idim,ind,jd
 
   associate(r=>s%r,g=>s%g,m=>s%m)
   if(p%static)return
@@ -1159,10 +1155,11 @@ subroutine cic_trace_gas_part_ito(s,p,ilevel,action_part)
      end do
      call wrap_cell_coords(s,x,ilevel+1)
 
-     call gather_cic_state(s,x,ilevel,dx_loc,use_sgs,vel,kappa_mid)
+     ! Gather gas velocity u(x) and SGS diffusivity kappa(x)
+     call gather_cic_state(s,x,ilevel,dx_loc,use_sgs,u_eff,kappa_mid)
 
      if(action_part==action_kick_only)then
-        p%vp(ipart,1:ndim)=vel(1:ndim)
+        p%vp(ipart,1:ndim)=u_eff(1:ndim)
         p%levelp(ipart)=ilevel
         cycle
      endif
@@ -1170,7 +1167,7 @@ subroutine cic_trace_gas_part_ito(s,p,ilevel,action_part)
      if (g%nstep>0) then
         v_pred(1:ndim)=p%vp(ipart,1:ndim)
      else
-        v_pred(1:ndim)=vel(1:ndim)
+        v_pred(1:ndim)=u_eff(1:ndim)
      endif
 
      do idim=1,ndim
@@ -1178,71 +1175,48 @@ subroutine cic_trace_gas_part_ito(s,p,ilevel,action_part)
      end do
      call wrap_cell_coords(s,x_mid,ilevel+1)
 
-     call gather_cic_state(s,x_mid,ilevel,dx_loc,use_sgs,vel_mid,kappa_mid)
+     ! Gather gas velocity u(x_mid) and SGS diffusivity kappa(x_mid)
+     call gather_cic_state(s,x_mid,ilevel,dx_loc,use_sgs,u_mid,kappa_mid)
 
-     ! Ito drift: use CIC kernel gradient (first-order / piecewise-constant derivative)
-     ! ∇kappa(x) ≈ Σ_i kappa_i ∇W_i(x), with CIC weights W_i.
-     disp(1:ndim)=0.d0
+     ! Kernel gradient (first-order): grad(kappa) from cell-centered kappa on CIC stencil
+     grad_at_part(1:ndim)=0.d0
      if(use_sgs)then
         kappa_cells(1:twotondim)=0.d0
         call gather_cic_scalar(s,x_mid,ilevel,dx_loc,use_sgs,kappa_cells)
 
-        ! Build 1D CIC weights and derivatives (keep syntax close to TSC code)
-        do idim=1,ndim
-           xd = x_mid(idim)
-           dr(idim)=xd+0.5d0
-           ir(idim)=int(dr(idim))
-           dr(idim)=dr(idim)-ir(idim)
-           dl(idim)=1.0d0-dr(idim)
-           w1d (idim,1)=dl(idim)
-           w1d (idim,2)=dr(idim)
-           dw1d(idim,1)=-1.d0
-           dw1d(idim,2)=+1.d0
+        ! CIC fractional offsets in cell units at x_mid
+        do jd=1,ndim
+           dr(jd)=x_mid(jd)+0.5d0
+           ir(jd)=int(dr(jd))
+           dr(jd)=dr(jd)-ir(jd)
+           dl(jd)=1.0d0-dr(jd)
         end do
 
-        ! Build neighbor list, weights and derivatives (twotondim=2^ndim)
-        vol_diff=0.d0; grad_vol=0.d0
+        grad_vol=0.d0
         do ind=1,twotondim
-           weight = 1.d0
-           do jd=1,ndim
-              if(btest(ind-1,jd-1))then
-                 weight = weight*w1d(jd,2)
-              else
-                 weight = weight*w1d(jd,1)
-              endif
-           end do
-           vol_diff(ind)=weight
            do idim=1,ndim
-              if(btest(ind-1,idim-1))then
-                 grad_vol(idim,ind)=dw1d(idim,2)
-              else
-                 grad_vol(idim,ind)=dw1d(idim,1)
-              endif
+              grad_vol(idim,ind)=merge(1.d0,-1.d0,btest(ind-1,idim-1))
               do jd=1,ndim
                  if(jd==idim)cycle
                  if(btest(ind-1,jd-1))then
-                    grad_vol(idim,ind)=grad_vol(idim,ind)*w1d(jd,2)
+                    grad_vol(idim,ind)=grad_vol(idim,ind)*dr(jd)
                  else
-                    grad_vol(idim,ind)=grad_vol(idim,ind)*w1d(jd,1)
+                    grad_vol(idim,ind)=grad_vol(idim,ind)*dl(jd)
                  endif
               end do
            end do
         end do
-
-        grad_at_part(1:ndim)=0.d0
         do idim=1,ndim
            do ind=1,twotondim
               grad_at_part(idim)=grad_at_part(idim)+grad_vol(idim,ind)*kappa_cells(ind)
            end do
         end do
-
-        ! Convert from cell-units gradient to physical gradient
-        disp(1:ndim)=grad_at_part(1:ndim)/dx_loc
      end if
 
      ! Ito drift: u + grad(kappa)
+     disp(1:ndim)=0.d0
      do idim=1,ndim
-        disp(idim) = (vel_mid(idim) + disp(idim))*dt_level
+        disp(idim) = (u_mid(idim) + grad_at_part(idim)/dx_loc)*dt_level
      end do
 
      if(use_sgs .and. kappa_mid>0.0d0)then
@@ -1251,7 +1225,7 @@ subroutine cic_trace_gas_part_ito(s,p,ilevel,action_part)
         disp(1:ndim)=disp(1:ndim)+noise_amp*xi(1:ndim)
      end if
 
-     p%vp(ipart,1:ndim)=vel_mid(1:ndim)
+     p%vp(ipart,1:ndim)=u_mid(1:ndim)
      p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+disp(1:ndim)
   end do
 
