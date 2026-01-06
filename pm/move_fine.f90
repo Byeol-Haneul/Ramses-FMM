@@ -104,13 +104,11 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
         elseif(pst%s%r%trac_interpolation_scheme==3)then
            call pcs_trace_gas_part(pst%s,pst%s%trac,ilevel,action_part)
         elseif(pst%s%r%trac_interpolation_scheme==4)then
-           call cic_trace_gas_part_num(pst%s,pst%s%trac,ilevel,action_part) ! Ito formulation of the flux-based Monte Carlo tracer
+           call cic_trace_gas_part_ito_mc(pst%s,pst%s%trac,ilevel,action_part) ! Ito formulation of the flux-based Monte Carlo tracer
         elseif(pst%s%r%trac_interpolation_scheme==5)then
-           call cic_trace_gas_part_ito(pst%s,pst%s%trac,ilevel,action_part) ! Ito formulation of the sgs driven diffusion tracer
-      !   elseif(pst%s%r%trac_interpolation_scheme==6)then
-      !      call cic_trace_gas_part_slope_limit(pst%s,pst%s%trac,ilevel,action_part) ! Flux-based Monte Carlo tracer with CFL-limited diffusion
-        elseif(pst%s%r%trac_interpolation_scheme==7)then
-           call tsc_trace_gas_part_slope_limit(pst%s,pst%s%trac,ilevel,action_part) ! Flux-based Monte Carlo tracer with CFL-limited diffusion
+           call cic_trace_gas_part_sgs_turb(pst%s,pst%s%trac,ilevel,action_part) ! Ito formulation of the sgs driven diffusion tracer
+        elseif(pst%s%r%trac_interpolation_scheme==6)then
+           call tsc_trace_gas_part_ito_mc_grad(pst%s,pst%s%trac,ilevel,action_part) ! Ito MC tracer with (1-CFL) factor and grad(kappa).
         endif
      endif
      if(pst%s%r%dust)then
@@ -120,10 +118,10 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
            call tsc_kick_drift_dust(pst%s,pst%s%dust,ilevel,action_part)
         elseif(pst%s%r%dust_force_interpolation_scheme==3)then
            call pcs_kick_drift_dust(pst%s,pst%s%dust,ilevel,action_part)
-      !   elseif(pst%s%r%dust_force_interpolation_scheme==4)then
-      !      call cic_kick_drift_dust_num_diff(pst%s,pst%s%dust,ilevel,action_part)
+        elseif(pst%s%r%dust_force_interpolation_scheme==4)then
+           call tsc_kick_drift_dust_ito_mc_grad(pst%s,pst%s%dust,ilevel,action_part) ! Asymptotically approaches Ito MC tracer in the stiff regime.
         elseif(pst%s%r%dust_force_interpolation_scheme==5)then
-           call tsc_kick_drift_dust_num_diff(pst%s,pst%s%dust,ilevel,action_part)
+           call tsc_kick_drift_dust_guiding_center(pst%s,pst%s%dust,ilevel,action_part)
         endif
      endif
   endif
@@ -1101,7 +1099,7 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
 
 end subroutine cic_trace_gas_part
 
-subroutine cic_trace_gas_part_ito(s,p,ilevel,action_part)
+subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
   use amr_parameters, only: ndim, twotondim
   use pm_parameters
   use pm_commons, only: part_t
@@ -1243,9 +1241,9 @@ subroutine cic_trace_gas_part_ito(s,p,ilevel,action_part)
   end if
 
   end associate
-end subroutine cic_trace_gas_part_ito
+end subroutine cic_trace_gas_part_sgs_turb
 
-subroutine cic_trace_gas_part_num(s,p,ilevel,action_part)
+subroutine cic_trace_gas_part_ito_mc(s,p,ilevel,action_part)
   use amr_parameters, only: ndim, twotondim
   use pm_parameters
   use pm_commons, only: part_t
@@ -1394,12 +1392,12 @@ subroutine cic_trace_gas_part_num(s,p,ilevel,action_part)
   end if
 
   end associate
-end subroutine cic_trace_gas_part_num
+end subroutine cic_trace_gas_part_ito_mc
 
 ! subroutine cic_trace_gas_part_slope_limit(s,p,ilevel,action_part)
 ! end subroutine cic_trace_gas_part_slope_limit
 
-subroutine tsc_trace_gas_part_slope_limit(s,p,ilevel,action_part)
+subroutine tsc_trace_gas_part_ito_mc_grad(s,p,ilevel,action_part)
   use amr_parameters, only: ndim, twotondim, threetondim
   use pm_parameters
   use pm_commons, only: part_t
@@ -1675,7 +1673,7 @@ subroutine tsc_trace_gas_part_slope_limit(s,p,ilevel,action_part)
   end if
 
   end associate
-end subroutine tsc_trace_gas_part_slope_limit
+end subroutine tsc_trace_gas_part_ito_mc_grad
 
 subroutine mc_trace_gas_part(s,p,ilevel,action_part)
   use amr_parameters, only: ndim, twotondim
@@ -2654,7 +2652,7 @@ end subroutine cic_kick_drift_dust
 !subroutine cic_kick_drift_dust_num_diff(s,p,ilevel,action_part)
 !end subroutine cic_kick_drift_dust_num_diff
 
-subroutine tsc_kick_drift_dust_num_diff(s,p,ilevel,action_part)
+subroutine tsc_kick_drift_dust_ito_mc_grad(s,p,ilevel,action_part)
   use amr_parameters, only: ndim, threetondim
   use hydro_parameters, only: nener
   use pm_parameters
@@ -3117,7 +3115,10 @@ subroutine tsc_kick_drift_dust_num_diff(s,p,ilevel,action_part)
   end if
 
   end associate
-end subroutine tsc_kick_drift_dust_num_diff
+end subroutine tsc_kick_drift_dust_ito_mc_grad
+
+subroutine tsc_kick_drift_dust_guiding_center(s,p,ilevel,action_part)
+end subroutine tsc_kick_drift_dust_guiding_center
 
 subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
   use amr_parameters, only: ndim, threetondim
