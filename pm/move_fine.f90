@@ -2700,7 +2700,7 @@ subroutine tsc_kick_drift_dust_num_diff(s,p,ilevel,action_part)
   real(kind=8)::wdrift2,w0,a,g_par,g_perp
   type(oct),pointer :: gridp
   real(kind=8)::x_rel,weight,xd
-  integer :: k,slope_type
+  integer :: k,slope_type,jdim
   real(kind=8)::rho,denom,fluxL,fluxR,xl,xc,xr
   real(kind=8)::cfl_dim,one_minus_cfl,jr,jl
   real(kind=8)::rho_left,rho_right,dr_plus,dr_minus,r_ratio
@@ -3089,11 +3089,11 @@ subroutine tsc_kick_drift_dust_num_diff(s,p,ilevel,action_part)
 
         dx_ito(1:ndim)=0.d0
         do idim=1,ndim
-           do k=1,ndim
+           do jdim=1,ndim
               if (wdrift2 > 0.d0) then
                  dx_ito(idim) = dx_ito(idim) + &
-                      (g_perp * merge(1.d0,0.d0,idim==k) + (g_par - g_perp)*what(idim)*what(k)) * &
-                      (sqrt(2.d0*kappa_num(k)*dt_level) * xi(k) + grad_at_part(k) * dt_level)
+                      (g_perp * merge(1.d0,0.d0,idim==jdim) + (g_par - g_perp)*what(idim)*what(jdim)) * &
+                      (sqrt(2.d0*kappa_num(jdim)*dt_level) * xi(jdim) + grad_at_part(jdim) * dt_level)
               end if
            end do
         end do

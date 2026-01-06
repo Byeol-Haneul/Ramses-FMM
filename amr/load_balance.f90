@@ -606,7 +606,7 @@ subroutine pack_flush_loadbalance(grid,msg_size,msg_array)
 #endif
   
 #ifdef MHD
-  msg%realdp_mhd=grid%bold
+  msg%=grid%bold
 #endif
 
 #ifdef RT
@@ -669,7 +669,7 @@ subroutine unpack_flush_loadbalance(grid,msg_size,msg_array,hash_key)
 #endif
   
 #ifdef MHD
-  grid%bold=msg%realdp_mhd
+  grid%bold=msg%
 #endif
 
 #ifdef RT
