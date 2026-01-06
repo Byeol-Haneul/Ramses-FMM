@@ -132,7 +132,7 @@ function worker_init(mdl) result(pst)
   use feedback_module, only: r_thermal_feedback, r_mechanical_feedback
   use sink_evolution_module, only: r_sink_evolution
   use sink_merger_module, only: r_sink_merger
-  use newdt_fine_module, only: r_newdt_part,r_broadcast_dt,r_max_B_and_Q,r_max_sigma
+  use newdt_fine_module, only: r_newdt_part,r_broadcast_dt,r_max_B_and_Q
   use rho_fine_module, only: r_split_part,r_sort_part
 #ifdef GRAV
   use force_fine_module, only: r_force_analytic,r_compute_epot,r_compute_rhomax,r_gradient_phi
@@ -254,7 +254,6 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_SINK_MERGER,            pst,C_FUNLOC(r_sink_merger),1,0,"sink_merger")
   call mdl_add_service(pst%s%mdl,MDL_NEWDT_PART,             pst,C_FUNLOC(r_newdt_part),0,0,"newdt_part")
   call mdl_add_service(pst%s%mdl,MDL_MAX_B_AND_Q,            pst,C_FUNLOC(r_max_B_and_Q),1,4,"max_B_and_Q")
-  call mdl_add_service(pst%s%mdl,MDL_MAX_SIGMA,              pst,C_FUNLOC(r_max_sigma),1,2,"max_sigma")
   call mdl_add_service(pst%s%mdl,MDL_BROADCAST_DT,           pst,C_FUNLOC(r_broadcast_dt),24,0,"broadcast_dt")
   call mdl_add_service(pst%s%mdl,MDL_SYNCHRO_HYDRO_FINE,     pst,C_FUNLOC(r_synchro_hydro_fine),3,0,"synchro_hydro_fine")
   call mdl_add_service(pst%s%mdl,MDL_GRAVITY_HYDRO_FINE,     pst,C_FUNLOC(r_gravity_hydro_fine),1,0,"gravity_hydro_fine")
