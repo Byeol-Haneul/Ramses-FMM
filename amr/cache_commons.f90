@@ -38,7 +38,7 @@ module cache_commons
      real(kind=8),dimension(1:twotondim,1:nrtvar)::realdp_rt
 #endif
 #ifdef MHD
-     real(kind=8),dimension(1:twotondim,1:6)::
+     real(kind=8),dimension(1:twotondim,1:6)::realdp_mhd
 #endif
      real(kind=8),dimension(1:twotondim,1:6)::realdp_mflux
   end type msg_realdp
@@ -71,7 +71,7 @@ module cache_commons
      real(kind=8),dimension(1:twotondim,1:nrtvar)::realdp_rt
 #endif
 #ifdef MHD
-     real(kind=8),dimension(1:twotondim,1:6)::
+     real(kind=8),dimension(1:twotondim,1:6)::realdp_mhd
 #endif
 #ifdef GRAV
      real(kind=8),dimension(1:twotondim,1:ndim+2)::realdp_poisson

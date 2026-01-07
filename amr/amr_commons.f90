@@ -96,10 +96,10 @@ module amr_commons
      integer :: sink_force_interpolation_scheme=1 ! sink force interpolation schemes
      integer :: tree_mass_deposition_scheme=1     ! tree mass deposition schemes
      integer :: tree_force_interpolation_scheme=1 ! tree force interpolation schemes
-     integer :: trac_interpolation_scheme=1 ! tracer force interpolation schemes (0: MC, 1: CIC, 2: TSC, 3: PCS, 4: flux-based Ito, 5: SGS Ito, 6: flux-based CFL-limited)
-     real(kind=8) :: tracer_inverse_peclet_number=1.0d-2 ! tracer turbulent Schmidt number for SGS diffusion
+     integer :: trac_interpolation_scheme=1 ! tracer force interpolation schemes (0: MC, 1: CIC, 2: TSC, 3: PCS, 4: TSC Ito MC, 5: TSC SGS Ito, 6: TSC Ito MC with grad(kappa))
+     real(kind=8) :: tracer_inverse_peclet_number=1.0d0 ! tracer inverse Peclet number for SGS Ito diffusion (controls diffusivity)
      integer :: dust_mass_deposition_scheme=1 ! dust mass deposition schemes
-     integer :: dust_force_interpolation_scheme=1 ! dust force interpolation schemes (1:CIC,2:TSC,3:PCS,4:CIC num-diff,5:TSC num-diff)
+     integer :: dust_force_interpolation_scheme=1 ! dust force interpolation schemes (1:CIC,2:TSC,3:PCS,4:TSC Ito MC,5:TSC Guiding Center)
 
      ! Movie parameters
      integer::levelmax_frame=0

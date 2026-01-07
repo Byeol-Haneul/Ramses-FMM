@@ -77,7 +77,7 @@ subroutine m_newdt_fine(pst,ilevel)
 
   ! Estimate maximum SGS turbulent speed at this level (for particle CFL)
   sigma_max_global = 0.0d0
-  if(r%pic .and. r%sgs_turb .and. r%iturb>0)then
+  if(r%pic .and. r%sgs_turb .and. r%iturb>0 .and. r%trac_interpolation_scheme==5)then
      block
        type(out_max_sigma_t)::sigout
        sigout%max_sigma = 0.0d0

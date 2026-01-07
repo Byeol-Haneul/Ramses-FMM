@@ -414,7 +414,6 @@ subroutine unpack_flush_multipole(grid,msg_size,msg_array,hash_key)
      end do
   end do
 #endif
-  ! NOTE: mflux must not be modified here (book-keeping from hydro only).
 
 end subroutine unpack_flush_multipole
 !################################################################

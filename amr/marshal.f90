@@ -38,7 +38,7 @@ subroutine pack_fetch_refine(grid,msg_size,msg_array)
 #endif
 
 #ifdef MHD
-  msg%=grid%bold
+  msg%realdp_mhd=grid%bold
 #endif
 
 #ifdef GRAV
@@ -107,7 +107,7 @@ subroutine unpack_fetch_refine(grid,msg_size,msg_array,hash_key)
 #endif
 
 #ifdef MHD
-  grid%bold=msg%
+  grid%bold=msg%realdp_mhd
 #endif
 
 #ifdef GRAV
