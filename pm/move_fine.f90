@@ -873,6 +873,7 @@ end subroutine unpack_fetch_kick_trac
 subroutine pack_fetch_kick_dust(mesh,igrid,msg_size,msg_array)
   use amr_parameters, only: twotondim
   use hydro_parameters, only: nvar
+  use rt_parameters, only: nrtvar
   use amr_commons, only: mesh_t
   use cache_commons, only: msg_large_realdp
   type(mesh_t)::mesh
@@ -919,6 +920,7 @@ end subroutine pack_fetch_kick_dust
 subroutine unpack_fetch_kick_dust(mesh,igrid,msg_size,msg_array,hash_key)
   use amr_parameters, only: ndim, twotondim
   use hydro_parameters, only: nvar
+  use rt_parameters, only: nrtvar
   use amr_commons, only: mesh_t
   use cache_commons, only: msg_large_realdp
   type(mesh_t)::mesh

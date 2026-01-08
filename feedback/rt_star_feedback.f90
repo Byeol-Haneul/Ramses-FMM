@@ -274,7 +274,7 @@ subroutine unpack_flush_emissivity(mesh,igrid,msg_size,msg_array,hash_key)
   msg=transfer(msg_array,msg)
 
 #ifdef RT
-  mesh%emissivity(:,:migrid)=mesh%emissivity(:,:,igrid)+msg%realdp(:,:)
+  mesh%emissivity(:,:,igrid)=mesh%emissivity(:,:,igrid)+msg%realdp(:,:)
 #endif
 
 end subroutine unpack_flush_emissivity
