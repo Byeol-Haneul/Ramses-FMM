@@ -60,7 +60,6 @@ p_region= 1.391794d-08, 1.391795d-08	! 8000 K and 40 K
 /
 
 &OUTPUT_PARAMS
-noutput=6
 tout=0.1,0.2,0.5,1,2,5
 /
 
