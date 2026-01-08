@@ -40,7 +40,6 @@ module cache_commons
 #ifdef MHD
      real(kind=8),dimension(1:twotondim,1:6)::realdp_mhd
 #endif
-     real(kind=8),dimension(1:twotondim,1:6)::realdp_mflux
   end type msg_realdp
   type msg_small_realdp
      real(kind=8),dimension(1:twotondim)::realdp
@@ -58,12 +57,23 @@ module cache_commons
      real(kind=8),dimension(1:twotondim)::realdp_phi
      real(kind=8),dimension(1:twotondim)::realdp_phi_old
      real(kind=8),dimension(1:twotondim)::realdp_dis
-     real(kind=8),dimension(1:twotondim,1:6)::realdp_mflux
   end type msg_three_realdp
   type msg_nvar_realdp
      real(kind=8),dimension(1:twotondim,1:nvar)::realdp_hydro
-     real(kind=8),dimension(1:twotondim,1:6)::realdp_mflux
   end type msg_nvar_realdp
+  ! Explicit mflux message types (keep mflux transfers self-contained)
+  type msg_hydro_mflux
+     real(kind=8),dimension(1:twotondim,1:nvar)::realdp_hydro
+     real(kind=8),dimension(1:twotondim,1:6)::realdp_mflux
+  end type msg_hydro_mflux
+  type msg_upload_hydro_mflux_mhd
+     integer(kind=4),dimension(1:twotondim)::int4
+     real(kind=8),dimension(1:twotondim,1:nvar)::realdp_hydro
+     real(kind=8),dimension(1:twotondim,1:6)::realdp_mflux
+#ifdef MHD
+     real(kind=8),dimension(1:twotondim,1:6)::realdp_mhd
+#endif
+  end type msg_upload_hydro_mflux_mhd
   type msg_large_realdp
      integer(kind=4),dimension(1:twotondim)::int4
      real(kind=8),dimension(1:twotondim,1:nvar)::realdp_hydro

@@ -177,10 +177,6 @@ subroutine pack_flush_upload_rt(grid,msg_size,msg_array)
 #endif
      end do
   end do
-#ifdef HYDRO
-  ! mflux is hydro book-keeping; RT upload must not propagate it.
-  msg%realdp_mflux=0.0d0
-#endif
   msg_array=transfer(msg,msg_array)
 
 end subroutine pack_flush_upload_rt

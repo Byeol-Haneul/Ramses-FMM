@@ -799,9 +799,6 @@ subroutine pack_fetch_kick(grid,msg_size,msg_array)
      msg%realdp_dis(ind)=grid%f(ind,3)
   end do
 #endif
-#ifdef HYDRO
-  msg%realdp_mflux=grid%mflux
-#endif
 
   msg_array=transfer(msg,msg_array)
 
@@ -833,9 +830,6 @@ subroutine unpack_fetch_kick(grid,msg_size,msg_array,hash_key)
      grid%f(ind,3)=msg%realdp_dis(ind)
   end do
 #endif
-#ifdef HYDRO
-  grid%mflux=msg%realdp_mflux
-#endif
 
 end subroutine unpack_fetch_kick
 !#########################################################################
@@ -848,13 +842,13 @@ subroutine pack_fetch_kick_trac(grid,msg_size,msg_array)
   use amr_parameters, only: twotondim, ndim
   use hydro_parameters, only: nvar
   use oct_commons, only: oct
-  use cache_commons, only: msg_nvar_realdp
+  use cache_commons, only: msg_hydro_mflux
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
 
   integer::ind,ivar
-  type(msg_nvar_realdp)::msg
+  type(msg_hydro_mflux)::msg
 
 #ifdef HYDRO
   do ivar=1,nvar
@@ -876,13 +870,13 @@ subroutine unpack_fetch_kick_trac(grid,msg_size,msg_array,hash_key)
   use amr_parameters, only: ndim,twotondim
   use hydro_parameters, only: nvar
   use oct_commons, only: oct
-  use cache_commons, only: msg_nvar_realdp
+  use cache_commons, only: msg_hydro_mflux
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
   integer(kind=8),dimension(0:ndim)::hash_key
   integer::ind,ivar
-  type(msg_nvar_realdp)::msg
+  type(msg_hydro_mflux)::msg
 
   grid%lev=hash_key(0)
   grid%ckey(1:ndim)=hash_key(1:ndim)
@@ -1018,7 +1012,7 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
   real(kind=8),dimension(1:ndim)::x,x_mid,v_pred,vel,vel_mid,disp,xi
   real(kind=8)::dx_loc,dt_level,kappa_mid,noise_amp
   logical :: use_sgs
-  type(msg_nvar_realdp)::dummy_nvar_realdp
+  type(msg_hydro_mflux)::dummy_nvar_realdp
   type(RngStream),external::RngStream_CreateStream
   real(kind=8),external::RngStream_RandUni
   integer(kind=8)::stream_skip
@@ -1120,7 +1114,7 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
   real(kind=8),dimension(1:ndim,1:twotondim)::grad_vol
   real(kind=8)::dx_loc,dt_level,kappa_mid,noise_amp
   logical :: use_sgs
-  type(msg_nvar_realdp)::dummy_nvar_realdp
+  type(msg_hydro_mflux)::dummy_nvar_realdp
   type(RngStream),external::RngStream_CreateStream
   real(kind=8),external::RngStream_RandUni
   integer(kind=8)::stream_skip
@@ -1270,7 +1264,7 @@ subroutine cic_trace_gas_part_ito_mc(s,p,ilevel,action_part)
   type(oct),pointer::gridp
   integer :: ipart,ind,idim,icell,k
   real(kind=8)::dx_loc,dt_level,rho,denom,fluxL,fluxR,jr,jl,noise_amp
-  type(msg_nvar_realdp)::dummy_nvar_realdp
+  type(msg_hydro_mflux)::dummy_nvar_realdp
   type(RngStream),external::RngStream_CreateStream
   real(kind=8),external::RngStream_RandUni
   integer(kind=8)::stream_skip
@@ -1433,7 +1427,7 @@ subroutine tsc_trace_gas_part_ito_mc_grad(s,p,ilevel,action_part)
   real(kind=8)::rho_left,rho_right,dr_plus,dr_minus,r_ratio,phiR,phiL
   real(kind=8)::x_rel,weight
   real(kind=8)::xd
-  type(msg_nvar_realdp)::dummy_nvar_realdp
+  type(msg_hydro_mflux)::dummy_nvar_realdp
   type(RngStream),external::RngStream_CreateStream
   real(kind=8),external::RngStream_RandUni
   integer(kind=8)::stream_skip
@@ -1614,8 +1608,8 @@ subroutine tsc_trace_gas_part_ito_mc_grad(s,p,ilevel,action_part)
             !      r_ratio = dr_plus/dr_minus
             !      phiL = slope_limiter(r_ratio,slope_type)
             !   end if
-              phiR = min(1.d0,max(0.d0,phiR))
-              phiL = min(1.d0,max(0.d0,phiL))
+              phiR = 0.0d0 !min(1.d0,max(0.d0,phiR))
+              phiL = 0.0d0 !min(1.d0,max(0.d0,phiL))
 
               kappa_num_cells(idim,ind)=one_minus_cfl*&
                    ((1.d0-phiR)*jr + (1.d0-phiL)*jl)*dx_loc/(2.d0*denom)
@@ -1705,7 +1699,7 @@ subroutine mc_trace_gas_part(s,p,ilevel,action_part)
   real(kind=8)::weight_sum
   integer :: ind,bit,selected_corner,corner_associated
   type(oct),pointer::gridp
-  type(msg_nvar_realdp)::dummy_nvar_realdp
+  type(msg_hydro_mflux)::dummy_nvar_realdp
   type(RngStream),external::RngStream_CreateStream
   real(kind=8),external::RngStream_RandUni
   integer(kind=8)::stream_skip
@@ -2180,7 +2174,7 @@ subroutine tsc_trace_gas_part(s,p,ilevel,action_part)
   type(oct),pointer::gridp
   logical::ok_level
   type(msg_three_realdp)::dummy_three_realdp
-  type(msg_nvar_realdp)::dummy_nvar_realdp
+  type(msg_hydro_mflux)::dummy_nvar_realdp
   associate(r=>s%r,g=>s%g,m=>s%m)
   if(p%static)return
   if (p%type/=TRAC_TYPE) return
@@ -2325,7 +2319,7 @@ subroutine pcs_trace_gas_part(s,p,ilevel,action_part)
   real(kind=8),dimension(1:ndim)::ff,v_pred
   type(oct),pointer::gridp
   type(msg_large_realdp)::dummy_large_realdp
-  type(msg_nvar_realdp)::dummy_nvar_realdp
+  type(msg_hydro_mflux)::dummy_nvar_realdp
   associate(r=>s%r,g=>s%g,m=>s%m)
   if(p%static)return
   if (p%type/=TRAC_TYPE) return
@@ -3118,6 +3112,19 @@ subroutine tsc_kick_drift_dust_ito_mc_grad(s,p,ilevel,action_part)
 end subroutine tsc_kick_drift_dust_ito_mc_grad
 
 subroutine tsc_kick_drift_dust_guiding_center(s,p,ilevel,action_part)
+  use ramses_commons, only: ramses_t
+  use pm_commons, only: part_t
+  use mdl_module
+  implicit none
+  type(ramses_t)::s
+  type(part_t)::p
+  integer::ilevel
+  integer::action_part
+
+  ! Guiding-center scheme placeholder.
+  ! This must not silently do nothing if selected.
+  write(*,*) 'Error: dust_force_interpolation_scheme=5 (TSC guiding center) is not implemented.'
+  call mdl_abort(s%mdl)
 end subroutine tsc_kick_drift_dust_guiding_center
 subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
   use amr_parameters, only: ndim, threetondim

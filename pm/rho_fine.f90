@@ -377,11 +377,6 @@ subroutine pack_flush_multipole(grid,msg_size,msg_array)
      end do
   end do
 #endif
-#ifdef HYDRO
-  ! mflux is unrelated to multipole splitting; keep message deterministic but do not propagate it.
-  msg%realdp_mflux=0.0d0
-#endif
-
   msg_array=transfer(msg,msg_array)
 
 end subroutine pack_flush_multipole

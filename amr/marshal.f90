@@ -33,10 +33,6 @@ subroutine pack_fetch_refine(grid,msg_size,msg_array)
   end do
 #endif
   
-#ifdef HYDRO
-  msg%realdp_mflux=grid%mflux
-#endif
-
 #ifdef MHD
   msg%realdp_mhd=grid%bold
 #endif
@@ -100,10 +96,6 @@ subroutine unpack_fetch_refine(grid,msg_size,msg_array,hash_key)
         grid%uold(ind,ivar)=msg%realdp_hydro(ind,ivar)
      end do
   end do
-#endif
-
-#ifdef HYDRO
-  grid%mflux=msg%realdp_mflux
 #endif
 
 #ifdef MHD
