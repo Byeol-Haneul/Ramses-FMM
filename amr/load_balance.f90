@@ -683,7 +683,7 @@ subroutine pack_flush_loadbalance(mesh, igrid, msg_size, msg_array)
 #ifdef MHD
   do ind=1,twotondim
      do ivar=1,6
-        msg%realdp_mhd=mesh%bold(ind,ivar,igrid)
+        msg%realdp_mhd(ind,ivar)=mesh%bold(ind,ivar,igrid)
      end do
   end do
 #endif
@@ -751,7 +751,7 @@ subroutine unpack_flush_loadbalance(mesh,igrid,msg_size,msg_array,hash_key)
 #ifdef MHD
   do ind=1,twotondim
      do ivar=1,6
-        mesh%bold(ind,ivar,igrid)=msg%realdp_mhd
+        mesh%bold(ind,ivar,igrid)=msg%realdp_mhd(ind,ivar)
      end do
   end do
 #endif

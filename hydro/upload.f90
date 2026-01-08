@@ -287,7 +287,7 @@ subroutine pack_flush_upload(mesh,igrid,msg_size,msg_array)
 #ifdef MHD
   do ivar=1,6
      do ind=1,twotondim
-        msg%realdp_mhd(ind,ivar)=grid%bold(ind,ivar,igrid)
+        msg%realdp_mhd(ind,ivar)=mesh%bold(ind,ivar,igrid)
      end do
   end do
 #endif
