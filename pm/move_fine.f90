@@ -2495,6 +2495,15 @@ subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
   dx_loc=r%boxlen/2**ilevel
   vol_loc=dx_loc**ndim
   if (p%type/=DUST_TYPE) return
+
+  ! OPTIMIZATION: Handle kick-only pass immediately without cache operations
+  if(action_part==action_kick_only)then
+     do ipart=p%headp(ilevel),p%tailp(ilevel)
+        p%levelp(ipart)=ilevel
+     end do
+     return
+  endif
+
   coeff=9.0d0*pi*r%gamma/128.0d0
   ! Dust hydro+gravity cache
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
@@ -2526,114 +2535,108 @@ subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
      ckey = cic_index(il,ir)
      vol = cic_weight(dl,dr)
 
-
-
-     if(action_part==action_kick_only)then
-        p%levelp(ipart)=ilevel
-     else if(action_part==action_kick_drift)then
-        ! Leapfrog-style sampling: half-step shift only on the first coarse step
-        v_pred(1:ndim)=p%vp(ipart,1:ndim)
-        if (g%nstep==0) then
-           do idim=1,ndim
-              x_mid(idim)=x(idim)+0.5d0*g%dtnew(ilevel)*v_pred(idim)/dx_loc
-           end do
-        else
-           do idim=1,ndim
-              x_mid(idim)=x(idim)
-           end do
-        endif
+     ! Leapfrog-style sampling: half-step shift only on the first coarse step
+     v_pred(1:ndim)=p%vp(ipart,1:ndim)
+     if (g%nstep==0) then
         do idim=1,ndim
-           if(x_mid(idim)<0d0)x_mid(idim)=x_mid(idim)+dble(m%ckey_max(ilevel+1))
-           if(x_mid(idim)>=dble(m%ckey_max(ilevel+1)))x_mid(idim)=x_mid(idim)-dble(m%ckey_max(ilevel+1))
+           x_mid(idim)=x(idim)+0.5d0*g%dtnew(ilevel)*v_pred(idim)/dx_loc
         end do
-
-        ! CIC weights/indices at x_mid
+     else
         do idim=1,ndim
-           dr2(idim)=x_mid(idim)+0.5D0
-           ir2(idim)=int(dr2(idim))
-           dr2(idim)=dr2(idim)-ir2(idim)
-           dl2(idim)=1.0D0-dr2(idim)
-           il2(idim)=ir2(idim)-1
+           x_mid(idim)=x(idim)
         end do
-        do idim=1,ndim
-           if(il2(idim)<0)il2(idim)=m%ckey_max(ilevel+1)-1
-           if(ir2(idim)==m%ckey_max(ilevel+1))ir2(idim)=0
-        enddo
-        ckey2 = cic_index(il2,ir2)
-        vol2 = cic_weight(dl2,dr2)
-
-        ! Gather hydro and forces at x_mid
-        ff(1:ndim)=0.0
-        uu(1:ndim)=0.0
-        rho_gas = 0.0
-        eint = 0.0
-#ifdef MHD
-        bb(1:3)=0.0
-        emag=0.0d0
-#endif
-        hash_nbor(0)=ilevel+1
-        do ind=1,twotondim
-           hash_nbor(1:ndim)=ckey2(1:ndim,ind)
-           call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
-#ifdef HYDRO
-           if(associated(gridp))then
-#ifdef GRAV
-              ff(1:ndim)=ff(1:ndim)+gridp%f(icell2,1:ndim)*vol2(ind)
-#endif
-              rho_gas = rho_gas + gridp%uold(icell2,1)*vol2(ind)
-#ifdef MHD
-              bb(1:3)=bb(1:3)+0.5d0*(gridp%bold(icell2,1:3)+gridp%bold(icell2,4:6))*vol2(ind)
-#endif
-              dens = max(dble(gridp%uold(icell2,1)), r%smallr)
-              etot = gridp%uold(icell2,5)
-              ekin = 0.0d0
-              do idim=1,ndim
-                 ekin = ekin + 0.5d0 * gridp%uold(icell2,1+idim)**2 / dens
-              end do
-              erad = 0.0d0
-#if NENER>0
-              do irad=1,nener
-                 erad = erad + gridp%uold(icell2,5+irad)
-              end do
-#endif
-#ifdef MHD
-              do idim=1,3
-                 emag = emag + 0.125d0*(gridp%bold(icell2,idim)+gridp%bold(icell2,ndim+idim))**2*vol2(ind)
-              end do
-              eint = eint - emag*vol2(ind)
-#endif
-              eint = eint + (etot - ekin - erad)*vol2(ind)
-           end if
-#endif
-        end do
-
-        cs2 = r%gamma * (r%gamma-1.0d0) * max(eint, r%smallc**2) / max(rho_gas, r%smallr)
-        c_sound = max(sqrt(cs2), r%smallc)
-        nu_stop = coeff*c_sound*rho_gas/p%size(ipart)
-        wdrift(1:ndim)= v_pred(1:ndim) - uu(1:ndim)
-
-        ! Operator-split: drag(half) -> forces -> drag(half)
-        call compute_drag_step(wdrift, c_sound, 0.5d0*g%dtnew(ilevel), nu_stop, coeff, r%analytic_dust_force)
-#ifdef GRAV
-        wdrift(1:ndim)=wdrift(1:ndim)+ff(1:ndim)*0.5d0*g%dtnew(ilevel)
-#endif
-#ifdef MHD
-        if (ndim==3) then
-            call compute_lorentz_step(wdrift, bb(1:ndim), g%dtnew(ilevel), p%charge(ipart), r%analytic_dust_force)
-        else
-            if(g%myid==1 .and. g%nstep==0)then
-               write(*,*) 'Warning: Lorentz force not implemented for NDIM != 3; proceeding without it.'
-            endif
-        endif
-#endif
-#ifdef GRAV
-        wdrift(1:ndim)=wdrift(1:ndim)+ff(1:ndim)*0.5d0*g%dtnew(ilevel)
-#endif
-        call compute_drag_step(wdrift, c_sound, 0.5d0*g%dtnew(ilevel), nu_stop, coeff, r%analytic_dust_force)
-
-        p%vp(ipart,1:ndim)=uu(1:ndim)+wdrift(1:ndim)
-        p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
      endif
+     do idim=1,ndim
+        if(x_mid(idim)<0d0)x_mid(idim)=x_mid(idim)+dble(m%ckey_max(ilevel+1))
+        if(x_mid(idim)>=dble(m%ckey_max(ilevel+1)))x_mid(idim)=x_mid(idim)-dble(m%ckey_max(ilevel+1))
+     end do
+
+     ! CIC weights/indices at x_mid
+     do idim=1,ndim
+        dr2(idim)=x_mid(idim)+0.5D0
+        ir2(idim)=int(dr2(idim))
+        dr2(idim)=dr2(idim)-ir2(idim)
+        dl2(idim)=1.0D0-dr2(idim)
+        il2(idim)=ir2(idim)-1
+     end do
+     do idim=1,ndim
+        if(il2(idim)<0)il2(idim)=m%ckey_max(ilevel+1)-1
+        if(ir2(idim)==m%ckey_max(ilevel+1))ir2(idim)=0
+     enddo
+     ckey2 = cic_index(il2,ir2)
+     vol2 = cic_weight(dl2,dr2)
+
+     ! Gather hydro and forces at x_mid
+     ff(1:ndim)=0.0
+     uu(1:ndim)=0.0
+     rho_gas = 0.0
+     eint = 0.0
+#ifdef MHD
+     bb(1:3)=0.0
+     emag=0.0d0
+#endif
+     hash_nbor(0)=ilevel+1
+     do ind=1,twotondim
+        hash_nbor(1:ndim)=ckey2(1:ndim,ind)
+        call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
+#ifdef HYDRO
+        if(associated(gridp))then
+#ifdef GRAV
+           ff(1:ndim)=ff(1:ndim)+gridp%f(icell2,1:ndim)*vol2(ind)
+#endif
+           rho_gas = rho_gas + gridp%uold(icell2,1)*vol2(ind)
+#ifdef MHD
+           bb(1:3)=bb(1:3)+0.5d0*(gridp%bold(icell2,1:3)+gridp%bold(icell2,4:6))*vol2(ind)
+#endif
+           dens = max(dble(gridp%uold(icell2,1)), r%smallr)
+           etot = gridp%uold(icell2,5)
+           ekin = 0.0d0
+           do idim=1,ndim
+              ekin = ekin + 0.5d0 * gridp%uold(icell2,1+idim)**2 / dens
+           end do
+           erad = 0.0d0
+#if NENER>0
+           do irad=1,nener
+              erad = erad + gridp%uold(icell2,5+irad)
+           end do
+#endif
+#ifdef MHD
+           do idim=1,3
+              emag = emag + 0.125d0*(gridp%bold(icell2,idim)+gridp%bold(icell2,ndim+idim))**2*vol2(ind)
+           end do
+           eint = eint - emag*vol2(ind)
+#endif
+           eint = eint + (etot - ekin - erad)*vol2(ind)
+        end if
+#endif
+     end do
+
+     cs2 = r%gamma * (r%gamma-1.0d0) * max(eint, r%smallc**2) / max(rho_gas, r%smallr)
+     c_sound = max(sqrt(cs2), r%smallc)
+     nu_stop = coeff*c_sound*rho_gas/p%size(ipart)
+     wdrift(1:ndim)= v_pred(1:ndim) - uu(1:ndim)
+
+     ! Operator-split: drag(half) -> forces -> drag(half)
+     call compute_drag_step(wdrift, c_sound, 0.5d0*g%dtnew(ilevel), nu_stop, coeff, r%analytic_dust_force)
+#ifdef GRAV
+     wdrift(1:ndim)=wdrift(1:ndim)+ff(1:ndim)*0.5d0*g%dtnew(ilevel)
+#endif
+#ifdef MHD
+     if (ndim==3) then
+         call compute_lorentz_step(wdrift, bb(1:ndim), g%dtnew(ilevel), p%charge(ipart), r%analytic_dust_force)
+     else
+         if(g%myid==1 .and. g%nstep==0)then
+            write(*,*) 'Warning: Lorentz force not implemented for NDIM != 3; proceeding without it.'
+         endif
+     endif
+#endif
+#ifdef GRAV
+     wdrift(1:ndim)=wdrift(1:ndim)+ff(1:ndim)*0.5d0*g%dtnew(ilevel)
+#endif
+     call compute_drag_step(wdrift, c_sound, 0.5d0*g%dtnew(ilevel), nu_stop, coeff, r%analytic_dust_force)
+
+     p%vp(ipart,1:ndim)=uu(1:ndim)+wdrift(1:ndim)
+     p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
   end do
   call close_cache(s,m%grid_dict)
   
@@ -3169,6 +3172,15 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
   if(p%static)return
   if (p%type/=DUST_TYPE) return
   dx_loc=r%boxlen/2**ilevel
+
+  ! OPTIMIZATION: Handle kick-only pass immediately without cache operations
+  if(action_part==action_kick_only)then
+     do ipart=p%headp(ilevel),p%tailp(ilevel)
+        p%levelp(ipart)=ilevel
+     end do
+     return
+  endif
+
   pi=4.0d0*atan(1.0d0)
   coeff=9.0d0*pi*r%gamma/128.0d0
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
@@ -3184,10 +3196,7 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
         if(x(idim)>=dble(m%ckey_max(ilevel+1)))x(idim)=x(idim)-dble(m%ckey_max(ilevel+1))
      end do
 
-     if(action_part==action_kick_only)then
-        p%levelp(ipart)=ilevel
-
-     else if(action_part==action_kick_drift)then
+     if(action_part==action_kick_drift)then
         ! Leapfrog-style sampling: do a half-step advance only on the first step,
         ! then sample at the current position thereafter (we are already time-centered).
         v_pred(1:ndim)=p%vp(ipart,1:ndim)
@@ -3364,6 +3373,15 @@ subroutine pcs_kick_drift_dust(s,p,ilevel,action_part)
   if(p%static)return
   if (p%type/=DUST_TYPE) return
   dx_loc=r%boxlen/2**ilevel
+
+  ! OPTIMIZATION: Handle kick-only pass immediately without cache operations
+  if(action_part==action_kick_only)then
+     do ipart=p%headp(ilevel),p%tailp(ilevel)
+        p%levelp(ipart)=ilevel
+     end do
+     return
+  endif
+
   pi=4.0d0*atan(1.0d0)
   coeff=9.0d0*pi*r%gamma/128.0d0
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
@@ -3411,11 +3429,7 @@ subroutine pcs_kick_drift_dust(s,p,ilevel,action_part)
 #endif
      end do
 
-    if(action_part==action_kick_only)then
-       ! RK2 step 1: stash state; keep velocity as-is for drag scheme
-        p%levelp(ipart)=ilevel
-
-    else if(action_part==action_kick_drift)then
+    if(action_part==action_kick_drift)then
        ! RK2 step 2: predict with v^n, sample gas state at midpoint
        if (g%nstep>0) then
           v_pred(1:ndim)=p%vp(ipart,1:ndim)
