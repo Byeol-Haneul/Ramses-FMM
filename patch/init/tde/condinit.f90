@@ -30,14 +30,23 @@ subroutine condinit(r,g,x,q,dx,nn)
   ! For 2D MHD, Q(i,nvar+1) is Bz.
   ! Q(:,:) are in user (aka code) units.
   !================================================================
-  integer::i
+  integer::i,io,j
   logical,save::read_flag=.false.
   integer,parameter::nrows=10000,ncols=2          ! CSV file parameters
   real(kind=8),dimension(1:nrows, 1:ncols),save::xx   ! Lane-Emden solutions (r, d, p)
   integer,save::nmax
-  real(kind=8),save::rmax,dmin,mass
+  real(kind=8),save::rmax,pmin,dmin,mass
   real(kind=8)::r2,rx,ry,rz,rr,d,p,pi
+  real(kind=8)::x0,y0,z0,u0,v0,w0
   real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v,scale_m
+
+  x0=r%boxlen/2d0+23.6
+  y0=r%boxlen/2d0
+  z0=r%boxlen/2d0
+  u0=0.0
+  v0=0.291
+  w0=0d0
+  pi=ACOS(-1d0)
 
   ! Read Lane-Emden solutions into an array
   if (.not. read_flag) then
@@ -59,7 +68,7 @@ subroutine condinit(r,g,x,q,dx,nn)
      ! Polytrope mass
      mass=0d0
      do i=1,nmax-1
-        mass=mass*xx(i,2)*4d0*pi*xx(i,1)**2*(xx(i+1,1)-xx(i,1))
+        mass=mass+xx(i,2)*4d0*pi*xx(i,1)**2*(xx(i+1,1)-xx(i,1))
      end do
      write(*,*)'Lane Emden file read'
      write(*,*)'nmax=',nmax,' rmax=',rmax,' mass=',mass,' dmin=',dmin,' pmin=',pmin
@@ -68,7 +77,6 @@ subroutine condinit(r,g,x,q,dx,nn)
   ! Scale factors
   call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
   scale_m=scale_d*scale_l**3
-  pi=ACOS(-1d0)
 
   ! vacuum as default
   do i=1,nn
@@ -81,9 +89,9 @@ subroutine condinit(r,g,x,q,dx,nn)
 
   if(rmax>dx)then
      do i=1,nn
-        rx=x(i,1)-r%boxlen/2.
-        ry=x(i,2)-r%boxlen/2.
-        rz=x(i,3)-r%boxlen/2.
+        rx=x(i,1)-x0
+        ry=x(i,2)-y0
+        rz=x(i,3)-z0
         r2=rx**2+ry**2+rz**2
         rr=sqrt(r2)
         if(rr<rmax)then
@@ -94,14 +102,17 @@ subroutine condinit(r,g,x,q,dx,nn)
            p=d**(4d0/3d0)
            ! store primitive variables
            q(i,1)=d
+           q(i,2)=u0
+           q(i,3)=v0
+           q(i,4)=w0
            q(i,5)=p
         endif
      end do
   else
      do i=1,nn
-        rx=x(i,1)-r%boxlen/2.
-        ry=x(i,2)-r%boxlen/2.
-        rz=x(i,3)-r%boxlen/2.
+        rx=x(i,1)-x0
+        ry=x(i,2)-y0
+        rz=x(i,3)-z0
         r2=rx**2+ry**2+rz**2
         rr=sqrt(r2)
         if(rr<dx)then
@@ -111,6 +122,9 @@ subroutine condinit(r,g,x,q,dx,nn)
            p=pmin
            ! store primitive variables
            q(i,1)=d
+           q(i,2)=u0
+           q(i,3)=v0
+           q(i,4)=w0
            q(i,5)=p
         end if
      end do
