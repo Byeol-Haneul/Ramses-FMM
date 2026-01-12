@@ -37,7 +37,7 @@ subroutine condinit(r,g,x,q,dx,nn)
   integer,save::nmax
   real(kind=8),save::rmax,pmin,dmin,mass
   real(kind=8)::r2,rx,ry,rz,rr,d,p,pi
-  real(kind=8)::x0,y0,z0,u0,v0,w0
+  real(kind=8)::x0,y0,z0,u0,v0,w0,K
   real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v,scale_m
 
   x0=r%boxlen/2d0+23.6
@@ -47,6 +47,7 @@ subroutine condinit(r,g,x,q,dx,nn)
   v0=0.291
   w0=0d0
   pi=ACOS(-1d0)
+  K=3.639d-5
 
   ! Read Lane-Emden solutions into an array
   if (.not. read_flag) then
@@ -64,7 +65,7 @@ subroutine condinit(r,g,x,q,dx,nn)
      ! Minimum density
      dmin=xx(nmax-1,2)
      ! Minimum pressure
-     pmin=dmin**(4d0/3d0)
+     pmin=K*dmin**(4d0/3d0)
      ! Polytrope mass
      mass=0d0
      do i=1,nmax-1
@@ -99,7 +100,7 @@ subroutine condinit(r,g,x,q,dx,nn)
            ! density
            d=xx(j,2)+(rr-xx(j,1))*((xx(j+1,2)-xx(j,2))/(xx(j+1,1)-xx(j,1)))
            ! pressure
-           p=d**(4d0/3d0)
+           p=K*d**(4d0/3d0)
            ! store primitive variables
            q(i,1)=d
            q(i,2)=u0
