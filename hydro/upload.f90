@@ -101,7 +101,7 @@ subroutine upload_fine(s,ilevel)
 #ifdef HYDRO
      do ind=1,twotondim
         if(m%grid(ioct)%refined(ind))then
-           m%grid(ioct)%mflux(ind,1:6)=0.0d0
+           m%grid(ioct)%mflux(ind,1:2*ndim+1)=0.0d0
         endif
      end do
 #endif
@@ -139,22 +139,29 @@ subroutine upload_fine(s,ilevel)
         gridp%uold(icell,ivar)=average/dble(twotondim)
      end do
 
+     ! Average old density (stored in mflux(:,1))
+     average=0.0d0
+     do ind=1,twotondim
+        average=average+m%grid(ioct)%mflux(ind,1)
+     end do
+     gridp%mflux(icell,1)=average/dble(twotondim)
+
      ! Average face-centered time-integrated mass flux (book-keeping, like face-centered B)
-     ! mflux(:,1:ndim)   : left faces
-     ! mflux(:,4:3+ndim) : right faces
+     ! mflux(:,2:1+ndim)   : left faces
+     ! mflux(:,2+ndim:1+2*ndim) : right faces
      do idim=1,ndim
         ! Left face in parent cell
         average=0.0d0
         do ind=1,twotondim/2
-           average=average+m%grid(ioct)%mflux(hh(2*idim-1,ind),idim)
+           average=average+m%grid(ioct)%mflux(hh(2*idim-1,ind),1+idim)
         end do
-        gridp%mflux(icell,idim)=average/dble(twotondim/2)
+        gridp%mflux(icell,1+idim)=average/dble(twotondim/2)
         ! Right face in parent cell
         average=0.0d0
         do ind=1,twotondim/2
-           average=average+m%grid(ioct)%mflux(hh(2*idim,ind),idim+3)
+           average=average+m%grid(ioct)%mflux(hh(2*idim,ind),1+idim+ndim)
         end do
-        gridp%mflux(icell,idim+3)=average/dble(twotondim/2)
+        gridp%mflux(icell,1+idim+ndim)=average/dble(twotondim/2)
      end do
 
      ! Average cell-centered magnetic field
@@ -424,7 +431,7 @@ subroutine unpack_flush_upload(grid,msg_size,msg_array,hash_key)
 #ifdef HYDRO
   do ind=1,twotondim
      if(grid%refined(ind))then
-        grid%mflux(ind,1:6)=grid%mflux(ind,1:6)+msg%realdp_mflux(ind,1:6)
+        grid%mflux(ind,1:2*ndim+1)=grid%mflux(ind,1:2*ndim+1)+msg%realdp_mflux(ind,1:2*ndim+1)
      endif
   end do
 #endif

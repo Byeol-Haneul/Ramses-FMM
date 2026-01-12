@@ -755,20 +755,23 @@ subroutine godfine1(s,ind_grid,ilevel,h)
 #if NDIM>2
                        k3=1+2*(k1-1)+k2
 #endif
+                       ! Store old density for MC tracers
+                       childp%mflux(ind_son,1) = max(childp%uold(ind_son,1), r%smallr)
+
                        ! Store time-integrated mass flux on the two faces along the current direction
                        select case(idim)
                        case(1)
-                          childp%mflux(ind_son,1)=h%flux(i3   ,j3   ,k3   ,1,idim)
-                          childp%mflux(ind_son,4)=h%flux(i3+i0,j3+j0,k3+k0,1,idim)
-#if NDIM>1
-                       case(2)
                           childp%mflux(ind_son,2)=h%flux(i3   ,j3   ,k3   ,1,idim)
                           childp%mflux(ind_son,5)=h%flux(i3+i0,j3+j0,k3+k0,1,idim)
+#if NDIM>1
+                       case(2)
+                          childp%mflux(ind_son,3)=h%flux(i3   ,j3   ,k3   ,1,idim)
+                          childp%mflux(ind_son,6)=h%flux(i3+i0,j3+j0,k3+k0,1,idim)
 #endif
 #if NDIM>2
                        case(3)
-                          childp%mflux(ind_son,3)=h%flux(i3   ,j3   ,k3   ,1,idim)
-                          childp%mflux(ind_son,6)=h%flux(i3+i0,j3+j0,k3+k0,1,idim)
+                          childp%mflux(ind_son,4)=h%flux(i3   ,j3   ,k3   ,1,idim)
+                          childp%mflux(ind_son,7)=h%flux(i3+i0,j3+j0,k3+k0,1,idim)
 #endif
                        end select
                        ! Update conservative variables new state vector

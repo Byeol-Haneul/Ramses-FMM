@@ -10,7 +10,7 @@ module oct_commons
      real(dp),dimension(1:twotondim,1:nvar)::unew
 #endif
 #ifdef HYDRO
-     real(dp),dimension(1:twotondim,1:6)::mflux
+     real(dp),dimension(1:twotondim,1:2*ndim+1)::mflux
 #endif
 #ifdef MHD
      real(dp),dimension(1:twotondim,1:6)::bold

@@ -857,7 +857,7 @@ subroutine pack_fetch_kick_trac(grid,msg_size,msg_array)
      end do
   end do
   do ind=1,twotondim
-     msg%realdp_mflux(ind,1:6)=grid%mflux(ind,1:6)
+     msg%realdp_mflux(ind,1:2*ndim+1)=grid%mflux(ind,1:2*ndim+1)
   end do
 #endif
 
@@ -889,7 +889,7 @@ subroutine unpack_fetch_kick_trac(grid,msg_size,msg_array,hash_key)
      end do
   end do
   do ind=1,twotondim
-     grid%mflux(ind,1:6)=msg%realdp_mflux(ind,1:6)
+     grid%mflux(ind,1:2*ndim+1)=msg%realdp_mflux(ind,1:2*ndim+1)
   end do
 #endif
 
@@ -897,7 +897,7 @@ end subroutine unpack_fetch_kick_trac
 !#########################################################################
 !#########################################################################
 subroutine pack_fetch_kick_dust(grid,msg_size,msg_array)
-  use amr_parameters, only: twotondim
+  use amr_parameters, only: twotondim, ndim
   use hydro_parameters, only: nvar
   use oct_commons, only: oct
   use cache_commons, only: msg_large_realdp
@@ -913,7 +913,7 @@ subroutine pack_fetch_kick_dust(grid,msg_size,msg_array)
      do ivar=1,nvar
         msg%realdp_hydro(ind,ivar)=grid%uold(ind,ivar)
      end do
-     msg%realdp_mflux(ind,1:6)=grid%mflux(ind,1:6)
+     msg%realdp_mflux(ind,1:2*ndim+1)=grid%mflux(ind,1:2*ndim+1)
   end do
 #endif
 #ifdef GRAV
@@ -964,7 +964,7 @@ subroutine unpack_fetch_kick_dust(grid,msg_size,msg_array,hash_key)
      do ivar=1,nvar
         grid%uold(ind,ivar)=msg%realdp_hydro(ind,ivar)
      end do
-     grid%mflux(ind,1:6)=msg%realdp_mflux(ind,1:6)
+     grid%mflux(ind,1:2*ndim+1)=msg%realdp_mflux(ind,1:2*ndim+1)
   end do
 #endif
 #ifdef GRAV
@@ -1325,9 +1325,9 @@ subroutine cic_trace_gas_part_ito_mc(s,p,ilevel,action_part)
            rho=gridp%uold(icell,1)
            denom=max(rho,r%smallr)
            do idim=1,ndim
-              ! mflux stores time-integrated flux ~ (dt/dx)*F; recover physical flux F with factor dx_loc/dt_level
-              fluxL=gridp%mflux(icell,idim     )*dx_loc/dt_level
-              fluxR=gridp%mflux(icell,idim+ndim)*dx_loc/dt_level
+              ! mflux stores time-integrated flux ~ (dt/dx)*F/rho; recover physical flux F with factor rho*dx_loc/dt_level
+              fluxL=gridp%mflux(icell,1+idim     )*dx_loc/dt_level
+              fluxR=gridp%mflux(icell,1+idim+ndim)*dx_loc/dt_level
               jr=max(fluxR,0.d0)
               jl=max(-fluxL,0.d0)
               u_cells(idim,ind)=(jr-jl)/denom
@@ -1550,8 +1550,8 @@ subroutine tsc_trace_gas_part_ito_mc_grad(s,p,ilevel,action_part)
            rho=gridp%uold(icell,1)
            rho_cells(ind)=rho
            do idim=1,ndim
-              fluxL_cells(idim,ind)=gridp%mflux(icell,idim     )*dx_loc/dt_level
-              fluxR_cells(idim,ind)=gridp%mflux(icell,idim+ndim)*dx_loc/dt_level
+              fluxL_cells(idim,ind)=gridp%mflux(icell,1+idim     )*dx_loc/dt_level
+              fluxR_cells(idim,ind)=gridp%mflux(icell,1+idim+ndim)*dx_loc/dt_level
            end do
         end if
 #endif
@@ -1711,6 +1711,13 @@ subroutine mc_trace_gas_part(s,p,ilevel,action_part)
 
   dx_loc=r%boxlen/2**ilevel
   tol_corner = 0.05d0
+  
+  if(action_part==action_kick_only)then
+    do ipart=p%headp(ilevel),p%tailp(ilevel)
+       p%levelp(ipart)=ilevel
+    end do
+    return
+  endif
 
   if(.not.tracer_rng_ready)then
      call RngStream_SetPackageSeed(r%seed)
@@ -1832,23 +1839,23 @@ subroutine mc_trace_gas_part(s,p,ilevel,action_part)
 #ifdef HYDRO
      if(.not.associated(gridp))cycle
 
-     rho_cell=gridp%uold(icell,1)
+     rho_cell=gridp%mflux(icell,1)
      denom=max(rho_cell,r%smallr)
      vel=0.d0
-     vel(1:ndim)=gridp%uold(icell,2:ndim+1)/denom
+     vel(1:ndim)=gridp%uold(icell,2:ndim+1)/max(gridp%uold(icell,1),r%smallr)
 
      prob_face=0.d0
      if(ndim>=1)then
-        prob_face(1)=max(-gridp%mflux(icell,1),0.d0)/denom
-        prob_face(2)=max( gridp%mflux(icell,1+ndim),0.d0)/denom
+        prob_face(1)=max(-gridp%mflux(icell,2),0.d0)/denom
+        prob_face(2)=max( gridp%mflux(icell,2+ndim),0.d0)/denom
      endif
      if(ndim>=2)then
-        prob_face(3)=max(-gridp%mflux(icell,2),0.d0)/denom
-        prob_face(4)=max( gridp%mflux(icell,2+ndim),0.d0)/denom
+        prob_face(3)=max(-gridp%mflux(icell,3),0.d0)/denom
+        prob_face(4)=max( gridp%mflux(icell,3+ndim),0.d0)/denom
      endif
      if(ndim==3)then
-        prob_face(5)=max(-gridp%mflux(icell,3),0.d0)/denom
-        prob_face(6)=max( gridp%mflux(icell,3+ndim),0.d0)/denom
+        prob_face(5)=max(-gridp%mflux(icell,4),0.d0)/denom
+        prob_face(6)=max( gridp%mflux(icell,4+ndim),0.d0)/denom
      endif
 #else
      if(.not.associated(gridp))cycle
@@ -1882,11 +1889,6 @@ subroutine mc_trace_gas_part(s,p,ilevel,action_part)
      end do
         ! Remaining probability corresponds to staying in the host cell
 
-     if(action_part==action_kick_only)then
-        p%vp(ipart,1:ndim)=vel(1:ndim)
-        p%levelp(ipart)=ilevel
-        cycle
-     endif
 
      p%vp(ipart,1:ndim)=vel(1:ndim)
      p%levelp(ipart)=ilevel
@@ -2809,8 +2811,8 @@ subroutine tsc_kick_drift_dust_ito_mc_grad(s,p,ilevel,action_part)
               dens = max(dble(gridp%uold(icell2,1)), r%smallr)
 
               do idim=1,ndim
-                 fluxL = gridp%mflux(icell2,idim     )*dx_loc/dt_level
-                 fluxR = gridp%mflux(icell2,idim+ndim)*dx_loc/dt_level
+                 fluxL = gridp%mflux(icell2,1+idim     )*dx_loc/dt_level
+                 fluxR = gridp%mflux(icell2,1+idim+ndim)*dx_loc/dt_level
                  jr = max(fluxR,0.d0)
                  jl = max(-fluxL,0.d0)
                  uu(idim)=uu(idim)+((jr-jl)/dens)*vol2(ind)
@@ -2971,8 +2973,8 @@ subroutine tsc_kick_drift_dust_ito_mc_grad(s,p,ilevel,action_part)
               rho=gridp%uold(icell,1)
               rho_cells(ind)=rho
               do idim=1,ndim
-                 fluxL_cells(idim,ind)=gridp%mflux(icell,idim     )*dx_loc/dt_level
-                 fluxR_cells(idim,ind)=gridp%mflux(icell,idim+ndim)*dx_loc/dt_level
+                 fluxL_cells(idim,ind)=gridp%mflux(icell,1+idim     )*dx_loc/dt_level
+                 fluxR_cells(idim,ind)=gridp%mflux(icell,1+idim+ndim)*dx_loc/dt_level
               end do
            end if
 #endif
