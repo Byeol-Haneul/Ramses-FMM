@@ -162,11 +162,12 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   endif
 
   !---------------
-  ! Poisson solver
+  ! Gravity solver
   !---------------
 #ifdef GRAV
-  if(r%poisson)then
+  if(r%poisson.and.r%gravity_type<=0)then
      call m_timer(pst,'poisson','start')
+
      ! Save old potential for time-extrapolation at level boundaries
      call r_save_phi_old(pst,ilevel,1)
 
@@ -183,10 +184,12 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
 
      ! Initial old potential
      if (g%nstep==0)call r_save_phi_old(pst,ilevel,1)
+  endif
 
-     ! Compute gravitational acceleration
+  ! Compute gravitational acceleration
+  if(r%poisson)then
+     call m_timer(pst,'grav force','start')
      call m_force_fine(pst,ilevel,icount)
-
   end if
 #endif
 
