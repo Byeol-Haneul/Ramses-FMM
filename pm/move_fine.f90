@@ -1263,7 +1263,7 @@ subroutine cic_trace_gas_part_ito_mc(s,p,ilevel,action_part)
   real(kind=8),dimension(1:ndim,1:twotondim)::fluxL_cells,fluxR_cells
   type(oct),pointer::gridp
   integer :: ipart,ind,idim,icell,k
-  real(kind=8)::dx_loc,dt_level,rho,denom,fluxL,fluxR,jr,jl,noise_amp
+  real(kind=8)::dx_loc,dt_level,rho,denom,fluxL,fluxR,jr,jl,noise_amp,one_minus_cfl,cfl_dim
   type(msg_hydro_mflux)::dummy_nvar_realdp
   type(RngStream),external::RngStream_CreateStream
   real(kind=8),external::RngStream_RandUni
@@ -1322,7 +1322,7 @@ subroutine cic_trace_gas_part_ito_mc(s,p,ilevel,action_part)
         call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
 #ifdef HYDRO
         if(associated(gridp))then
-           rho=gridp%uold(icell,1)
+           rho=gridp%mflux(icell,1)
            denom=max(rho,r%smallr)
            do idim=1,ndim
               ! mflux stores time-integrated flux ~ (dt/dx)*F/rho; recover physical flux F with factor rho*dx_loc/dt_level
@@ -1331,7 +1331,9 @@ subroutine cic_trace_gas_part_ito_mc(s,p,ilevel,action_part)
               jr=max(fluxR,0.d0)
               jl=max(-fluxL,0.d0)
               u_cells(idim,ind)=(jr-jl)/denom
-              kappa_num_cells(idim,ind)=0.5d0*(jr+jl)/denom*dx_loc
+              cfl_dim = abs(u_cells(idim,ind))*dt_level/dx_loc
+              one_minus_cfl = max(0.d0,(1.d0-cfl_dim))
+              kappa_num_cells(idim,ind)=0.5d0*one_minus_cfl*(jr+jl)/denom*dx_loc
            end do
         end if
 #endif
@@ -1572,7 +1574,7 @@ subroutine tsc_trace_gas_part_ito_mc_grad(s,p,ilevel,action_part)
               jl=max(-fluxL,0.d0)
               u_cells(idim,ind)=(jr-jl)/denom
               cfl_dim = abs(u_cells(idim,ind))*dt_level/dx_loc
-              one_minus_cfl = max(0.d0,1.d0-cfl_dim)
+              one_minus_cfl = 1.d0!max(0.d0,1.d0-cfl_dim)
 
               ! Cross-oct neighbor densities for slope limiter
               ckey_plus = ckey(1:ndim,ind)
@@ -1632,7 +1634,7 @@ subroutine tsc_trace_gas_part_ito_mc_grad(s,p,ilevel,action_part)
         do ind=1,threetondim
            grad_at_part(k)=grad_at_part(k)+grad_vol(k,ind)*kappa_num_cells(k,ind)
         end do
-        u_eff(k) = u_eff(k) + grad_at_part(k)
+        u_eff(k) = u_eff(k) !+ grad_at_part(k)
         kappa_num(k) = kappa_num(k)
      end do
 
@@ -2811,7 +2813,7 @@ subroutine tsc_kick_drift_dust_ito_mc_grad(s,p,ilevel,action_part)
 #ifdef MHD
               bb(1:3)=bb(1:3)+0.5d0*(gridp%bold(icell2,1:3)+gridp%bold(icell2,4:6))*vol2(ind)
 #endif
-              dens = max(dble(gridp%uold(icell2,1)), r%smallr)
+              dens = max(dble(gridp%mflux(icell2,1)), r%smallr) ! Must use mflux(1) for computing flux-based velocities
 
               do idim=1,ndim
                  fluxL = gridp%mflux(icell2,1+idim     )*dx_loc/dt_level
