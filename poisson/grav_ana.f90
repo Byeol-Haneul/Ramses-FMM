@@ -21,7 +21,7 @@ subroutine gravana(r,g,x,f,dx,ncell)
   real(kind=8)::gmass,emass,xmass,ymass,zmass,rr,rx,ry,rz
 
   ! Multipole expansion for isolated boundary conditions
-  if(r%gravity_type<=0)then
+  if(r%gravity_type==0)then
      do i=1,ncell
         rx=0.0d0; ry=0.0d0; rz=0.0d0
         rx=x(i,1)-g%multipole%q(2)/g%multipole%q(1)
