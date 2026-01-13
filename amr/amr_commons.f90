@@ -80,6 +80,7 @@ module amr_commons
      real(kind=8)::boxlen=1.0        ! Cell size at level 0 (total box size)
 
      ! Poisson solver parameters
+     logical :: gravity_test=.false.  ! Use file rho_ana.f90 to test the Poisson solvers
      real(kind=8)::epsilon=1.0D-4     ! Convergence criterion for Poisson solvers
      real(kind=8),dimension(1:10)::gravity_params=0.0 ! Gravity parameters
      integer :: gravity_type=0     ! Type of force computation

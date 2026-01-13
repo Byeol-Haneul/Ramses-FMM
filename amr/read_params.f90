@@ -287,6 +287,7 @@ subroutine m_read_params(pst)
   integer ::interpol_type=1
 
   ! Poisson solver parameters
+  logical :: gravity_test=.false. ! Use file rho_ana.f90 to test the Poisson solers.
   real(kind=8)::epsilon=1.0D-4 ! Convergence criterion
   real(kind=8),dimension(1:10)::gravity_params=0.0 ! Gravity parameters
   integer :: gravity_type=0 ! Type of gravity calculations (see user guide)
@@ -538,7 +539,7 @@ subroutine m_read_params(pst)
        & ,npartmax,nparttot,nexpand,boxlen
   ! Poisson solver parameters
   namelist/poisson_params/epsilon,gravity_type,gravity_params &
-       & ,cg_levelmin,cic_levelmax,fast_solver &
+       & ,cg_levelmin,cic_levelmax,fast_solver,gravity_test, &
        & ,part_mass_deposition_scheme,part_force_interpolation_scheme &
        & ,star_mass_deposition_scheme,star_force_interpolation_scheme &
        & ,sink_mass_deposition_scheme,sink_force_interpolation_scheme &
@@ -1225,6 +1226,7 @@ subroutine m_read_params(pst)
   s%r%nexpand=nexpand
   s%r%boxlen=boxlen
 
+  s%r%gravity_test=gravity_test
   s%r%epsilon=epsilon
   s%r%gravity_type=gravity_type
   s%r%gravity_params=gravity_params

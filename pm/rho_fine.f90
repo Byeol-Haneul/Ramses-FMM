@@ -229,7 +229,7 @@ subroutine multipole_leaf_cells(r,g,m,ilevel)
            end do
 #endif
            ! Add analytical density profile
-           if(r%gravity_type < 0)then
+           if(r%gravity_test)then
               call rho_ana(xx,dd,dx_loc,r%gravity_params)
               mmm=max(dd,r%smallr)*vol_loc
 #ifdef HYDRO
