@@ -539,7 +539,7 @@ subroutine m_read_params(pst)
        & ,npartmax,nparttot,nexpand,boxlen
   ! Poisson solver parameters
   namelist/poisson_params/epsilon,gravity_type,gravity_params &
-       & ,cg_levelmin,cic_levelmax,fast_solver,gravity_test, &
+       & ,cg_levelmin,cic_levelmax,fast_solver,gravity_test &
        & ,part_mass_deposition_scheme,part_force_interpolation_scheme &
        & ,star_mass_deposition_scheme,star_force_interpolation_scheme &
        & ,sink_mass_deposition_scheme,sink_force_interpolation_scheme &
