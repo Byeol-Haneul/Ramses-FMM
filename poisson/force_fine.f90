@@ -31,6 +31,10 @@ subroutine m_force_fine(pst,ilevel,icount)
      level_count%ilevel=ilevel
      level_count%icount=icount
      call r_gradient_phi(pst,level_count,2)
+     ! Add external acceleration
+     if(pst%s%r%gravity_type<0)then 
+        call r_force_analytic(pst,ilevel,1)
+     endif
   endif
   if(pst%s%r%verbose)write(*,'("   Gradient phi done for level ",I2)')ilevel
 
@@ -91,6 +95,11 @@ subroutine force_analytic(r,g,m,ilevel)
   ! Mesh size at level ilevel in code units
   dx=r%boxlen/2**ilevel
 
+  ! Initialize force zero
+  if(r%gravity_type>0)then
+     m%f(1:twotondim,1:ndim,m%head(ilevel):m%tail(ilevel))=0d0
+  endif
+
   ! Loop over grids by vector sweeps
   do igrid=m%head(ilevel),m%tail(ilevel),nvector
      ngrid=MIN(nvector,m%tail(ilevel)-igrid+1)
@@ -112,7 +121,7 @@ subroutine force_analytic(r,g,m,ilevel)
         ! Scatter variables to main memory
         do idim=1,ndim
            do i=1,ngrid
-              m%f(ind,idim,igrid+i-1)=ff(i,idim)
+              m%f(ind,idim,igrid+i-1)=m%f(ind,idim,igrid+i-1)+ff(i,idim)
            end do
         end do
 
