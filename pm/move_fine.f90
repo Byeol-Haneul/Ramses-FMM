@@ -1409,26 +1409,20 @@ subroutine tsc_trace_gas_part_ito_mc_grad(s,p,ilevel,action_part)
   integer::ilevel
   integer::action_part
   real(kind=8),dimension(1:ndim)::x,disp,xi,u_eff,kappa_num
-  real(kind=8),dimension(1:ndim)::dl,dr
   real(kind=8),dimension(1:ndim)::grad_at_part
   integer,dimension(1:ndim)::il,ic,ir
-  real(kind=8),dimension(1:threetondim)::vol,phi_slice,rho_cells
+  real(kind=8),dimension(1:threetondim)::vol
   integer,dimension(1:ndim,1:threetondim)::ckey
-  integer,dimension(1:ndim)::ckey_plus,ckey_minus
   integer(kind=8),dimension(0:ndim)::hash_nbor
-  real(kind=8),dimension(1:ndim,1:threetondim)::u_cells,kappa_num_cells,grad_phi_cells
-  real(kind=8),dimension(1:ndim,1:threetondim)::fluxL_cells,fluxR_cells
+  real(kind=8),dimension(1:ndim,1:threetondim)::u_cells,kappa_num_cells
   real(kind=8),dimension(1:ndim,1:3)::w1d,dw1d
   real(kind=8),dimension(1:ndim,1:threetondim)::grad_vol
   type(oct),pointer::gridp
   integer :: ipart,ind,idim,icell,k
-  integer :: slope_type
   integer :: ix,iy,iz
-  real(kind=8)::dx_loc,dt_level,rho,denom,fluxL,fluxR,noise_amp
+  real(kind=8)::dx_loc,dt_level,dx_over_dt,dt_over_dx,rho,denom,fluxL,fluxR,noise_amp
   real(kind=8)::cfl_dim,one_minus_cfl,jr,jl
-  real(kind=8)::rho_left,rho_right,dr_plus,dr_minus,r_ratio,phiR,phiL
-  real(kind=8)::x_rel,weight
-  real(kind=8)::xd
+  real(kind=8)::xl,xc,xr,xd,weight
   type(msg_hydro_mflux)::dummy_nvar_realdp
   type(RngStream),external::RngStream_CreateStream
   real(kind=8),external::RngStream_RandUni
@@ -1441,7 +1435,8 @@ subroutine tsc_trace_gas_part_ito_mc_grad(s,p,ilevel,action_part)
 
   dx_loc=r%boxlen/2**ilevel
   dt_level=g%dtnew(ilevel)
-  slope_type = r%slope_type
+  dx_over_dt=dx_loc/dt_level
+  dt_over_dx=dt_level/dx_loc
 
   if(.not.tracer_rng_ready)then
      call RngStream_SetPackageSeed(r%seed)
@@ -1462,40 +1457,23 @@ subroutine tsc_trace_gas_part_ito_mc_grad(s,p,ilevel,action_part)
      end do
      call wrap_cell_coords(s,x,ilevel+1)
 
-     ! Build 1D TSC weights and derivatives
+     ! Build 1D TSC weights and derivatives (branchless)
      do idim=1,ndim
         xd = x(idim)
         il(idim)=int(xd)-1
         ic(idim)=int(xd)
         ir(idim)=int(xd)+1
-        ! periodic adjust indices used later via ckey construction
-        ! wl
-        x_rel = xd-(dble(il(idim))+0.5d0)
-        if(abs(x_rel)<=1.5d0)then
-           w1d(idim,1)=0.5d0*(1.5d0-abs(x_rel))**2
-           dw1d(idim,1)=-(1.5d0-abs(x_rel))*sign(1.d0,x_rel)
-        else
-           w1d(idim,1)=0.d0
-           dw1d(idim,1)=0.d0
-        end if
-        ! wc
-        x_rel = xd-(dble(ic(idim))+0.5d0)
-        if(abs(x_rel)<=0.5d0)then
-           w1d(idim,2)=0.75d0 - x_rel*x_rel
-           dw1d(idim,2)=-2.d0*x_rel
-        else
-           w1d(idim,2)=0.d0
-           dw1d(idim,2)=0.d0
-        end if
-        ! wr
-        x_rel = xd-(dble(ir(idim))+0.5d0)
-        if(abs(x_rel)<=1.5d0)then
-           w1d(idim,3)=0.5d0*(1.5d0-abs(x_rel))**2
-           dw1d(idim,3)=-(1.5d0-abs(x_rel))*sign(1.d0,x_rel)
-        else
-           w1d(idim,3)=0.d0
-           dw1d(idim,3)=0.d0
-        end if
+        ! Branchless 1D weights
+        xl=dble(il(idim))+0.5D0
+        xc=dble(ic(idim))+0.5D0
+        xr=dble(ir(idim))+0.5D0
+        w1d(idim,1)=0.5D0*(1.5D0-abs(xd-xl))**2
+        w1d(idim,2)=0.75D0-(xd-xc)**2
+        w1d(idim,3)=0.5D0*(1.5D0-abs(xd-xr))**2
+        ! Derivatives (preserved for grad_at_part)
+        dw1d(idim,1)=-(1.5d0-abs(xd-xl))*sign(1.d0,xd-xl)
+        dw1d(idim,2)=-2.d0*(xd-xc)
+        dw1d(idim,3)=-(1.5d0-abs(xd-xr))*sign(1.d0,xd-xr)
      end do
 
      ! Periodic wrap of indices for 3x3x3 stencil
@@ -1537,12 +1515,9 @@ subroutine tsc_trace_gas_part_ito_mc_grad(s,p,ilevel,action_part)
         end do
      end do
 
+     ! Single merged loop over 27 neighbors
      u_cells=0.d0
      kappa_num_cells=0.d0
-     rho_cells=0.d0
-     fluxL_cells=0.d0
-     fluxR_cells=0.d0
-
      hash_nbor(0)=ilevel+1
      do ind=1,threetondim
         hash_nbor(1:ndim)=ckey(1:ndim,ind)
@@ -1550,71 +1525,16 @@ subroutine tsc_trace_gas_part_ito_mc_grad(s,p,ilevel,action_part)
 #ifdef HYDRO
         if(associated(gridp))then
            rho=gridp%uold(icell,1)
-           rho_cells(ind)=rho
-           do idim=1,ndim
-              fluxL_cells(idim,ind)=gridp%mflux(icell,1+idim     )*dx_loc/dt_level
-              fluxR_cells(idim,ind)=gridp%mflux(icell,1+idim+ndim)*dx_loc/dt_level
-           end do
-        end if
-#endif
-     end do
-
-     hash_nbor(0)=ilevel+1
-     do ind=1,threetondim
-        hash_nbor(1:ndim)=ckey(1:ndim,ind)
-        call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
-#ifdef HYDRO
-        if(associated(gridp))then
-           rho=rho_cells(ind)
            denom=max(rho,r%smallr)
            do idim=1,ndim
-              fluxL=fluxL_cells(idim,ind)
-              fluxR=fluxR_cells(idim,ind)
+              fluxL=gridp%mflux(icell,1+idim)*dx_over_dt
+              fluxR=gridp%mflux(icell,1+idim+ndim)*dx_over_dt
               jr=max(fluxR,0.d0)
               jl=max(-fluxL,0.d0)
               u_cells(idim,ind)=(jr-jl)/denom
-              cfl_dim = abs(u_cells(idim,ind))*dt_level/dx_loc
-              one_minus_cfl = 1.d0!max(0.d0,1.d0-cfl_dim)
-
-              ! Cross-oct neighbor densities for slope limiter
-              ckey_plus = ckey(1:ndim,ind)
-              ckey_plus(idim)=ckey_plus(idim)+1
-              if(r%periodic(idim))then
-                 if(ckey_plus(idim)>=m%box_ckey_max(idim,ilevel+1))ckey_plus(idim)=m%box_ckey_min(idim,ilevel+1)
-              end if
-              hash_nbor(1:ndim)=ckey_plus(1:ndim)
-              rho_right = rho
-              call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
-              if(associated(gridp))rho_right = gridp%uold(icell,1)
-
-              ckey_minus = ckey(1:ndim,ind)
-              ckey_minus(idim)=ckey_minus(idim)-1
-              if(r%periodic(idim))then
-                 if(ckey_minus(idim)<m%box_ckey_min(idim,ilevel+1))ckey_minus(idim)=m%box_ckey_max(idim,ilevel+1)-1
-              end if
-              hash_nbor(1:ndim)=ckey_minus(1:ndim)
-              rho_left = rho
-              call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
-              if(associated(gridp))rho_left = gridp%uold(icell,1)
-
-              dr_plus  = rho_right - rho
-              dr_minus = rho       - rho_left
-
-              phiR = 1.0d0
-              phiL = 1.0d0
-            !   if(abs(dr_plus)>r%smallr)then
-            !      r_ratio = dr_minus/dr_plus
-            !      phiR = slope_limiter(r_ratio,slope_type)
-            !   end if
-            !   if(abs(dr_minus)>r%smallr)then
-            !      r_ratio = dr_plus/dr_minus
-            !      phiL = slope_limiter(r_ratio,slope_type)
-            !   end if
-              phiR = 0.0d0 !min(1.d0,max(0.d0,phiR))
-              phiL = 0.0d0 !min(1.d0,max(0.d0,phiL))
-
-              kappa_num_cells(idim,ind)=one_minus_cfl*&
-                   ((1.d0-phiR)*jr + (1.d0-phiL)*jl)*dx_loc/(2.d0*denom)
+              cfl_dim = abs(u_cells(idim,ind))*dt_over_dx
+              one_minus_cfl = max(0.d0,1.d0-cfl_dim)
+              kappa_num_cells(idim,ind)=one_minus_cfl*(jr+jl)*dx_loc/(2.d0*denom)
            end do
         end if
 #endif
