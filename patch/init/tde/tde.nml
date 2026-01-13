@@ -35,6 +35,9 @@ courant_factor=0.8
 slope_type=1
 riemann='hllc'
 smallr=1d-22
+smallc=1d-20
+entropy=.true.
+dual_energy=0.01
 /
 
 &REFINE_PARAMS
