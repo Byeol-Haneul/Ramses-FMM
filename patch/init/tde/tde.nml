@@ -1,7 +1,7 @@
 This is the RAMSES parameter file for TDE simulation.
 Compile the code with:
 
-make NDIM=3 MPI=1 GRAV=1 HYDRO=1 PATCH=../patch/init/tde
+make NDIM=3 MPI=1 GRAV=1 HYDRO=1 NPSCAL=1 PATCH=../patch/init/tde
 
 &RUN_PARAMS 
 hydro=.true.

@@ -246,17 +246,18 @@ subroutine open_cache(mdl, m, pack_size, pack, unpack, init, flush, combine, bou
   mdl%m => m
 
   pack_fetch%proc => null()
-  unpack_fetch%proc => null()
   init_flush%proc => null()
   pack_flush%proc => null()
   init_bound%proc => null()
+  unpack_fetch%proc => null()
   unpack_flush%proc => null()
   if (present(pack))      pack_fetch%proc => pack
-  if (present(unpack))    unpack_fetch%proc => unpack
   if (present(init))      init_flush%proc => init
   if (present(flush))     pack_flush%proc => flush
   if (present(bound))     init_bound%proc => bound
+  if (present(unpack))  unpack_fetch%proc => unpack
   if (present(combine)) unpack_flush%proc => combine
+
   mdl%cache_opened=.true.
 
 #ifndef WITHOUTMPI
