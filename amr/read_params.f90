@@ -84,7 +84,7 @@ subroutine m_read_params(pst)
 
   ! Number of superoct levels
   integer::nsuperoct=0
-  
+
   ! MPI domain overloading
   integer::overload=1
 
@@ -110,7 +110,7 @@ subroutine m_read_params(pst)
   ! Output times
   real(kind=8),dimension(1:MAXOUT)::aout=1.1  ! Output expansion factors
   real(kind=8),dimension(1:MAXOUT)::tout=0.0  ! Output times
-  
+
   ! Trajectory output parameters
   integer::ntrajectories=0
   integer,dimension(1:MAXOUT)::trajectories=0
