@@ -108,7 +108,7 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
         elseif(pst%s%r%trac_interpolation_scheme==5)then
            call cic_trace_gas_part_sgs_turb(pst%s,pst%s%trac,ilevel,action_part) ! Ito formulation of the sgs driven diffusion tracer
         elseif(pst%s%r%trac_interpolation_scheme==6)then
-           call tsc_trace_gas_part_ito_mc_grad(pst%s,pst%s%trac,ilevel,action_part) ! Ito MC tracer with (1-CFL) factor and grad(kappa).
+           call tsc_trace_gas_part_ito_mc(pst%s,pst%s%trac,ilevel,action_part) ! Ito MC tracer with (1-CFL) factor and grad(kappa).
         endif
      endif
      if(pst%s%r%dust)then
@@ -119,7 +119,7 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
         elseif(pst%s%r%dust_force_interpolation_scheme==3)then
            call pcs_kick_drift_dust(pst%s,pst%s%dust,ilevel,action_part)
         elseif(pst%s%r%dust_force_interpolation_scheme==4)then
-           call tsc_kick_drift_dust_ito_mc_grad(pst%s,pst%s%dust,ilevel,action_part) ! Asymptotically approaches Ito MC tracer in the stiff regime.
+           call tsc_kick_drift_dust_ito_mc(pst%s,pst%s%dust,ilevel,action_part) ! Asymptotically approaches Ito MC tracer in the stiff regime.
         elseif(pst%s%r%dust_force_interpolation_scheme==5)then
            call tsc_kick_drift_dust_guiding_center(pst%s,pst%s%dust,ilevel,action_part)
         endif
@@ -1263,7 +1263,7 @@ subroutine cic_trace_gas_part_ito_mc(s,p,ilevel,action_part)
   real(kind=8),dimension(1:ndim,1:twotondim)::fluxL_cells,fluxR_cells
   type(oct),pointer::gridp
   integer :: ipart,ind,idim,icell,k
-  real(kind=8)::dx_loc,dt_level,rho,denom,fluxL,fluxR,jr,jl,noise_amp,one_minus_cfl,cfl_dim
+  real(kind=8)::dx_loc,dt_level,rho,denom,fluxL,fluxR,jr,jl,noise_amp
   type(msg_hydro_mflux)::dummy_nvar_realdp
   type(RngStream),external::RngStream_CreateStream
   real(kind=8),external::RngStream_RandUni
@@ -1331,9 +1331,7 @@ subroutine cic_trace_gas_part_ito_mc(s,p,ilevel,action_part)
               jr=max(fluxR,0.d0)
               jl=max(-fluxL,0.d0)
               u_cells(idim,ind)=(jr-jl)/denom
-              cfl_dim = abs(u_cells(idim,ind))*dt_level/dx_loc
-              one_minus_cfl = max(0.d0,(1.d0-cfl_dim))
-              kappa_num_cells(idim,ind)=0.5d0*one_minus_cfl*(jr+jl)/denom*dx_loc
+              kappa_num_cells(idim,ind)=0.5d0*(jr+jl)/denom*dx_loc
            end do
         end if
 #endif
@@ -1393,7 +1391,7 @@ end subroutine cic_trace_gas_part_ito_mc
 ! subroutine cic_trace_gas_part_slope_limit(s,p,ilevel,action_part)
 ! end subroutine cic_trace_gas_part_slope_limit
 
-subroutine tsc_trace_gas_part_ito_mc_grad(s,p,ilevel,action_part)
+subroutine tsc_trace_gas_part_ito_mc(s,p,ilevel,action_part)
   use amr_parameters, only: ndim, twotondim, threetondim
   use pm_parameters
   use pm_commons, only: part_t
@@ -1421,7 +1419,7 @@ subroutine tsc_trace_gas_part_ito_mc_grad(s,p,ilevel,action_part)
   integer :: ipart,ind,idim,icell,k
   integer :: ix,iy,iz
   real(kind=8)::dx_loc,dt_level,dx_over_dt,dt_over_dx,rho,denom,fluxL,fluxR,noise_amp
-  real(kind=8)::cfl_dim,one_minus_cfl,jr,jl
+  real(kind=8)::jr,jl
   real(kind=8)::xl,xc,xr,xd,weight
   type(msg_hydro_mflux)::dummy_nvar_realdp
   type(RngStream),external::RngStream_CreateStream
@@ -1532,9 +1530,7 @@ subroutine tsc_trace_gas_part_ito_mc_grad(s,p,ilevel,action_part)
               jr=max(fluxR,0.d0)
               jl=max(-fluxL,0.d0)
               u_cells(idim,ind)=(jr-jl)/denom
-              cfl_dim = abs(u_cells(idim,ind))*dt_over_dx
-              one_minus_cfl = max(0.d0,1.d0-cfl_dim)
-              kappa_num_cells(idim,ind)=one_minus_cfl*(jr+jl)*dx_loc/(2.d0*denom)
+              kappa_num_cells(idim,ind)=0.5d0*(jr+jl)*dx_loc/denom
            end do
         end if
 #endif
@@ -1589,7 +1585,7 @@ subroutine tsc_trace_gas_part_ito_mc_grad(s,p,ilevel,action_part)
   end if
 
   end associate
-end subroutine tsc_trace_gas_part_ito_mc_grad
+end subroutine tsc_trace_gas_part_ito_mc
 
 subroutine mc_trace_gas_part(s,p,ilevel,action_part)
   use amr_parameters, only: ndim, twotondim
@@ -2573,7 +2569,7 @@ end subroutine cic_kick_drift_dust
 !subroutine cic_kick_drift_dust_num_diff(s,p,ilevel,action_part)
 !end subroutine cic_kick_drift_dust_num_diff
 
-subroutine tsc_kick_drift_dust_ito_mc_grad(s,p,ilevel,action_part)
+subroutine tsc_kick_drift_dust_ito_mc(s,p,ilevel,action_part)
   use amr_parameters, only: ndim, threetondim
   use hydro_parameters, only: nener
   use pm_parameters
@@ -2617,7 +2613,7 @@ subroutine tsc_kick_drift_dust_ito_mc_grad(s,p,ilevel,action_part)
   real(kind=8)::xl,xc,xr,weight,xd
   integer :: k,jdim
   real(kind=8)::rho,denom,fluxL,fluxR
-  real(kind=8)::cfl_dim,one_minus_cfl,jr,jl
+  real(kind=8)::jr,jl
   type(msg_large_realdp)::dummy_large_realdp
   type(RngStream),external::RngStream_CreateStream
   real(kind=8),external::RngStream_RandUni
@@ -2857,9 +2853,7 @@ subroutine tsc_kick_drift_dust_ito_mc_grad(s,p,ilevel,action_part)
                  jr=max(fluxR,0.d0)
                  jl=max(-fluxL,0.d0)
                  u_cells(idim,ind)=(jr-jl)/denom
-                 cfl_dim = abs(u_cells(idim,ind))*dt_level/dx_loc
-                 one_minus_cfl = max(0.d0,1.d0-cfl_dim)
-                 kappa_num_cells(idim,ind)=one_minus_cfl*(jr+jl)*dx_loc/(2.d0*denom)
+                 kappa_num_cells(idim,ind)=0.5d0*(jr+jl)*dx_loc/denom
               end do
            end if
 #endif
@@ -2943,7 +2937,7 @@ subroutine tsc_kick_drift_dust_ito_mc_grad(s,p,ilevel,action_part)
   end if
 
   end associate
-end subroutine tsc_kick_drift_dust_ito_mc_grad
+end subroutine tsc_kick_drift_dust_ito_mc
 
 subroutine tsc_kick_drift_dust_guiding_center(s,p,ilevel,action_part)
   use ramses_commons, only: ramses_t
