@@ -1108,18 +1108,18 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
   integer::ilevel
   integer::action_part
   real(kind=8),dimension(1:ndim)::x,x_mid,v_pred,u_eff,u_mid,disp,xi
-  real(kind=8),dimension(1:ndim)::dl,dr,grad_at_part
+  real(kind=8),dimension(1:ndim)::grad_at_part
   integer,dimension(1:ndim)::ir
   real(kind=8),dimension(1:twotondim)::kappa_cells
-  real(kind=8),dimension(1:ndim,1:twotondim)::grad_vol
-  real(kind=8)::dx_loc,dt_level,kappa_mid,noise_amp
+  real(kind=8),dimension(1:ndim,1:2)::w1d,dw1d
+  real(kind=8)::dx_loc,dt_level,kappa_mid,noise_amp,xd
   logical :: use_sgs
   type(msg_hydro_mflux)::dummy_nvar_realdp
   type(RngStream),external::RngStream_CreateStream
   real(kind=8),external::RngStream_RandUni
   integer(kind=8)::stream_skip
   external :: RngStream_SetPackageSeed, RngStream_AdvanceState, gaussdev
-  integer :: ipart,idim,ind,jd
+  integer :: ipart,idim,ind,jd,ix,iy,iz
 
   associate(r=>s%r,g=>s%g,m=>s%m)
   if(p%static)return
@@ -1176,31 +1176,28 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
         kappa_cells(1:twotondim)=0.d0
         call gather_cic_scalar(s,x_mid,ilevel,dx_loc,use_sgs,kappa_cells)
 
-        ! CIC fractional offsets in cell units at x_mid
+        ! Build 1D CIC weights and derivatives (same structure as TSC)
         do jd=1,ndim
-           dr(jd)=x_mid(jd)+0.5d0
-           ir(jd)=int(dr(jd))
-           dr(jd)=dr(jd)-ir(jd)
-           dl(jd)=1.0d0-dr(jd)
+           xd = x_mid(jd) + 0.5d0
+           ir(jd) = int(xd)
+           xd = xd - ir(jd)  ! fractional offset in [0,1)
+           w1d(jd,1) = 1.d0 - xd   ! left weight
+           w1d(jd,2) = xd          ! right weight
+           dw1d(jd,1) = -1.d0      ! derivative of left weight
+           dw1d(jd,2) = +1.d0      ! derivative of right weight
         end do
 
-        grad_vol=0.d0
-        do ind=1,twotondim
-           do idim=1,ndim
-              grad_vol(idim,ind)=merge(1.d0,-1.d0,btest(ind-1,idim-1))
-              do jd=1,ndim
-                 if(jd==idim)cycle
-                 if(btest(ind-1,jd-1))then
-                    grad_vol(idim,ind)=grad_vol(idim,ind)*dr(jd)
-                 else
-                    grad_vol(idim,ind)=grad_vol(idim,ind)*dl(jd)
-                 endif
+        ! Compute CIC gradient inline (same structure as TSC)
+        grad_at_part = 0.d0
+        ind = 0
+        do iz=1,2
+           do iy=1,2
+              do ix=1,2
+                 ind = ind+1
+                 grad_at_part(1) = grad_at_part(1) + dw1d(1,ix)*w1d(2,iy)*w1d(3,iz)*kappa_cells(ind)
+                 grad_at_part(2) = grad_at_part(2) + w1d(1,ix)*dw1d(2,iy)*w1d(3,iz)*kappa_cells(ind)
+                 grad_at_part(3) = grad_at_part(3) + w1d(1,ix)*w1d(2,iy)*dw1d(3,iz)*kappa_cells(ind)
               end do
-           end do
-        end do
-        do idim=1,ndim
-           do ind=1,twotondim
-              grad_at_part(idim)=grad_at_part(idim)+grad_vol(idim,ind)*kappa_cells(ind)
            end do
         end do
      end if
@@ -1414,7 +1411,6 @@ subroutine tsc_trace_gas_part_ito_mc(s,p,ilevel,action_part)
   integer(kind=8),dimension(0:ndim)::hash_nbor
   real(kind=8),dimension(1:ndim,1:threetondim)::u_cells,kappa_num_cells
   real(kind=8),dimension(1:ndim,1:3)::w1d,dw1d
-  real(kind=8),dimension(1:ndim,1:threetondim)::grad_vol
   type(oct),pointer::gridp
   integer :: ipart,ind,idim,icell,k
   integer :: ix,iy,iz
@@ -1482,8 +1478,8 @@ subroutine tsc_trace_gas_part_ito_mc(s,p,ilevel,action_part)
         endif
      enddo
 
-     ! Build neighbor list, weights and derivatives (threetondim=27)
-     vol=0.d0; grad_vol=0.d0
+     ! Build neighbor list and weights (threetondim=27)
+     vol=0.d0
      ind=0
      do iz=1,3
         do iy=1,3
@@ -1504,11 +1500,7 @@ subroutine tsc_trace_gas_part_ito_mc(s,p,ilevel,action_part)
               case(2); ckey(3,ind)=ic(3)
               case(3); ckey(3,ind)=ir(3)
               end select
-              weight = w1d(1,ix)*w1d(2,iy)*w1d(3,iz)
-              vol(ind)=weight
-              grad_vol(1,ind)=dw1d(1,ix)*w1d(2,iy)*w1d(3,iz)
-              grad_vol(2,ind)=w1d(1,ix)*dw1d(2,iy)*w1d(3,iz)
-              grad_vol(3,ind)=w1d(1,ix)*w1d(2,iy)*dw1d(3,iz)
+              vol(ind) = w1d(1,ix)*w1d(2,iy)*w1d(3,iz)
            end do
         end do
      end do
@@ -1545,14 +1537,20 @@ subroutine tsc_trace_gas_part_ito_mc(s,p,ilevel,action_part)
         end do
      end do
 
-     do k=1,ndim
-        grad_at_part(k)=0.d0
-        do ind=1,threetondim
-           grad_at_part(k)=grad_at_part(k)+grad_vol(k,ind)*kappa_num_cells(k,ind)
+     ! Compute gradient of kappa inline (no grad_vol array needed)
+     grad_at_part = 0.d0
+     ind = 0
+     do iz=1,3
+        do iy=1,3
+           do ix=1,3
+              ind = ind+1
+              grad_at_part(1) = grad_at_part(1) + dw1d(1,ix)*w1d(2,iy)*w1d(3,iz)*kappa_num_cells(1,ind)
+              grad_at_part(2) = grad_at_part(2) + w1d(1,ix)*dw1d(2,iy)*w1d(3,iz)*kappa_num_cells(2,ind)
+              grad_at_part(3) = grad_at_part(3) + w1d(1,ix)*w1d(2,iy)*dw1d(3,iz)*kappa_num_cells(3,ind)
+           end do
         end do
-        u_eff(k) = u_eff(k) !+ grad_at_part(k)
-        kappa_num(k) = kappa_num(k)
      end do
+     ! u_eff = u_eff + grad_at_part  ! Uncomment to add noise-induced drift
 
      if(action_part==action_kick_only)then
         p%vp(ipart,1:ndim)=u_eff(1:ndim)
@@ -2606,7 +2604,7 @@ subroutine tsc_kick_drift_dust_ito_mc(s,p,ilevel,action_part)
   integer,dimension(1:ndim)::il,ic,ir
   real(kind=8),dimension(1:threetondim)::vol_diff
   integer,dimension(1:ndim,1:threetondim)::ckey_diff
-  real(kind=8),dimension(1:ndim,1:threetondim)::u_cells,kappa_num_cells,grad_vol
+  real(kind=8),dimension(1:ndim,1:threetondim)::u_cells,kappa_num_cells
   real(kind=8),dimension(1:ndim,1:3)::w1d,dw1d
   real(kind=8)::wdrift2,w0,a,g_par,g_perp
   type(oct),pointer :: gridp
@@ -2805,8 +2803,8 @@ subroutine tsc_kick_drift_dust_ito_mc(s,p,ilevel,action_part)
            endif
         enddo
 
-        ! Build neighbor list, weights and derivatives (threetondim=27)
-        vol_diff=0.d0; grad_vol=0.d0
+        ! Build neighbor list and weights (threetondim=27)
+        vol_diff=0.d0
         ind=0
         do iz=1,3
            do iy=1,3
@@ -2827,11 +2825,7 @@ subroutine tsc_kick_drift_dust_ito_mc(s,p,ilevel,action_part)
                  case(2); ckey_diff(3,ind)=ic(3)
                  case(3); ckey_diff(3,ind)=ir(3)
                  end select
-                 weight = w1d(1,ix)*w1d(2,iy)*w1d(3,iz)
-                 vol_diff(ind)=weight
-                 grad_vol(1,ind)=dw1d(1,ix)*w1d(2,iy)*w1d(3,iz)
-                 grad_vol(2,ind)=w1d(1,ix)*dw1d(2,iy)*w1d(3,iz)
-                 grad_vol(3,ind)=w1d(1,ix)*w1d(2,iy)*dw1d(3,iz)
+                 vol_diff(ind) = w1d(1,ix)*w1d(2,iy)*w1d(3,iz)
               end do
            end do
         end do
@@ -2868,13 +2862,20 @@ subroutine tsc_kick_drift_dust_ito_mc(s,p,ilevel,action_part)
            end do
         end do
 
-        do k=1,ndim
-           grad_at_part(k)=0.d0
-           do ind=1,threetondim
-              grad_at_part(k)=grad_at_part(k)+grad_vol(k,ind)*kappa_num_cells(k,ind)
+        ! Compute gradient of kappa inline (no grad_vol array needed)
+        grad_at_part = 0.d0
+        ind = 0
+        do iz=1,3
+           do iy=1,3
+              do ix=1,3
+                 ind = ind+1
+                 grad_at_part(1) = grad_at_part(1) + dw1d(1,ix)*w1d(2,iy)*w1d(3,iz)*kappa_num_cells(1,ind)
+                 grad_at_part(2) = grad_at_part(2) + w1d(1,ix)*dw1d(2,iy)*w1d(3,iz)*kappa_num_cells(2,ind)
+                 grad_at_part(3) = grad_at_part(3) + w1d(1,ix)*w1d(2,iy)*dw1d(3,iz)*kappa_num_cells(3,ind)
+              end do
            end do
-           u_eff(k) = u_eff(k) + grad_at_part(k)
         end do
+        u_eff(1:ndim) = u_eff(1:ndim) + grad_at_part(1:ndim)
 
         call sample_tracer_uniform(xi)
 
