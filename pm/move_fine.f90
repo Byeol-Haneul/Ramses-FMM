@@ -2590,10 +2590,10 @@ subroutine tsc_kick_drift_dust_ito_mc_grad(s,p,ilevel,action_part)
   integer::ilevel
   integer::action_part
   real(kind=8),dimension(1:ndim)::x_main,x_mid
-  real(kind=8),dimension(1:ndim)::wl,wc,wr,wl2,wc2,wr2
-  integer,dimension(1:ndim)::cl,cc,cr,cl2,cc2,cr2
-  real(kind=8),dimension(1:threetondim)::vol_main,vol2
-  integer,dimension(1:ndim,1:threetondim)::ckey,ckey2
+  real(kind=8),dimension(1:ndim)::wl2,wc2,wr2
+  integer,dimension(1:ndim)::cl2,cc2,cr2
+  real(kind=8),dimension(1:threetondim)::vol2
+  integer,dimension(1:ndim,1:threetondim)::ckey2
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer::ipart,ind,idim,irad,icell,icell2,ix,iy,iz
   real(kind=8)::dx_loc,dt_level
@@ -2608,21 +2608,16 @@ subroutine tsc_kick_drift_dust_ito_mc_grad(s,p,ilevel,action_part)
   real(kind=8),dimension(1:ndim)::disp,xi,dx_ito
   real(kind=8),dimension(1:ndim)::x_diff,grad_at_part,u_eff,kappa_num
   integer,dimension(1:ndim)::il,ic,ir
-  integer,dimension(1:ndim)::ind_minus,ind_plus
-  integer :: center_ind
-  real(kind=8),dimension(1:threetondim)::vol_diff,rho_cells
+  real(kind=8),dimension(1:threetondim)::vol_diff
   integer,dimension(1:ndim,1:threetondim)::ckey_diff
-  real(kind=8),dimension(1:ndim,1:threetondim)::u_cells,kappa_num_cells_L,kappa_num_cells_R,grad_vol
-  real(kind=8),dimension(1:ndim,1:threetondim)::fluxL_cells,fluxR_cells
+  real(kind=8),dimension(1:ndim,1:threetondim)::u_cells,kappa_num_cells,grad_vol
   real(kind=8),dimension(1:ndim,1:3)::w1d,dw1d
-  real(kind=8),dimension(1:ndim)::phiL,phiR
   real(kind=8)::wdrift2,w0,a,g_par,g_perp
   type(oct),pointer :: gridp
-  real(kind=8)::x_rel,weight,xd
-  integer :: k,slope_type,jdim
-  real(kind=8)::rho,denom,fluxL,fluxR,xl,xc,xr
+  real(kind=8)::xl,xc,xr,weight,xd
+  integer :: k,jdim
+  real(kind=8)::rho,denom,fluxL,fluxR
   real(kind=8)::cfl_dim,one_minus_cfl,jr,jl
-  real(kind=8)::rho_left,rho_right,dr_plus,dr_minus,r_ratio
   type(msg_large_realdp)::dummy_large_realdp
   type(RngStream),external::RngStream_CreateStream
   real(kind=8),external::RngStream_RandUni
@@ -2633,10 +2628,17 @@ subroutine tsc_kick_drift_dust_ito_mc_grad(s,p,ilevel,action_part)
   if(p%static)return
   dx_loc=r%boxlen/2**ilevel
   dt_level=g%dtnew(ilevel)
-  slope_type = r%slope_type
   if (p%type/=DUST_TYPE) return
   pi=4.0d0*atan(1.0d0)
   coeff=9.0d0*pi*r%gamma/128.0d0
+
+  ! OPTIMIZATION: Handle kick-only pass immediately without cache operations
+  if(action_part==action_kick_only)then
+     do ipart=p%headp(ilevel),p%tailp(ilevel)
+        p%levelp(ipart)=ilevel
+     end do
+     return
+  endif
 
   if(.not.tracer_rng_ready)then
      call RngStream_SetPackageSeed(r%seed)
@@ -2651,6 +2653,7 @@ subroutine tsc_kick_drift_dust_ito_mc_grad(s,p,ilevel,action_part)
                      pack=pack_fetch_kick_dust,unpack=unpack_fetch_kick_dust)
 
   do ipart=p%headp(ilevel),p%tailp(ilevel)
+     ! Compute particle position in cell units
      do idim=1,ndim
         x_main(idim)=p%xp(ipart,idim)/dx_loc
      end do
@@ -2659,26 +2662,10 @@ subroutine tsc_kick_drift_dust_ito_mc_grad(s,p,ilevel,action_part)
         if(x_main(idim)>=dble(m%ckey_max(ilevel+1)))x_main(idim)=x_main(idim)-dble(m%ckey_max(ilevel+1))
      end do
 
-     do idim=1,ndim
-        cl(idim)=int(x_main(idim))-1
-        cc(idim)=int(x_main(idim))
-        cr(idim)=int(x_main(idim))+1
-        x_rel = x_main(idim)
-        wl(idim)=0.5D0*(1.5D0-abs(x_rel-(dble(cl(idim))+0.5d0)))**2
-        wc(idim)=0.75D0-         (x_rel-(dble(cc(idim))+0.5d0)) **2
-        wr(idim)=0.5D0*(1.5D0-abs(x_rel-(dble(cr(idim))+0.5d0)))**2
-     end do
-     do idim=1,ndim
-        if(cl(idim)<0)cl(idim)=m%ckey_max(ilevel+1)-1
-        if(cr(idim)==m%ckey_max(ilevel+1))cr(idim)=0
-     enddo
-     ckey = tsc_index(cl,cc,cr)
-     vol_main = tsc_weight(wl,wc,wr)
+     ! NOTE: TSC weights at x_main (ckey, vol_main) were removed as they were unused.
+     ! The code uses x_mid for gas property interpolation and x_diff for diffusion.
 
-     if(action_part==action_kick_only)then
-        p%levelp(ipart)=ilevel
-        cycle
-     else if(action_part==action_kick_drift)then
+     if(action_part==action_kick_drift)then
         v_pred(1:ndim)=p%vp(ipart,1:ndim)
         if (g%nstep==0) then
            do idim=1,ndim
@@ -2797,35 +2784,23 @@ subroutine tsc_kick_drift_dust_ito_mc_grad(s,p,ilevel,action_part)
         end do
         call wrap_cell_coords(s,x_diff,ilevel+1)
 
+        ! Build 1D TSC weights and derivatives (branchless)
         do idim=1,ndim
            xd = x_diff(idim)
            il(idim)=int(xd)-1
            ic(idim)=int(xd)
            ir(idim)=int(xd)+1
-           x_rel = xd-(dble(il(idim))+0.5d0)
-           if(abs(x_rel)<=1.5d0)then
-              w1d(idim,1)=0.5d0*(1.5d0-abs(x_rel))**2
-              dw1d(idim,1)=-(1.5d0-abs(x_rel))*sign(1.d0,x_rel)
-           else
-              w1d(idim,1)=0.d0
-              dw1d(idim,1)=0.d0
-           end if
-           x_rel = xd-(dble(ic(idim))+0.5d0)
-           if(abs(x_rel)<=0.5d0)then
-              w1d(idim,2)=0.75d0 - x_rel*x_rel
-              dw1d(idim,2)=-2.d0*x_rel
-           else
-              w1d(idim,2)=0.d0
-              dw1d(idim,2)=0.d0
-           end if
-           x_rel = xd-(dble(ir(idim))+0.5d0)
-           if(abs(x_rel)<=1.5d0)then
-              w1d(idim,3)=0.5d0*(1.5d0-abs(x_rel))**2
-              dw1d(idim,3)=-(1.5d0-abs(x_rel))*sign(1.d0,x_rel)
-           else
-              w1d(idim,3)=0.d0
-              dw1d(idim,3)=0.d0
-           end if
+           ! Branchless 1D weights
+           xl=dble(il(idim))+0.5D0
+           xc=dble(ic(idim))+0.5D0
+           xr=dble(ir(idim))+0.5D0
+           w1d(idim,1)=0.5D0*(1.5D0-abs(xd-xl))**2
+           w1d(idim,2)=0.75D0-(xd-xc)**2
+           w1d(idim,3)=0.5D0*(1.5D0-abs(xd-xr))**2
+           ! Derivatives
+           dw1d(idim,1)=-(1.5d0-abs(xd-xl))*sign(1.d0,xd-xl)
+           dw1d(idim,2)=-2.d0*(xd-xc)
+           dw1d(idim,3)=-(1.5d0-abs(xd-xr))*sign(1.d0,xd-xr)
         end do
         do idim=1,ndim
            if(r%periodic(idim))then
@@ -2834,9 +2809,7 @@ subroutine tsc_kick_drift_dust_ito_mc_grad(s,p,ilevel,action_part)
            endif
         enddo
 
-        center_ind=0
-        ind_minus=0
-        ind_plus=0
+        ! Build neighbor list, weights and derivatives (threetondim=27)
         vol_diff=0.d0; grad_vol=0.d0
         ind=0
         do iz=1,3
@@ -2863,91 +2836,30 @@ subroutine tsc_kick_drift_dust_ito_mc_grad(s,p,ilevel,action_part)
                  grad_vol(1,ind)=dw1d(1,ix)*w1d(2,iy)*w1d(3,iz)
                  grad_vol(2,ind)=w1d(1,ix)*dw1d(2,iy)*w1d(3,iz)
                  grad_vol(3,ind)=w1d(1,ix)*w1d(2,iy)*dw1d(3,iz)
-                 if(iy==2 .and. iz==2)then
-                    if(ix==1)ind_minus(1)=ind
-                    if(ix==2)center_ind=ind
-                    if(ix==3)ind_plus(1)=ind
-                 end if
-                 if(ix==2 .and. iz==2)then
-                    if(iy==1)ind_minus(2)=ind
-                    if(iy==3)ind_plus(2)=ind
-                 end if
-                 if(ix==2 .and. iy==2)then
-                    if(iz==1)ind_minus(3)=ind
-                    if(iz==3)ind_plus(3)=ind
-                 end if
               end do
            end do
         end do
 
+        ! Single merged loop over 27 neighbors
         u_cells=0.d0
-        kappa_num_cells_L=0.d0
-        kappa_num_cells_R=0.d0
-        rho_cells=0.d0
-        fluxL_cells=0.d0
-        fluxR_cells=0.d0
-        phiL=1.d0
-        phiR=1.d0
-
+        kappa_num_cells=0.d0
         hash_nbor(0)=ilevel+1
         do ind=1,threetondim
            hash_nbor(1:ndim)=ckey_diff(1:ndim,ind)
            call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
 #ifdef HYDRO
            if(associated(gridp))then
-              rho=gridp%uold(icell,1)
-              rho_cells(ind)=rho
-              do idim=1,ndim
-                 fluxL_cells(idim,ind)=gridp%mflux(icell,1+idim     )*dx_loc/dt_level
-                 fluxR_cells(idim,ind)=gridp%mflux(icell,1+idim+ndim)*dx_loc/dt_level
-              end do
-           end if
-#endif
-        end do
-
-#ifdef HYDRO
-        rho = rho_cells(center_ind)
-        do idim=1,ndim
-           rho_right = rho_cells(ind_plus(idim))
-           rho_left  = rho_cells(ind_minus(idim))
-           dr_plus  = rho_right - rho
-           dr_minus = rho       - rho_left
-
-           phiR(idim) = 1.0d0
-           phiL(idim) = 1.0d0
-         !   if(abs(dr_plus)>r%smallr)then
-         !      r_ratio = dr_minus/dr_plus
-         !      phiR(idim) = slope_limiter(r_ratio,slope_type)
-         !   end if
-         !   if(abs(dr_minus)>r%smallr)then
-         !     r_ratio = dr_plus/dr_minus
-         !      phiL(idim) = slope_limiter(r_ratio,slope_type)
-         !   end if
-           phiR(idim) = min(1.d0,max(0.d0,phiR(idim)))
-           phiL(idim) = min(1.d0,max(0.d0,phiL(idim)))
-           phiL(idim) = 0.d0
-           phiR(idim) = 0.d0
-        end do
-#endif
-
-        hash_nbor(0)=ilevel+1
-        do ind=1,threetondim
-           hash_nbor(1:ndim)=ckey_diff(1:ndim,ind)
-           call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
-#ifdef HYDRO
-           if(associated(gridp))then
-              rho=rho_cells(ind)
+              rho=gridp%mflux(icell,1)
               denom=max(rho,r%smallr)
               do idim=1,ndim
-                 fluxL=fluxL_cells(idim,ind)
-                 fluxR=fluxR_cells(idim,ind)
+                 fluxL=gridp%mflux(icell,1+idim     )*dx_loc/dt_level
+                 fluxR=gridp%mflux(icell,1+idim+ndim)*dx_loc/dt_level
                  jr=max(fluxR,0.d0)
                  jl=max(-fluxL,0.d0)
                  u_cells(idim,ind)=(jr-jl)/denom
                  cfl_dim = abs(u_cells(idim,ind))*dt_level/dx_loc
                  one_minus_cfl = max(0.d0,1.d0-cfl_dim)
-                 kappa_num_cells_R(idim,ind)=one_minus_cfl*jr*dx_loc/(2.d0*denom)
-                 kappa_num_cells_L(idim,ind)=one_minus_cfl*jl*dx_loc/(2.d0*denom)
+                 kappa_num_cells(idim,ind)=one_minus_cfl*(jr+jl)*dx_loc/(2.d0*denom)
               end do
            end if
 #endif
@@ -2958,21 +2870,16 @@ subroutine tsc_kick_drift_dust_ito_mc_grad(s,p,ilevel,action_part)
         do ind=1,threetondim
            do idim=1,ndim
               u_eff(idim)=u_eff(idim)+u_cells(idim,ind)*vol_diff(ind)
-              kappa_num(idim)=kappa_num(idim)+&
-                   ((1.d0-phiR(idim))*kappa_num_cells_R(idim,ind)+&
-                    (1.d0-phiL(idim))*kappa_num_cells_L(idim,ind))*vol_diff(ind)
+              kappa_num(idim)=kappa_num(idim)+kappa_num_cells(idim,ind)*vol_diff(ind)
            end do
         end do
 
         do k=1,ndim
            grad_at_part(k)=0.d0
            do ind=1,threetondim
-              grad_at_part(k)=grad_at_part(k)+grad_vol(k,ind)*&
-                   ((1.d0-phiR(k))*kappa_num_cells_R(k,ind)+&
-                    (1.d0-phiL(k))*kappa_num_cells_L(k,ind))
+              grad_at_part(k)=grad_at_part(k)+grad_vol(k,ind)*kappa_num_cells(k,ind)
            end do
            u_eff(k) = u_eff(k) + grad_at_part(k)
-           kappa_num(k) = kappa_num(k)
         end do
 
         call sample_tracer_uniform(xi)
