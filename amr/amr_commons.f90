@@ -136,6 +136,7 @@ module amr_commons
      logical ::induction=.false.
      logical ::entropy=.false.
      logical ::sgs_turb=.false.
+     logical ::equilibrium_sgs=.false.
      real(kind=8)::dual_energy=-1
      real(kind=8)::T2_fix=0d0
      character(LEN=10)::scheme='muscl'

@@ -106,9 +106,9 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
         elseif(pst%s%r%trac_interpolation_scheme==4)then
            call cic_trace_gas_part_ito_mc(pst%s,pst%s%trac,ilevel,action_part) ! Ito formulation of the flux-based Monte Carlo tracer
         elseif(pst%s%r%trac_interpolation_scheme==5)then
-           call cic_trace_gas_part_sgs_turb(pst%s,pst%s%trac,ilevel,action_part) ! Ito formulation of the sgs driven diffusion tracer
+           call tsc_trace_gas_part_ito_mc(pst%s,pst%s%trac,ilevel,action_part) ! Ito MC tracer with TSC
         elseif(pst%s%r%trac_interpolation_scheme==6)then
-           call tsc_trace_gas_part_ito_mc(pst%s,pst%s%trac,ilevel,action_part) ! Ito MC tracer with (1-CFL) factor and grad(kappa).
+           call cic_trace_gas_part_sgs_turb(pst%s,pst%s%trac,ilevel,action_part) ! Ito formulation of the sgs driven diffusion tracer
         endif
      endif
      if(pst%s%r%dust)then
@@ -145,8 +145,6 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
   type(part_t)::p
   integer::ilevel
   integer::action_part
-  !
-  !
   real(kind=8),dimension(1:ndim)::x,dr,dl
   integer,dimension(1:ndim)::ir,il
   real(kind=8),dimension(1:twotondim)::vol
@@ -1097,6 +1095,7 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
   use amr_parameters, only: ndim, twotondim
   use pm_parameters
   use pm_commons, only: part_t
+  use oct_commons, only: oct
   use ramses_commons, only: ramses_t
   use rng
   use nbors_utils
@@ -1107,19 +1106,22 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
   type(part_t)::p
   integer::ilevel
   integer::action_part
-  real(kind=8),dimension(1:ndim)::x,x_mid,v_pred,u_eff,u_mid,disp,xi
+  real(kind=8),dimension(1:ndim)::x,x_mid,v_pred,u_eff,u_mid,disp,xi,momentum
   real(kind=8),dimension(1:ndim)::grad_at_part
-  integer,dimension(1:ndim)::ir
-  real(kind=8),dimension(1:twotondim)::kappa_cells
+  real(kind=8),dimension(1:twotondim)::vol,kappa_cells
+  integer,dimension(1:ndim)::il,ir
+  integer,dimension(1:ndim,1:twotondim)::ckey
+  integer(kind=8),dimension(0:ndim)::hash_nbor
   real(kind=8),dimension(1:ndim,1:2)::w1d,dw1d
-  real(kind=8)::dx_loc,dt_level,kappa_mid,noise_amp,xd
+  real(kind=8)::dx_loc,dt_level,kappa_mid,noise_amp,rho
   logical :: use_sgs
+  type(oct),pointer::gridp
   type(msg_hydro_mflux)::dummy_nvar_realdp
   type(RngStream),external::RngStream_CreateStream
   real(kind=8),external::RngStream_RandUni
   integer(kind=8)::stream_skip
   external :: RngStream_SetPackageSeed, RngStream_AdvanceState, gaussdev
-  integer :: ipart,idim,ind,jd,ix,iy,iz
+  integer :: ipart,idim,ind,icell
 
   associate(r=>s%r,g=>s%g,m=>s%m)
   if(p%static)return
@@ -1128,6 +1130,15 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
   dx_loc=r%boxlen/2**ilevel
   dt_level=g%dtnew(ilevel)
   use_sgs = r%sgs_turb .and. (r%iturb>0)
+
+  ! OPTIMIZATION: Handle kick-only pass immediately without cache operations
+  if(action_part==action_kick_only)then
+     do ipart=p%headp(ilevel),p%tailp(ilevel)
+        p%levelp(ipart)=ilevel
+     end do
+     return
+  endif
+
   if(use_sgs .and. .not. tracer_rng_ready)then
      call RngStream_SetPackageSeed(r%seed)
      tracer_rng = RngStream_CreateStream('tracer_sgs')
@@ -1147,14 +1158,8 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
      end do
      call wrap_cell_coords(s,x,ilevel+1)
 
-     ! Gather gas velocity u(x) and SGS diffusivity kappa(x)
-     call gather_cic_state(s,x,ilevel,dx_loc,use_sgs,u_eff,kappa_mid)
-
-     if(action_part==action_kick_only)then
-        p%vp(ipart,1:ndim)=u_eff(1:ndim)
-        p%levelp(ipart)=ilevel
-        cycle
-     endif
+     ! Gather gas velocity u(x) for predictor step
+     call gather_cic_state(s,x,ilevel,dx_loc,.false.,u_eff,kappa_mid)
 
      if (g%nstep>0) then
         v_pred(1:ndim)=p%vp(ipart,1:ndim)
@@ -1167,46 +1172,50 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
      end do
      call wrap_cell_coords(s,x_mid,ilevel+1)
 
-     ! Gather gas velocity u(x_mid) and SGS diffusivity kappa(x_mid)
-     call gather_cic_state(s,x_mid,ilevel,dx_loc,use_sgs,u_mid,kappa_mid)
+     ! Build CIC weights, derivatives, indices, and volume weights ONCE for x_mid
+     call cic_weights_and_derivs(x_mid, w1d, dw1d, il, ir, vol)
+     do idim=1,ndim
+        if(r%periodic(idim))then
+           if(il(idim)< m%box_ckey_min(idim,ilevel+1))il(idim)=m%box_ckey_max(idim,ilevel+1)-1
+           if(ir(idim)>=m%box_ckey_max(idim,ilevel+1))ir(idim)=m%box_ckey_min(idim,ilevel+1)
+        endif
+     end do
+     ckey = cic_index(il,ir)
 
-     ! Kernel gradient (first-order): grad(kappa) from cell-centered kappa on CIC stencil
+     ! Single pass over cells: gather velocity, density, and per-cell kappa
+     momentum(1:ndim)=0.d0
+     rho=0.d0
+     kappa_mid=0.d0
+     kappa_cells(1:twotondim)=0.d0
+     hash_nbor(0)=ilevel+1
+     do ind=1,twotondim
+        hash_nbor(1:ndim)=ckey(1:ndim,ind)
+        call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+#ifdef HYDRO
+        if(associated(gridp))then
+           momentum(1:ndim)=momentum(1:ndim)+gridp%uold(icell,2:ndim+1)*vol(ind)
+           rho=rho+gridp%uold(icell,1)*vol(ind)
+           if(use_sgs)then
+              kappa_cells(ind)=tracer_cell_kappa(gridp%uold(icell,1),gridp%uold(icell,r%iturb),dx_loc,r%smallr,r%tracer_inverse_peclet_number)
+              kappa_mid=kappa_mid+kappa_cells(ind)*vol(ind)
+           end if
+        end if
+#endif
+     end do
+     if(rho>r%smallr)then
+        u_mid(1:ndim)=momentum(1:ndim)/rho
+     else
+        u_mid(1:ndim)=0.d0
+     end if
+
+     ! Compute gradient of kappa using the already-computed weights and per-cell values
      grad_at_part(1:ndim)=0.d0
      if(use_sgs)then
-        kappa_cells(1:twotondim)=0.d0
-        call gather_cic_scalar(s,x_mid,ilevel,dx_loc,use_sgs,kappa_cells)
-
-        ! Build 1D CIC weights and derivatives (same structure as TSC)
-        do jd=1,ndim
-           xd = x_mid(jd) + 0.5d0
-           ir(jd) = int(xd)
-           xd = xd - ir(jd)  ! fractional offset in [0,1)
-           w1d(jd,1) = 1.d0 - xd   ! left weight
-           w1d(jd,2) = xd          ! right weight
-           dw1d(jd,1) = -1.d0      ! derivative of left weight
-           dw1d(jd,2) = +1.d0      ! derivative of right weight
-        end do
-
-        ! Compute CIC gradient inline (same structure as TSC)
-        grad_at_part = 0.d0
-        ind = 0
-        do iz=1,2
-           do iy=1,2
-              do ix=1,2
-                 ind = ind+1
-                 grad_at_part(1) = grad_at_part(1) + dw1d(1,ix)*w1d(2,iy)*w1d(3,iz)*kappa_cells(ind)
-                 grad_at_part(2) = grad_at_part(2) + w1d(1,ix)*dw1d(2,iy)*w1d(3,iz)*kappa_cells(ind)
-                 grad_at_part(3) = grad_at_part(3) + w1d(1,ix)*w1d(2,iy)*dw1d(3,iz)*kappa_cells(ind)
-              end do
-           end do
-        end do
+        call compute_gradient_cic(w1d, dw1d, kappa_cells, grad_at_part)
      end if
 
      ! Ito drift: u + grad(kappa)
-     disp(1:ndim)=0.d0
-     do idim=1,ndim
-        disp(idim) = (u_mid(idim) + grad_at_part(idim)/dx_loc)*dt_level
-     end do
+     disp(1:ndim)=(u_mid(1:ndim) + grad_at_part(1:ndim)/dx_loc)*dt_level
 
      if(use_sgs .and. kappa_mid>0.0d0)then
         call sample_tracer_gaussian(xi)
@@ -1250,7 +1259,6 @@ subroutine cic_trace_gas_part_ito_mc(s,p,ilevel,action_part)
   integer::ilevel
   integer::action_part
   real(kind=8),dimension(1:ndim)::x,disp,xi,u_eff,kappa_num
-  real(kind=8),dimension(1:ndim)::dl,dr
   real(kind=8),dimension(1:ndim)::grad_at_part
   integer,dimension(1:ndim)::il,ir
   real(kind=8),dimension(1:twotondim)::vol,phi_slice
@@ -1258,6 +1266,7 @@ subroutine cic_trace_gas_part_ito_mc(s,p,ilevel,action_part)
   integer(kind=8),dimension(0:ndim)::hash_nbor
   real(kind=8),dimension(1:ndim,1:twotondim)::u_cells,kappa_num_cells,grad_phi_cells
   real(kind=8),dimension(1:ndim,1:twotondim)::fluxL_cells,fluxR_cells
+  real(kind=8),dimension(1:ndim,1:2)::w1d,dw1d
   type(oct),pointer::gridp
   integer :: ipart,ind,idim,icell,k
   real(kind=8)::dx_loc,dt_level,rho,denom,fluxL,fluxR,jr,jl,noise_amp
@@ -1293,13 +1302,10 @@ subroutine cic_trace_gas_part_ito_mc(s,p,ilevel,action_part)
      end do
      call wrap_cell_coords(s,x,ilevel+1)
 
-     do idim=1,ndim
-        dr(idim)=x(idim)+0.5d0
-        ir(idim)=int(dr(idim))
-        dr(idim)=dr(idim)-ir(idim)
-        dl(idim)=1.0d0-dr(idim)
-        il(idim)=ir(idim)-1
-     end do
+     ! Build 1D CIC weights, indices, and 3D volume weights
+     call cic_weights_and_derivs(x, w1d, dw1d, il, ir, vol)
+
+     ! Periodic wrap of indices for 2x2x2 stencil
      do idim=1,ndim
         if(r%periodic(idim))then
            if(il(idim)< m%box_ckey_min(idim,ilevel+1))il(idim)=m%box_ckey_max(idim,ilevel+1)-1
@@ -1307,8 +1313,8 @@ subroutine cic_trace_gas_part_ito_mc(s,p,ilevel,action_part)
         endif
      enddo
 
+     ! Build neighbor index list (twotondim=8)
      ckey = cic_index(il,ir)
-     vol = cic_weight(dl,dr)
 
      u_cells=0.d0
      kappa_num_cells=0.d0
@@ -1389,7 +1395,7 @@ end subroutine cic_trace_gas_part_ito_mc
 ! end subroutine cic_trace_gas_part_slope_limit
 
 subroutine tsc_trace_gas_part_ito_mc(s,p,ilevel,action_part)
-  use amr_parameters, only: ndim, twotondim, threetondim
+  use amr_parameters, only: ndim, threetondim
   use pm_parameters
   use pm_commons, only: part_t
   use oct_commons, only: oct
@@ -1412,11 +1418,9 @@ subroutine tsc_trace_gas_part_ito_mc(s,p,ilevel,action_part)
   real(kind=8),dimension(1:ndim,1:threetondim)::u_cells,kappa_num_cells
   real(kind=8),dimension(1:ndim,1:3)::w1d,dw1d
   type(oct),pointer::gridp
-  integer :: ipart,ind,idim,icell,k
-  integer :: ix,iy,iz
+  integer :: ipart,ind,idim,icell
   real(kind=8)::dx_loc,dt_level,dx_over_dt,dt_over_dx,rho,denom,fluxL,fluxR,noise_amp
   real(kind=8)::jr,jl
-  real(kind=8)::xl,xc,xr,xd,weight
   type(msg_hydro_mflux)::dummy_nvar_realdp
   type(RngStream),external::RngStream_CreateStream
   real(kind=8),external::RngStream_RandUni
@@ -1451,24 +1455,8 @@ subroutine tsc_trace_gas_part_ito_mc(s,p,ilevel,action_part)
      end do
      call wrap_cell_coords(s,x,ilevel+1)
 
-     ! Build 1D TSC weights and derivatives (branchless)
-     do idim=1,ndim
-        xd = x(idim)
-        il(idim)=int(xd)-1
-        ic(idim)=int(xd)
-        ir(idim)=int(xd)+1
-        ! Branchless 1D weights
-        xl=dble(il(idim))+0.5D0
-        xc=dble(ic(idim))+0.5D0
-        xr=dble(ir(idim))+0.5D0
-        w1d(idim,1)=0.5D0*(1.5D0-abs(xd-xl))**2
-        w1d(idim,2)=0.75D0-(xd-xc)**2
-        w1d(idim,3)=0.5D0*(1.5D0-abs(xd-xr))**2
-        ! Derivatives (preserved for grad_at_part)
-        dw1d(idim,1)=-(1.5d0-abs(xd-xl))*sign(1.d0,xd-xl)
-        dw1d(idim,2)=-2.d0*(xd-xc)
-        dw1d(idim,3)=-(1.5d0-abs(xd-xr))*sign(1.d0,xd-xr)
-     end do
+     ! Build 1D TSC weights, derivatives, indices, and 3D volume weights
+     call tsc_weights_and_derivs(x, w1d, dw1d, il, ic, ir, vol)
 
      ! Periodic wrap of indices for 3x3x3 stencil
      do idim=1,ndim
@@ -1478,32 +1466,8 @@ subroutine tsc_trace_gas_part_ito_mc(s,p,ilevel,action_part)
         endif
      enddo
 
-     ! Build neighbor list and weights (threetondim=27)
-     vol=0.d0
-     ind=0
-     do iz=1,3
-        do iy=1,3
-           do ix=1,3
-              ind=ind+1
-              select case(ix)
-              case(1); ckey(1,ind)=il(1)
-              case(2); ckey(1,ind)=ic(1)
-              case(3); ckey(1,ind)=ir(1)
-              end select
-              select case(iy)
-              case(1); ckey(2,ind)=il(2)
-              case(2); ckey(2,ind)=ic(2)
-              case(3); ckey(2,ind)=ir(2)
-              end select
-              select case(iz)
-              case(1); ckey(3,ind)=il(3)
-              case(2); ckey(3,ind)=ic(3)
-              case(3); ckey(3,ind)=ir(3)
-              end select
-              vol(ind) = w1d(1,ix)*w1d(2,iy)*w1d(3,iz)
-           end do
-        end do
-     end do
+     ! Build neighbor index list (threetondim=27)
+     ckey = tsc_index(il,ic,ir)
 
      ! Single merged loop over 27 neighbors
      u_cells=0.d0
@@ -1537,19 +1501,8 @@ subroutine tsc_trace_gas_part_ito_mc(s,p,ilevel,action_part)
         end do
      end do
 
-     ! Compute gradient of kappa inline (no grad_vol array needed)
-     grad_at_part = 0.d0
-     ind = 0
-     do iz=1,3
-        do iy=1,3
-           do ix=1,3
-              ind = ind+1
-              grad_at_part(1) = grad_at_part(1) + dw1d(1,ix)*w1d(2,iy)*w1d(3,iz)*kappa_num_cells(1,ind)
-              grad_at_part(2) = grad_at_part(2) + w1d(1,ix)*dw1d(2,iy)*w1d(3,iz)*kappa_num_cells(2,ind)
-              grad_at_part(3) = grad_at_part(3) + w1d(1,ix)*w1d(2,iy)*dw1d(3,iz)*kappa_num_cells(3,ind)
-           end do
-        end do
-     end do
+     ! Compute gradient using TSC subroutine
+     call compute_gradient_tsc(w1d, dw1d, kappa_num_cells, grad_at_part)
      ! u_eff = u_eff + grad_at_part  ! Uncomment to add noise-induced drift
 
      if(action_part==action_kick_only)then
@@ -1866,10 +1819,10 @@ subroutine gather_cic_state(st,x_cell,level_in,dx_cell,use_sgs_in,vel_out,kappa_
   logical,intent(in)::use_sgs_in
   real(kind=8),intent(out)::vel_out(1:ndim)
   real(kind=8),intent(out)::kappa_out
-  real(kind=8),dimension(1:ndim)::dl,dr
   integer,dimension(1:ndim)::il,ir
   real(kind=8),dimension(1:twotondim)::vol
   integer,dimension(1:ndim,1:twotondim)::ckey
+  real(kind=8),dimension(1:ndim,1:2)::w1d,dw1d
   real(kind=8),dimension(1:ndim)::momentum
   real(kind=8)::rho,kappa_sum
   integer(kind=8),dimension(0:ndim)::hash_nbor
@@ -1881,13 +1834,8 @@ subroutine gather_cic_state(st,x_cell,level_in,dx_cell,use_sgs_in,vel_out,kappa_
   rho=0.d0
   kappa_sum=0.d0
 
-  do jd=1,ndim
-     dr(jd)=x_cell(jd)+0.5d0
-     ir(jd)=int(dr(jd))
-     dr(jd)=dr(jd)-ir(jd)
-     dl(jd)=1.0d0-dr(jd)
-     il(jd)=ir(jd)-1
-  end do
+  ! Build CIC weights, indices, and volume weights
+  call cic_weights_and_derivs(x_cell, w1d, dw1d, il, ir, vol)
   do jd=1,ndim
      if(st%r%periodic(jd))then
         if(il(jd)< st%m%box_ckey_min(jd,level_in+1))il(jd)=st%m%box_ckey_max(jd,level_in+1)-1
@@ -1895,7 +1843,6 @@ subroutine gather_cic_state(st,x_cell,level_in,dx_cell,use_sgs_in,vel_out,kappa_
      endif
   end do
   ckey = cic_index(il,ir)
-  vol = cic_weight(dl,dr)
 
   hash_nbor(0)=level_in+1
   do ind=1,twotondim
@@ -1938,9 +1885,9 @@ subroutine gather_cic_scalar(st,x_cell,level_in,dx_cell,use_sgs_in,phi_cells)
   real(kind=8),intent(in)::dx_cell
   logical,intent(in)::use_sgs_in
   real(kind=8),intent(out)::phi_cells(1:twotondim)
-  real(kind=8),dimension(1:ndim)::dl,dr
   integer,dimension(1:ndim)::il,ir
   integer,dimension(1:ndim,1:twotondim)::ckey
+  real(kind=8),dimension(1:ndim,1:2)::w1d,dw1d
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer::ind,jd,icell
   type(oct),pointer::gridp
@@ -1948,13 +1895,8 @@ subroutine gather_cic_scalar(st,x_cell,level_in,dx_cell,use_sgs_in,phi_cells)
   phi_cells=0.d0
   if(.not.use_sgs_in)return
 
-  do jd=1,ndim
-     dr(jd)=x_cell(jd)+0.5d0
-     ir(jd)=int(dr(jd))
-     dr(jd)=dr(jd)-ir(jd)
-     dl(jd)=1.0d0-dr(jd)
-     il(jd)=ir(jd)-1
-  end do
+  ! Build CIC weights and indices (only indices used here)
+  call cic_weights_and_derivs(x_cell, w1d, dw1d, il, ir)
   do jd=1,ndim
      if(st%r%periodic(jd))then
         if(il(jd)< st%m%box_ckey_min(jd,level_in+1))il(jd)=st%m%box_ckey_max(jd,level_in+1)-1
@@ -1974,46 +1916,6 @@ subroutine gather_cic_scalar(st,x_cell,level_in,dx_cell,use_sgs_in,phi_cells)
 #endif
   end do
 end subroutine gather_cic_scalar
-
-
-
-subroutine interp_grad_at_pos(st,x_cell,level_in,grad_cells,grad_out)
-  use amr_parameters, only: ndim, twotondim
-  use ramses_commons, only: ramses_t
-  implicit none
-  type(ramses_t),intent(in)::st
-  real(kind=8),intent(in)::x_cell(1:ndim)
-  integer,intent(in)::level_in
-  real(kind=8),intent(in)::grad_cells(1:ndim,1:twotondim)
-  real(kind=8),intent(out)::grad_out(1:ndim)
-  real(kind=8),dimension(1:ndim)::dl,dr
-  integer,dimension(1:ndim)::il,ir
-  real(kind=8),dimension(1:twotondim)::vol
-  integer,dimension(1:ndim,1:twotondim)::ckey
-  integer :: jd,ind
-
-  grad_out=0.d0
-
-  do jd=1,ndim
-     dr(jd)=x_cell(jd)+0.5d0
-     ir(jd)=int(dr(jd))
-     dr(jd)=dr(jd)-ir(jd)
-     dl(jd)=1.0d0-dr(jd)
-     il(jd)=ir(jd)-1
-  end do
-  do jd=1,ndim
-     if(st%r%periodic(jd))then
-        if(il(jd)< st%m%box_ckey_min(jd,level_in+1))il(jd)=st%m%box_ckey_max(jd,level_in+1)-1
-        if(ir(jd)>=st%m%box_ckey_max(jd,level_in+1))ir(jd)=st%m%box_ckey_min(jd,level_in+1)
-     endif
-  end do
-  ckey = cic_index(il,ir)
-  vol = cic_weight(dl,dr)
-
-  do ind=1,twotondim
-     grad_out(1:ndim)=grad_out(1:ndim)+grad_cells(1:ndim,ind)*vol(ind)
-  end do
-end subroutine interp_grad_at_pos
 
 real(kind=8) function tracer_cell_kappa(dens_in,eturb_in,dx_in,smallr_in,inverse_peclet_in) result(kappa_val)
   implicit none
@@ -2078,19 +1980,16 @@ subroutine tsc_trace_gas_part(s,p,ilevel,action_part)
   type(part_t)::p
   integer::ilevel
   integer::action_part
-  real(kind=8),dimension(1:ndim)::x,wl,wc,wr
-  real(kind=8),dimension(1:ndim)::x_mid,wl2,wc2,wr2
-  integer,dimension(1:ndim)::cl,cc,cr
-  integer,dimension(1:ndim)::cl2,cc2,cr2
+  real(kind=8),dimension(1:ndim)::x,x_mid
+  integer,dimension(1:ndim)::il,ic,ir
   real(kind=8),dimension(1:threetondim)::vol,vol2
   integer,dimension(1:ndim,1:threetondim)::ckey,ckey2
   integer(kind=8),dimension(0:ndim)::hash_nbor
+  real(kind=8),dimension(1:ndim,1:3)::w1d,dw1d
   integer::ipart,icell,icell2,ind,idim
-  real(kind=8)::xl,xc,xr
   real(kind=8)::dx_loc
   real(kind=8),dimension(1:ndim)::ff,v_pred
   type(oct),pointer::gridp
-  logical::ok_level
   type(msg_three_realdp)::dummy_three_realdp
   type(msg_hydro_mflux)::dummy_nvar_realdp
   associate(r=>s%r,g=>s%g,m=>s%m)
@@ -2110,25 +2009,15 @@ subroutine tsc_trace_gas_part(s,p,ilevel,action_part)
            if(x(idim)>=dble(m%box_ckey_max(idim,ilevel+1)))x(idim)=x(idim)-dble(m%box_ckey_max(idim,ilevel+1)-m%box_ckey_min(idim,ilevel+1))
         endif
      end do
-     do idim=1,ndim
-        cl(idim)=int(x(idim))-1
-        cc(idim)=int(x(idim))
-        cr(idim)=int(x(idim))+1
-        xl=dble(cl(idim))+0.5D0
-        xc=dble(cc(idim))+0.5D0
-        xr=dble(cr(idim))+0.5D0
-        wl(idim)=0.5D0*(1.5D0-abs(x(idim)-xl))**2
-        wc(idim)=0.75D0-         (x(idim)-xc) **2
-        wr(idim)=0.5D0*(1.5D0-abs(x(idim)-xr))**2
-     end do
+     ! Build 1D TSC weights, indices, and 3D volume weights
+     call tsc_weights_and_derivs(x, w1d, dw1d, il, ic, ir, vol)
      do idim=1,ndim
         if(r%periodic(idim))then
-           if(cl(idim)< m%box_ckey_min(idim,ilevel+1))cl(idim)=m%box_ckey_max(idim,ilevel+1)-1
-           if(cr(idim)>=m%box_ckey_max(idim,ilevel+1))cr(idim)=m%box_ckey_min(idim,ilevel+1)
+           if(il(idim)< m%box_ckey_min(idim,ilevel+1))il(idim)=m%box_ckey_max(idim,ilevel+1)-1
+           if(ir(idim)>=m%box_ckey_max(idim,ilevel+1))ir(idim)=m%box_ckey_min(idim,ilevel+1)
         endif
      enddo
-     ckey = tsc_index(cl,cc,cr)
-     vol = tsc_weight(wl,wc,wr)
+     ckey = tsc_index(il,ic,ir)
      hash_nbor(0)=ilevel+1
      ff(1:ndim)=0.0
      do ind=1,threetondim
@@ -2162,25 +2051,15 @@ subroutine tsc_trace_gas_part(s,p,ilevel,action_part)
               if(x_mid(idim)>=dble(m%box_ckey_max(idim,ilevel+1)))x_mid(idim)=x_mid(idim)-dble(m%box_ckey_max(idim,ilevel+1)-m%box_ckey_min(idim,ilevel+1))
            endif
         end do
-        do idim=1,ndim
-           cl2(idim)=int(x_mid(idim))-1
-           cc2(idim)=int(x_mid(idim))
-           cr2(idim)=int(x_mid(idim))+1
-           xl=dble(cl2(idim))+0.5D0
-           xc=dble(cc2(idim))+0.5D0
-           xr=dble(cr2(idim))+0.5D0
-           wl2(idim)=0.5D0*(1.5D0-abs(x_mid(idim)-xl))**2
-           wc2(idim)=0.75D0-         (x_mid(idim)-xc) **2
-           wr2(idim)=0.5D0*(1.5D0-abs(x_mid(idim)-xr))**2
-        end do
+        ! Build 1D TSC weights, indices, and 3D volume weights at x_mid
+        call tsc_weights_and_derivs(x_mid, w1d, dw1d, il, ic, ir, vol2)
         do idim=1,ndim
            if(r%periodic(idim))then
-              if(cl2(idim)< m%box_ckey_min(idim,ilevel+1))cl2(idim)=m%box_ckey_max(idim,ilevel+1)-1
-              if(cr2(idim)>=m%box_ckey_max(idim,ilevel+1))cr2(idim)=m%box_ckey_min(idim,ilevel+1)
+              if(il(idim)< m%box_ckey_min(idim,ilevel+1))il(idim)=m%box_ckey_max(idim,ilevel+1)-1
+              if(ir(idim)>=m%box_ckey_max(idim,ilevel+1))ir(idim)=m%box_ckey_min(idim,ilevel+1)
            endif
         enddo
-        ckey2 = tsc_index(cl2,cc2,cr2)
-        vol2 = tsc_weight(wl2,wc2,wr2)
+        ckey2 = tsc_index(il,ic,ir)
         hash_nbor(0)=ilevel+1
         ff(1:ndim)=0.0
         do ind=1,threetondim
@@ -2224,19 +2103,15 @@ subroutine pcs_trace_gas_part(s,p,ilevel,action_part)
   type(part_t)::p
   integer::ilevel
   integer::action_part
-  real(kind=8),dimension(1:ndim)::x,wll,wl,wr,wrr
-  real(kind=8),dimension(1:ndim)::x_mid,wll2,wl2,wr2,wrr2
+  real(kind=8),dimension(1:ndim)::x,x_mid,wll,wl,wr,wrr
   integer,dimension(1:ndim)::cll,cl,cr,crr
-  integer,dimension(1:ndim)::cll2,cl2,cr2,crr2
   real(kind=8),dimension(1:fourtondim)::vol,vol2
   integer,dimension(1:ndim,1:fourtondim)::ckey,ckey2
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer::ipart,icell,icell2,ind,idim
-  real(kind=8)::xll,xl,xr,xrr
   real(kind=8)::dx_loc
   real(kind=8),dimension(1:ndim)::ff,v_pred
   type(oct),pointer::gridp
-  type(msg_large_realdp)::dummy_large_realdp
   type(msg_hydro_mflux)::dummy_nvar_realdp
   associate(r=>s%r,g=>s%g,m=>s%m)
   if(p%static)return
@@ -2255,20 +2130,9 @@ subroutine pcs_trace_gas_part(s,p,ilevel,action_part)
            if(x(idim)>=dble(m%box_ckey_max(idim,ilevel+1)))x(idim)=x(idim)-dble(m%box_ckey_max(idim,ilevel+1)-m%box_ckey_min(idim,ilevel+1))
         endif
      end do
-     do idim=1,ndim
-        crr(idim)=int(x(idim)+1.5D0)
-        cr (idim)=crr(idim)-1
-        cl (idim)=crr(idim)-2
-        cll(idim)=crr(idim)-3
-        xll=dble(cll(idim))+0.5D0
-        xl =dble(cl (idim))+0.5D0
-        xr =dble(cr (idim))+0.5D0
-        xrr=dble(crr(idim))+0.5D0
-        wll(idim)=(2D0-abs(x(idim)-xll))**3/6D0
-        wl (idim)=(4D0-6D0*(x(idim)-xl)**2+3d0*abs(x(idim)-xl )**3)/6D0
-        wr (idim)=(4D0-6D0*(x(idim)-xr)**2+3d0*abs(x(idim)-xr )**3)/6D0
-        wrr(idim)=(2D0-abs(x(idim)-xrr))**3/6D0
-     end do
+     ! Build PCS 1D weights and indices
+     call pcs_1d_weights(x, wll, wl, wr, wrr, cll, cl, cr, crr)
+     vol = pcs_weight(wll, wl, wr, wrr)
      do idim=1,ndim
         if(r%periodic(idim))then
            if(cll(idim)< m%box_ckey_min(idim,ilevel+1))cll(idim)=cll(idim)-m%box_ckey_min(idim,ilevel+1)+m%box_ckey_max(idim,ilevel+1)
@@ -2278,7 +2142,6 @@ subroutine pcs_trace_gas_part(s,p,ilevel,action_part)
         endif
      enddo
      ckey = pcs_index(cll,cl,cr,crr)
-     vol = pcs_weight(wll,wl,wr,wrr)
      hash_nbor(0)=ilevel+1
      ff(1:ndim)=0.0
      do ind=1,fourtondim
@@ -2312,30 +2175,18 @@ subroutine pcs_trace_gas_part(s,p,ilevel,action_part)
               if(x_mid(idim)>=dble(m%box_ckey_max(idim,ilevel+1)))x_mid(idim)=x_mid(idim)-dble(m%box_ckey_max(idim,ilevel+1)-m%box_ckey_min(idim,ilevel+1))
            endif
         end do
-        do idim=1,ndim
-           crr2(idim)=int(x_mid(idim)+1.5D0)
-           cr2 (idim)=crr2(idim)-1
-           cl2 (idim)=crr2(idim)-2
-           cll2(idim)=crr2(idim)-3
-           xll=dble(cll2(idim))+0.5D0
-           xl =dble(cl2 (idim))+0.5D0
-           xr =dble(cr2 (idim))+0.5D0
-           xrr=dble(crr2(idim))+0.5D0
-           wll2(idim)=(2D0-abs(x_mid(idim)-xll))**3/6D0
-           wl2 (idim)=(4D0-6D0*(x_mid(idim)-xl)**2+3d0*abs(x_mid(idim)-xl )**3)/6D0
-           wr2 (idim)=(4D0-6D0*(x_mid(idim)-xr)**2+3d0*abs(x_mid(idim)-xr )**3)/6D0
-           wrr2(idim)=(2D0-abs(x_mid(idim)-xrr))**3/6D0
-        end do
+        ! Build PCS 1D weights and indices at x_mid
+        call pcs_1d_weights(x_mid, wll, wl, wr, wrr, cll, cl, cr, crr)
+        vol2 = pcs_weight(wll, wl, wr, wrr)
         do idim=1,ndim
            if(r%periodic(idim))then
-              if(cll2(idim)< m%box_ckey_min(idim,ilevel+1))cll2(idim)=cll2(idim)-m%box_ckey_min(idim,ilevel+1)+m%box_ckey_max(idim,ilevel+1)
-              if(cl2 (idim)< m%box_ckey_min(idim,ilevel+1))cl2 (idim)=cl2 (idim)-m%box_ckey_min(idim,ilevel+1)+m%box_ckey_max(idim,ilevel+1)
-              if(cr2 (idim)>=m%box_ckey_max(idim,ilevel+1))cr2 (idim)=cr2 (idim)+m%box_ckey_min(idim,ilevel+1)-m%box_ckey_max(idim,ilevel+1)
-              if(crr2(idim)>=m%box_ckey_max(idim,ilevel+1))crr2(idim)=crr2(idim)+m%box_ckey_min(idim,ilevel+1)-m%box_ckey_max(idim,ilevel+1)
+              if(cll(idim)< m%box_ckey_min(idim,ilevel+1))cll(idim)=cll(idim)-m%box_ckey_min(idim,ilevel+1)+m%box_ckey_max(idim,ilevel+1)
+              if(cl (idim)< m%box_ckey_min(idim,ilevel+1))cl (idim)=cl (idim)-m%box_ckey_min(idim,ilevel+1)+m%box_ckey_max(idim,ilevel+1)
+              if(cr (idim)>=m%box_ckey_max(idim,ilevel+1))cr (idim)=cr (idim)+m%box_ckey_min(idim,ilevel+1)-m%box_ckey_max(idim,ilevel+1)
+              if(crr(idim)>=m%box_ckey_max(idim,ilevel+1))crr(idim)=crr(idim)+m%box_ckey_min(idim,ilevel+1)-m%box_ckey_max(idim,ilevel+1)
            endif
         enddo
-        ckey2 = pcs_index(cll2,cl2,cr2,crr2)
-        vol2 = pcs_weight(wll2,wl2,wr2,wrr2)
+        ckey2 = pcs_index(cll,cl,cr,crr)
         hash_nbor(0)=ilevel+1
         ff(1:ndim)=0.0
         do ind=1,fourtondim
@@ -2385,13 +2236,14 @@ subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
   type(part_t)::p
   integer::ilevel
   integer::action_part
-  real(kind=8),dimension(1:ndim)::x,x_mid,dr,dl,dr2,dl2
+  real(kind=8),dimension(1:ndim)::x,x_mid
   integer,dimension(1:ndim)::ir,il
   integer,dimension(1:ndim)::ir2,il2
   real(kind=8),dimension(1:twotondim)::vol,vol2
   integer,dimension(1:ndim,1:twotondim)::ckey,ckey2
   integer(kind=8),dimension(0:ndim)::hash_nbor
-  integer::ipart,ind,idim,irad,icell,icell2,ix,iy,iz
+  real(kind=8),dimension(1:ndim,1:2)::w1d,dw1d
+  integer::ipart,ind,idim,irad,icell,icell2
   real(kind=8)::dx_loc,vol_loc
   real(kind=8),dimension(1:ndim)::ff,v_pred
   real(kind=8),dimension(1:ndim)::uu
@@ -2437,19 +2289,12 @@ subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
      end do
 
      ! CIC weights/indices at x
-     do idim=1,ndim
-        dr(idim)=x(idim)+0.5D0
-        ir(idim)=int(dr(idim))
-        dr(idim)=dr(idim)-ir(idim)
-        dl(idim)=1.0D0-dr(idim)
-        il(idim)=ir(idim)-1
-     end do
+     call cic_weights_and_derivs(x, w1d, dw1d, il, ir, vol)
      do idim=1,ndim
         if(il(idim)<0)il(idim)=m%ckey_max(ilevel+1)-1
         if(ir(idim)==m%ckey_max(ilevel+1))ir(idim)=0
      enddo
      ckey = cic_index(il,ir)
-     vol = cic_weight(dl,dr)
 
      ! Leapfrog-style sampling: half-step shift only on the first coarse step
      v_pred(1:ndim)=p%vp(ipart,1:ndim)
@@ -2468,19 +2313,12 @@ subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
      end do
 
      ! CIC weights/indices at x_mid
-     do idim=1,ndim
-        dr2(idim)=x_mid(idim)+0.5D0
-        ir2(idim)=int(dr2(idim))
-        dr2(idim)=dr2(idim)-ir2(idim)
-        dl2(idim)=1.0D0-dr2(idim)
-        il2(idim)=ir2(idim)-1
-     end do
+     call cic_weights_and_derivs(x_mid, w1d, dw1d, il2, ir2, vol2)
      do idim=1,ndim
         if(il2(idim)<0)il2(idim)=m%ckey_max(ilevel+1)-1
         if(ir2(idim)==m%ckey_max(ilevel+1))ir2(idim)=0
      enddo
      ckey2 = cic_index(il2,ir2)
-     vol2 = cic_weight(dl2,dr2)
 
      ! Gather hydro and forces at x_mid
      ff(1:ndim)=0.0
@@ -2584,12 +2422,11 @@ subroutine tsc_kick_drift_dust_ito_mc(s,p,ilevel,action_part)
   integer::ilevel
   integer::action_part
   real(kind=8),dimension(1:ndim)::x_main,x_mid
-  real(kind=8),dimension(1:ndim)::wl2,wc2,wr2
   integer,dimension(1:ndim)::cl2,cc2,cr2
   real(kind=8),dimension(1:threetondim)::vol2
   integer,dimension(1:ndim,1:threetondim)::ckey2
   integer(kind=8),dimension(0:ndim)::hash_nbor
-  integer::ipart,ind,idim,irad,icell,icell2,ix,iy,iz
+  integer::ipart,ind,idim,irad,icell,icell2
   real(kind=8)::dx_loc,dt_level
   real(kind=8),dimension(1:ndim)::ff,v_pred,uu
 #ifdef MHD
@@ -2605,10 +2442,9 @@ subroutine tsc_kick_drift_dust_ito_mc(s,p,ilevel,action_part)
   real(kind=8),dimension(1:threetondim)::vol_diff
   integer,dimension(1:ndim,1:threetondim)::ckey_diff
   real(kind=8),dimension(1:ndim,1:threetondim)::u_cells,kappa_num_cells
-  real(kind=8),dimension(1:ndim,1:3)::w1d,dw1d
+  real(kind=8),dimension(1:ndim,1:3)::w1d,dw1d,w1d_mid,dw1d_mid
   real(kind=8)::wdrift2,w0,a,g_par,g_perp
   type(oct),pointer :: gridp
-  real(kind=8)::xl,xc,xr,weight,xd
   integer :: k,jdim
   real(kind=8)::rho,denom,fluxL,fluxR
   real(kind=8)::jr,jl
@@ -2675,23 +2511,13 @@ subroutine tsc_kick_drift_dust_ito_mc(s,p,ilevel,action_part)
            if(x_mid(idim)>=dble(m%ckey_max(ilevel+1)))x_mid(idim)=x_mid(idim)-dble(m%ckey_max(ilevel+1))
         end do
 
-        do idim=1,ndim
-           cl2(idim)=int(x_mid(idim))-1
-           cc2(idim)=int(x_mid(idim))
-           cr2(idim)=int(x_mid(idim))+1
-           xl=dble(cl2(idim))+0.5D0
-           xc=dble(cc2(idim))+0.5D0
-           xr=dble(cr2(idim))+0.5D0
-           wl2(idim)=0.5D0*(1.5D0-abs(x_mid(idim)-xl))**2
-           wc2(idim)=0.75D0-         (x_mid(idim)-xc) **2
-           wr2(idim)=0.5D0*(1.5D0-abs(x_mid(idim)-xr))**2
-        end do
+        ! Build weights and indices for x_mid (derivatives not needed but computed anyway)
+        call tsc_weights_and_derivs(x_mid, w1d_mid, dw1d_mid, cl2, cc2, cr2, vol2)
         do idim=1,ndim
            if(cl2(idim)<0)cl2(idim)=m%ckey_max(ilevel+1)-1
            if(cr2(idim)==m%ckey_max(ilevel+1))cr2(idim)=0
-        enddo
+        end do
         ckey2 = tsc_index(cl2,cc2,cr2)
-        vol2 = tsc_weight(wl2,wc2,wr2)
 
         ff(1:ndim)=0.0
         uu(1:ndim)=0.0
@@ -2778,24 +2604,8 @@ subroutine tsc_kick_drift_dust_ito_mc(s,p,ilevel,action_part)
         end do
         call wrap_cell_coords(s,x_diff,ilevel+1)
 
-        ! Build 1D TSC weights and derivatives (branchless)
-        do idim=1,ndim
-           xd = x_diff(idim)
-           il(idim)=int(xd)-1
-           ic(idim)=int(xd)
-           ir(idim)=int(xd)+1
-           ! Branchless 1D weights
-           xl=dble(il(idim))+0.5D0
-           xc=dble(ic(idim))+0.5D0
-           xr=dble(ir(idim))+0.5D0
-           w1d(idim,1)=0.5D0*(1.5D0-abs(xd-xl))**2
-           w1d(idim,2)=0.75D0-(xd-xc)**2
-           w1d(idim,3)=0.5D0*(1.5D0-abs(xd-xr))**2
-           ! Derivatives
-           dw1d(idim,1)=-(1.5d0-abs(xd-xl))*sign(1.d0,xd-xl)
-           dw1d(idim,2)=-2.d0*(xd-xc)
-           dw1d(idim,3)=-(1.5d0-abs(xd-xr))*sign(1.d0,xd-xr)
-        end do
+        ! Build 1D TSC weights, derivatives, indices, and 3D volume weights
+        call tsc_weights_and_derivs(x_diff, w1d, dw1d, il, ic, ir, vol_diff)
         do idim=1,ndim
            if(r%periodic(idim))then
               if(il(idim)< m%box_ckey_min(idim,ilevel+1))il(idim)=m%box_ckey_max(idim,ilevel+1)-1
@@ -2803,34 +2613,10 @@ subroutine tsc_kick_drift_dust_ito_mc(s,p,ilevel,action_part)
            endif
         enddo
 
-        ! Build neighbor list and weights (threetondim=27)
-        vol_diff=0.d0
-        ind=0
-        do iz=1,3
-           do iy=1,3
-              do ix=1,3
-                 ind=ind+1
-                 select case(ix)
-                 case(1); ckey_diff(1,ind)=il(1)
-                 case(2); ckey_diff(1,ind)=ic(1)
-                 case(3); ckey_diff(1,ind)=ir(1)
-                 end select
-                 select case(iy)
-                 case(1); ckey_diff(2,ind)=il(2)
-                 case(2); ckey_diff(2,ind)=ic(2)
-                 case(3); ckey_diff(2,ind)=ir(2)
-                 end select
-                 select case(iz)
-                 case(1); ckey_diff(3,ind)=il(3)
-                 case(2); ckey_diff(3,ind)=ic(3)
-                 case(3); ckey_diff(3,ind)=ir(3)
-                 end select
-                 vol_diff(ind) = w1d(1,ix)*w1d(2,iy)*w1d(3,iz)
-              end do
-           end do
-        end do
+        ! Build neighbor index list (threetondim=27)
+        ckey_diff = tsc_index(il,ic,ir)
 
-        ! Single merged loop over 27 neighbors
+        ! Compute cell-by-cell velocities and diffusivities
         u_cells=0.d0
         kappa_num_cells=0.d0
         hash_nbor(0)=ilevel+1
@@ -2862,19 +2648,8 @@ subroutine tsc_kick_drift_dust_ito_mc(s,p,ilevel,action_part)
            end do
         end do
 
-        ! Compute gradient of kappa inline (no grad_vol array needed)
-        grad_at_part = 0.d0
-        ind = 0
-        do iz=1,3
-           do iy=1,3
-              do ix=1,3
-                 ind = ind+1
-                 grad_at_part(1) = grad_at_part(1) + dw1d(1,ix)*w1d(2,iy)*w1d(3,iz)*kappa_num_cells(1,ind)
-                 grad_at_part(2) = grad_at_part(2) + w1d(1,ix)*dw1d(2,iy)*w1d(3,iz)*kappa_num_cells(2,ind)
-                 grad_at_part(3) = grad_at_part(3) + w1d(1,ix)*w1d(2,iy)*dw1d(3,iz)*kappa_num_cells(3,ind)
-              end do
-           end do
-        end do
+        ! Compute gradient using TSC subroutine
+        call compute_gradient_tsc(w1d, dw1d, kappa_num_cells, grad_at_part)
         u_eff(1:ndim) = u_eff(1:ndim) + grad_at_part(1:ndim)
 
         call sample_tracer_uniform(xi)
@@ -2970,15 +2745,13 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
   type(part_t)::p
   integer::ilevel
   integer::action_part
-  real(kind=8),dimension(1:ndim)::x,wl,wc,wr
-  real(kind=8),dimension(1:ndim)::x_mid,wl2,wc2,wr2
-  integer,dimension(1:ndim)::cl,cc,cr
-  integer,dimension(1:ndim)::cl2,cc2,cr2
-  real(kind=8),dimension(1:threetondim)::vol,vol2
-  integer,dimension(1:ndim,1:threetondim)::ckey,ckey2
+  real(kind=8),dimension(1:ndim)::x,x_mid
+  integer,dimension(1:ndim)::il,ic,ir
+  real(kind=8),dimension(1:threetondim)::vol2
+  integer,dimension(1:ndim,1:threetondim)::ckey2
   integer(kind=8),dimension(0:ndim)::hash_nbor
-  integer::ipart,icell,icell2,ind,idim,irad
-  real(kind=8)::xl,xc,xr
+  real(kind=8),dimension(1:ndim,1:3)::w1d,dw1d
+  integer::ipart,icell2,ind,idim,irad
   real(kind=8)::dx_loc
   real(kind=8),dimension(1:ndim)::ff,uu,v_pred,wdrift
 
@@ -3040,23 +2813,13 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
            if(x_mid(idim)<0d0)x_mid(idim)=x_mid(idim)+dble(m%ckey_max(ilevel+1))
            if(x_mid(idim)>=dble(m%ckey_max(ilevel+1)))x_mid(idim)=x_mid(idim)-dble(m%ckey_max(ilevel+1))
         end do
+        ! Build 1D TSC weights, indices, and 3D volume weights at x_mid
+        call tsc_weights_and_derivs(x_mid, w1d, dw1d, il, ic, ir, vol2)
         do idim=1,ndim
-           cl2(idim)=int(x_mid(idim))-1
-           cc2(idim)=int(x_mid(idim))
-           cr2(idim)=int(x_mid(idim))+1
-           xl=dble(cl2(idim))+0.5D0
-           xc=dble(cc2(idim))+0.5D0
-           xr=dble(cr2(idim))+0.5D0
-           wl2(idim)=0.5D0*(1.5D0-abs(x_mid(idim)-xl))**2
-           wc2(idim)=0.75D0-         (x_mid(idim)-xc) **2
-           wr2(idim)=0.5D0*(1.5D0-abs(x_mid(idim)-xr))**2
-        end do
-        do idim=1,ndim
-           if(cl2(idim)<0)cl2(idim)=m%ckey_max(ilevel+1)-1
-           if(cr2(idim)==m%ckey_max(ilevel+1))cr2(idim)=0
+           if(il(idim)<0)il(idim)=m%ckey_max(ilevel+1)-1
+           if(ir(idim)==m%ckey_max(ilevel+1))ir(idim)=0
         enddo
-        ckey2 = tsc_index(cl2,cc2,cr2)
-        vol2 = tsc_weight(wl2,wc2,wr2)
+        ckey2 = tsc_index(il,ic,ir)
 
         ff(1:ndim)=0.0d0
         uu(1:ndim)=0.0d0
@@ -3174,15 +2937,12 @@ subroutine pcs_kick_drift_dust(s,p,ilevel,action_part)
   type(part_t)::p
   integer::ilevel
   integer::action_part
-  real(kind=8),dimension(1:ndim)::x,wll,wl,wr,wrr
-  real(kind=8),dimension(1:ndim)::x_mid,wll2,wl2,wr2,wrr2
+  real(kind=8),dimension(1:ndim)::x,x_mid,wll,wl,wr,wrr
   integer,dimension(1:ndim)::cll,cl,cr,crr
-  integer,dimension(1:ndim)::cll2,cl2,cr2,crr2
   real(kind=8),dimension(1:fourtondim)::vol,vol2
   integer,dimension(1:ndim,1:fourtondim)::ckey,ckey2
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer::ipart,icell,icell2,ind,idim
-  real(kind=8)::xll,xl,xr,xrr
   real(kind=8)::dx_loc
   real(kind=8),dimension(1:ndim)::ff,v_pred,uu,what,wdrift
   real(kind=8),dimension(1:3)::bb
@@ -3219,20 +2979,9 @@ subroutine pcs_kick_drift_dust(s,p,ilevel,action_part)
         if(x(idim)<0d0)x(idim)=x(idim)+dble(m%ckey_max(ilevel+1))
         if(x(idim)>=dble(m%ckey_max(ilevel+1)))x(idim)=x(idim)-dble(m%ckey_max(ilevel+1))
      end do
-     do idim=1,ndim
-        crr(idim)=int(x(idim)+1.5D0)
-        cr (idim)=crr(idim)-1
-        cl (idim)=crr(idim)-2
-        cll(idim)=crr(idim)-3
-        xll=dble(cll(idim))+0.5D0
-        xl =dble(cl (idim))+0.5D0
-        xr =dble(cr (idim))+0.5D0
-        xrr=dble(crr(idim))+0.5D0
-        wll(idim)=(2D0-abs(x(idim)-xll))**3/6D0
-        wl (idim)=(4D0-6D0*(x(idim)-xl)**2+3d0*abs(x(idim)-xl )**3)/6D0
-        wr (idim)=(4D0-6D0*(x(idim)-xr)**2+3d0*abs(x(idim)-xr )**3)/6D0
-        wrr(idim)=(2D0-abs(x(idim)-xrr))**3/6D0
-     end do
+     ! Build PCS 1D weights and indices
+     call pcs_1d_weights(x, wll, wl, wr, wrr, cll, cl, cr, crr)
+     vol = pcs_weight(wll, wl, wr, wrr)
      do idim=1,ndim
         if(cll(idim)<0)cll(idim)=cll(idim)+m%ckey_max(ilevel+1)
         if(cl (idim)<0)cl (idim)=cl (idim)+m%ckey_max(ilevel+1)
@@ -3240,7 +2989,6 @@ subroutine pcs_kick_drift_dust(s,p,ilevel,action_part)
         if(crr(idim)>=m%ckey_max(ilevel+1))crr(idim)=crr(idim)-m%ckey_max(ilevel+1)
      enddo
      ckey = pcs_index(cll,cl,cr,crr)
-     vol = pcs_weight(wll,wl,wr,wrr)
      hash_nbor(0)=ilevel+1
      ff(1:ndim)=0.0
      do ind=1,fourtondim
@@ -3267,28 +3015,16 @@ subroutine pcs_kick_drift_dust(s,p,ilevel,action_part)
           if(x_mid(idim)<0d0)x_mid(idim)=x_mid(idim)+dble(m%ckey_max(ilevel+1))
           if(x_mid(idim)>=dble(m%ckey_max(ilevel+1)))x_mid(idim)=x_mid(idim)-dble(m%ckey_max(ilevel+1))
        end do
+       ! Build PCS 1D weights and indices at x_mid
+       call pcs_1d_weights(x_mid, wll, wl, wr, wrr, cll, cl, cr, crr)
+       vol2 = pcs_weight(wll, wl, wr, wrr)
        do idim=1,ndim
-          crr2(idim)=int(x_mid(idim)+1.5D0)
-          cr2 (idim)=crr2(idim)-1
-          cl2 (idim)=crr2(idim)-2
-          cll2(idim)=crr2(idim)-3
-          xll=dble(cll2(idim))+0.5D0
-          xl =dble(cl2 (idim))+0.5D0
-          xr =dble(cr2 (idim))+0.5D0
-          xrr=dble(crr2(idim))+0.5D0
-          wll2(idim)=(2D0-abs(x_mid(idim)-xll))**3/6D0
-          wl2 (idim)=(4D0-6D0*(x_mid(idim)-xl)**2+3d0*abs(x_mid(idim)-xl )**3)/6D0
-          wr2 (idim)=(4D0-6D0*(x_mid(idim)-xr)**2+3d0*abs(x_mid(idim)-xr )**3)/6D0
-          wrr2(idim)=(2D0-abs(x_mid(idim)-xrr))**3/6D0
-       end do
-       do idim=1,ndim
-          if(cll2(idim)<0)cll2(idim)=cll2(idim)+m%ckey_max(ilevel+1)
-          if(cl2 (idim)<0)cl2 (idim)=cl2 (idim)+m%ckey_max(ilevel+1)
-          if(cr2 (idim)>=m%ckey_max(ilevel+1))cr2 (idim)=cr2 (idim)-m%ckey_max(ilevel+1)
-          if(crr2(idim)>=m%ckey_max(ilevel+1))crr2(idim)=crr2(idim)-m%ckey_max(ilevel+1)
+          if(cll(idim)<0)cll(idim)=cll(idim)+m%ckey_max(ilevel+1)
+          if(cl (idim)<0)cl (idim)=cl (idim)+m%ckey_max(ilevel+1)
+          if(cr (idim)>=m%ckey_max(ilevel+1))cr (idim)=cr (idim)-m%ckey_max(ilevel+1)
+          if(crr(idim)>=m%ckey_max(ilevel+1))crr(idim)=crr(idim)-m%ckey_max(ilevel+1)
        enddo
-       ckey2 = pcs_index(cll2,cl2,cr2,crr2)
-       vol2 = pcs_weight(wll2,wl2,wr2,wrr2)
+       ckey2 = pcs_index(cll,cl,cr,crr)
        hash_nbor(0)=ilevel+1
        ff(1:ndim)=0.0
        uu(1:ndim)=0.0
@@ -3368,6 +3104,193 @@ subroutine pcs_kick_drift_dust(s,p,ilevel,action_part)
   end if
   end associate
 end subroutine pcs_kick_drift_dust
+
+!################################################################
+! Weight computation subroutines for CIC and TSC interpolation
+!################################################################
+subroutine cic_weights_and_derivs(x, w1d, dw1d, il_out, ir_out, vol_out)
+  !--------------------------------------------------------------
+  ! Compute 1D CIC weights, derivatives, and cell indices from position.
+  ! x(1:ndim) is the cell-centered coordinate.
+  ! w1d(dim,1) = left weight (dl), w1d(dim,2) = right weight (dr)
+  ! dw1d(dim,1) = -1, dw1d(dim,2) = +1 (CIC derivatives are constant)
+  ! il_out, ir_out = cell indices (optional)
+  ! vol_out(1:twotondim) = 3D volume weights (optional)
+  !--------------------------------------------------------------
+  use amr_parameters, only: ndim, twotondim
+  implicit none
+  real(kind=8),intent(in)::x(1:ndim)
+  real(kind=8),intent(out)::w1d(1:ndim,1:2),dw1d(1:ndim,1:2)
+  integer,intent(out),optional::il_out(1:ndim),ir_out(1:ndim)
+  real(kind=8),intent(out),optional::vol_out(1:twotondim)
+  integer::idim,ind,ix,iy,iz
+  real(kind=8)::xd
+
+  do idim=1,ndim
+     xd = x(idim) + 0.5d0
+     if(present(ir_out)) ir_out(idim) = int(xd)
+     xd = xd - int(xd)  ! fractional offset in [0,1)
+     w1d(idim,1) = 1.d0 - xd   ! left weight (dl)
+     w1d(idim,2) = xd          ! right weight (dr)
+     dw1d(idim,1) = -1.d0      ! derivative of left weight
+     dw1d(idim,2) = +1.d0      ! derivative of right weight
+     if(present(il_out).and.present(ir_out)) il_out(idim) = ir_out(idim) - 1
+  end do
+  ! 3D volume weights (optional output)
+  if(present(vol_out))then
+     ind = 0
+     do iz=1,2
+        do iy=1,2
+           do ix=1,2
+              ind = ind+1
+              vol_out(ind) = w1d(1,ix)*w1d(2,iy)*w1d(3,iz)
+           end do
+        end do
+     end do
+  end if
+end subroutine cic_weights_and_derivs
+
+subroutine tsc_weights_and_derivs(x, w1d, dw1d, il_out, ic_out, ir_out, vol_out)
+  !--------------------------------------------------------------
+  ! Compute 1D TSC weights, derivatives, and cell indices from position.
+  ! x(1:ndim) is the cell-centered coordinate.
+  ! w1d(dim,1:3) = left, center, right weights
+  ! dw1d(dim,1:3) = corresponding derivatives
+  ! il_out, ic_out, ir_out = cell indices (optional)
+  ! vol_out(1:threetondim) = 3D volume weights (optional)
+  !--------------------------------------------------------------
+  use amr_parameters, only: ndim, threetondim
+  implicit none
+  real(kind=8),intent(in)::x(1:ndim)
+  real(kind=8),intent(out)::w1d(1:ndim,1:3),dw1d(1:ndim,1:3)
+  integer,intent(out),optional::il_out(1:ndim),ic_out(1:ndim),ir_out(1:ndim)
+  real(kind=8),intent(out),optional::vol_out(1:threetondim)
+  integer::idim,il,ic,ir,ind,ix,iy,iz
+  real(kind=8)::xd,xl,xc,xr
+
+  do idim=1,ndim
+     xd = x(idim)
+     il = int(xd)-1
+     ic = int(xd)
+     ir = int(xd)+1
+     xl = dble(il)+0.5d0
+     xc = dble(ic)+0.5d0
+     xr = dble(ir)+0.5d0
+     ! TSC weights
+     w1d(idim,1) = 0.5d0*(1.5d0-abs(xd-xl))**2
+     w1d(idim,2) = 0.75d0-(xd-xc)**2
+     w1d(idim,3) = 0.5d0*(1.5d0-abs(xd-xr))**2
+     ! TSC derivatives
+     dw1d(idim,1) = -(1.5d0-abs(xd-xl))*sign(1.d0,xd-xl)
+     dw1d(idim,2) = -2.d0*(xd-xc)
+     dw1d(idim,3) = -(1.5d0-abs(xd-xr))*sign(1.d0,xd-xr)
+     ! Cell indices (optional output)
+     if(present(il_out)) il_out(idim) = il
+     if(present(ic_out)) ic_out(idim) = ic
+     if(present(ir_out)) ir_out(idim) = ir
+  end do
+  ! 3D volume weights (optional output)
+  if(present(vol_out))then
+     ind = 0
+     do iz=1,3
+        do iy=1,3
+           do ix=1,3
+              ind = ind+1
+              vol_out(ind) = w1d(1,ix)*w1d(2,iy)*w1d(3,iz)
+           end do
+        end do
+     end do
+  end if
+end subroutine tsc_weights_and_derivs
+
+subroutine pcs_1d_weights(x, wll_out, wl_out, wr_out, wrr_out, cll_out, cl_out, cr_out, crr_out)
+  !--------------------------------------------------------------
+  ! Compute 1D PCS weights and cell indices from position.
+  ! x(1:ndim) is the cell-centered coordinate.
+  ! wll_out, wl_out, wr_out, wrr_out = 1D weights for each dimension
+  ! cll_out, cl_out, cr_out, crr_out = cell indices for each dimension
+  ! Use pcs_weight(wll,wl,wr,wrr) to get 3D volume weights.
+  ! Use pcs_index(cll,cl,cr,crr) to get neighbor index list (after periodic wrap).
+  !--------------------------------------------------------------
+  use amr_parameters, only: ndim
+  implicit none
+  real(kind=8),intent(in)::x(1:ndim)
+  real(kind=8),intent(out)::wll_out(1:ndim),wl_out(1:ndim),wr_out(1:ndim),wrr_out(1:ndim)
+  integer,intent(out)::cll_out(1:ndim),cl_out(1:ndim),cr_out(1:ndim),crr_out(1:ndim)
+  integer::idim
+  real(kind=8)::xll,xl,xr,xrr
+
+  do idim=1,ndim
+     crr_out(idim) = int(x(idim)+1.5d0)
+     cr_out(idim)  = crr_out(idim)-1
+     cl_out(idim)  = crr_out(idim)-2
+     cll_out(idim) = crr_out(idim)-3
+     xll = dble(cll_out(idim))+0.5d0
+     xl  = dble(cl_out(idim))+0.5d0
+     xr  = dble(cr_out(idim))+0.5d0
+     xrr = dble(crr_out(idim))+0.5d0
+     wll_out(idim) = (2.d0-abs(x(idim)-xll))**3/6.d0
+     wl_out(idim)  = (4.d0-6.d0*(x(idim)-xl)**2+3.d0*abs(x(idim)-xl)**3)/6.d0
+     wr_out(idim)  = (4.d0-6.d0*(x(idim)-xr)**2+3.d0*abs(x(idim)-xr)**3)/6.d0
+     wrr_out(idim) = (2.d0-abs(x(idim)-xrr))**3/6.d0
+  end do
+end subroutine pcs_1d_weights
+
+!################################################################
+! Gradient computation subroutines for CIC and TSC interpolation
+!################################################################
+subroutine compute_gradient_cic(w1d, dw1d, field, grad_out)
+  !--------------------------------------------------------------
+  ! Compute gradient of a scalar field using CIC (2x2x2) weights.
+  ! grad_out(k) = sum_ind dw/dx_k * field(ind)
+  !--------------------------------------------------------------
+  use amr_parameters, only: ndim, twotondim
+  implicit none
+  real(kind=8),intent(in)::w1d(1:ndim,1:2),dw1d(1:ndim,1:2)
+  real(kind=8),intent(in)::field(1:twotondim)
+  real(kind=8),intent(out)::grad_out(1:ndim)
+  integer::ix,iy,iz,ind
+
+  grad_out = 0.d0
+  ind = 0
+  do iz=1,2
+     do iy=1,2
+        do ix=1,2
+           ind = ind+1
+           grad_out(1) = grad_out(1) + dw1d(1,ix)*w1d(2,iy)*w1d(3,iz)*field(ind)
+           grad_out(2) = grad_out(2) + w1d(1,ix)*dw1d(2,iy)*w1d(3,iz)*field(ind)
+           grad_out(3) = grad_out(3) + w1d(1,ix)*w1d(2,iy)*dw1d(3,iz)*field(ind)
+        end do
+     end do
+  end do
+end subroutine compute_gradient_cic
+
+subroutine compute_gradient_tsc(w1d, dw1d, field, grad_out)
+  !--------------------------------------------------------------
+  ! Compute gradient of a vector field using TSC (3x3x3) weights.
+  ! grad_out(k) = sum_ind dw/dx_k * field(k,ind)
+  ! Each dimension k uses its own field values field(k,:).
+  !--------------------------------------------------------------
+  use amr_parameters, only: ndim, threetondim
+  implicit none
+  real(kind=8),intent(in)::w1d(1:ndim,1:3),dw1d(1:ndim,1:3)
+  real(kind=8),intent(in)::field(1:ndim,1:threetondim)
+  real(kind=8),intent(out)::grad_out(1:ndim)
+  integer::ix,iy,iz,ind
+
+  grad_out = 0.d0
+  ind = 0
+  do iz=1,3
+     do iy=1,3
+        do ix=1,3
+           ind = ind+1
+           grad_out(1) = grad_out(1) + dw1d(1,ix)*w1d(2,iy)*w1d(3,iz)*field(1,ind)
+           grad_out(2) = grad_out(2) + w1d(1,ix)*dw1d(2,iy)*w1d(3,iz)*field(2,ind)
+           grad_out(3) = grad_out(3) + w1d(1,ix)*w1d(2,iy)*dw1d(3,iz)*field(3,ind)
+        end do
+     end do
+  end do
+end subroutine compute_gradient_tsc
 
 !#########################################################################
 !#########################################################################

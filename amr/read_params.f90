@@ -274,6 +274,7 @@ subroutine m_read_params(pst)
   logical ::induction=.false.
   logical ::entropy=.false.
   logical ::sgs_turb=.false.
+  logical ::equilibrium_sgs=.false.
   real(kind=8)::dual_energy=-1
   real(kind=8)::T2_fix=0d0
   real(kind=8),dimension(1:3)::constant_gravity=0.0d0
@@ -575,7 +576,7 @@ subroutine m_read_params(pst)
   ! Hydro solver parameters
   namelist/hydro_params/gamma,courant_factor,smallr,smallc &
        & ,slope_type,slope_mag_type,difmag,etamag,gamma_rad &
-       & ,dual_energy,T2_fix,induction,entropy,sgs_turb,riemann,riemann2d,constant_gravity &
+       & ,dual_energy,T2_fix,induction,entropy,sgs_turb,equilibrium_sgs,riemann,riemann2d,constant_gravity &
        & ,niter_riemann,scheme,switch_llf_dmin,switch_llf_pmin,smagorinsky_lilly_constant
   ! Grid refinement parameters
   namelist/refine_params/x_refine,y_refine,z_refine,r_refine &
@@ -1300,6 +1301,7 @@ subroutine m_read_params(pst)
   s%r%induction=induction
   s%r%entropy=entropy
   s%r%sgs_turb=sgs_turb
+  s%r%equilibrium_sgs=equilibrium_sgs
   s%r%inener=inener
   s%r%ientropy=ientropy
   s%r%imetal=imetal

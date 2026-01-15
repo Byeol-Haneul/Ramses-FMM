@@ -225,16 +225,19 @@ subroutine source_hydro_fine(s,ilevel)
            m%grid(igrid)%unew(ind,r%iturb)=m%grid(igrid)%unew(ind,r%iturb) &
                 & -(2.0/3.0)*m%grid(igrid)%uold(ind,r%iturb)*divu*g%dtnew(ilevel)
 
-           if(g%nstep_coarse==0) then
-              ! Initialize subgrid turbulent energy with stationary solution
-              m%grid(igrid)%unew(ind,r%iturb)=m%grid(igrid)%uold(ind,1)*dx**2*phi_diss*r%smagorinsky_lilly_constant
+           if(g%nstep_coarse==0 .or. r%equilibrium_sgs) then
+              ! Set subgrid turbulent energy to equilibrium/stationary solution
+              ! Using C_s^4/2 so that sigma = C_s^2 * dx * |S| (traditional Smagorinsky)
+              m%grid(igrid)%unew(ind,r%iturb)=m%grid(igrid)%uold(ind,1)*dx**2*phi_diss &
+                   & *0.5d0*r%smagorinsky_lilly_constant**4
            else
               ! Implicit solution wrt to decay term only
               d_old=max(dble(m%grid(igrid)%uold(ind,1)),r%smallr)
               e_turb=m%grid(igrid)%uold(ind,r%iturb)
               sigma=sqrt(max(2.0*e_turb/d_old,dble(r%smallc)**2))
               m%grid(igrid)%unew(ind,r%iturb)=(m%grid(igrid)%unew(ind,r%iturb) &
-                   &  +d_old*dx*sigma*phi_diss*g%dtnew(ilevel)*r%smagorinsky_lilly_constant) &
+                   &  +d_old*dx*sigma*phi_diss*g%dtnew(ilevel) &
+                   &  *0.5d0*r%smagorinsky_lilly_constant**4) &
                    & /(1.0+sigma/dx*g%dtnew(ilevel))
            end if
 
