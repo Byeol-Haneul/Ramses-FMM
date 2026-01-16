@@ -108,7 +108,9 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
         elseif(pst%s%r%trac_interpolation_scheme==5)then
            call tsc_trace_gas_part_ito_mc(pst%s,pst%s%trac,ilevel,action_part) ! Ito MC tracer with TSC
         elseif(pst%s%r%trac_interpolation_scheme==6)then
-           call cic_trace_gas_part_sgs_turb(pst%s,pst%s%trac,ilevel,action_part) ! Ito formulation of the sgs driven diffusion tracer
+           call cic_trace_gas_part_sgs_turb(pst%s,pst%s%trac,ilevel,action_part) ! SGS turbulent diffusion tracer with CIC
+        elseif(pst%s%r%trac_interpolation_scheme==7)then
+           call tsc_trace_gas_part_sgs_turb(pst%s,pst%s%trac,ilevel,action_part) ! SGS turbulent diffusion tracer with TSC
         endif
      endif
      if(pst%s%r%dust)then
@@ -1158,12 +1160,11 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
      end do
      call wrap_cell_coords(s,x,ilevel+1)
 
-     ! Gather gas velocity u(x) for predictor step
-     call gather_cic_state(s,x,ilevel,dx_loc,.false.,u_eff,kappa_mid)
-
+     ! Predictor velocity: use stored velocity if available, otherwise gather from grid
      if (g%nstep>0) then
         v_pred(1:ndim)=p%vp(ipart,1:ndim)
      else
+        call gather_cic_state(s,x,ilevel,dx_loc,.false.,u_eff,kappa_mid)
         v_pred(1:ndim)=u_eff(1:ndim)
      endif
 
@@ -1242,6 +1243,158 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
 
   end associate
 end subroutine cic_trace_gas_part_sgs_turb
+
+subroutine tsc_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
+  use amr_parameters, only: ndim, threetondim
+  use pm_parameters
+  use pm_commons, only: part_t
+  use oct_commons, only: oct
+  use ramses_commons, only: ramses_t
+  use rng
+  use nbors_utils
+  use cache_commons
+  use cache
+  use rho_fine_module, only: tsc_index
+  implicit none
+  type(ramses_t)::s
+  type(part_t)::p
+  integer::ilevel
+  integer::action_part
+  real(kind=8),dimension(1:ndim)::x,x_mid,v_pred,u_eff,u_mid,disp,xi,momentum
+  real(kind=8),dimension(1:ndim)::grad_at_part
+  real(kind=8),dimension(1:threetondim)::vol,kappa_cells
+  integer,dimension(1:ndim)::il,ic,ir
+  integer,dimension(1:ndim,1:threetondim)::ckey
+  integer(kind=8),dimension(0:ndim)::hash_nbor
+  real(kind=8),dimension(1:ndim,1:3)::w1d,dw1d
+  real(kind=8)::dx_loc,dt_level,kappa_mid,noise_amp,rho
+  logical :: use_sgs
+  type(oct),pointer::gridp
+  type(msg_hydro_mflux)::dummy_nvar_realdp
+  type(RngStream),external::RngStream_CreateStream
+  real(kind=8),external::RngStream_RandUni
+  integer(kind=8)::stream_skip
+  external :: RngStream_SetPackageSeed, RngStream_AdvanceState, gaussdev
+  integer :: ipart,idim,ind,icell
+
+  associate(r=>s%r,g=>s%g,m=>s%m)
+  if(p%static)return
+  if (p%type/=TRAC_TYPE) return
+
+  dx_loc=r%boxlen/2**ilevel
+  dt_level=g%dtnew(ilevel)
+  use_sgs = r%sgs_turb .and. (r%iturb>0)
+
+  ! OPTIMIZATION: Handle kick-only pass immediately without cache operations
+  if(action_part==action_kick_only)then
+     do ipart=p%headp(ilevel),p%tailp(ilevel)
+        p%levelp(ipart)=ilevel
+     end do
+     return
+  endif
+
+  if(use_sgs .and. .not. tracer_rng_ready)then
+     call RngStream_SetPackageSeed(r%seed)
+     tracer_rng = RngStream_CreateStream('tracer_sgs')
+     stream_skip = int(2*g%myid,kind=8)
+     call RngStream_AdvanceState(tracer_rng,0_8,stream_skip)
+     tracer_rng_ready = .true.
+  end if
+
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                     hilbert=m%domain, pack_size=storage_size(dummy_nvar_realdp)/32,&
+                     pack=pack_fetch_kick_trac,unpack=unpack_fetch_kick_trac)
+
+  do ipart=p%headp(ilevel),p%tailp(ilevel)
+
+     do idim=1,ndim
+        x(idim)=(p%xp(ipart,idim)+m%skip(idim))/dx_loc
+     end do
+     call wrap_cell_coords(s,x,ilevel+1)
+
+     ! Predictor velocity: use stored velocity if available, otherwise gather from grid
+     if (g%nstep>0) then
+        v_pred(1:ndim)=p%vp(ipart,1:ndim)
+     else
+        call gather_tsc_state(s,x,ilevel,dx_loc,.false.,u_eff,kappa_mid)
+        v_pred(1:ndim)=u_eff(1:ndim)
+     endif
+
+     do idim=1,ndim
+        x_mid(idim)=x(idim)+0.5d0*dt_level*v_pred(idim)/dx_loc
+     end do
+     call wrap_cell_coords(s,x_mid,ilevel+1)
+
+     ! Build TSC weights, derivatives, indices, and volume weights ONCE for x_mid
+     call tsc_weights_and_derivs(x_mid, w1d, dw1d, il, ic, ir, vol)
+     do idim=1,ndim
+        if(r%periodic(idim))then
+           if(il(idim)< m%box_ckey_min(idim,ilevel+1))il(idim)=il(idim)-m%box_ckey_min(idim,ilevel+1)+m%box_ckey_max(idim,ilevel+1)
+           if(ir(idim)>=m%box_ckey_max(idim,ilevel+1))ir(idim)=ir(idim)+m%box_ckey_min(idim,ilevel+1)-m%box_ckey_max(idim,ilevel+1)
+        endif
+     end do
+     ckey = tsc_index(il,ic,ir)
+
+     ! Single pass over cells: gather velocity, density, and per-cell kappa
+     momentum(1:ndim)=0.d0
+     rho=0.d0
+     kappa_mid=0.d0
+     kappa_cells(1:threetondim)=0.d0
+     hash_nbor(0)=ilevel+1
+     do ind=1,threetondim
+        hash_nbor(1:ndim)=ckey(1:ndim,ind)
+        call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+#ifdef HYDRO
+        if(associated(gridp))then
+           momentum(1:ndim)=momentum(1:ndim)+gridp%uold(icell,2:ndim+1)*vol(ind)
+           rho=rho+gridp%uold(icell,1)*vol(ind)
+           if(use_sgs)then
+              kappa_cells(ind)=tracer_cell_kappa(gridp%uold(icell,1),gridp%uold(icell,r%iturb),dx_loc,r%smallr,r%tracer_inverse_peclet_number)
+              kappa_mid=kappa_mid+kappa_cells(ind)*vol(ind)
+           end if
+        end if
+#endif
+     end do
+     if(rho>r%smallr)then
+        u_mid(1:ndim)=momentum(1:ndim)/rho
+     else
+        u_mid(1:ndim)=0.d0
+     end if
+
+     ! Compute gradient of kappa using the already-computed weights and per-cell values
+     grad_at_part(1:ndim)=0.d0
+     if(use_sgs)then
+        call compute_gradient_tsc_scalar(w1d, dw1d, kappa_cells, grad_at_part)
+     end if
+
+     ! Ito drift: u + grad(kappa)
+     disp(1:ndim)=(u_mid(1:ndim) + grad_at_part(1:ndim)/dx_loc)*dt_level
+
+     if(use_sgs .and. kappa_mid>0.0d0)then
+        call sample_tracer_gaussian(xi)
+        noise_amp = sqrt(2.0d0*kappa_mid*dt_level)
+        disp(1:ndim)=disp(1:ndim)+noise_amp*xi(1:ndim)
+     end if
+
+     p%vp(ipart,1:ndim)=u_mid(1:ndim)
+     p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+disp(1:ndim)
+  end do
+
+  call close_cache(s,m%grid_dict)
+
+  if(action_part==action_kick_drift)then
+     do ipart=p%headp(ilevel),p%tailp(ilevel)
+        do idim=1,ndim
+           if(r%periodic(idim))then
+              if(p%xp(ipart,idim)< 0.0d0)p%xp(ipart,idim)=p%xp(ipart,idim)+r%box_size(idim)
+              if(p%xp(ipart,idim)>=r%box_size(idim))p%xp(ipart,idim)=p%xp(ipart,idim)-r%box_size(idim)
+           endif
+        end do
+     end do
+  end if
+
+  end associate
+end subroutine tsc_trace_gas_part_sgs_turb
 
 subroutine cic_trace_gas_part_ito_mc(s,p,ilevel,action_part)
   use amr_parameters, only: ndim, twotondim
@@ -1478,7 +1631,7 @@ subroutine tsc_trace_gas_part_ito_mc(s,p,ilevel,action_part)
         call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
 #ifdef HYDRO
         if(associated(gridp))then
-           rho=gridp%uold(icell,1)
+           rho=gridp%mflux(icell,1)
            denom=max(rho,r%smallr)
            do idim=1,ndim
               fluxL=gridp%mflux(icell,1+idim)*dx_over_dt
@@ -1502,7 +1655,7 @@ subroutine tsc_trace_gas_part_ito_mc(s,p,ilevel,action_part)
      end do
 
      ! Compute gradient using TSC subroutine
-     call compute_gradient_tsc(w1d, dw1d, kappa_num_cells, grad_at_part)
+     !call compute_gradient_tsc(w1d, dw1d, kappa_num_cells, grad_at_part)
      ! u_eff = u_eff + grad_at_part  ! Uncomment to add noise-induced drift
 
      if(action_part==action_kick_only)then
@@ -1871,6 +2024,74 @@ subroutine gather_cic_state(st,x_cell,level_in,dx_cell,use_sgs_in,vel_out,kappa_
      kappa_out=0.d0
   end if
 end subroutine gather_cic_state
+
+subroutine gather_tsc_state(st,x_cell,level_in,dx_cell,use_sgs_in,vel_out,kappa_out)
+  use amr_parameters, only: ndim, threetondim
+  use oct_commons, only: oct
+  use ramses_commons, only: ramses_t
+  use nbors_utils
+  use cache
+  use rho_fine_module, only: tsc_index
+  implicit none
+  type(ramses_t),intent(in)::st
+  real(kind=8),intent(in)::x_cell(1:ndim)
+  integer,intent(in)::level_in
+  real(kind=8),intent(in)::dx_cell
+  logical,intent(in)::use_sgs_in
+  real(kind=8),intent(out)::vel_out(1:ndim)
+  real(kind=8),intent(out)::kappa_out
+  integer,dimension(1:ndim)::il,ic,ir
+  real(kind=8),dimension(1:threetondim)::vol
+  integer,dimension(1:ndim,1:threetondim)::ckey
+  real(kind=8),dimension(1:ndim,1:3)::w1d,dw1d
+  real(kind=8),dimension(1:ndim)::momentum
+  real(kind=8)::rho,kappa_sum
+  integer(kind=8),dimension(0:ndim)::hash_nbor
+  integer::ind,icell,jd
+  type(oct),pointer::gridp
+
+  vel_out=0.d0
+  momentum=0.d0
+  rho=0.d0
+  kappa_sum=0.d0
+
+  ! Build TSC weights, indices, and volume weights
+  call tsc_weights_and_derivs(x_cell, w1d, dw1d, il, ic, ir, vol)
+  do jd=1,ndim
+     if(st%r%periodic(jd))then
+        if(il(jd)< st%m%box_ckey_min(jd,level_in+1))il(jd)=il(jd)-st%m%box_ckey_min(jd,level_in+1)+st%m%box_ckey_max(jd,level_in+1)
+        if(ir(jd)>=st%m%box_ckey_max(jd,level_in+1))ir(jd)=ir(jd)+st%m%box_ckey_min(jd,level_in+1)-st%m%box_ckey_max(jd,level_in+1)
+     endif
+  end do
+  ckey = tsc_index(il,ic,ir)
+
+  hash_nbor(0)=level_in+1
+  do ind=1,threetondim
+     hash_nbor(1:ndim)=ckey(1:ndim,ind)
+     call get_parent_cell(st,hash_nbor,st%m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+#ifdef HYDRO
+     if(associated(gridp))then
+        momentum(1:ndim)=momentum(1:ndim)+gridp%uold(icell,2:ndim+1)*vol(ind)
+        rho=rho+gridp%uold(icell,1)*vol(ind)
+        if(use_sgs_in)then
+           kappa_sum=kappa_sum+tracer_cell_kappa(gridp%uold(icell,1),gridp%uold(icell,st%r%iturb),dx_cell,st%r%smallr,st%r%tracer_inverse_peclet_number)*vol(ind)
+        end if
+     end if
+#endif
+  end do
+
+  if(rho>0.d0)then
+     vel_out(1:ndim)=momentum(1:ndim)/max(rho,st%r%smallr)
+  else
+     vel_out(1:ndim)=0.d0
+  end if
+
+  if(use_sgs_in)then
+     kappa_out=max(kappa_sum,0.d0)
+  else
+     kappa_out=0.d0
+  end if
+end subroutine gather_tsc_state
 
 subroutine gather_cic_scalar(st,x_cell,level_in,dx_cell,use_sgs_in,phi_cells)
   use amr_parameters, only: ndim, twotondim
@@ -2649,8 +2870,8 @@ subroutine tsc_kick_drift_dust_ito_mc(s,p,ilevel,action_part)
         end do
 
         ! Compute gradient using TSC subroutine
-        call compute_gradient_tsc(w1d, dw1d, kappa_num_cells, grad_at_part)
-        u_eff(1:ndim) = u_eff(1:ndim) + grad_at_part(1:ndim)
+        !call compute_gradient_tsc(w1d, dw1d, kappa_num_cells, grad_at_part)
+        !u_eff(1:ndim) = u_eff(1:ndim) + grad_at_part(1:ndim)
 
         call sample_tracer_uniform(xi)
 
@@ -3264,6 +3485,32 @@ subroutine compute_gradient_cic(w1d, dw1d, field, grad_out)
      end do
   end do
 end subroutine compute_gradient_cic
+
+subroutine compute_gradient_tsc_scalar(w1d, dw1d, field, grad_out)
+  !--------------------------------------------------------------
+  ! Compute gradient of a scalar field using TSC (3x3x3) weights.
+  ! grad_out(k) = sum_ind dw/dx_k * field(ind)
+  !--------------------------------------------------------------
+  use amr_parameters, only: ndim, threetondim
+  implicit none
+  real(kind=8),intent(in)::w1d(1:ndim,1:3),dw1d(1:ndim,1:3)
+  real(kind=8),intent(in)::field(1:threetondim)
+  real(kind=8),intent(out)::grad_out(1:ndim)
+  integer::ix,iy,iz,ind
+
+  grad_out = 0.d0
+  ind = 0
+  do iz=1,3
+     do iy=1,3
+        do ix=1,3
+           ind = ind+1
+           grad_out(1) = grad_out(1) + dw1d(1,ix)*w1d(2,iy)*w1d(3,iz)*field(ind)
+           grad_out(2) = grad_out(2) + w1d(1,ix)*dw1d(2,iy)*w1d(3,iz)*field(ind)
+           grad_out(3) = grad_out(3) + w1d(1,ix)*w1d(2,iy)*dw1d(3,iz)*field(ind)
+        end do
+     end do
+  end do
+end subroutine compute_gradient_tsc_scalar
 
 subroutine compute_gradient_tsc(w1d, dw1d, field, grad_out)
   !--------------------------------------------------------------
