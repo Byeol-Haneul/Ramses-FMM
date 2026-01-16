@@ -63,7 +63,7 @@ bound_zmax = -1, -1, -1, -1,  1,  0
 
 &POISSON_PARAMS
 epsilon=1.d-6
-level_fmm_to_amr=1
+level_fmm_to_amr=2
 /
 
 &HYDRO_PARAMS

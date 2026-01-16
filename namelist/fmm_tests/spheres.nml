@@ -1,15 +1,14 @@
-make NDIM=3 MPI=1 GRAV=1 HYDRO=0
+make NDIM=3 MPI=1 GRAV=1 HYDRO=1
 
 &RUN_PARAMS
 cosmo=.false.
 pic=.true.
 poisson=.true.
-hydro=.false.
+hydro=.true.
 nrestart=0
 nsubcycle=1,1,2
 ncontrol=1
-verbose=.false.
-nstepmax=1
+verbose=.true.
 /
 
 &OUTPUT_PARAMS
@@ -19,14 +18,12 @@ bkp_modulo=3
 /
 
 &INIT_PARAMS
-filetype='ascii'
-initfile(1)='single'
 ic_scale_m=1.00
 /
 
 &AMR_PARAMS
-levelmin=9
-levelmax=9
+levelmin=8
+levelmax=8
 ngridmax=2000000
 npartmax=4000000
 nexpand=1,
@@ -54,9 +51,15 @@ bound_zmin =  1,  1,  1,  1,  0, -1
 bound_zmax = -1, -1, -1, -1,  1,  0
 /
 
+&HYDRO_PARAMS
+smallr=1d-10
+smallc=1d-10
+/
+
 &POISSON_PARAMS
-epsilon=1.d-6
-level_fmm_to_amr=1
+gravity_type=-1 
+gravity_params=-1.0, 0.2, 0.5, 0.5, 0.7, 0.5, 0.5, 0.1, 0.2
+epsilon=1.d-6 
 /
 
 &REFINE_PARAMS

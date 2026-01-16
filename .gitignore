@@ -27,6 +27,7 @@ time*.txt
 **eight**
 
 nfw/
+spheres/
 ics_ramses/
 analyze/fig**/
 analyze/.ipynb_checkpoints/**
