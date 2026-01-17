@@ -121,9 +121,13 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
         elseif(pst%s%r%dust_force_interpolation_scheme==3)then
            call pcs_kick_drift_dust(pst%s,pst%s%dust,ilevel,action_part)
         elseif(pst%s%r%dust_force_interpolation_scheme==4)then
-           call tsc_kick_drift_dust_ito_mc(pst%s,pst%s%dust,ilevel,action_part) ! Asymptotically approaches Ito MC tracer in the stiff regime.
+           call cic_kick_drift_dust_ito_mc(pst%s,pst%s%dust,ilevel,action_part) ! Asymptotically approaches Ito MC tracer limit
         elseif(pst%s%r%dust_force_interpolation_scheme==5)then
-           call tsc_kick_drift_dust_guiding_center(pst%s,pst%s%dust,ilevel,action_part)
+           call tsc_kick_drift_dust_ito_mc(pst%s,pst%s%dust,ilevel,action_part) ! Asymptotically approaches Ito MC tracer limit
+        elseif(pst%s%r%dust_force_interpolation_scheme==6)then
+           call cic_kick_drift_dust_guiding_center(pst%s,pst%s%dust,ilevel,action_part) ! CIC guiding center
+        elseif(pst%s%r%dust_force_interpolation_scheme==7)then
+           call tsc_kick_drift_dust_guiding_center(pst%s,pst%s%dust,ilevel,action_part) ! TSC guiding center
         endif
      endif
   endif
@@ -1212,7 +1216,7 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
      ! Compute gradient of kappa using the already-computed weights and per-cell values
      grad_at_part(1:ndim)=0.d0
      if(use_sgs)then
-        call compute_gradient_cic(w1d, dw1d, kappa_cells, grad_at_part)
+        call compute_gradient_cic_scalar(w1d, dw1d, kappa_cells, grad_at_part)
      end if
 
      ! Ito drift: u + grad(kappa)
@@ -2626,6 +2630,311 @@ end subroutine cic_kick_drift_dust
 !subroutine cic_kick_drift_dust_num_diff(s,p,ilevel,action_part)
 !end subroutine cic_kick_drift_dust_num_diff
 
+subroutine cic_kick_drift_dust_ito_mc(s,p,ilevel,action_part)
+  use amr_parameters, only: ndim, twotondim
+  use hydro_parameters, only: nener
+  use pm_parameters
+  use pm_commons, only: part_t
+  use oct_commons, only: oct
+  use ramses_commons, only: ramses_t
+  use rng
+  use nbors_utils
+  use cache_commons
+  use cache
+  implicit none
+  type(ramses_t)::s
+  type(part_t)::p
+  integer::ilevel
+  integer::action_part
+  real(kind=8),dimension(1:ndim)::x_main,x_mid
+  integer,dimension(1:ndim)::cl2,cr2
+  real(kind=8),dimension(1:twotondim)::vol2
+  integer,dimension(1:ndim,1:twotondim)::ckey2
+  integer(kind=8),dimension(0:ndim)::hash_nbor
+  integer::ipart,ind,idim,irad,icell,icell2
+  real(kind=8)::dx_loc,dt_level
+  real(kind=8),dimension(1:ndim)::ff,v_pred,uu
+#ifdef MHD
+  real(kind=8),dimension(1:3)::bb
+  real(kind=8)::emag
+#endif
+  real(kind=8)::rho_gas,c_sound,eint,coeff
+  real(kind=8)::nu_stop,dens,etot,ekin,erad,cs2,pi
+  real(kind=8),dimension(1:ndim)::what,wdrift,wdrift0
+  real(kind=8),dimension(1:ndim)::disp,xi,dx_ito
+  real(kind=8),dimension(1:ndim)::x_diff,grad_at_part,u_eff,kappa_num
+  integer,dimension(1:ndim)::il,ir
+  real(kind=8),dimension(1:twotondim)::vol_diff
+  integer,dimension(1:ndim,1:twotondim)::ckey_diff
+  real(kind=8),dimension(1:ndim,1:twotondim)::u_cells,kappa_num_cells
+  real(kind=8),dimension(1:ndim,1:2)::w1d,dw1d,w1d_mid,dw1d_mid
+  real(kind=8)::wdrift2,w0,a,g_par,g_perp
+  type(oct),pointer :: gridp
+  integer :: k,jdim
+  real(kind=8)::rho,denom,fluxL,fluxR
+  real(kind=8)::jr,jl
+  type(msg_large_realdp)::dummy_large_realdp
+  type(RngStream),external::RngStream_CreateStream
+  real(kind=8),external::RngStream_RandUni
+  integer(kind=8)::stream_skip
+  external :: RngStream_SetPackageSeed, RngStream_AdvanceState, gaussdev
+
+  associate(r=>s%r,g=>s%g,m=>s%m)
+  if(p%static)return
+  dx_loc=r%boxlen/2**ilevel
+  dt_level=g%dtnew(ilevel)
+  if (p%type/=DUST_TYPE) return
+  pi=4.0d0*atan(1.0d0)
+  coeff=9.0d0*pi*r%gamma/128.0d0
+
+  ! OPTIMIZATION: Handle kick-only pass immediately without cache operations
+  if(action_part==action_kick_only)then
+     do ipart=p%headp(ilevel),p%tailp(ilevel)
+        p%levelp(ipart)=ilevel
+     end do
+     return
+  endif
+
+  if(.not.tracer_rng_ready)then
+     call RngStream_SetPackageSeed(r%seed)
+     tracer_rng = RngStream_CreateStream('tracer_sgs')
+     stream_skip = int(2*g%myid,kind=8)
+     call RngStream_AdvanceState(tracer_rng,0_8,stream_skip)
+     tracer_rng_ready = .true.
+  end if
+
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                     hilbert=m%domain, pack_size=storage_size(dummy_large_realdp)/32,&
+                     pack=pack_fetch_kick_dust,unpack=unpack_fetch_kick_dust)
+
+  do ipart=p%headp(ilevel),p%tailp(ilevel)
+     ! Compute particle position in cell units
+     do idim=1,ndim
+        x_main(idim)=p%xp(ipart,idim)/dx_loc
+     end do
+     do idim=1,ndim
+        if(x_main(idim)<0d0)x_main(idim)=x_main(idim)+dble(m%ckey_max(ilevel+1))
+        if(x_main(idim)>=dble(m%ckey_max(ilevel+1)))x_main(idim)=x_main(idim)-dble(m%ckey_max(ilevel+1))
+     end do
+
+     if(action_part==action_kick_drift)then
+        v_pred(1:ndim)=p%vp(ipart,1:ndim)
+        if (g%nstep==0) then
+           do idim=1,ndim
+              x_mid(idim)=x_main(idim)+0.5d0*dt_level*v_pred(idim)/dx_loc
+           end do
+        else
+           do idim=1,ndim
+              x_mid(idim)=x_main(idim)
+           end do
+        endif
+        do idim=1,ndim
+           if(x_mid(idim)<0d0)x_mid(idim)=x_mid(idim)+dble(m%ckey_max(ilevel+1))
+           if(x_mid(idim)>=dble(m%ckey_max(ilevel+1)))x_mid(idim)=x_mid(idim)-dble(m%ckey_max(ilevel+1))
+        end do
+
+        ! Build weights and indices for x_mid (derivatives not needed but computed anyway)
+        call cic_weights_and_derivs(x_mid, w1d_mid, dw1d_mid, cl2, cr2, vol2)
+        do idim=1,ndim
+           if(cl2(idim)<0)cl2(idim)=m%ckey_max(ilevel+1)-1
+           if(cr2(idim)==m%ckey_max(ilevel+1))cr2(idim)=0
+        end do
+        ckey2 = cic_index(cl2,cr2)
+
+        ff(1:ndim)=0.0
+        uu(1:ndim)=0.0
+        rho_gas = 0.0
+        eint = 0.0
+#ifdef MHD
+        bb(1:3)=0.0
+        emag=0.0d0
+#endif
+        hash_nbor(0)=ilevel+1
+        do ind=1,twotondim
+           hash_nbor(1:ndim)=ckey2(1:ndim,ind)
+           call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
+#ifdef HYDRO
+           if(associated(gridp))then
+#ifdef GRAV
+              ff(1:ndim)=ff(1:ndim)+gridp%f(icell2,1:ndim)*vol2(ind)
+#endif
+              rho_gas = rho_gas + gridp%uold(icell2,1)*vol2(ind)
+#ifdef MHD
+              bb(1:3)=bb(1:3)+0.5d0*(gridp%bold(icell2,1:3)+gridp%bold(icell2,4:6))*vol2(ind)
+#endif
+              dens = max(dble(gridp%mflux(icell2,1)), r%smallr) ! Must use mflux(1) for computing flux-based velocities
+
+              do idim=1,ndim
+                 fluxL = gridp%mflux(icell2,1+idim     )*dx_loc/dt_level
+                 fluxR = gridp%mflux(icell2,1+idim+ndim)*dx_loc/dt_level
+                 jr = max(fluxR,0.d0)
+                 jl = max(-fluxL,0.d0)
+                 uu(idim)=uu(idim)+((jr-jl)/dens)*vol2(ind)
+              end do
+              etot = gridp%uold(icell2,5)
+              ekin = 0.0d0
+              do idim=1,ndim
+                 ekin = ekin + 0.5d0 * gridp%uold(icell2,1+idim)**2 / dens
+              end do
+              erad = 0.0d0
+#if NENER>0
+              do irad=1,nener
+                 erad = erad + gridp%uold(icell2,5+irad)
+              end do
+#endif
+#ifdef MHD
+              do idim=1,3
+                 emag = emag + 0.125d0*(gridp%bold(icell2,idim)+gridp%bold(icell2,ndim+idim))**2*vol2(ind)
+              end do
+              eint = eint - emag*vol2(ind)
+#endif
+              eint = eint + (etot - ekin - erad)*vol2(ind)
+           end if
+#endif
+        end do
+
+        cs2 = r%gamma * (r%gamma-1.0d0) * max(eint, r%smallc**2) / max(rho_gas, r%smallr)
+        c_sound = max(sqrt(cs2), r%smallc)
+        nu_stop = coeff*c_sound*rho_gas/p%size(ipart)
+        wdrift0(1:ndim)= v_pred(1:ndim) - uu(1:ndim)
+        wdrift(1:ndim)=wdrift0(1:ndim)
+        call compute_drag_step(wdrift, c_sound, 0.5d0*dt_level, nu_stop, coeff, r%analytic_dust_force)
+#ifdef GRAV
+        wdrift(1:ndim)=wdrift(1:ndim)+ff(1:ndim)*0.5d0*dt_level
+#endif
+#ifdef MHD
+        if (ndim==3) then
+            call compute_lorentz_step(wdrift, bb(1:ndim), dt_level, p%charge(ipart), r%analytic_dust_force)
+        else
+            if(g%myid==1 .and. g%nstep==0)then
+               write(*,*) 'Warning: Lorentz force not implemented for NDIM != 3; proceeding without it.'
+            endif
+        endif
+#endif
+#ifdef GRAV
+        wdrift(1:ndim)=wdrift(1:ndim)+ff(1:ndim)*0.5d0*dt_level
+#endif
+        call compute_drag_step(wdrift, c_sound, 0.5d0*dt_level, nu_stop, coeff, r%analytic_dust_force)
+
+        p%vp(ipart,1:ndim)=uu(1:ndim)+wdrift(1:ndim)
+
+        do idim=1,ndim
+           x_diff(idim)=(p%xp(ipart,idim)+m%skip(idim))/dx_loc
+        end do
+        call wrap_cell_coords(s,x_diff,ilevel+1)
+
+        ! Build 1D CIC weights, derivatives, indices, and 3D volume weights
+        call cic_weights_and_derivs(x_diff, w1d, dw1d, il, ir, vol_diff)
+        do idim=1,ndim
+           if(r%periodic(idim))then
+              if(il(idim)< m%box_ckey_min(idim,ilevel+1))il(idim)=m%box_ckey_max(idim,ilevel+1)-1
+              if(ir(idim)>=m%box_ckey_max(idim,ilevel+1))ir(idim)=m%box_ckey_min(idim,ilevel+1)
+           endif
+        enddo
+
+        ! Build neighbor index list (twotondim=8)
+        ckey_diff = cic_index(il,ir)
+
+        ! Compute cell-by-cell velocities and diffusivities
+        u_cells=0.d0
+        kappa_num_cells=0.d0
+        hash_nbor(0)=ilevel+1
+        do ind=1,twotondim
+           hash_nbor(1:ndim)=ckey_diff(1:ndim,ind)
+           call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+#ifdef HYDRO
+           if(associated(gridp))then
+              rho=gridp%mflux(icell,1)
+              denom=max(rho,r%smallr)
+              do idim=1,ndim
+                 fluxL=gridp%mflux(icell,1+idim     )*dx_loc/dt_level
+                 fluxR=gridp%mflux(icell,1+idim+ndim)*dx_loc/dt_level
+                 jr=max(fluxR,0.d0)
+                 jl=max(-fluxL,0.d0)
+                 u_cells(idim,ind)=(jr-jl)/denom
+                 kappa_num_cells(idim,ind)=0.5d0*(jr+jl)*dx_loc/denom
+              end do
+           end if
+#endif
+        end do
+
+        u_eff=0.d0
+        kappa_num=0.d0
+        do ind=1,twotondim
+           do idim=1,ndim
+              u_eff(idim)=u_eff(idim)+u_cells(idim,ind)*vol_diff(ind)
+              kappa_num(idim)=kappa_num(idim)+kappa_num_cells(idim,ind)*vol_diff(ind)
+           end do
+        end do
+
+        ! Compute gradient using CIC subroutine
+        grad_at_part(1:ndim)=0.d0
+        !call compute_gradient_cic(w1d, dw1d, kappa_num_cells, grad_at_part)
+        !u_eff(1:ndim) = u_eff(1:ndim) + grad_at_part(1:ndim)
+
+        call sample_tracer_uniform(xi)
+
+        disp(1:ndim)=0.d0
+        do idim=1,ndim
+           disp(idim)=u_eff(idim)*dt_level
+        end do
+
+        wdrift2 = dot_product(wdrift0(1:ndim), wdrift0(1:ndim))
+        if (wdrift2 > 0.d0) then
+           what(1:ndim) = wdrift0(1:ndim)/sqrt(wdrift2)
+           w0 = sqrt(wdrift2)
+        else
+           what(1:ndim) = 0.d0
+           w0 = 0.d0
+        end if
+
+        if (nu_stop>0.d0 .and. w0 > 0.d0) then
+           a = c_sound/sqrt(coeff)
+           if(dt_level*nu_stop < 1.d2)then
+              call get_g_factors(dt_level, w0, a, nu_stop, g_par, g_perp)
+           else
+              g_par = sqrt(1.d0-3.d0/(2.d0*dt_level*nu_stop) &
+              &- exp(-2.d0*dt_level*nu_stop)/(2.d0*dt_level*nu_stop) &
+              &+ 2.d0*exp(-(dt_level*nu_stop))/(dt_level*nu_stop))
+              g_perp = g_par
+           end if
+        else
+           g_par = 0.d0
+           g_perp = 0.d0
+        end if
+
+        dx_ito(1:ndim)=0.d0
+        do idim=1,ndim
+           do jdim=1,ndim
+              if (wdrift2 > 0.d0) then
+                 dx_ito(idim) = dx_ito(idim) + &
+                      (g_perp * merge(1.d0,0.d0,idim==jdim) + (g_par - g_perp)*what(idim)*what(jdim)) * &
+                      (sqrt(2.d0*kappa_num(jdim)*dt_level) * xi(jdim) + grad_at_part(jdim) * dt_level)
+              end if
+           end do
+        end do
+
+        disp(1:ndim)=disp(1:ndim)+dx_ito(1:ndim)
+
+        p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+disp(1:ndim)
+     endif
+  end do
+  call close_cache(s,m%grid_dict)
+
+  if(action_part==action_kick_drift)then
+     do ipart=p%headp(ilevel),p%tailp(ilevel)
+        do idim=1,ndim
+           if(r%periodic(idim))then
+              if(p%xp(ipart,idim)< 0.0d0           )p%xp(ipart,idim)=p%xp(ipart,idim)+r%box_size(idim)
+              if(p%xp(ipart,idim)>=r%box_size(idim))p%xp(ipart,idim)=p%xp(ipart,idim)-r%box_size(idim)
+           endif
+        end do
+     end do
+  end if
+
+  end associate
+end subroutine cic_kick_drift_dust_ito_mc
+
 subroutine tsc_kick_drift_dust_ito_mc(s,p,ilevel,action_part)
   use amr_parameters, only: ndim, threetondim
   use hydro_parameters, only: nener
@@ -2870,6 +3179,7 @@ subroutine tsc_kick_drift_dust_ito_mc(s,p,ilevel,action_part)
         end do
 
         ! Compute gradient using TSC subroutine
+        grad_at_part(1:ndim)=0.d0
         !call compute_gradient_tsc(w1d, dw1d, kappa_num_cells, grad_at_part)
         !u_eff(1:ndim) = u_eff(1:ndim) + grad_at_part(1:ndim)
 
@@ -2936,6 +3246,22 @@ subroutine tsc_kick_drift_dust_ito_mc(s,p,ilevel,action_part)
   end associate
 end subroutine tsc_kick_drift_dust_ito_mc
 
+subroutine cic_kick_drift_dust_guiding_center(s,p,ilevel,action_part)
+  use ramses_commons, only: ramses_t
+  use pm_commons, only: part_t
+  use mdl_module
+  implicit none
+  type(ramses_t)::s
+  type(part_t)::p
+  integer::ilevel
+  integer::action_part
+
+  ! Guiding-center scheme placeholder.
+  ! This must not silently do nothing if selected.
+  write(*,*) 'Error: dust_force_interpolation_scheme=6 (CIC guiding center) is not implemented.'
+  call mdl_abort(s%mdl)
+end subroutine cic_kick_drift_dust_guiding_center
+
 subroutine tsc_kick_drift_dust_guiding_center(s,p,ilevel,action_part)
   use ramses_commons, only: ramses_t
   use pm_commons, only: part_t
@@ -2948,7 +3274,7 @@ subroutine tsc_kick_drift_dust_guiding_center(s,p,ilevel,action_part)
 
   ! Guiding-center scheme placeholder.
   ! This must not silently do nothing if selected.
-  write(*,*) 'Error: dust_force_interpolation_scheme=5 (TSC guiding center) is not implemented.'
+  write(*,*) 'Error: dust_force_interpolation_scheme=7 (TSC guiding center) is not implemented.'
   call mdl_abort(s%mdl)
 end subroutine tsc_kick_drift_dust_guiding_center
 subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
@@ -3460,7 +3786,7 @@ end subroutine pcs_1d_weights
 !################################################################
 ! Gradient computation subroutines for CIC and TSC interpolation
 !################################################################
-subroutine compute_gradient_cic(w1d, dw1d, field, grad_out)
+subroutine compute_gradient_cic_scalar(w1d, dw1d, field, grad_out)
   !--------------------------------------------------------------
   ! Compute gradient of a scalar field using CIC (2x2x2) weights.
   ! grad_out(k) = sum_ind dw/dx_k * field(ind)
@@ -3481,6 +3807,33 @@ subroutine compute_gradient_cic(w1d, dw1d, field, grad_out)
            grad_out(1) = grad_out(1) + dw1d(1,ix)*w1d(2,iy)*w1d(3,iz)*field(ind)
            grad_out(2) = grad_out(2) + w1d(1,ix)*dw1d(2,iy)*w1d(3,iz)*field(ind)
            grad_out(3) = grad_out(3) + w1d(1,ix)*w1d(2,iy)*dw1d(3,iz)*field(ind)
+        end do
+     end do
+  end do
+end subroutine compute_gradient_cic_scalar
+
+subroutine compute_gradient_cic(w1d, dw1d, field, grad_out)
+  !--------------------------------------------------------------
+  ! Compute gradient of a vector field using CIC (2x2x2) weights.
+  ! grad_out(k) = sum_ind dw/dx_k * field(k,ind)
+  ! Each dimension k uses its own field values field(k,:).
+  !--------------------------------------------------------------
+  use amr_parameters, only: ndim, twotondim
+  implicit none
+  real(kind=8),intent(in)::w1d(1:ndim,1:2),dw1d(1:ndim,1:2)
+  real(kind=8),intent(in)::field(1:ndim,1:twotondim)
+  real(kind=8),intent(out)::grad_out(1:ndim)
+  integer::ix,iy,iz,ind
+
+  grad_out = 0.d0
+  ind = 0
+  do iz=1,2
+     do iy=1,2
+        do ix=1,2
+           ind = ind+1
+           grad_out(1) = grad_out(1) + dw1d(1,ix)*w1d(2,iy)*w1d(3,iz)*field(1,ind)
+           grad_out(2) = grad_out(2) + w1d(1,ix)*dw1d(2,iy)*w1d(3,iz)*field(2,ind)
+           grad_out(3) = grad_out(3) + w1d(1,ix)*w1d(2,iy)*dw1d(3,iz)*field(3,ind)
         end do
      end do
   end do
