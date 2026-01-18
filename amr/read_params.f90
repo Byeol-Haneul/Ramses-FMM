@@ -306,10 +306,9 @@ subroutine m_read_params(pst)
   integer :: sink_force_interpolation_scheme=1 ! sink force interpolation schemes
   integer :: tree_mass_deposition_scheme=1     ! tree mass deposition schemes
   integer :: tree_force_interpolation_scheme=1 ! tree force interpolation schemes
-  integer :: trac_interpolation_scheme=1 ! tracer force interpolation schemes (0: MC, 1: CIC, 2: TSC, 3: PCS, 4: TSC Ito MC, 5: TSC SGS Ito, 6: TSC Ito MC with grad(kappa))
-  real(kind=8) :: tracer_inverse_peclet_number=1.0d0 ! tracer inverse Peclet number for SGS Ito diffusion (controls diffusivity)
+  integer :: trac_interpolation_scheme=1 ! tracer interpolation/numerical schemes
   integer :: dust_mass_deposition_scheme=1 ! dust mass deposition schemes
-  integer :: dust_force_interpolation_scheme=1 ! dust force interpolation schemes (1: CIC, 2: TSC, 3: PCS, 4: TSC Ito MC, 5: TSC Guiding Center)
+  integer :: dust_force_interpolation_scheme=1 ! dust force interpolation/numerical schemes
 
   ! Boundary conditions parameters
   integer::nbound=0
@@ -626,7 +625,7 @@ subroutine m_read_params(pst)
        & ,rtz_primary_cosmic_ray_ionization_rate, rtz_include_HM12_UVB, isH2_rtz &
        & ,rtz_max_cool_timestep, rtz_eqm_min_its
   ! Tracer particles parameters
-  namelist/trac_params/trac,ntracmax,ntractot,ntrac_per_cell,trac_interpolation_scheme,tracer_inverse_peclet_number,part_subcell_positions
+  namelist/trac_params/trac,ntracmax,ntractot,ntrac_per_cell,trac_interpolation_scheme,part_subcell_positions
   namelist/dust_params/dust,ndustmax,ndusttot,ndust_per_cell,dust_to_gas_mass_ratio,&
   & grain_size_parameter,grain_charge_parameter,dust_mass_deposition_scheme,dust_force_interpolation_scheme,dust_gyro_factor,analytic_dust_force
   ! Star particles and star formation recipe
@@ -1254,7 +1253,6 @@ subroutine m_read_params(pst)
   s%r%tree_mass_deposition_scheme=tree_mass_deposition_scheme
   s%r%tree_force_interpolation_scheme=tree_force_interpolation_scheme
   s%r%trac_interpolation_scheme=trac_interpolation_scheme
-  s%r%tracer_inverse_peclet_number=tracer_inverse_peclet_number
   s%r%dust_mass_deposition_scheme=dust_mass_deposition_scheme
   s%r%dust_force_interpolation_scheme=dust_force_interpolation_scheme
 

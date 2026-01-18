@@ -209,7 +209,6 @@ subroutine unpack_flush_upload_rt(grid,msg_size,msg_array,hash_key)
         endif
      end do
   end do
-  ! NOTE: mflux must not be modified here (book-keeping from hydro only).
 end subroutine unpack_flush_upload_rt
 !##########################################################################
 !##########################################################################

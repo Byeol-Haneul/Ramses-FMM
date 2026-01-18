@@ -1201,7 +1201,7 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
            momentum(1:ndim)=momentum(1:ndim)+gridp%uold(icell,2:ndim+1)*vol(ind)
            rho=rho+gridp%uold(icell,1)*vol(ind)
            if(use_sgs)then
-              kappa_cells(ind)=tracer_cell_kappa(gridp%uold(icell,1),gridp%uold(icell,r%iturb),dx_loc,r%smallr,r%tracer_inverse_peclet_number)
+              kappa_cells(ind)=tracer_cell_kappa(gridp%uold(icell,1),gridp%uold(icell,r%iturb),dx_loc,r%smallr)
               kappa_mid=kappa_mid+kappa_cells(ind)*vol(ind)
            end if
         end if
@@ -1353,7 +1353,7 @@ subroutine tsc_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
            momentum(1:ndim)=momentum(1:ndim)+gridp%uold(icell,2:ndim+1)*vol(ind)
            rho=rho+gridp%uold(icell,1)*vol(ind)
            if(use_sgs)then
-              kappa_cells(ind)=tracer_cell_kappa(gridp%uold(icell,1),gridp%uold(icell,r%iturb),dx_loc,r%smallr,r%tracer_inverse_peclet_number)
+              kappa_cells(ind)=tracer_cell_kappa(gridp%uold(icell,1),gridp%uold(icell,r%iturb),dx_loc,r%smallr)
               kappa_mid=kappa_mid+kappa_cells(ind)*vol(ind)
            end if
         end if
@@ -2010,7 +2010,7 @@ subroutine gather_cic_state(st,x_cell,level_in,dx_cell,use_sgs_in,vel_out,kappa_
         momentum(1:ndim)=momentum(1:ndim)+gridp%uold(icell,2:ndim+1)*vol(ind)
         rho=rho+gridp%uold(icell,1)*vol(ind)
         if(use_sgs_in)then
-           kappa_sum=kappa_sum+tracer_cell_kappa(gridp%uold(icell,1),gridp%uold(icell,st%r%iturb),dx_cell,st%r%smallr,st%r%tracer_inverse_peclet_number)*vol(ind)
+           kappa_sum=kappa_sum+tracer_cell_kappa(gridp%uold(icell,1),gridp%uold(icell,st%r%iturb),dx_cell,st%r%smallr)*vol(ind)
         end if
      end if
 #endif
@@ -2078,7 +2078,7 @@ subroutine gather_tsc_state(st,x_cell,level_in,dx_cell,use_sgs_in,vel_out,kappa_
         momentum(1:ndim)=momentum(1:ndim)+gridp%uold(icell,2:ndim+1)*vol(ind)
         rho=rho+gridp%uold(icell,1)*vol(ind)
         if(use_sgs_in)then
-           kappa_sum=kappa_sum+tracer_cell_kappa(gridp%uold(icell,1),gridp%uold(icell,st%r%iturb),dx_cell,st%r%smallr,st%r%tracer_inverse_peclet_number)*vol(ind)
+           kappa_sum=kappa_sum+tracer_cell_kappa(gridp%uold(icell,1),gridp%uold(icell,st%r%iturb),dx_cell,st%r%smallr)*vol(ind)
         end if
      end if
 #endif
@@ -2136,21 +2136,21 @@ subroutine gather_cic_scalar(st,x_cell,level_in,dx_cell,use_sgs_in,phi_cells)
      call get_parent_cell(st,hash_nbor,st%m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
 #ifdef HYDRO
      if(associated(gridp))then
-        phi_cells(ind)=tracer_cell_kappa(gridp%uold(icell,1),gridp%uold(icell,st%r%iturb),dx_cell,st%r%smallr,st%r%tracer_inverse_peclet_number)
+        phi_cells(ind)=tracer_cell_kappa(gridp%uold(icell,1),gridp%uold(icell,st%r%iturb),dx_cell,st%r%smallr)
      end if
 #endif
   end do
 end subroutine gather_cic_scalar
 
-real(kind=8) function tracer_cell_kappa(dens_in,eturb_in,dx_in,smallr_in,inverse_peclet_in) result(kappa_val)
+real(kind=8) function tracer_cell_kappa(dens_in,eturb_in,dx_in,smallr_in) result(kappa_val)
   implicit none
-  real(kind=8),intent(in)::dens_in,eturb_in,dx_in,smallr_in,inverse_peclet_in
+  real(kind=8),intent(in)::dens_in,eturb_in,dx_in,smallr_in
   real(kind=8)::rho_eff,sigma_sq
 
   rho_eff = max(dens_in,smallr_in)
   sigma_sq = max(2.0d0*max(eturb_in,0.0d0)/rho_eff,0.0d0)
   if(sigma_sq>0.0d0)then
-     kappa_val = inverse_peclet_in*dx_in*sqrt(sigma_sq)
+     kappa_val = dx_in*sqrt(sigma_sq)
   else
      kappa_val = 0.0d0
   end if
