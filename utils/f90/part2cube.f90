@@ -314,12 +314,25 @@ contains
     logical::periodic_g
     integer::ix,iy,iz,ixp1,iyp1,izp1
     real(kind=8)::fx,fy,fz
-    ix=int(ddxg)
-    iy=int(ddyg)
-    iz=int(ddzg)
-    fx=ddxg-dble(ix)
-    fy=ddyg-dble(iy)
-    fz=ddzg-dble(iz)
+    real(kind=8)::ddx,ddy,ddz
+    ! Apply -0.5 shift with +1 safety offset (same centering as ramses part2cube)
+    ddx = ddxg - 0.5d0 + 1.0d0
+    ddy = ddyg - 0.5d0 + 1.0d0
+    ddz = ddzg - 0.5d0 + 1.0d0
+    ix=int(ddx)
+    iy=int(ddy)
+    iz=int(ddz)
+    ! Remove safety offset
+    ix = ix - 1
+    iy = iy - 1
+    iz = iz - 1
+    ddx = ddx - 1.0d0
+    ddy = ddy - 1.0d0
+    ddz = ddz - 1.0d0
+    ! Fractional position within cell
+    fx = ddx - dble(ix)
+    fy = ddy - dble(iy)
+    fz = ddz - dble(iz)
     if(periodic_g)then
        if(ix<0)ix=ix+nxg
        if(ix>=nxg)ix=ix-nxg
@@ -359,15 +372,20 @@ contains
     logical::periodic_g
     integer::ixc,iyc,izc,ix,iy,iz,dxi,dyi,dzi
     real(kind=8)::xc,yc,zc,wx(3),wy(3),wz(3),dxrel,dyrel,dzrel
+    real(kind=8)::ddx,ddy,ddz
     integer::ix_idx,iy_idx,iz_idx
 
-    ixc=int(ddxg); iyc=int(ddyg); izc=int(ddzg)
+    ! Apply -0.5 shift (same centering as ramses part2cube)
+    ddx = ddxg - 0.5d0
+    ddy = ddyg - 0.5d0
+    ddz = ddzg - 0.5d0
+    ixc=int(ddx+0.5d0); iyc=int(ddy+0.5d0); izc=int(ddz+0.5d0)
     xc=dble(ixc)+0.5d0
     yc=dble(iyc)+0.5d0
     zc=dble(izc)+0.5d0
-    dxrel=ddxg-xc
-    dyrel=ddyg-yc
-    dzrel=ddzg-zc
+    dxrel=ddx-xc
+    dyrel=ddy-yc
+    dzrel=ddz-zc
 
     wx(1)=0.5d0*(1.5d0-abs(dxrel+1.0d0))**2
     wx(2)=0.75d0-        (dxrel        )**2
@@ -418,12 +436,17 @@ contains
     integer::ixc,iyc,izc,ix,iy,iz,dxi,dyi,dzi
     real(kind=8)::wx(4),wy(4),wz(4)
     real(kind=8)::dxrel,dyrel,dzrel
+    real(kind=8)::ddx,ddy,ddz
     integer::ix_idx,iy_idx,iz_idx
 
-    ixc=int(ddxg); iyc=int(ddyg); izc=int(ddzg)
-    dxrel=ddxg-(dble(ixc)+0.5d0)
-    dyrel=ddyg-(dble(iyc)+0.5d0)
-    dzrel=ddzg-(dble(izc)+0.5d0)
+    ! Apply -0.5 shift (same centering as ramses part2cube)
+    ddx = ddxg - 0.5d0
+    ddy = ddyg - 0.5d0
+    ddz = ddzg - 0.5d0
+    ixc=int(ddx); iyc=int(ddy); izc=int(ddz)
+    dxrel=ddx-(dble(ixc)+0.5d0)
+    dyrel=ddy-(dble(iyc)+0.5d0)
+    dzrel=ddz-(dble(izc)+0.5d0)
 
     wx(1)=(2d0-abs(dxrel+1.5d0))**3/6d0
     wx(2)=(4d0-6d0*(dxrel+0.5d0)**2+3d0*abs(dxrel+0.5d0)**3)/6d0

@@ -143,6 +143,7 @@ subroutine set_unew(r,g,m,ilevel)
   !$OMP PARALLEL DO
   do i = m%head(ilevel),m%tail(ilevel)
      m%grid(i)%unew = m%grid(i)%uold
+     m%grid(i)%mflux = 0.0d0
   end do
   !$OMP END PARALLEL DO
 #endif
@@ -754,6 +755,13 @@ subroutine godfine1(s,ind_grid,ilevel,h)
 #if NDIM>2
                        k3=1+2*(k1-1)+k2
 #endif
+                       ! Store old density for MC tracers
+                       childp%mflux(ind_son,1) = max(childp%uold(ind_son,1), r%smallr)
+
+                       ! Store time-integrated mass flux on the two faces along the current direction
+                       childp%mflux(ind_son,1+idim)=h%flux(i3   ,j3   ,k3   ,1,idim)
+                       childp%mflux(ind_son,1+ndim+idim)=h%flux(i3+i0,j3+j0,k3+k0,1,idim)
+
                        ! Update conservative variables new state vector
                        do ivar=1,5
                           childp%unew(ind_son,ivar)=childp%unew(ind_son,ivar)+ &
@@ -1339,6 +1347,7 @@ subroutine init_flush_godunov(grid,hash_key)
         grid%unew(ind,ivar)=0.0d0
      enddo
   enddo
+  grid%mflux=0.0d0
 #endif
 
 #ifdef MHD
@@ -1368,6 +1377,10 @@ subroutine pack_flush_godunov(grid,msg_size,msg_array)
         msg%realdp_hydro(ind,ivar)=grid%unew(ind,ivar)
      end do
   end do
+#endif
+
+#ifdef HYDRO
+  msg%realdp_mflux=grid%mflux
 #endif
 
 #ifdef MHD
@@ -1404,6 +1417,10 @@ subroutine unpack_flush_godunov(grid,msg_size,msg_array,hash_key)
         grid%unew(ind,ivar)=grid%unew(ind,ivar)+msg%realdp_hydro(ind,ivar)
      end do
   end do
+#endif
+
+#ifdef HYDRO
+  grid%mflux=grid%mflux+msg%realdp_mflux
 #endif
 
 #ifdef MHD

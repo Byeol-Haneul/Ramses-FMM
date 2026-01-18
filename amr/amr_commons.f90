@@ -71,6 +71,7 @@ module amr_commons
      integer::ndustmax=0         ! Maximum number of dust particles
      integer::ntrac_per_cell=1   ! Number of tracer particles per cell in ICs
      integer::ndust_per_cell=1   ! Number of dust particles per cell in ICs
+     logical :: part_subcell_positions=.true. ! Use subcell offsets when seeding parts
      real(kind=8)::dust_to_gas_mass_ratio=0.0d0   ! Dust to gas mass ratio
      real(kind=8)::grain_size_parameter=0.0d0   ! Dust particle size parameter (dimensionless)
      real(kind=8)::grain_charge_parameter=0.0d0  ! Dust particle charge-to-mass ratio (dimensionless)
@@ -94,9 +95,9 @@ module amr_commons
      integer :: sink_force_interpolation_scheme=1 ! sink force interpolation schemes
      integer :: tree_mass_deposition_scheme=1     ! tree mass deposition schemes
      integer :: tree_force_interpolation_scheme=1 ! tree force interpolation schemes
-     integer :: trac_interpolation_scheme=1 ! tracer force interpolation schemes
+     integer :: trac_interpolation_scheme=1 ! tracer interpolation/numerical schemes
      integer :: dust_mass_deposition_scheme=1 ! dust mass deposition schemes
-     integer :: dust_force_interpolation_scheme=1 ! dust force interpolation schemes
+     integer :: dust_force_interpolation_scheme=1 ! dust force interpolation/numerical schemes
 
      ! Movie parameters
      integer::levelmax_frame=0
@@ -133,6 +134,7 @@ module amr_commons
      logical ::induction=.false.
      logical ::entropy=.false.
      logical ::sgs_turb=.false.
+     logical ::equilibrium_sgs=.false.
      real(kind=8)::dual_energy=-1
      real(kind=8)::T2_fix=0d0
      character(LEN=10)::scheme='muscl'
@@ -531,6 +533,8 @@ module amr_commons
      integer      :: turb_Ndt=100        ! Number of timesteps per autocorr. time
      real(kind=8) :: turb_rms=1.0        ! rms turbulent forcing acceleration
      real(kind=8) :: turb_min_rho=1d-50  ! Minimum density for turbulence
+     
+     real(kind=8) :: smagorinsky_lilly_constant=1.0d0 ! Smagorinsky-Lilly constant for SGS turbulence
 
   end type run_t
 

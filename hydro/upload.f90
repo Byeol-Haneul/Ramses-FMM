@@ -61,7 +61,6 @@ subroutine upload_fine(s,ilevel)
   use nbors_utils
   use cache_commons
   use cache
-  use hydro_flag_module, only: pack_fetch_hydro, unpack_fetch_hydro
   implicit none
   type(ramses_t)::s
   integer::ilevel
@@ -77,7 +76,7 @@ subroutine upload_fine(s,ilevel)
   integer,dimension(1:6,1:4)::hh
   real(kind=8)::average,ekin,erad,emag
   type(oct),pointer::gridp
-  type(msg_realdp)::dummy_realdp
+  type(msg_upload_hydro_mflux_mhd)::dummy_upload
 
 #ifdef HYDRO
 
@@ -99,6 +98,13 @@ subroutine upload_fine(s,ilevel)
            endif
         end do
      end do
+#ifdef HYDRO
+     do ind=1,twotondim
+        if(m%grid(ioct)%refined(ind))then
+           m%grid(ioct)%mflux(ind,1:2*ndim+1)=0.0d0
+        endif
+     end do
+#endif
 #ifdef MHD
      do ivar=1,6
         do ind=1,twotondim
@@ -111,8 +117,8 @@ subroutine upload_fine(s,ilevel)
   end do
 
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-                     hilbert=m%domain, pack_size=storage_size(dummy_realdp)/32,&
-                     pack=pack_fetch_hydro, unpack=unpack_fetch_hydro,&
+                     hilbert=m%domain, pack_size=storage_size(dummy_upload)/32,&
+                     pack=pack_fetch_upload, unpack=unpack_fetch_upload,&
                      init=init_flush_upload, flush=pack_flush_upload, combine=unpack_flush_upload)
 
   ! Loop over finer level grids
@@ -131,6 +137,31 @@ subroutine upload_fine(s,ilevel)
         end do
         ! Scatter result to parent cell
         gridp%uold(icell,ivar)=average/dble(twotondim)
+     end do
+
+     ! Average old density (stored in mflux(:,1))
+     average=0.0d0
+     do ind=1,twotondim
+        average=average+m%grid(ioct)%mflux(ind,1)
+     end do
+     gridp%mflux(icell,1)=average/dble(twotondim)
+
+     ! Average face-centered time-integrated mass flux (book-keeping, like face-centered B)
+     ! mflux(:,2:1+ndim)   : left faces
+     ! mflux(:,2+ndim:1+2*ndim) : right faces
+     do idim=1,ndim
+        ! Left face in parent cell
+        average=0.0d0
+        do ind=1,twotondim/2
+           average=average+m%grid(ioct)%mflux(hh(2*idim-1,ind),1+idim)
+        end do
+        gridp%mflux(icell,1+idim)=average/dble(twotondim/2)
+        ! Right face in parent cell
+        average=0.0d0
+        do ind=1,twotondim/2
+           average=average+m%grid(ioct)%mflux(hh(2*idim,ind),1+idim+ndim)
+        end do
+        gridp%mflux(icell,1+idim+ndim)=average/dble(twotondim/2)
      end do
 
      ! Average cell-centered magnetic field
@@ -230,6 +261,75 @@ subroutine upload_fine(s,ilevel)
 #endif
 
 end subroutine upload_fine
+
+!##########################################################################
+! Fetch pack/unpack for upload_fine (explicitly includes mflux)
+!##########################################################################
+subroutine pack_fetch_upload(grid,msg_size,msg_array)
+  use amr_parameters, only: twotondim
+  use hydro_parameters, only: nvar
+  use amr_commons, only: oct
+  use cache_commons, only: msg_upload_hydro_mflux_mhd
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+  integer::ind,ivar
+  type(msg_upload_hydro_mflux_mhd)::msg
+
+  do ind=1,twotondim
+     msg%int4(ind)=merge(1,0,grid%refined(ind))
+  end do
+
+#ifdef HYDRO
+  do ivar=1,nvar
+     do ind=1,twotondim
+        msg%realdp_hydro(ind,ivar)=grid%uold(ind,ivar)
+     end do
+  end do
+  msg%realdp_mflux=grid%mflux
+#endif
+
+#ifdef MHD
+  msg%realdp_mhd=grid%bold
+#endif
+
+  msg_array=transfer(msg,msg_array)
+end subroutine pack_fetch_upload
+
+subroutine unpack_fetch_upload(grid,msg_size,msg_array,hash_key)
+  use amr_parameters, only: ndim,twotondim
+  use hydro_parameters, only: nvar
+  use amr_commons, only: oct
+  use cache_commons, only: msg_upload_hydro_mflux_mhd
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
+  integer::ind,ivar
+  type(msg_upload_hydro_mflux_mhd)::msg
+
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
+  msg=transfer(msg_array,msg)
+
+  do ind=1,twotondim
+     grid%refined(ind)= (msg%int4(ind)==1)
+  end do
+
+#ifdef HYDRO
+  do ivar=1,nvar
+     do ind=1,twotondim
+        grid%uold(ind,ivar)=msg%realdp_hydro(ind,ivar)
+     end do
+  end do
+  grid%mflux=msg%realdp_mflux
+#endif
+
+#ifdef MHD
+  grid%bold=msg%realdp_mhd
+#endif
+
+end subroutine unpack_fetch_upload
 !##########################################################################
 !##########################################################################
 !##########################################################################
@@ -251,6 +351,7 @@ subroutine init_flush_upload(grid,hash_key)
         grid%uold(ind,ivar)=0.0d0
      end do
   end do
+  grid%mflux=0.0d0
 #endif
 #ifdef MHD
   grid%bold=0.0d0
@@ -265,20 +366,28 @@ subroutine pack_flush_upload(grid,msg_size,msg_array)
   use amr_parameters, only: twotondim
   use hydro_parameters, only: nvar
   use amr_commons, only: oct
-  use cache_commons, only: msg_realdp
+  use cache_commons, only: msg_upload_hydro_mflux_mhd
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
 
   integer::ind,ivar
-  type(msg_realdp)::msg
+  type(msg_upload_hydro_mflux_mhd)::msg
+
+  do ind=1,twotondim
+     msg%int4(ind)=merge(1,0,grid%refined(ind))
+  end do
 
 #ifdef HYDRO
   do ivar=1,nvar
      do ind=1,twotondim
-        msg%realdp(ind,ivar)=grid%uold(ind,ivar)
+        msg%realdp_hydro(ind,ivar)=grid%uold(ind,ivar)
      end do
   end do
+#endif
+
+#ifdef HYDRO
+  msg%realdp_mflux=grid%mflux
 #endif
 
 #ifdef MHD
@@ -296,14 +405,14 @@ subroutine unpack_flush_upload(grid,msg_size,msg_array,hash_key)
   use amr_parameters, only: ndim,twotondim
   use hydro_parameters, only: nvar
   use amr_commons, only: oct
-  use cache_commons, only: msg_realdp
+  use cache_commons, only: msg_upload_hydro_mflux_mhd
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
   integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind,ivar
-  type(msg_realdp)::msg
+  type(msg_upload_hydro_mflux_mhd)::msg
 
   grid%lev=hash_key(0)
   grid%ckey(1:ndim)=hash_key(1:ndim)
@@ -313,9 +422,17 @@ subroutine unpack_flush_upload(grid,msg_size,msg_array,hash_key)
   do ivar=1,nvar
      do ind=1,twotondim
         if(grid%refined(ind))then
-           grid%uold(ind,ivar)=grid%uold(ind,ivar)+msg%realdp(ind,ivar)
+           grid%uold(ind,ivar)=grid%uold(ind,ivar)+msg%realdp_hydro(ind,ivar)
         endif
      end do
+  end do
+#endif
+
+#ifdef HYDRO
+  do ind=1,twotondim
+     if(grid%refined(ind))then
+        grid%mflux(ind,1:2*ndim+1)=grid%mflux(ind,1:2*ndim+1)+msg%realdp_mflux(ind,1:2*ndim+1)
+     endif
   end do
 #endif
 
