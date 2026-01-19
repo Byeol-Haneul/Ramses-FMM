@@ -1427,7 +1427,7 @@ subroutine cic_trace_gas_part_ito_mc(s,p,ilevel,action_part)
   real(kind=8),dimension(1:ndim,1:2)::w1d,dw1d
   type(oct),pointer::gridp
   integer :: ipart,ind,idim,icell,k
-  real(kind=8)::dx_loc,dt_level,rho,denom,fluxL,fluxR,jr,jl,noise_amp
+  real(kind=8)::dx_loc,dt_level,rho,denom,fluxL,fluxR,jr,jl,noise_amp,cfl_eff,one_minus_cfl
   type(msg_hydro_mflux)::dummy_nvar_realdp
   type(RngStream),external::RngStream_CreateStream
   real(kind=8),external::RngStream_RandUni
@@ -1492,7 +1492,9 @@ subroutine cic_trace_gas_part_ito_mc(s,p,ilevel,action_part)
               jr=max(fluxR,0.d0)
               jl=max(-fluxL,0.d0)
               u_cells(idim,ind)=(jr-jl)/denom
-              kappa_num_cells(idim,ind)=0.5d0*(jr+jl)/denom*dx_loc
+              cfl_eff=(jr+jl)/denom*dt_level/dx_loc
+              one_minus_cfl = max(0.d0,(1.d0-cfl_eff))
+              kappa_num_cells(idim,ind)=0.5d0*(jr+jl)/denom*dx_loc*one_minus_cfl
            end do
         end if
 #endif
@@ -1577,7 +1579,7 @@ subroutine tsc_trace_gas_part_ito_mc(s,p,ilevel,action_part)
   real(kind=8),dimension(1:ndim,1:3)::w1d,dw1d
   type(oct),pointer::gridp
   integer :: ipart,ind,idim,icell
-  real(kind=8)::dx_loc,dt_level,dx_over_dt,dt_over_dx,rho,denom,fluxL,fluxR,noise_amp
+  real(kind=8)::dx_loc,dt_level,dx_over_dt,dt_over_dx,rho,denom,fluxL,fluxR,noise_amp,cfl_eff,one_minus_cfl
   real(kind=8)::jr,jl
   type(msg_hydro_mflux)::dummy_nvar_realdp
   type(RngStream),external::RngStream_CreateStream
@@ -1644,7 +1646,9 @@ subroutine tsc_trace_gas_part_ito_mc(s,p,ilevel,action_part)
               jr=max(fluxR,0.d0)
               jl=max(-fluxL,0.d0)
               u_cells(idim,ind)=(jr-jl)/denom
-              kappa_num_cells(idim,ind)=0.5d0*(jr+jl)*dx_loc/denom
+              cfl_eff=(jr+jl)/denom*dt_level/dx_loc
+              one_minus_cfl = max(0.d0,(1.d0-cfl_eff))
+              kappa_num_cells(idim,ind)=0.5d0*(jr+jl)*dx_loc/denom*one_minus_cfl
            end do
         end if
 #endif
