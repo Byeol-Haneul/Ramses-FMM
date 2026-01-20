@@ -1486,15 +1486,21 @@ subroutine cic_trace_gas_part_ito_mc(s,p,ilevel,action_part)
            rho=gridp%mflux(icell,1)
            denom=max(rho,r%smallr)
            do idim=1,ndim
+              ! The trick might be to use a cell-centered average of the face-centered downwind fluxes.
+              ! So we use the density corresponding to the upwind density for a given face flux.
               ! mflux stores time-integrated flux ~ (dt/dx)*F/rho; recover physical flux F with factor rho*dx_loc/dt_level
               fluxL=gridp%mflux(icell,1+idim     )*dx_loc/dt_level
               fluxR=gridp%mflux(icell,1+idim+ndim)*dx_loc/dt_level
               jr=max(fluxR,0.d0)
               jl=max(-fluxL,0.d0)
               u_cells(idim,ind)=(jr-jl)/denom
+              !u_cells(idim,ind)=0.5d0*(fluxR+fluxL)/denom
               cfl_eff=(jr+jl)/denom*dt_level/dx_loc
+              !cfl_eff=0.5d0*(abs(fluxR)+abs(fluxL))/denom*dt_level/dx_loc
+              !cfl_eff=abs(u_cells(idim,ind))*dt_level/dx_loc
               one_minus_cfl = max(0.d0,(1.d0-cfl_eff))
               kappa_num_cells(idim,ind)=0.5d0*(jr+jl)/denom*dx_loc*one_minus_cfl
+              !kappa_num_cells(idim,ind)=0.25d0*(abs(fluxR)+abs(fluxL))/denom*dx_loc*one_minus_cfl
            end do
         end if
 #endif
