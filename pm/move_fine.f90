@@ -1463,16 +1463,16 @@ subroutine cic_trace_gas_part_ito_mc(s,p,ilevel,action_part)
   real(kind=8),dimension(1:twotondim)::vol,phi_slice
   integer,dimension(1:ndim,1:twotondim)::ckey
   integer(kind=8),dimension(0:ndim)::hash_nbor
-  real(kind=8),dimension(1:ndim,1:twotondim)::u_cells,kappa_num_cells,grad_phi_cells,skew_cells,kurt_cells
+  real(kind=8),dimension(1:ndim,1:twotondim)::u_cells,kappa_num_cells,grad_phi_cells,skew_cells!,kurt_cells
   real(kind=8),dimension(1:ndim,1:twotondim)::fluxL_cells,fluxR_cells
-  real(kind=8),dimension(1:ndim)::skewness_eff,kurtosis_eff
+  real(kind=8),dimension(1:ndim)::skewness_eff!,kurtosis_eff
   real(kind=8),dimension(1:ndim,1:2)::w1d,dw1d
   type(oct),pointer::gridp
   integer :: ipart,ind,idim,icell,k
   integer :: ii
   character(LEN=80)::filename,fileloc
   character(LEN=5)::nchar
-  real(kind=8)::dx_loc,dt_level,rho,denom,fluxL,fluxR,jr,jl,noise_amp,cfl_eff,one_minus_cfl,pr,pl
+  real(kind=8)::dx_loc,dt_level,rho,denom,fluxL,fluxR,jr,jl,noise_amp,cfl_plus,cfl_minus,pr,pl
   type(msg_hydro_mflux)::dummy_nvar_realdp
   type(RngStream),external::RngStream_CreateStream
   real(kind=8),external::RngStream_RandUni
@@ -1553,34 +1553,34 @@ subroutine cic_trace_gas_part_ito_mc(s,p,ilevel,action_part)
               !u_cells(idim,ind)=0.5d0*(fluxR+fluxL)/denom!(jr-jl)/denom
               !u_cells(idim,ind)=gridp%uold(icell,1+idim)/gridp%uold(icell,1)
               !cfl_eff=(jr+jl)/denom*dt_level/dx_loc
-              cfl_eff=(jr+jl)/denom*dt_level/dx_loc
-              one_minus_cfl = max(0.d0,(1.d0-cfl_eff))
+              cfl_plus=abs(jr+jl)/denom*dt_level/dx_loc ! abs is redundant here, but for clarity
+              cfl_minus=abs(jl-jr)/denom*dt_level/dx_loc
               !kappa_num_cells(idim,ind)=0.5d0*(jr+jl)/denom*dx_loc*one_minus_cfl 
-              kappa_num_cells(idim,ind)=0.5d0* cfl_eff * one_minus_cfl * dx_loc**2.d0 / dt_level
+              kappa_num_cells(idim,ind)=0.5d0* (cfl_plus - cfl_minus**2.d0) * dx_loc**2.d0 / dt_level
 
               ! Skewness of MC discrete kernel for two-piece uniform sampling
               pr=max(fluxR,0.d0)/denom
               pl=max(-fluxL,0.d0)/denom
               skew_cells(idim,ind)=mc_kernel_skewness(pr,pl)
-              kurt_cells(idim,ind)=mc_kernel_kurtosis(pr,pl)
+              !kurt_cells(idim,ind)=mc_kernel_kurtosis(pr,pl)
 
               ! Also require that this is not the first timestep.
-              if ((idim==3) .and. (g%t.ge.1.d0) .and. ind==1 .and. (mod(p%idp(ipart), 64**3) == 1)) then
-                 write(*,*) 'particle id', p%idp(ipart)
-                 write(*,*) 'u_cells(idim,ind)', u_cells(idim,ind)
-                 write(*,*) 'kappa_num_cells(idim,ind)', kappa_num_cells(idim,ind)
-                 write(*,*) 'rho', denom
-                 write(*,*) 'fluxR', fluxR
-                 write(*,*) 'fluxL', fluxL
-                 write(*,*) 'jr', jr
-                 write(*,*) 'jl', jl
-                 write(*,*) 'dt_level', dt_level
-                 write(*,*) 'dx_loc', dx_loc
-                 write(*,*) 'cfl_eff', cfl_eff
-                 write(*,*) 'one_minus_cfl', one_minus_cfl
-                 write(*,*) 'skew_cells', skew_cells(idim,ind)
-                 write(*,*) 'kurt_cells', kurt_cells(idim,ind)
-              endif
+            !   if ((idim==3) .and. (g%t.ge.1.d0) .and. ind==1 .and. (mod(p%idp(ipart), 64**3) == 1)) then
+            !      write(*,*) 'particle id', p%idp(ipart)
+            !      write(*,*) 'u_cells(idim,ind)', u_cells(idim,ind)
+            !      write(*,*) 'kappa_num_cells(idim,ind)', kappa_num_cells(idim,ind)
+            !      write(*,*) 'rho', denom
+            !      write(*,*) 'fluxR', fluxR
+            !      write(*,*) 'fluxL', fluxL
+            !      write(*,*) 'jr', jr
+            !      write(*,*) 'jl', jl
+            !      write(*,*) 'dt_level', dt_level
+            !      write(*,*) 'dx_loc', dx_loc
+            !      write(*,*) 'cfl_eff', cfl_eff
+            !      write(*,*) 'one_minus_cfl', one_minus_cfl
+            !      write(*,*) 'skew_cells', skew_cells(idim,ind)
+            !      write(*,*) 'kurt_cells', kurt_cells(idim,ind)
+            !   endif
               ! When we get back, we can examine how using cell-centered values (below)
               ! impacts the results. We can also examine the impact of including the gradient
               ! term. We should also crank up the particle count, and examine the impact of 
@@ -1605,13 +1605,13 @@ subroutine cic_trace_gas_part_ito_mc(s,p,ilevel,action_part)
      u_eff=0.d0
      kappa_num=0.d0
      skewness_eff=0.d0
-     kurtosis_eff=0.d0
+     !kurtosis_eff=0.d0
      do ind=1,twotondim
         do idim=1,ndim
            u_eff(idim)=u_eff(idim)+u_cells(idim,ind)*vol(ind)
            kappa_num(idim)=kappa_num(idim)+kappa_num_cells(idim,ind)*vol(ind)
            skewness_eff(idim)=skewness_eff(idim)+skew_cells(idim,ind)*vol(ind)
-           kurtosis_eff(idim)=kurtosis_eff(idim)+kurt_cells(idim,ind)*vol(ind)
+           !kurtosis_eff(idim)=kurtosis_eff(idim)+kurt_cells(idim,ind)*vol(ind)
         end do
      end do
 
@@ -1638,7 +1638,8 @@ subroutine cic_trace_gas_part_ito_mc(s,p,ilevel,action_part)
      p%vp(ipart,1:ndim)=u_eff(1:ndim)
      p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+disp(1:ndim)
 
-     p%vp(ipart,1)=kappa_num(3)
+     !p%vp(ipart,2)=skewness_eff(3)
+     !p%vp(ipart,1)=kappa_num(3)
 
      ! Trajectory output for selected particles
      if(s%r%ntrajectories>0)then
@@ -1699,11 +1700,12 @@ subroutine tsc_trace_gas_part_ito_mc(s,p,ilevel,action_part)
   real(kind=8),dimension(1:threetondim)::vol
   integer,dimension(1:ndim,1:threetondim)::ckey
   integer(kind=8),dimension(0:ndim)::hash_nbor
-  real(kind=8),dimension(1:ndim,1:threetondim)::u_cells,kappa_num_cells
+  real(kind=8),dimension(1:ndim,1:threetondim)::u_cells,kappa_num_cells,skew_cells
   real(kind=8),dimension(1:ndim,1:3)::w1d,dw1d
+  real(kind=8),dimension(1:ndim)::skewness_eff
   type(oct),pointer::gridp
   integer :: ipart,ind,idim,icell
-  real(kind=8)::dx_loc,dt_level,dx_over_dt,dt_over_dx,rho,denom,fluxL,fluxR,noise_amp,cfl_eff,one_minus_cfl
+  real(kind=8)::dx_loc,dt_level,dx_over_dt,dt_over_dx,rho,denom,fluxL,fluxR,noise_amp,cfl_plus,cfl_minus,pr,pl
   real(kind=8)::jr,jl
   type(msg_hydro_mflux)::dummy_nvar_realdp
   type(RngStream),external::RngStream_CreateStream
@@ -1716,6 +1718,14 @@ subroutine tsc_trace_gas_part_ito_mc(s,p,ilevel,action_part)
   if (p%type/=TRAC_TYPE) return
 
   dx_loc=r%boxlen/2**ilevel
+
+  if(action_part==action_kick_only)then
+     do ipart=p%headp(ilevel),p%tailp(ilevel)
+        p%levelp(ipart)=ilevel
+     end do
+     return
+  endif
+
   dt_level=g%dtnew(ilevel)
   dx_over_dt=dx_loc/dt_level
   dt_over_dx=dt_level/dx_loc
@@ -1756,6 +1766,7 @@ subroutine tsc_trace_gas_part_ito_mc(s,p,ilevel,action_part)
      ! Single merged loop over 27 neighbors
      u_cells=0.d0
      kappa_num_cells=0.d0
+     skew_cells=0.d0
      hash_nbor(0)=ilevel+1
      do ind=1,threetondim
         hash_nbor(1:ndim)=ckey(1:ndim,ind)
@@ -1770,9 +1781,12 @@ subroutine tsc_trace_gas_part_ito_mc(s,p,ilevel,action_part)
               jr=max(fluxR,0.d0)
               jl=max(-fluxL,0.d0)
               u_cells(idim,ind)=(jr-jl)/denom
-              cfl_eff=(jr+jl)/denom*dt_level/dx_loc
-              one_minus_cfl = max(0.d0,(1.d0-cfl_eff))
-              kappa_num_cells(idim,ind)=0.5d0*(jr+jl)*dx_loc/denom*one_minus_cfl
+              cfl_plus=abs(jr+jl)/denom*dt_level/dx_loc
+              cfl_minus=abs(jl-jr)/denom*dt_level/dx_loc
+              kappa_num_cells(idim,ind)=0.5d0*(cfl_plus - cfl_minus**2.d0)*dx_loc**2.d0/dt_level
+              pr=max(gridp%mflux(icell,1+idim+ndim),0.d0)/denom
+              pl=max(-gridp%mflux(icell,1+idim),0.d0)/denom
+              skew_cells(idim,ind)=mc_kernel_skewness(pr,pl)
            end do
         end if
 #endif
@@ -1780,10 +1794,12 @@ subroutine tsc_trace_gas_part_ito_mc(s,p,ilevel,action_part)
 
      u_eff=0.d0
      kappa_num=0.d0
+     skewness_eff=0.d0
      do ind=1,threetondim
         do idim=1,ndim
            u_eff(idim)=u_eff(idim)+u_cells(idim,ind)*vol(ind)
            kappa_num(idim)=kappa_num(idim)+kappa_num_cells(idim,ind)*vol(ind)
+           skewness_eff(idim)=skewness_eff(idim)+skew_cells(idim,ind)*vol(ind)
         end do
      end do
 
@@ -1797,7 +1813,7 @@ subroutine tsc_trace_gas_part_ito_mc(s,p,ilevel,action_part)
         cycle
      endif
 
-     call sample_tracer_uniform(xi)
+     call sample_tracer_two_piece_uniform(xi,skewness_eff)
      do idim=1,ndim
         disp(idim)=u_eff(idim)*dt_level
         noise_amp = sqrt(max(0.d0,2.d0*kappa_num(idim)*dt_level))
