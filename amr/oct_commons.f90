@@ -11,6 +11,7 @@ module oct_commons
 #endif
 #ifdef HYDRO
      real(dp),dimension(1:twotondim,1:2*ndim+1)::mflux
+     real(dp),dimension(1:twotondim,1:2*ndim)::upwind_rho
 #endif
 #ifdef MHD
      real(dp),dimension(1:twotondim,1:6)::bold

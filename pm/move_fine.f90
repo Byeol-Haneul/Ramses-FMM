@@ -111,6 +111,8 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
            call cic_trace_gas_part_sgs_turb(pst%s,pst%s%trac,ilevel,action_part) ! SGS turbulent diffusion tracer with CIC
         elseif(pst%s%r%trac_interpolation_scheme==7)then
            call tsc_trace_gas_part_sgs_turb(pst%s,pst%s%trac,ilevel,action_part) ! SGS turbulent diffusion tracer with TSC
+        elseif(pst%s%r%trac_interpolation_scheme==8)then
+           call trace_gas_part_trivial(pst%s,pst%s%trac,ilevel,action_part) ! Trivial tracer: no interpolation, fixed velocity, random diffusion
         endif
      endif
      if(pst%s%r%dust)then
@@ -863,6 +865,7 @@ subroutine pack_fetch_kick_trac(grid,msg_size,msg_array)
   end do
   do ind=1,twotondim
      msg%realdp_mflux(ind,1:2*ndim+1)=grid%mflux(ind,1:2*ndim+1)
+     msg%realdp_upwind_rho(ind,1:2*ndim)=grid%upwind_rho(ind,1:2*ndim)
   end do
 #endif
 
@@ -895,6 +898,7 @@ subroutine unpack_fetch_kick_trac(grid,msg_size,msg_array,hash_key)
   end do
   do ind=1,twotondim
      grid%mflux(ind,1:2*ndim+1)=msg%realdp_mflux(ind,1:2*ndim+1)
+     grid%upwind_rho(ind,1:2*ndim)=msg%realdp_upwind_rho(ind,1:2*ndim)
   end do
 #endif
 
@@ -919,6 +923,7 @@ subroutine pack_fetch_kick_dust(grid,msg_size,msg_array)
         msg%realdp_hydro(ind,ivar)=grid%uold(ind,ivar)
      end do
      msg%realdp_mflux(ind,1:2*ndim+1)=grid%mflux(ind,1:2*ndim+1)
+     msg%realdp_upwind_rho(ind,1:2*ndim)=grid%upwind_rho(ind,1:2*ndim)
   end do
 #endif
 #ifdef GRAV
@@ -970,6 +975,7 @@ subroutine unpack_fetch_kick_dust(grid,msg_size,msg_array,hash_key)
         grid%uold(ind,ivar)=msg%realdp_hydro(ind,ivar)
      end do
      grid%mflux(ind,1:2*ndim+1)=msg%realdp_mflux(ind,1:2*ndim+1)
+     grid%upwind_rho(ind,1:2*ndim)=msg%realdp_upwind_rho(ind,1:2*ndim)
   end do
 #endif
 #ifdef GRAV
@@ -1023,6 +1029,9 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
   integer(kind=8)::stream_skip
   external :: RngStream_SetPackageSeed, RngStream_AdvanceState, gaussdev
   integer :: ipart,idim
+  integer :: ii
+  character(LEN=80)::filename,fileloc
+  character(LEN=5)::nchar
 
   associate(r=>s%r,g=>s%g,m=>s%m)
   if(p%static)return
@@ -1030,14 +1039,7 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
 
   dx_loc=r%boxlen/2**ilevel
   dt_level=g%dtnew(ilevel)
-  use_sgs = r%sgs_turb .and. (r%iturb>0)
-  if(use_sgs .and. .not. tracer_rng_ready)then
-     call RngStream_SetPackageSeed(r%seed)
-     tracer_rng = RngStream_CreateStream('tracer_sgs')
-     stream_skip = int(2*g%myid,kind=8)
-     call RngStream_AdvanceState(tracer_rng,0_8,stream_skip)
-     tracer_rng_ready = .true.
-  end if
+  use_sgs = .false.
 
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
                      hilbert=m%domain, pack_size=storage_size(dummy_nvar_realdp)/32,&
@@ -1079,6 +1081,24 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
         disp(1:ndim)=disp(1:ndim)+noise_amp*xi(1:ndim)
      end if
      p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+disp(1:ndim)
+
+     ! Trajectory output for selected particles
+     if(s%r%ntrajectories>0)then
+        do ii=1,s%r%ntrajectories
+           if(s%r%trajectories(ii)==p%idp(ipart))then
+              call title(g%myid,nchar)
+              filename='trajectory.dat'
+              fileloc=TRIM(filename)//TRIM(nchar)
+              open(25+g%myid,file=fileloc,status='unknown',access='append')
+              write(25+g%myid,*) g%t, p%idp(ipart), &
+                   (p%xp(ipart,idim), idim=1,ndim), &
+                   (p%vp(ipart,idim), idim=1,ndim)
+              close(25+g%myid)
+              exit
+           endif
+        end do
+     endif
+
   end do
 
   call close_cache(s,m%grid_dict)
@@ -1129,6 +1149,9 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
   integer(kind=8)::stream_skip
   external :: RngStream_SetPackageSeed, RngStream_AdvanceState, gaussdev
   integer :: ipart,idim,ind,icell
+  integer :: ii
+  character(LEN=80)::filename,fileloc
+  character(LEN=5)::nchar
 
   associate(r=>s%r,g=>s%g,m=>s%m)
   if(p%static)return
@@ -1231,6 +1254,24 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
 
      p%vp(ipart,1:ndim)=u_mid(1:ndim)
      p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+disp(1:ndim)
+
+     ! Trajectory output for selected particles
+     if(s%r%ntrajectories>0)then
+        do ii=1,s%r%ntrajectories
+           if(s%r%trajectories(ii)==p%idp(ipart))then
+              call title(g%myid,nchar)
+              filename='trajectory.dat'
+              fileloc=TRIM(filename)//TRIM(nchar)
+              open(25+g%myid,file=fileloc,status='unknown',access='append')
+              write(25+g%myid,*) g%t, p%idp(ipart), &
+                   (p%xp(ipart,idim), idim=1,ndim), &
+                   (p%vp(ipart,idim), idim=1,ndim)
+              close(25+g%myid)
+              exit
+           endif
+        end do
+     endif
+
   end do
 
   call close_cache(s,m%grid_dict)
@@ -1422,12 +1463,16 @@ subroutine cic_trace_gas_part_ito_mc(s,p,ilevel,action_part)
   real(kind=8),dimension(1:twotondim)::vol,phi_slice
   integer,dimension(1:ndim,1:twotondim)::ckey
   integer(kind=8),dimension(0:ndim)::hash_nbor
-  real(kind=8),dimension(1:ndim,1:twotondim)::u_cells,kappa_num_cells,grad_phi_cells
+  real(kind=8),dimension(1:ndim,1:twotondim)::u_cells,kappa_num_cells,grad_phi_cells,skew_cells,kurt_cells
   real(kind=8),dimension(1:ndim,1:twotondim)::fluxL_cells,fluxR_cells
+  real(kind=8),dimension(1:ndim)::skewness_eff,kurtosis_eff
   real(kind=8),dimension(1:ndim,1:2)::w1d,dw1d
   type(oct),pointer::gridp
   integer :: ipart,ind,idim,icell,k
-  real(kind=8)::dx_loc,dt_level,rho,denom,fluxL,fluxR,jr,jl,noise_amp,cfl_eff,one_minus_cfl
+  integer :: ii
+  character(LEN=80)::filename,fileloc
+  character(LEN=5)::nchar
+  real(kind=8)::dx_loc,dt_level,rho,denom,fluxL,fluxR,jr,jl,noise_amp,cfl_eff,one_minus_cfl,pr,pl
   type(msg_hydro_mflux)::dummy_nvar_realdp
   type(RngStream),external::RngStream_CreateStream
   real(kind=8),external::RngStream_RandUni
@@ -1439,6 +1484,15 @@ subroutine cic_trace_gas_part_ito_mc(s,p,ilevel,action_part)
   if (p%type/=TRAC_TYPE) return
 
   dx_loc=r%boxlen/2**ilevel
+
+  ! OPTIMIZATION: Handle kick-only pass immediately without cache operations or dt_level
+  if(action_part==action_kick_only)then
+     do ipart=p%headp(ilevel),p%tailp(ilevel)
+        p%levelp(ipart)=ilevel
+     end do
+     return
+  endif
+
   dt_level=g%dtnew(ilevel)
 
   if(.not.tracer_rng_ready)then
@@ -1476,6 +1530,7 @@ subroutine cic_trace_gas_part_ito_mc(s,p,ilevel,action_part)
 
      u_cells=0.d0
      kappa_num_cells=0.d0
+     skew_cells=0.d0
 
      hash_nbor(0)=ilevel+1
      do ind=1,twotondim
@@ -1489,18 +1544,59 @@ subroutine cic_trace_gas_part_ito_mc(s,p,ilevel,action_part)
               ! The trick might be to use a cell-centered average of the face-centered downwind fluxes.
               ! So we use the density corresponding to the upwind density for a given face flux.
               ! mflux stores time-integrated flux ~ (dt/dx)*F/rho; recover physical flux F with factor rho*dx_loc/dt_level
-              fluxL=gridp%mflux(icell,1+idim     )*dx_loc/dt_level
-              fluxR=gridp%mflux(icell,1+idim+ndim)*dx_loc/dt_level
-              jr=max(fluxR,0.d0)
-              jl=max(-fluxL,0.d0)
+              fluxL=gridp%mflux(icell,1+idim     )
+              fluxR=gridp%mflux(icell,1+idim+ndim)
+              jr=max(fluxR,0.d0)*dx_loc/dt_level
+              jl=max(-fluxL,0.d0)*dx_loc/dt_level
               u_cells(idim,ind)=(jr-jl)/denom
-              !u_cells(idim,ind)=0.5d0*(fluxR+fluxL)/denom
+              !u_cells(idim,ind)=u_cells(idim,ind) !Amplify the difference.
+              !u_cells(idim,ind)=0.5d0*(fluxR+fluxL)/denom!(jr-jl)/denom
+              !u_cells(idim,ind)=gridp%uold(icell,1+idim)/gridp%uold(icell,1)
+              !cfl_eff=(jr+jl)/denom*dt_level/dx_loc
               cfl_eff=(jr+jl)/denom*dt_level/dx_loc
-              !cfl_eff=0.5d0*(abs(fluxR)+abs(fluxL))/denom*dt_level/dx_loc
-              !cfl_eff=abs(u_cells(idim,ind))*dt_level/dx_loc
               one_minus_cfl = max(0.d0,(1.d0-cfl_eff))
-              kappa_num_cells(idim,ind)=0.5d0*(jr+jl)/denom*dx_loc*one_minus_cfl
-              !kappa_num_cells(idim,ind)=0.25d0*(abs(fluxR)+abs(fluxL))/denom*dx_loc*one_minus_cfl
+              !kappa_num_cells(idim,ind)=0.5d0*(jr+jl)/denom*dx_loc*one_minus_cfl 
+              kappa_num_cells(idim,ind)=0.5d0* cfl_eff * one_minus_cfl * dx_loc**2.d0 / dt_level
+
+              ! Skewness of MC discrete kernel for two-piece uniform sampling
+              pr=max(fluxR,0.d0)/denom
+              pl=max(-fluxL,0.d0)/denom
+              skew_cells(idim,ind)=mc_kernel_skewness(pr,pl)
+              kurt_cells(idim,ind)=mc_kernel_kurtosis(pr,pl)
+
+              ! Also require that this is not the first timestep.
+              if ((idim==3) .and. (g%t.ge.1.d0) .and. ind==1 .and. (mod(p%idp(ipart), 64**3) == 1)) then
+                 write(*,*) 'particle id', p%idp(ipart)
+                 write(*,*) 'u_cells(idim,ind)', u_cells(idim,ind)
+                 write(*,*) 'kappa_num_cells(idim,ind)', kappa_num_cells(idim,ind)
+                 write(*,*) 'rho', denom
+                 write(*,*) 'fluxR', fluxR
+                 write(*,*) 'fluxL', fluxL
+                 write(*,*) 'jr', jr
+                 write(*,*) 'jl', jl
+                 write(*,*) 'dt_level', dt_level
+                 write(*,*) 'dx_loc', dx_loc
+                 write(*,*) 'cfl_eff', cfl_eff
+                 write(*,*) 'one_minus_cfl', one_minus_cfl
+                 write(*,*) 'skew_cells', skew_cells(idim,ind)
+                 write(*,*) 'kurt_cells', kurt_cells(idim,ind)
+              endif
+              ! When we get back, we can examine how using cell-centered values (below)
+              ! impacts the results. We can also examine the impact of including the gradient
+              ! term. We should also crank up the particle count, and examine the impact of 
+              ! changing how we define one_minus_cfl.
+              ! Average upwind values algorithm.
+            !   jr = fluxR/gridp%upwind_rho(icell,1+idim+ndim)
+            !   jl = fluxL/gridp%upwind_rho(icell,1+idim)
+            !   u_cells(idim,ind)=0.5d0*(jr+jl)
+            !   cfl_eff=(jr+jl)/denom*dt_level/dx_loc
+            !   one_minus_cfl = max(0.d0,(1.d0-cfl_eff))
+            !   cfl_eff=abs(jr)*dt_level/dx_loc
+            !   one_minus_cfl = max(0.d0,(1.d0-cfl_eff))
+            !   kappa_num_cells(idim,ind)=0.25d0*jr*dx_loc*one_minus_cfl
+            !   cfl_eff=abs(jl)*dt_level/dx_loc
+            !   one_minus_cfl = max(0.d0,(1.d0-cfl_eff))
+            !   kappa_num_cells(idim,ind)=kappa_num_cells(idim,ind)+0.25d0*jl*dx_loc*one_minus_cfl
            end do
         end if
 #endif
@@ -1508,29 +1604,31 @@ subroutine cic_trace_gas_part_ito_mc(s,p,ilevel,action_part)
 
      u_eff=0.d0
      kappa_num=0.d0
+     skewness_eff=0.d0
+     kurtosis_eff=0.d0
      do ind=1,twotondim
         do idim=1,ndim
            u_eff(idim)=u_eff(idim)+u_cells(idim,ind)*vol(ind)
            kappa_num(idim)=kappa_num(idim)+kappa_num_cells(idim,ind)*vol(ind)
+           skewness_eff(idim)=skewness_eff(idim)+skew_cells(idim,ind)*vol(ind)
+           kurtosis_eff(idim)=kurtosis_eff(idim)+kurt_cells(idim,ind)*vol(ind)
         end do
      end do
 
-     do k=1,ndim
-        do ind=1,twotondim
-           phi_slice(ind)=kappa_num_cells(k,ind)
-        end do
-        u_eff(k) = u_eff(k) 
-        kappa_num(k) = kappa_num(k) 
-     end do
-
-     if(action_part==action_kick_only)then
-        p%vp(ipart,1:ndim)=u_eff(1:ndim)
-        p%levelp(ipart)=ilevel
-        cycle
-     endif
+     ! Reintroduce Ito drift: add grad(kappa_k) along each axis
+     ! (i.e., d(kappa_x)/dx, d(kappa_y)/dy, d(kappa_z)/dz)
+     ! We need even higher particles per cell. It is unclear to me which is correct.
+     ! It might somehow need (1/2)*grad(kappa) to be present. 
+     ! This depends on what sort of algorithm we are using (Stratonovich vs Ito).
+   !   grad_at_part(1:ndim)=0.d0
+   !   !call compute_gradient_cic(w1d, dw1d, kappa_num_cells, grad_at_part)
+   !   do k=1,ndim
+   !      u_eff(k) = u_eff(k) !+ grad_at_part(k)/dx_loc
+   !   end do
 
      !call sample_tracer_gaussian(xi)
      call sample_tracer_uniform(xi)
+     !call sample_tracer_two_piece_uniform(xi,skewness_eff)
      do idim=1,ndim
         disp(idim)=u_eff(idim)*dt_level
         noise_amp = sqrt(max(0.d0,2.d0*kappa_num(idim)*dt_level))
@@ -1539,6 +1637,26 @@ subroutine cic_trace_gas_part_ito_mc(s,p,ilevel,action_part)
 
      p%vp(ipart,1:ndim)=u_eff(1:ndim)
      p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+disp(1:ndim)
+
+     p%vp(ipart,1)=kappa_num(3)
+
+     ! Trajectory output for selected particles
+     if(s%r%ntrajectories>0)then
+        do ii=1,s%r%ntrajectories
+           if(s%r%trajectories(ii)==p%idp(ipart))then
+              call title(g%myid,nchar)
+              filename='trajectory.dat'
+              fileloc=TRIM(filename)//TRIM(nchar)
+              open(25+g%myid,file=fileloc,status='unknown',access='append')
+              write(25+g%myid,*) g%t, p%idp(ipart), &
+                   (p%xp(ipart,idim), idim=1,ndim), &
+                   (p%vp(ipart,idim), idim=1,ndim)
+              close(25+g%myid)
+              exit
+           endif
+        end do
+     endif
+
   end do
 
   call close_cache(s,m%grid_dict)
@@ -1724,7 +1842,7 @@ subroutine mc_trace_gas_part(s,p,ilevel,action_part)
   real(kind=8),dimension(1:ndim)::x,vel
   integer,dimension(1:ndim)::icell_idx
   integer(kind=8),dimension(0:ndim)::hash_nbor
-  real(kind=8),dimension(1:6)::prob_face
+  real(kind=8),dimension(1:2*ndim)::prob_face
   real(kind=8)::out_sum,scale,stay_prob,u,cum
   integer::ipart,idim,iface,selected,icell
   real(kind=8)::rho_cell,denom,dx_loc,dist_to_face
@@ -1735,6 +1853,9 @@ subroutine mc_trace_gas_part(s,p,ilevel,action_part)
   real(kind=8),dimension(1:twotondim)::corner_weight
   real(kind=8)::weight_sum
   integer :: ind,bit,selected_corner,corner_associated
+  integer :: ii
+  character(LEN=80)::filename,fileloc
+  character(LEN=5)::nchar
   type(oct),pointer::gridp
   type(msg_hydro_mflux)::dummy_nvar_realdp
   type(RngStream),external::RngStream_CreateStream
@@ -1881,19 +2002,11 @@ subroutine mc_trace_gas_part(s,p,ilevel,action_part)
      vel=0.d0
      vel(1:ndim)=gridp%uold(icell,2:ndim+1)/max(gridp%uold(icell,1),r%smallr)
 
-     prob_face=0.d0
-     if(ndim>=1)then
-        prob_face(1)=max(-gridp%mflux(icell,2),0.d0)/denom
-        prob_face(2)=max( gridp%mflux(icell,2+ndim),0.d0)/denom
-     endif
-     if(ndim>=2)then
-        prob_face(3)=max(-gridp%mflux(icell,3),0.d0)/denom
-        prob_face(4)=max( gridp%mflux(icell,3+ndim),0.d0)/denom
-     endif
-     if(ndim==3)then
-        prob_face(5)=max(-gridp%mflux(icell,4),0.d0)/denom
-        prob_face(6)=max( gridp%mflux(icell,4+ndim),0.d0)/denom
-     endif
+    prob_face=0.d0
+    do idim=1,ndim
+       prob_face(2*idim-1)=max(-gridp%mflux(icell,1+idim),0.d0)/denom
+       prob_face(2*idim  )=max( gridp%mflux(icell,1+idim+ndim),0.d0)/denom
+    end do
 #else
      if(.not.associated(gridp))cycle
      prob_face=0.d0
@@ -1933,6 +2046,23 @@ subroutine mc_trace_gas_part(s,p,ilevel,action_part)
      if(selected>0)then
         idim = (selected + 1) / 2 ! integer division.
         p%xp(ipart,idim)=p%xp(ipart,idim)+ (-1)**selected * dx_loc
+     endif
+
+     ! Trajectory output for selected particles
+     if(s%r%ntrajectories>0)then
+        do ii=1,s%r%ntrajectories
+           if(s%r%trajectories(ii)==p%idp(ipart))then
+              call title(g%myid,nchar)
+              filename='trajectory.dat'
+              fileloc=TRIM(filename)//TRIM(nchar)
+              open(25+g%myid,file=fileloc,status='unknown',access='append')
+              write(25+g%myid,*) g%t, p%idp(ipart), &
+                   (p%xp(ipart,idim), idim=1,ndim), &
+                   (p%vp(ipart,idim), idim=1,ndim)
+              close(25+g%myid)
+              exit
+           endif
+        end do
      endif
 
   end do
@@ -2202,6 +2332,102 @@ subroutine sample_tracer_uniform(vec)
   end do
 end subroutine sample_tracer_uniform
 
+subroutine sample_tracer_two_piece_uniform(vec, gamma1_vec)
+  !------------------------------------------------------------------------
+  ! Sample from a two-piece uniform distribution with mean 0, variance 1,
+  ! and skewness gamma1 (one value per dimension).
+  !
+  ! The PDF is piecewise constant on [-a, 0] and [0, b], with heights chosen
+  ! so that mean=0, variance=1, and third central moment = gamma1.
+  !
+  ! Given pr = max(mflux(1+idim+ndim), 0) / mflux(1)  (right exit prob),
+  !       pl = max(-mflux(1+idim), 0) / mflux(1)      (left exit prob),
+  ! the skewness of the MC discrete kernel is:
+  !   gamma1 = (pr - pl)*(1 - 3*pr + 4*pr**2 - 2*pr**3 - 3*pl - 8*pr*pl
+  !            + 2*pr**2*pl + 4*pl**2 + 2*pr*pl**2 - 2*pl**3)
+  !------------------------------------------------------------------------
+  use amr_parameters, only: ndim
+  implicit none
+  real(kind=8),intent(out)::vec(1:ndim)
+  real(kind=8),intent(in)::gamma1_vec(1:ndim)
+  integer :: jd
+  real(kind=8)::u_rand,gamma1,k,a,b,p_left,apb
+  real(kind=8), external :: RngStream_RandUni
+
+  vec=0.0d0
+  do jd=1,ndim
+     gamma1 = gamma1_vec(jd)
+
+     ! Compute two-piece uniform parameters from skewness
+     ! Constraints: ab = 3, b - a = 4*gamma1/3
+     k = 4.0d0 * gamma1 / 3.0d0
+     a = 0.5d0 * (-k + sqrt(k*k + 12.0d0))
+     b = a + k
+     apb = a + b
+     p_left = b / apb   ! probability mass on the left piece [-a, 0]
+
+     ! Sample using inverse CDF
+     u_rand = RngStream_RandUni(tracer_rng)
+     if (u_rand < p_left) then
+        ! Left piece: uniform on [-a, 0]
+        vec(jd) = -a + a * u_rand * apb / b
+     else
+        ! Right piece: uniform on [0, b]
+        vec(jd) = b * (u_rand * apb - b) / a
+     endif
+  end do
+end subroutine sample_tracer_two_piece_uniform
+
+real(kind=8) function mc_kernel_skewness(pr, pl) result(gamma1)
+  !------------------------------------------------------------------------
+  ! Compute the standardized skewness of the MC discrete kernel for one
+  ! dimension: gamma1 = mu3 / variance^(3/2).
+  !
+  ! The MC kernel has X in {-dx, 0, +dx} with probabilities (pl, 1-pl-pr, pr).
+  ! Third central moment (mu3) and variance have closed forms in (pl, pr);
+  ! standardized skewness = mu3 / variance^1.5.
+  !
+  ! Input: pr = max(mflux(1+idim+ndim), 0) / mflux(1)  (right exit prob)
+  !        pl = max(-mflux(1+idim), 0) / mflux(1)      (left exit prob)
+  !------------------------------------------------------------------------
+  implicit none
+  real(kind=8),intent(in)::pr, pl
+  real(kind=8)::mu3, variance
+
+  mu3 = (pr - pl) * (1.0d0 - 3.0d0*pl + 4.0d0*pl**2 - 2.0d0*pl**3 &
+       & - 3.0d0*pr - 8.0d0*pl*pr + 2.0d0*pl**2*pr &
+       & + 4.0d0*pr**2 + 2.0d0*pl*pr**2 - 2.0d0*pr**3)
+  variance = pl - pl**2 + pr + 2.0d0*pl*pr - pr**2
+  if (variance > 0.0d0) then
+     gamma1 = mu3 / (variance**1.5d0)
+  else
+     gamma1 = 0.0d0
+  endif
+end function mc_kernel_skewness
+
+real(kind=8) function mc_kernel_kurtosis(pr, pl) result(gamma2)
+  !------------------------------------------------------------------------
+  ! Compute the excess kurtosis of the MC discrete kernel for one dimension.
+  ! Excess kurtosis = kurtosis - 3 (zero for Gaussian).
+  !
+  ! The MC kernel has X in {-dx, 0, +dx} with probabilities (pl, 1-pl-pr, pr).
+  ! Closed form: gamma2 = -6 + (pl - pl^2 + pr + 14*pl*pr - pr^2) / variance^2.
+  !
+  ! Input: pr = max(mflux(1+idim+ndim), 0) / mflux(1)  (right exit prob)
+  !        pl = max(-mflux(1+idim), 0) / mflux(1)      (left exit prob)
+  !------------------------------------------------------------------------
+  implicit none
+  real(kind=8),intent(in)::pr, pl
+  real(kind=8)::variance
+
+  variance = pl - pl**2 + pr + 2.0d0*pl*pr - pr**2
+  if (variance > 0.0d0) then
+     gamma2 = -6.0d0 + (pl - pl**2 + pr + 14.0d0*pl*pr - pr**2) / (variance**2)
+  else
+     gamma2 = 0.0d0
+  endif
+end function mc_kernel_kurtosis
+
 subroutine tsc_trace_gas_part(s,p,ilevel,action_part)
   use amr_parameters, only: ndim, threetondim
   use pm_parameters
@@ -2451,6 +2677,116 @@ subroutine pcs_trace_gas_part(s,p,ilevel,action_part)
   end if
   end associate
 end subroutine pcs_trace_gas_part
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+subroutine trace_gas_part_trivial(s,p,ilevel,action_part)
+  use amr_parameters, only: ndim
+  use pm_parameters
+  use pm_commons, only: part_t
+  use ramses_commons, only: ramses_t
+  use rng
+  implicit none
+  type(ramses_t)::s
+  type(part_t)::p
+  integer::ilevel
+  integer::action_part
+  real(kind=8),dimension(1:ndim)::disp,xi
+  real(kind=8)::dx_loc,dt_level,D_diff,noise_amp
+  integer :: ipart,idim
+  integer :: ii
+  integer :: z_dim
+  character(LEN=80)::filename,fileloc
+  character(LEN=5)::nchar
+  type(RngStream),external::RngStream_CreateStream
+  real(kind=8),external::RngStream_RandUni
+  integer(kind=8)::stream_skip
+  external :: RngStream_SetPackageSeed, RngStream_AdvanceState
+
+  associate(r=>s%r,g=>s%g,m=>s%m)
+  if(p%static)return
+  if (p%type/=TRAC_TYPE) return
+
+  dx_loc=r%boxlen/2**ilevel
+  dt_level=g%dtnew(ilevel)
+  
+  ! Determine z-direction (last dimension)
+  z_dim = ndim
+
+  ! Initialize RNG if needed
+  if(.not.tracer_rng_ready)then
+     call RngStream_SetPackageSeed(r%seed)
+     tracer_rng = RngStream_CreateStream('tracer_trivial')
+     stream_skip = int(2*g%myid,kind=8)
+     call RngStream_AdvanceState(tracer_rng,0_8,stream_skip)
+     tracer_rng_ready = .true.
+  end if
+
+  do ipart=p%headp(ilevel),p%tailp(ilevel)
+
+     ! Set velocity: 1.0 in z-direction only, 0.0 in others
+     do idim=1,ndim
+        if(idim==z_dim)then
+           p%vp(ipart,idim)=1.0d0
+        else
+           p%vp(ipart,idim)=0.0d0
+        endif
+     end do
+     p%levelp(ipart)=ilevel
+
+     if(action_part==action_kick_only)then
+        cycle
+     endif
+
+     ! Compute displacement from advection
+     disp(1:ndim)=p%vp(ipart,1:ndim)*dt_level
+
+     ! Add random diffusion kick in z-direction only
+     ! Diffusion coefficient: D = dx_loc*(1.d0-dt_level/dx_loc)/2.d0
+     D_diff = 0.00653!dx_loc*(1.d0-dt_level/dx_loc)/2.d0
+     if(D_diff > 0.0d0)then
+        call sample_tracer_uniform(xi)
+        noise_amp = sqrt(2.0d0*D_diff*dt_level)
+        disp(z_dim)=disp(z_dim)+noise_amp*xi(z_dim)
+     end if
+
+     ! Update position
+     p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+disp(1:ndim)
+
+     ! Trajectory output for selected particles
+     if(s%r%ntrajectories>0)then
+        do ii=1,s%r%ntrajectories
+           if(s%r%trajectories(ii)==p%idp(ipart))then
+              call title(g%myid,nchar)
+              filename='trajectory.dat'
+              fileloc=TRIM(filename)//TRIM(nchar)
+              open(25+g%myid,file=fileloc,status='unknown',access='append')
+              write(25+g%myid,*) g%t, p%idp(ipart), &
+                   (p%xp(ipart,idim), idim=1,ndim), &
+                   (p%vp(ipart,idim), idim=1,ndim)
+              close(25+g%myid)
+              exit
+           endif
+        end do
+     endif
+
+  end do
+
+  if(action_part==action_kick_drift)then
+     do ipart=p%headp(ilevel),p%tailp(ilevel)
+        do idim=1,ndim
+           if(r%periodic(idim))then
+              if(p%xp(ipart,idim)< 0.0d0)p%xp(ipart,idim)=p%xp(ipart,idim)+r%box_size(idim)
+              if(p%xp(ipart,idim)>=r%box_size(idim))p%xp(ipart,idim)=p%xp(ipart,idim)-r%box_size(idim)
+           endif
+        end do
+     end do
+  end if
+
+  end associate
+
+end subroutine trace_gas_part_trivial
 !#########################################################################
 !#########################################################################
 !#########################################################################

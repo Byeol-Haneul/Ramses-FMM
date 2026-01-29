@@ -102,6 +102,7 @@ subroutine upload_fine(s,ilevel)
      do ind=1,twotondim
         if(m%grid(ioct)%refined(ind))then
            m%grid(ioct)%mflux(ind,1:2*ndim+1)=0.0d0
+          m%grid(ioct)%upwind_rho(ind,1:2*ndim)=0.0d0
         endif
      end do
 #endif
@@ -287,6 +288,7 @@ subroutine pack_fetch_upload(grid,msg_size,msg_array)
      end do
   end do
   msg%realdp_mflux=grid%mflux
+  msg%realdp_upwind_rho=grid%upwind_rho
 #endif
 
 #ifdef MHD
@@ -323,6 +325,7 @@ subroutine unpack_fetch_upload(grid,msg_size,msg_array,hash_key)
      end do
   end do
   grid%mflux=msg%realdp_mflux
+  grid%upwind_rho=msg%realdp_upwind_rho
 #endif
 
 #ifdef MHD
