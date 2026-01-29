@@ -1627,8 +1627,8 @@ subroutine cic_trace_gas_part_ito_mc(s,p,ilevel,action_part)
    !   end do
 
      !call sample_tracer_gaussian(xi)
-     call sample_tracer_uniform(xi)
-     !call sample_tracer_two_piece_uniform(xi,skewness_eff)
+     !call sample_tracer_uniform(xi)
+     call sample_tracer_two_piece_uniform(xi,skewness_eff)
      do idim=1,ndim
         disp(idim)=u_eff(idim)*dt_level
         noise_amp = sqrt(max(0.d0,2.d0*kappa_num(idim)*dt_level))
