@@ -1625,10 +1625,14 @@ subroutine cic_trace_gas_part_ito_mc(s,p,ilevel,action_part)
    !   do k=1,ndim
    !      u_eff(k) = u_eff(k) !+ grad_at_part(k)/dx_loc
    !   end do
+     if(r%tracer_kick_pdf =='gaussian')then
+        call sample_tracer_gaussian(xi)
+     elseif(r%tracer_kick_pdf =='uniform')then
+        call sample_tracer_uniform(xi)
+     else ! Default to piecewise skew uniform
+        call sample_tracer_piecewise_skew_uniform(xi,skewness_eff)
+     endif
 
-     !call sample_tracer_gaussian(xi)
-     !call sample_tracer_uniform(xi)
-     call sample_tracer_two_piece_uniform(xi,skewness_eff)
      do idim=1,ndim
         disp(idim)=u_eff(idim)*dt_level
         noise_amp = sqrt(max(0.d0,2.d0*kappa_num(idim)*dt_level))
@@ -1813,7 +1817,13 @@ subroutine tsc_trace_gas_part_ito_mc(s,p,ilevel,action_part)
         cycle
      endif
 
-     call sample_tracer_two_piece_uniform(xi,skewness_eff)
+     if(r%tracer_kick_pdf =='gaussian')then
+        call sample_tracer_gaussian(xi)
+     elseif(r%tracer_kick_pdf =='uniform')then
+        call sample_tracer_uniform(xi)
+     else ! Default to piecewise skew uniform
+        call sample_tracer_piecewise_skew_uniform(xi,skewness_eff)
+     endif
      do idim=1,ndim
         disp(idim)=u_eff(idim)*dt_level
         noise_amp = sqrt(max(0.d0,2.d0*kappa_num(idim)*dt_level))
@@ -2348,7 +2358,7 @@ subroutine sample_tracer_uniform(vec)
   end do
 end subroutine sample_tracer_uniform
 
-subroutine sample_tracer_two_piece_uniform(vec, gamma1_vec)
+subroutine sample_tracer_piecewise_skew_uniform(vec, gamma1_vec)
   !------------------------------------------------------------------------
   ! Sample from a two-piece uniform distribution with mean 0, variance 1,
   ! and skewness gamma1 (one value per dimension).
@@ -2392,7 +2402,7 @@ subroutine sample_tracer_two_piece_uniform(vec, gamma1_vec)
         vec(jd) = b * (u_rand * apb - b) / a
      endif
   end do
-end subroutine sample_tracer_two_piece_uniform
+end subroutine sample_tracer_piecewise_skew_uniform
 
 real(kind=8) function mc_kernel_skewness(pr, pl) result(gamma1)
   !------------------------------------------------------------------------
@@ -2760,7 +2770,7 @@ subroutine trace_gas_part_trivial(s,p,ilevel,action_part)
 
      ! Add random diffusion kick in z-direction only
      ! Diffusion coefficient: D = dx_loc*(1.d0-dt_level/dx_loc)/2.d0
-     D_diff = 0.00653!dx_loc*(1.d0-dt_level/dx_loc)/2.d0
+     D_diff = dx_loc*(1.d0-dt_level/dx_loc)/2.d0
      if(D_diff > 0.0d0)then
         call sample_tracer_uniform(xi)
         noise_amp = sqrt(2.0d0*D_diff*dt_level)
