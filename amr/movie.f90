@@ -396,32 +396,32 @@ subroutine output_frame(r,g,m,ind_proj,ind_var,map_size,map)
 #ifdef HYDRO
                     if(ind_var==0)then
                        ! Compute column density map
-                       map(ind_map)=map(ind_map)+dvol*max(dble(m%grid(igrid)%uold(ind,1)),r%smallr)
+                       map(ind_map)=map(ind_map)+dvol*max(dble(m%uold(ind,1,igrid)),r%smallr)
                     else if(ind_var==1)then
                        ! Compute mass-weighted mean density
-                       map(ind_map)=map(ind_map)+dvol*max(dble(m%grid(igrid)%uold(ind,1)),r%smallr)**2
+                       map(ind_map)=map(ind_map)+dvol*max(dble(m%uold(ind,1,igrid)),r%smallr)**2
                     else if(ind_var==5)then
                        ! Compute mass-weighted mean temperature
                        ! Kinetic energy
                        ekk=0.0d0
                        do idim=1,3
-                          ekk=ekk+0.5d0*m%grid(igrid)%uold(ind,idim+1)**2/max(dble(m%grid(igrid)%uold(ind,1)),r%smallr)
+                          ekk=ekk+0.5d0*m%uold(ind,idim+1,igrid)**2/max(dble(m%uold(ind,1,igrid)),r%smallr)
                        enddo
                        ! Pressure
-                       temp=(r%gamma-1.0d0)*(m%grid(igrid)%uold(ind,5)-ekk)
+                       temp=(r%gamma-1.0d0)*(m%uold(ind,5,igrid)-ekk)
                        ! Temperature in K
-                       temp=max(temp/max(dble(m%grid(igrid)%uold(ind,1)),r%smallr),r%smallc**2)*scale_T2
-                       map(ind_map)=map(ind_map)+dvol*max(dble(m%grid(igrid)%uold(ind,1)),r%smallr)*temp
+                       temp=max(temp/max(dble(m%uold(ind,1,igrid)),r%smallr),r%smallc**2)*scale_T2
+                       map(ind_map)=map(ind_map)+dvol*max(dble(m%uold(ind,1,igrid)),r%smallr)*temp
 #ifdef RT
                     else if(ind_var.ge.nvar+1 .and. ind_var.lt.nvar+1+nrtgrp)then
                        ! Photon flux
                        map(ind_map) = map(ind_map) &
-                                    + dvol * max(dble(m%grid(igrid)%uold(ind,1)),r%smallr) &
-                                    * m%grid(igrid)%rtuold(ind,1+(ind_var-nvar-1)*(ndim+1)) * g%rt_c(ilevel)
+                                    + dvol * max(dble(m%uold(ind,1,igrid)),r%smallr) &
+                                    * m%rtuold(ind,1+(ind_var-nvar-1)*(ndim+1),igrid) * g%rt_c(ilevel)
 #endif
                     else
                        ! Other variables
-                       map(ind_map)=map(ind_map)+dvol*m%grid(igrid)%uold(ind,ind_var)
+                       map(ind_map)=map(ind_map)+dvol*m%uold(ind,ind_var,igrid)
                     end if
 #endif
                  end do

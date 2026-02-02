@@ -54,7 +54,6 @@ subroutine rt_upload_fine(s,ilevel)
   use mdl_module
   use rt_parameters, only: nrtvar
   use amr_parameters, only: ndim, twotondim
-  use amr_commons, only: oct
   use ramses_commons, only: ramses_t
   use nbors_utils
   use cache_commons
@@ -67,11 +66,10 @@ subroutine rt_upload_fine(s,ilevel)
   ! This routine performs a restriction operation (averaging down)
   ! for the RT variables.
   !----------------------------------------------------------------------
-  integer::ioct,ind,ivar,icell
+  integer::ioct,ind,ivar,icell,igrid
   integer(kind=8),dimension(0:ndim)::hash_key
   integer,dimension(1:6,1:4)::hh
   real(kind=8)::average
-  type(oct),pointer::gridp
   type(msg_realdp)::dummy_realdp
 
   hh(1,1:4)=(/1,3,5,7/)
@@ -89,17 +87,16 @@ subroutine rt_upload_fine(s,ilevel)
         do ind=1,twotondim
            if(m%grid(ioct)%refined(ind))then
 #ifdef RT
-              m%grid(ioct)%rtuold(ind,ivar)=0.0
+              m%rtuold(ind,ivar,ioct)=0.0
 #endif
            endif
         end do
      end do
   end do
 
-  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-                     hilbert=m%domain, pack_size=storage_size(dummy_realdp)/32,&
-                     pack=pack_fetch_rt, unpack=unpack_fetch_rt,&
-                     init=init_flush_upload_rt, flush=pack_flush_upload_rt, combine=unpack_flush_upload_rt)
+  call open_cache(mdl, m, pack_size=storage_size(dummy_realdp)/32, &
+       pack=pack_fetch_rt, unpack=unpack_fetch_rt, &
+       init=init_flush_upload_rt, flush=pack_flush_upload_rt, combine=unpack_flush_upload_rt)
 
   ! Loop over finer level grids
   hash_key(0)=ilevel+1
@@ -107,28 +104,28 @@ subroutine rt_upload_fine(s,ilevel)
 
      ! Get parent cell and grid index
      hash_key(1:ndim)=m%grid(ioct)%ckey(1:ndim)
-     call get_parent_cell(s,hash_key,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
+     call get_parent_cell(s,hash_key,igrid,icell,flush_cache=.true.,fetch_cache=.false.)
 
      ! Average conservative variables
      do ivar=1,nrtvar
         average=0.0d0
         do ind=1,twotondim
 #ifdef RT
-           average=average+m%grid(ioct)%rtuold(ind,ivar)
+           average=average+m%rtuold(ind,ivar,ioct)
 #endif
         end do
         ! Scatter result to parent cell
 #ifdef RT
-        gridp%rtuold(icell,ivar)=average/dble(twotondim)
+        m%rtuold(icell,ivar,igrid)=average/dble(twotondim)
         ! Rescale according to light speed difference between levels
         if (mod(ivar,ndim+1).eq.1) &
-            gridp%rtuold(icell,ivar) = gridp%rtuold(icell,ivar) * g%rt_c(ilevel+1)/g%rt_c(ilevel)
+            m%rtuold(icell,ivar,igrid) = m%rtuold(icell,ivar,igrid) * g%rt_c(ilevel+1)/g%rt_c(ilevel)
 #endif
      end do
 
   end do
 
-  call close_cache(s,m%grid_dict)
+  call close_cache(mdl)
 
   end associate
 
@@ -137,46 +134,53 @@ end subroutine rt_upload_fine
 !##########################################################################
 !##########################################################################
 !##########################################################################
-subroutine init_flush_upload_rt(grid,hash_key)
-  use amr_parameters, only: ndim,twotondim
+subroutine init_flush_upload_rt(mesh,igrid,hash_key)
+  use amr_parameters, only: ndim, twotondim
   use rt_parameters, only: nrtvar
-  use amr_commons, only: oct
-  type(oct)::grid
+  use amr_commons, only: mesh_t
+  type(mesh_t)::mesh
+  integer::igrid
   integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind,ivar
-  grid%lev=hash_key(0)
-  grid%ckey(1:ndim)=hash_key(1:ndim)
+
+  mesh%grid(igrid)%lev=hash_key(0)
+  mesh%grid(igrid)%ckey(1:ndim)=hash_key(1:ndim)
+
+#ifdef RT
   do ivar=1,nrtvar
      do ind=1,twotondim
-#ifdef RT  
-        grid%rtuold(ind,ivar)=0.0d0
-#endif
+        mesh%rtuold(ind,ivar,igrid)=0.0d0
      end do
   end do
+#endif
+
 end subroutine init_flush_upload_rt
 !##########################################################################
 !##########################################################################
 !##########################################################################
 !##########################################################################
-subroutine pack_flush_upload_rt(grid,msg_size,msg_array)
+subroutine pack_flush_upload_rt(mesh,igrid,msg_size,msg_array)
   use amr_parameters, only: twotondim
   use rt_parameters, only: nrtvar
-  use amr_commons, only: oct
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_realdp
-  type(oct)::grid
+  type(mesh_t)::mesh
+  integer::igrid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
 
   integer::ind,ivar
   type(msg_realdp)::msg
+
+#ifdef RT
   do ivar=1,nrtvar
      do ind=1,twotondim
-#ifdef RT
-        msg%realdp_rt(ind,ivar)=grid%rtuold(ind,ivar)
-#endif
+        msg%realdp_rt(ind,ivar)=mesh%rtuold(ind,ivar,igrid)
      end do
   end do
+#endif
+
   msg_array=transfer(msg,msg_array)
 
 end subroutine pack_flush_upload_rt
@@ -184,12 +188,13 @@ end subroutine pack_flush_upload_rt
 !##########################################################################
 !##########################################################################
 !##########################################################################
-subroutine unpack_flush_upload_rt(grid,msg_size,msg_array,hash_key)
-  use amr_parameters, only: ndim,twotondim
+subroutine unpack_flush_upload_rt(mesh,igrid,msg_size,msg_array,hash_key)
+  use amr_parameters, only: ndim, twotondim
   use rt_parameters, only: nrtvar
-  use amr_commons, only: oct
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_realdp
-  type(oct)::grid
+  type(mesh_t)::mesh
+  integer::igrid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
   integer(kind=8),dimension(0:ndim)::hash_key
@@ -197,18 +202,20 @@ subroutine unpack_flush_upload_rt(grid,msg_size,msg_array,hash_key)
   integer::ind,ivar
   type(msg_realdp)::msg
 
-  grid%lev=hash_key(0)
-  grid%ckey(1:ndim)=hash_key(1:ndim)
+  mesh%grid(igrid)%lev=hash_key(0)
+  mesh%grid(igrid)%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
+
+#ifdef RT
   do ivar=1,nrtvar
      do ind=1,twotondim
-        if(grid%refined(ind))then
-#ifdef RT
-           grid%rtuold(ind,ivar)=grid%rtuold(ind,ivar)+msg%realdp_rt(ind,ivar)
-#endif
+        if(mesh%grid(igrid)%refined(ind))then
+           mesh%rtuold(ind,ivar,igrid)=mesh%rtuold(ind,ivar,igrid)+msg%realdp_rt(ind,ivar)
         endif
      end do
   end do
+#endif
+
 end subroutine unpack_flush_upload_rt
 !##########################################################################
 !##########################################################################

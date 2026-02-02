@@ -299,15 +299,14 @@ end subroutine r_load_balance
 !#########################################################################
 !#########################################################################
 subroutine load_balance(s,ilevel)
-  USE, INTRINSIC :: ISO_C_BINDING, ONLY : C_F_POINTER
   use amr_parameters, only: ndim, twotondim, nhilbert
-  use amr_commons, only: oct
+  use oct_commons, only: oct
   use ramses_commons, only: ramses_t
   use hilbert
   use hash
   use cache_commons
   use cache
-  use marshal, only: pack_fetch_refine,unpack_fetch_refine
+  use marshal, only: pack_fetch_refine, unpack_fetch_refine
   use nbors_utils
   implicit none
   type(ramses_t)::s
@@ -331,11 +330,24 @@ subroutine load_balance(s,ilevel)
   integer,dimension(:),allocatable::noct_level,head_level,indx_level
   integer,dimension(:),allocatable::swap_table,swap_tmp
   integer,dimension(0:twotondim-1)::bucket_count,bucket_offset
+  integer,dimension(1:twotondim)::flag1_tmp,flag2_tmp
+#ifdef HYDRO
+  real(kind=8),dimension(1:twotondim,1:nvar)::uold_tmp
+#endif
+#ifdef MHD
+  real(kind=8),dimension(1:twotondim,1:6)::bold_tmp
+#endif
+#ifdef RT
+  real(kind=8),dimension(1:twotondim,1:nrtvar)::rtuold_tmp
+#endif
+#ifdef GRAV
+  real(kind=8),dimension(1:twotondim,1:3)::f_tmp
+  real(kind=8),dimension(1:twotondim)::phi_tmp,phi_old_tmp
+#endif
   type(oct)::grid_tmp
-  type(oct),pointer::child
   type(msg_large_realdp)::dummy_large_realdp
 
-  associate(r=>s%r,g=>s%g,m=>s%m)
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
   !-----------------------------------------------------
   ! Step 1: dispatch octs and empty slots according to
@@ -344,10 +356,9 @@ subroutine load_balance(s,ilevel)
   m%ifree=m%noct_used+1
   do ilev=ilevel+1,r%nlevelmax
 
-     call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-                hilbert=m%domain,pack_size=storage_size(dummy_large_realdp)/32,&
-                pack=pack_fetch_refine,unpack=unpack_fetch_refine,&
-                flush=pack_flush_loadbalance, combine=unpack_flush_loadbalance)
+     call open_cache(mdl, m, pack_size=storage_size(dummy_large_realdp)/32, &
+          pack=pack_fetch_refine, unpack=unpack_fetch_refine, &
+          flush=pack_flush_loadbalance, combine=unpack_flush_loadbalance)
 
      hash_key(0)=ilev
      do ioct=m%head(ilev),m%tail(ilev)
@@ -360,9 +371,9 @@ subroutine load_balance(s,ilevel)
            grid_cpu = m%domain(ilev)%get_rank(hk)
 
            ! If next cache line is occupied, free it.
-           if(m%occupied(m%free_cache))call destage(s,r%ngridmax+m%free_cache,m%grid_dict)
+           if(m%occupied(m%free_cache))call destage(mdl,m%ngridmax+m%free_cache)
            ! Set grid index to a virtual grid in local cache memory
-           ichild=r%ngridmax+m%free_cache
+           ichild=m%ngridmax+m%free_cache
            m%occupied(m%free_cache)=.true.
            m%parent_cpu(m%free_cache)=grid_cpu
            m%dirty(m%free_cache)=.true.
@@ -371,12 +382,27 @@ subroutine load_balance(s,ilevel)
            ! Go to next free cache line
            m%free_cache=m%free_cache+1
            m%ncache=m%ncache+1
-           if(m%free_cache.GT.r%ncachemax)m%free_cache=1
-           if(m%ncache.GT.r%ncachemax)m%ncache=r%ncachemax
+           if(m%free_cache.GT.m%ncachemax)m%free_cache=1
+           if(m%ncache.GT.m%ncachemax)m%ncache=m%ncachemax
 
            ! Copy all data to the cache grid
            m%grid(ichild)=m%grid(ioct)
-
+           m%flag1(:,ichild)=m%flag1(:,ioct)
+           m%flag2(:,ichild)=m%flag2(:,ioct)
+#ifdef HYDRO
+           m%uold(:,:,ichild)=m%uold(:,:,ioct)
+#endif
+#ifdef MHD
+           m%bold(:,:,ichild)=m%bold(:,:,ioct)
+#endif
+#ifdef RT
+           m%rtuold(:,:,ichild)=m%rtuold(:,:,ioct)
+#endif
+#ifdef GRAV
+           m%f(:,:,ichild)=m%f(:,:,ioct)
+           m%phi(:,ichild)=m%phi(:,ioct)
+           m%phi_old(:,ichild)=m%phi_old(:,ioct)
+#endif
            ! Set grid level to zero
            m%grid(ioct)%lev=0
            ! Free grid from hash table
@@ -384,13 +410,13 @@ subroutine load_balance(s,ilevel)
            call hash_free(m%grid_dict,hash_key)
 
            ! Insert new cache grid in hash table
-           call hash_setp(m%grid_dict,hash_key,m%grid(ichild))
+           call hash_setp(m%grid_dict,hash_key,ichild)
 
         endif
 
      end do
 
-     call close_cache(s,m%grid_dict)
+     call close_cache(mdl)
 
   end do
 
@@ -504,25 +530,73 @@ subroutine load_balance(s,ilevel)
            call hash_free(m%grid_dict,hash_key)
         endif
         grid_tmp=m%grid(j)
+        flag1_tmp=m%flag1(:,j)
+        flag2_tmp=m%flag2(:,j)
+#ifdef HYDRO
+        uold_tmp=m%uold(:,:,j)
+#endif
+#ifdef MHD
+        bold_tmp=m%bold(:,:,j)
+#endif
+#ifdef RT
+        rtuold_tmp=m%rtuold(:,:,j)
+#endif
+#ifdef GRAV
+        f_tmp=m%f(:,:,j)
+        phi_tmp=m%phi(:,j)
+        phi_old_tmp=m%phi_old(:,j)
+#endif
         i=j
         inew=swap_table(j)
         do while(inew.NE.j)
            m%grid(i)=m%grid(inew)
+           m%flag1(:,i)=m%flag1(:,inew)
+           m%flag2(:,i)=m%flag2(:,inew)
+#ifdef HYDRO
+           m%uold(:,:,i)=m%uold(:,:,inew)
+#endif
+#ifdef MHD
+           m%bold(:,:,i)=m%bold(:,:,inew)
+#endif
+#ifdef RT
+           m%rtuold(:,:,i)=m%rtuold(:,:,inew)
+#endif
+#ifdef GRAV
+           m%f(:,:,i)=m%f(:,:,inew)
+           m%phi(:,i)=m%phi(:,inew)
+           m%phi_old(:,i)=m%phi_old(:,inew)
+#endif
            hash_key(0)=m%grid(inew)%lev
            hash_key(1:ndim)=m%grid(inew)%ckey(1:ndim)
            if(m%grid(inew)%lev>0)then
               call hash_free(m%grid_dict,hash_key)
-              call hash_setp(m%grid_dict,hash_key,m%grid(i))
+              call hash_setp(m%grid_dict,hash_key,i)
            endif
            swap_table(i)=i
            i=inew
            inew=swap_table(inew)
         end do
         m%grid(i)=grid_tmp
+        m%flag1(:,i)=flag1_tmp
+        m%flag2(:,i)=flag2_tmp
+#ifdef HYDRO
+        m%uold(:,:,i)=uold_tmp
+#endif
+#ifdef MHD
+        m%bold(:,:,i)=bold_tmp
+#endif
+#ifdef RT
+        m%rtuold(:,:,i)=rtuold_tmp
+#endif
+#ifdef GRAV
+        m%f(:,:,i)=f_tmp
+        m%phi(:,i)=phi_tmp
+        m%phi_old(:,i)=phi_old_tmp
+#endif
         hash_key(0)=m%grid(i)%lev
         hash_key(1:ndim)=m%grid(i)%ckey(1:ndim)
         if(m%grid(i)%lev>0)then
-           call hash_setp(m%grid_dict,hash_key,m%grid(i))
+           call hash_setp(m%grid_dict,hash_key,i)
         end if
         swap_table(i)=i
      endif
@@ -576,13 +650,14 @@ end subroutine load_balance
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine pack_flush_loadbalance(grid,msg_size,msg_array)
-  use amr_parameters, only: ndim,twotondim
+subroutine pack_flush_loadbalance(mesh, igrid, msg_size, msg_array)
+  use amr_parameters, only: ndim, twotondim
   use hydro_parameters, only: nvar
-  use amr_commons, only: oct
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_large_realdp
   use rt_parameters, only: nrtvar
-  type(oct)::grid
+  type(mesh_t)::mesh
+  integer::igrid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
 
@@ -590,7 +665,7 @@ subroutine pack_flush_loadbalance(grid,msg_size,msg_array)
   type(msg_large_realdp)::msg
 
   do ind=1,twotondim
-     if(grid%refined(ind))then
+     if(mesh%grid(igrid)%refined(ind))then
         msg%int4(ind)=1
      else
         msg%int4(ind)=0
@@ -600,19 +675,23 @@ subroutine pack_flush_loadbalance(grid,msg_size,msg_array)
 #ifdef HYDRO
   do ind=1,twotondim
      do ivar=1,nvar
-        msg%realdp_hydro(ind,ivar)=grid%uold(ind,ivar)
+        msg%realdp_hydro(ind,ivar)=mesh%uold(ind,ivar,igrid)
      end do
   end do
 #endif
   
 #ifdef MHD
-  msg%realdp_mhd=grid%bold
+  do ind=1,twotondim
+     do ivar=1,6
+        msg%realdp_mhd(ind,ivar)=mesh%bold(ind,ivar,igrid)
+     end do
+  end do
 #endif
 
 #ifdef RT
   do ind=1,twotondim
      do ivar=1,nrtvar
-        msg%realdp_rt(ind,ivar)=grid%rtuold(ind,ivar)
+        msg%realdp_rt(ind,ivar)=mesh%rtuold(ind,ivar,igrid)
      end do
   end do
 #endif
@@ -620,10 +699,10 @@ subroutine pack_flush_loadbalance(grid,msg_size,msg_array)
 #ifdef GRAV
   do ind=1,twotondim
      do idim=1,ndim
-        msg%realdp_poisson(ind,idim)=grid%f(ind,idim)
+        msg%realdp_poisson(ind,idim)=mesh%f(ind,idim,igrid)
      end do
-     msg%realdp_poisson(ind,ndim+1)=grid%phi(ind)
-     msg%realdp_poisson(ind,ndim+2)=grid%phi_old(ind)
+     msg%realdp_poisson(ind,ndim+1)=mesh%phi(ind,igrid)
+     msg%realdp_poisson(ind,ndim+2)=mesh%phi_old(ind,igrid)
   end do
 #endif
 
@@ -634,13 +713,14 @@ end subroutine pack_flush_loadbalance
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine unpack_flush_loadbalance(grid,msg_size,msg_array,hash_key)
+subroutine unpack_flush_loadbalance(mesh,igrid,msg_size,msg_array,hash_key)
   use amr_parameters, only: ndim,twotondim
   use hydro_parameters, only: nvar
-  use amr_commons, only: oct
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_large_realdp
   use rt_parameters, only: nrtvar
-  type(oct)::grid
+  type(mesh_t)::mesh
+  integer::igrid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
   integer(kind=8),dimension(0:ndim)::hash_key
@@ -648,34 +728,38 @@ subroutine unpack_flush_loadbalance(grid,msg_size,msg_array,hash_key)
   integer::ind,ivar,idim
   type(msg_large_realdp)::msg
 
-  grid%lev=hash_key(0)
-  grid%ckey(1:ndim)=hash_key(1:ndim)
+  mesh%grid(igrid)%lev=hash_key(0)
+  mesh%grid(igrid)%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
 
   do ind=1,twotondim
      if(msg%int4(ind)==1)then
-        grid%refined(ind)=.true.
+        mesh%grid(igrid)%refined(ind)=.true.
      else
-        grid%refined(ind)=.false.
+        mesh%grid(igrid)%refined(ind)=.false.
      endif
   enddo
   
 #ifdef HYDRO
   do ind=1,twotondim
      do ivar=1,nvar
-        grid%uold(ind,ivar)=msg%realdp_hydro(ind,ivar)
+        mesh%uold(ind,ivar,igrid)=msg%realdp_hydro(ind,ivar)
      end do
   end do
 #endif
   
 #ifdef MHD
-  grid%bold=msg%realdp_mhd
+  do ind=1,twotondim
+     do ivar=1,6
+        mesh%bold(ind,ivar,igrid)=msg%realdp_mhd(ind,ivar)
+     end do
+  end do
 #endif
 
 #ifdef RT
   do ind=1,twotondim
      do ivar=1,nrtvar
-        grid%rtuold(ind,ivar)=msg%realdp_rt(ind,ivar)
+        mesh%rtuold(ind,ivar,igrid)=msg%realdp_rt(ind,ivar)
      end do
   end do
 #endif
@@ -683,10 +767,10 @@ subroutine unpack_flush_loadbalance(grid,msg_size,msg_array,hash_key)
 #ifdef GRAV
   do ind=1,twotondim
      do idim=1,ndim
-        grid%f(ind,idim)=msg%realdp_poisson(ind,idim)
+        mesh%f(ind,idim,igrid)=msg%realdp_poisson(ind,idim)
      end do
-     grid%phi(ind)=msg%realdp_poisson(ind,ndim+1)
-     grid%phi_old(ind)=msg%realdp_poisson(ind,ndim+2)
+     mesh%phi(ind,igrid)=msg%realdp_poisson(ind,ndim+1)
+     mesh%phi_old(ind,igrid)=msg%realdp_poisson(ind,ndim+2)
   end do
 #endif
 
@@ -727,8 +811,11 @@ recursive subroutine r_balance_part(pst,ilevel,input_size,output_array,output_si
         call balance_part(pst%s,pst%s%tree,ilevel)
      endif
      if(pst%s%r%trac)then
-      call balance_part(pst%s,pst%s%trac,ilevel)
-   endif
+        call balance_part(pst%s,pst%s%trac,ilevel)
+     endif
+     if(pst%s%r%dust)then
+        call balance_part(pst%s,pst%s%dust,ilevel)
+     endif
 #endif
   endif
 
@@ -1128,6 +1215,18 @@ subroutine balance_part(s,p,ilevel)
            p%idt(ipart)=p%idt(jpart)
            p%idt(jpart)=idp_tmp
         endif
+        ! Swap size
+        if(allocated(p%size))then
+           mp_tmp=p%size(ipart)
+           p%size(ipart)=p%size(jpart)
+           p%size(jpart)=mp_tmp
+        endif
+        ! Swap charge
+        if(allocated(p%charge))then
+           mp_tmp=p%charge(ipart)
+           p%charge(ipart)=p%charge(jpart)
+           p%charge(jpart)=mp_tmp
+        endif
      end do
   end do
 
@@ -1482,6 +1581,92 @@ subroutine balance_part(s,p,ilevel)
      do i=1,recv_cnt_tot
         ipart=p%headp(ilevel)-1+count_loc+i
         p%tm(ipart)=x_recv_buf(i)
+     end do
+
+     ! Wait for full completion of sends
+     call MPI_WAITALL(countsend,reqsend,statuses,info)
+
+  endif
+
+  !-------------------------
+  ! Swap sizes
+  !-------------------------
+  if(allocated(p%size))then
+
+     countrecv=0
+     do icpu=1,g%ncpu
+        nbuffer=recv_cnt(icpu)
+        if(nbuffer>0)then
+           countrecv=countrecv+1
+           istart=recv_oft(icpu)+1
+           call MPI_IRECV(x_recv_buf(istart),nbuffer,MPI_DOUBLE_PRECISION,icpu-1,tag,MPI_COMM_WORLD,reqrecv(countrecv),info)
+        endif
+     end do
+
+     do i=1,send_cnt_tot
+        ipart=p%headp(ilevel)-1+count_loc+i
+        x_send_buf(i)=p%size(ipart)
+     end do
+
+     countsend=0
+     do icpu=1,g%ncpu
+        nbuffer=send_cnt(icpu)
+        if(nbuffer>0) then
+           countsend=countsend+1
+           istart=send_oft(icpu)+1
+           call MPI_ISEND(x_send_buf(istart),nbuffer,MPI_DOUBLE_PRECISION,icpu-1,tag,MPI_COMM_WORLD,reqsend(countsend),info)
+        end if
+     end do
+
+     ! Wait for full completion of receives
+     call MPI_WAITALL(countrecv,reqrecv,statuses,info)
+
+     do i=1,recv_cnt_tot
+        ipart=p%headp(ilevel)-1+count_loc+i
+        p%size(ipart)=x_recv_buf(i)
+     end do
+
+     ! Wait for full completion of sends
+     call MPI_WAITALL(countsend,reqsend,statuses,info)
+
+  endif
+
+  !-------------------------
+  ! Swap charges
+  !-------------------------
+  if(allocated(p%charge))then
+
+     countrecv=0
+     do icpu=1,g%ncpu
+        nbuffer=recv_cnt(icpu)
+        if(nbuffer>0)then
+           countrecv=countrecv+1
+           istart=recv_oft(icpu)+1
+           call MPI_IRECV(x_recv_buf(istart),nbuffer,MPI_DOUBLE_PRECISION,icpu-1,tag,MPI_COMM_WORLD,reqrecv(countrecv),info)
+        endif
+     end do
+
+     do i=1,send_cnt_tot
+        ipart=p%headp(ilevel)-1+count_loc+i
+        x_send_buf(i)=p%charge(ipart)
+     end do
+
+     countsend=0
+     do icpu=1,g%ncpu
+        nbuffer=send_cnt(icpu)
+        if(nbuffer>0) then
+           countsend=countsend+1
+           istart=send_oft(icpu)+1
+           call MPI_ISEND(x_send_buf(istart),nbuffer,MPI_DOUBLE_PRECISION,icpu-1,tag,MPI_COMM_WORLD,reqsend(countsend),info)
+        end if
+     end do
+
+     ! Wait for full completion of receives
+     call MPI_WAITALL(countrecv,reqrecv,statuses,info)
+
+     do i=1,recv_cnt_tot
+        ipart=p%headp(ilevel)-1+count_loc+i
+        p%charge(ipart)=x_recv_buf(i)
      end do
 
      ! Wait for full completion of sends

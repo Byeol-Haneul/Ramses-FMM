@@ -20,73 +20,22 @@ subroutine gravana(r,g,x,f,dx,ncell)
   integer::idim,i
   real(kind=8)::gmass,emass,xmass,ymass,zmass,rr,rx,ry,rz
 
-  ! Multipole expansion for isolated boundary conditions
-  if(r%gravity_type==0)then
-     do i=1,ncell
-        rx=0.0d0; ry=0.0d0; rz=0.0d0
-        rx=x(i,1)-g%multipole%q(2)/g%multipole%q(1)
-#if NDIM>1
-        ry=x(i,2)-g%multipole%q(3)/g%multipole%q(1)
-#endif
-#if NDIM>2
-        rz=x(i,3)-g%multipole%q(4)/g%multipole%q(1)
-#endif
-        rr=MAX(sqrt(rx**2+ry**2+rz**2),dx)
-#if NDIM==1
-        f(i,1)=-g%multipole%q(1)*2d0*ACOS(-1d0)*rx/rr
-#endif
-#if NDIM==2
-        f(i,1)=-g%multipole%q(1)*2d0*rx/rr*2
-        f(i,2)=-g%multipole%q(1)*2d0*ry/rr*2
-#endif
-#if NDIM==3
-        f(i,1)=-g%multipole%q(1)*rx/rr*3
-        f(i,2)=-g%multipole%q(1)*ry/rr*3
-        f(i,3)=-g%multipole%q(1)*rz/rr*3
-#endif
-     end do
-  end if
-
-  ! Constant vector
-  if(r%gravity_type==1)then
-     do idim=1,ndim
-        do i=1,ncell
-           f(i,idim)=r%gravity_params(idim)
-        end do
-     end do
-  end if
-
   ! Point mass
-  if(r%gravity_type==2)then
-     gmass=r%gravity_params(1) ! GM
-     emass=r%gravity_params(2) ! Softening length
-     xmass=r%gravity_params(3) ! Point mass x-coordinate
-     ymass=r%gravity_params(4) ! Point mass y-coordinate
-     zmass=r%gravity_params(5) ! Point mass z-coordinate
-     do i=1,ncell
-        rx=0.0d0; ry=0.0d0; rz=0.0d0
-        rx=x(i,1)-xmass
-#if NDIM>1
-        ry=x(i,2)-ymass
-#endif
-#if NDIM>2
-        rz=x(i,3)-zmass
-#endif
-        rr=sqrt(rx**2+ry**2+rz**2+emass**2)
-#if NDIM==1
-        f(i,1)=-gmass*rx/rr
-#endif
-#if NDIM==2
-        f(i,1)=-gmass*ry/rr**2
-        f(i,2)=-gmass*ry/rr**2
-#endif
-#if NDIM==3
-        f(i,1)=-gmass*rx/rr**3
-        f(i,2)=-gmass*ry/rr**3
-        f(i,3)=-gmass*rz/rr**3
-#endif
-     end do
-  end if
+  gmass=1.0
+  emass=0.0
+  xmass=r%boxlen/2d0
+  ymass=r%boxlen/2d0
+  zmass=r%boxlen/2d0
+  do i=1,ncell
+     rx=0.0d0; ry=0.0d0; rz=0.0d0
+     rx=x(i,1)-xmass
+     ry=x(i,2)-ymass
+     rz=x(i,3)-zmass
+     rr=sqrt(rx**2+ry**2+rz**2+emass**2)
+     f(i,1)=-gmass*rx/rr**3
+     f(i,2)=-gmass*ry/rr**3
+     f(i,3)=-gmass*rz/rr**3
+  end do
 
 end subroutine gravana
 !#########################################################

@@ -17,11 +17,24 @@ nrestart=0
 levelmin=5
 levelmax=8
 ngridmax=800000
+/
+
+&BOUNDARY_PARAMS
+bound_levelmin=3
 box_size=1.0
 box_xmin=1
 box_ymin=1
 box_xmax=-1
 box_ymax=-1
+nbound=4
+periodic=.false.,.false.
+bound_dir=1,1,2,2
+bound_type=1,1,1,1
+bound_shift=1,-1,1,-1
+bound_xmin= 0,-1, 0, 0
+bound_ymin= 1, 1, 0,-1
+bound_xmax= 1, 0, 0, 0
+bound_ymax=-1,-1, 1, 0
 /
 
 &INIT_PARAMS                    ! Initial conditions of the gas
@@ -62,9 +75,9 @@ isH2=.false.
 interpol_var=0
 interpol_type=0
 err_grad_p=0.1
-rt_err_grad_n=0.4
-rt_floor_n=0.1
-/
+rt_err_grad_cn=0.4
+rt_floor_cn=0.1
+ /
 
 &RT_PARAMS
 rt_advect=.true.

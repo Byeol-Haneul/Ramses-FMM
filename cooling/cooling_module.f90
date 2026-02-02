@@ -49,20 +49,20 @@ module cooling_module
   type cooling_table
      integer::n1
      integer::n2
-     real(kind=8),dimension(:)    ,pointer::nH
-     real(kind=8),dimension(:)    ,pointer::T2
-     real(kind=8),dimension(:,:)  ,pointer::cool
-     real(kind=8),dimension(:,:)  ,pointer::heat
-     real(kind=8),dimension(:,:)  ,pointer::cool_com
-     real(kind=8),dimension(:,:)  ,pointer::heat_com
-     real(kind=8),dimension(:,:)  ,pointer::metal
-     real(kind=8),dimension(:,:)  ,pointer::cool_prime
-     real(kind=8),dimension(:,:)  ,pointer::heat_prime
-     real(kind=8),dimension(:,:)  ,pointer::cool_com_prime
-     real(kind=8),dimension(:,:)  ,pointer::heat_com_prime
-     real(kind=8),dimension(:,:)  ,pointer::metal_prime
-     real(kind=8),dimension(:,:)  ,pointer::mu
-     real(kind=8),dimension(:,:,:),pointer::n_spec
+     real(kind=8),dimension(:)    ,allocatable::nH
+     real(kind=8),dimension(:)    ,allocatable::T2
+     real(kind=8),dimension(:,:)  ,allocatable::cool
+     real(kind=8),dimension(:,:)  ,allocatable::heat
+     real(kind=8),dimension(:,:)  ,allocatable::cool_com
+     real(kind=8),dimension(:,:)  ,allocatable::heat_com
+     real(kind=8),dimension(:,:)  ,allocatable::metal
+     real(kind=8),dimension(:,:)  ,allocatable::cool_prime
+     real(kind=8),dimension(:,:)  ,allocatable::heat_prime
+     real(kind=8),dimension(:,:)  ,allocatable::cool_com_prime
+     real(kind=8),dimension(:,:)  ,allocatable::heat_com_prime
+     real(kind=8),dimension(:,:)  ,allocatable::metal_prime
+     real(kind=8),dimension(:,:)  ,allocatable::mu
+     real(kind=8),dimension(:,:,:),allocatable::n_spec
   end type cooling_table
 
   type cooling_t

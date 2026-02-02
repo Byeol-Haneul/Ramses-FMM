@@ -12,14 +12,16 @@ module ramses_commons
 
      type(run_t)::r
      type(global_t)::g
-     type(mesh_t)::m
+     type(mesh_t),pointer::m => null()
+     type(mesh_t),pointer::m_mg => null()
      type(part_t)::p
      type(part_t)::star
      type(part_t)::sink
      type(part_t)::tree
      type(part_t)::trac
+     type(part_t)::dust
      type(part_t)::gas
-     type(clump_t)::c
+     type(clump_t),pointer::c => null()
      type(turb_t)::turb
      type(cooling_t)::cool
      type(neq_cooling_t)::tables
@@ -423,6 +425,14 @@ subroutine open_part_file(s,p,filename,nskip,ilun)
         ivar=ivar+1
         nskip(ivar+1)=nskip(ivar)+i8b*npart
      endif
+     if(allocated(p%size))then
+        ivar=ivar+1
+        nskip(ivar+1)=nskip(ivar)+4*npart
+     endif
+     if(allocated(p%charge))then
+        ivar=ivar+1
+        nskip(ivar+1)=nskip(ivar)+4*npart
+     endif
 
   elseif(g%myid.GT.istart(ifile))then
 
@@ -553,6 +563,14 @@ subroutine close_part_file(s,p,filename,nskip,ilun)
      if(allocated(p%idt))then
         ivar=ivar+1
         nskip(ivar)=nskip(ivar)+i8b*p%npart
+     endif
+     if(allocated(p%size))then
+        ivar=ivar+1
+        nskip(ivar)=nskip(ivar)+4*p%npart
+     endif
+     if(allocated(p%charge))then
+        ivar=ivar+1
+        nskip(ivar)=nskip(ivar)+4*p%npart
      endif
 
 #ifndef WITHOUTMPI

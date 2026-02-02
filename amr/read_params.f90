@@ -29,6 +29,7 @@ subroutine m_read_params(pst)
   integer(kind=8)::nsinktot=0
   integer(kind=8)::ntreetot=0
   integer(kind=8)::ntractot=0
+  integer(kind=8)::ndusttot=0
   real(kind=8)::delta_tout=0,tend=0
   real(kind=8)::delta_aout=0,aend=0
   logical::nml_ok
@@ -47,6 +48,7 @@ subroutine m_read_params(pst)
   logical::sink    =.false.    ! Sinks and sink formation activated
   logical::part    =.false.   ! Dark matter particles activated
   logical::trac    =.false.   ! Tracer particles activated
+  logical::dust    =.false.   ! Dust particles activated
   logical::merger_tree=.false. ! Merger tree particles activated
   logical::orphan  =.false.   ! Orphan particles activated
   logical::verbose =.false.    ! Write everything
@@ -67,10 +69,22 @@ subroutine m_read_params(pst)
   integer::nsinkmax=0
   integer::ntreemax=0
   integer::ntracmax=0
+  integer::ndustmax=0
+
+  ! IC subcell multiplicity
+  integer::ntrac_per_cell=1
+  integer::ndust_per_cell=1
+
+  ! Dust parameters
+  real(kind=8)::dust_to_gas_mass_ratio=0.0d0
+  real(kind=8)::grain_size_parameter=0.0d0
+  real(kind=8)::grain_charge_parameter=0.0d0
+  real(kind=8)::dust_gyro_factor=0.1d0 ! At least 10 steps per gyro-period.
+  logical :: analytic_dust_force = .false.
 
   ! Number of superoct levels
   integer::nsuperoct=0
-  
+
   ! MPI domain overloading
   integer::overload=1
 
@@ -96,6 +110,10 @@ subroutine m_read_params(pst)
   ! Output times
   real(kind=8),dimension(1:MAXOUT)::aout=1.1  ! Output expansion factors
   real(kind=8),dimension(1:MAXOUT)::tout=0.0  ! Output times
+
+  ! Trajectory output parameters
+  integer::ntrajectories=0
+  integer,dimension(1:MAXOUT)::trajectories=0
 
   ! Movie
   integer::imovout=0     ! Increment for output times
@@ -269,6 +287,7 @@ subroutine m_read_params(pst)
   integer ::interpol_type=1
 
   ! Poisson solver parameters
+  logical :: gravity_test=.false. ! Use file rho_ana.f90 to test the Poisson solers.
   real(kind=8)::epsilon=1.0D-4 ! Convergence criterion
   real(kind=8),dimension(1:10)::gravity_params=0.0 ! Gravity parameters
   integer :: gravity_type=0 ! Type of gravity calculations (see user guide)
@@ -287,11 +306,13 @@ subroutine m_read_params(pst)
   integer :: tree_mass_deposition_scheme=1     ! tree mass deposition schemes
   integer :: tree_force_interpolation_scheme=1 ! tree force interpolation schemes
   integer :: trac_interpolation_scheme=1 ! tracer force interpolation schemes
+  integer :: dust_mass_deposition_scheme=1 ! dust mass deposition schemes
+  integer :: dust_force_interpolation_scheme=1 ! dust force interpolation schemes
 
   ! Boundary conditions parameters
   integer::nbound=0
   logical::no_inflow=.false.
-  logical,dimension(1:NDIM)::periodic=.true.
+  logical,dimension(1:3)::periodic=.true.
   integer::bound_levelmin=1 ! AMR level for boundary geometry
   real(kind=8),dimension(1:3)::box_size=0.0D0 ! Box length in active domain along each direction
   integer::box_xmin=0 ! Min. Cartesian key for the box at levelmin in x direction
@@ -399,6 +420,7 @@ subroutine m_read_params(pst)
   logical::output_peak_sink=.false.
   logical::output_peak_tree=.false.
   logical::output_peak_trac=.false.
+  logical::output_peak_dust=.false.
   integer::rho_type_clump=1 ! 1: DM, 2: stars, 3: sinks, 4: gas
   real(kind=8)::relevance_threshold=2
   real(kind=8)::density_threshold=-1
@@ -511,13 +533,15 @@ subroutine m_read_params(pst)
   namelist/output_params/foutput,aout,tout,output_mode &
        & ,tend,delta_tout,aend,delta_aout,gadget_output &
        & ,run_time_hrs,bkp_time_hrs,bkp_last_min,bkp_modulo,nfile
+  ! Trajectory output parameters
+  namelist/traj_params/ntrajectories,trajectories
   ! AMR grid basic parameters
   namelist/amr_params/levelmin,levelmax,ngridmax,ncachemax,ngridtot &
        & ,npartmax,nparttot,nexpand,boxlen
   ! Poisson solver parameters
   namelist/poisson_params/epsilon,gravity_type,gravity_params &
        & ,level_fmm_to_amr &
-       & ,cg_levelmin,cic_levelmax,fast_solver &
+       & ,cg_levelmin,cic_levelmax,fast_solver,gravity_test &
        & ,part_mass_deposition_scheme,part_force_interpolation_scheme &
        & ,star_mass_deposition_scheme,star_force_interpolation_scheme &
        & ,sink_mass_deposition_scheme,sink_force_interpolation_scheme &
@@ -602,7 +626,9 @@ subroutine m_read_params(pst)
        & ,rtz_primary_cosmic_ray_ionization_rate, rtz_include_HM12_UVB, isH2_rtz &
        & ,rtz_max_cool_timestep, rtz_eqm_min_its
   ! Tracer particles parameters
-  namelist/trac_params/trac,ntracmax,ntractot,trac_interpolation_scheme
+  namelist/trac_params/trac,ntracmax,ntractot,ntrac_per_cell,trac_interpolation_scheme
+  namelist/dust_params/dust,ndustmax,ndusttot,ndust_per_cell,dust_to_gas_mass_ratio,&
+  & grain_size_parameter,grain_charge_parameter,dust_mass_deposition_scheme,dust_force_interpolation_scheme,dust_gyro_factor,analytic_dust_force
   ! Star particles and star formation recipe
   namelist/star_params/star,nstarmax,nstartot,T2_star,n_star,eps_star,seed,m_star,sf_model
   ! Sink particles and black hole parameters
@@ -624,7 +650,7 @@ subroutine m_read_params(pst)
   ! Clump finder parameters
   namelist/clump_params/clump_finder,clump_info &
        & ,output_clump,output_peak_grid,output_peak_part,output_peak_star,output_peak_sink,output_peak_tree &
-       & ,output_peak_trac &
+       & ,output_peak_trac,output_peak_dust &
        & ,relevance_threshold,density_threshold,saddle_threshold &
        & ,mass_threshold,purity_threshold,fraction_threshold &
        & ,merger_tree,orphan,ntreemax,ntreetot,rho_type_clump
@@ -703,6 +729,9 @@ subroutine m_read_params(pst)
   read(1,NML=run_params)
   rewind(1)
   read(1,NML=output_params)
+  rewind(1)
+  read(1,NML=traj_params,END=83)
+83 continue
   rewind(1)
   read(1,NML=amr_params)
   rewind(1)
@@ -783,7 +812,7 @@ subroutine m_read_params(pst)
   end if
   !--------------------------------------------------
   ! Compute maximum number of particles:
-  ! dm, stars, sinks, trees, and tracers
+  ! dm, stars, sinks, trees, tracers, and dust
   !--------------------------------------------------
 
   if(npartmax==0)then
@@ -900,12 +929,19 @@ subroutine m_read_params(pst)
   rewind(1)
   read(1,NML=trac_params,END=117)
 117 continue
+  rewind(1)
+  read(1,NML=dust_params,END=118)
+118 continue
   close(1)
 
   ! Compute maximum number of tracer particles
   if(ntracmax==0)then
      ntracmax=int(ntractot/int(s%g%ncpu,kind=8),kind=4)
      if(ntracmax==0)trac=.false.
+  endif
+  if(ndustmax==0)then
+     ndustmax=int(ndusttot/int(s%g%ncpu,kind=8),kind=4)
+     if(ndustmax==0)dust=.false.
   endif
 
   !-----------------
@@ -1143,6 +1179,7 @@ subroutine m_read_params(pst)
   s%r%star=star
   s%r%sink=sink
   s%r%trac=trac
+  s%r%dust=dust
   s%r%tree=merger_tree
   s%r%orphan=orphan
   s%r%verbose=verbose
@@ -1180,9 +1217,18 @@ subroutine m_read_params(pst)
   s%r%nsinkmax=nsinkmax
   s%r%ntreemax=ntreemax
   s%r%ntracmax=ntracmax
+  s%r%ndustmax=ndustmax
+  s%r%ntrac_per_cell=ntrac_per_cell
+  s%r%ndust_per_cell=ndust_per_cell
+  s%r%dust_to_gas_mass_ratio=dust_to_gas_mass_ratio
+  s%r%grain_size_parameter=grain_size_parameter
+  s%r%grain_charge_parameter=grain_charge_parameter
+  s%r%dust_gyro_factor=dust_gyro_factor
+  s%r%analytic_dust_force=analytic_dust_force
   s%r%nexpand=nexpand
   s%r%boxlen=boxlen
 
+  s%r%gravity_test=gravity_test
   s%r%epsilon=epsilon
   s%r%gravity_type=gravity_type
   s%r%gravity_params=gravity_params
@@ -1199,6 +1245,8 @@ subroutine m_read_params(pst)
   s%r%tree_mass_deposition_scheme=tree_mass_deposition_scheme
   s%r%tree_force_interpolation_scheme=tree_force_interpolation_scheme
   s%r%trac_interpolation_scheme=trac_interpolation_scheme
+  s%r%dust_mass_deposition_scheme=dust_mass_deposition_scheme
+  s%r%dust_force_interpolation_scheme=dust_force_interpolation_scheme
 
   s%r%nw_frame=nw_frame
   s%r%nh_frame=nh_frame
@@ -1219,6 +1267,10 @@ subroutine m_read_params(pst)
   s%r%proj_axis=proj_axis
   s%r%movie_vars_txt=movie_vars_txt
   if(s%r%movie)call set_movie_vars(s%r)
+
+  ! Trajectory output params
+  s%r%ntrajectories=ntrajectories
+  s%r%trajectories=trajectories
 
   s%r%gamma=gamma
   s%r%courant_factor=courant_factor
@@ -1495,6 +1547,7 @@ subroutine m_read_params(pst)
   s%r%output_peak_sink=output_peak_sink
   s%r%output_peak_tree=output_peak_tree
   s%r%output_peak_trac=output_peak_trac
+  s%r%output_peak_dust=output_peak_dust
   s%r%relevance_threshold=relevance_threshold
   s%r%density_threshold=density_threshold
   s%r%saddle_threshold=saddle_threshold

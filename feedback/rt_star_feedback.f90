@@ -41,7 +41,6 @@ end subroutine r_star_rt_feedback
 !##############################################################################
 subroutine star_rt_feedback(s, p, ilevel)
   use amr_parameters, only: ndim, twotondim
-  use amr_commons, only: oct
   use ramses_commons, only: ramses_t
   use pm_commons, only: part_t
   use rt_parameters, only: nrtgrp
@@ -62,20 +61,18 @@ subroutine star_rt_feedback(s, p, ilevel)
   ! Local variables
   integer,dimension(1:ndim)::ckey
   integer(kind=8),dimension(0:ndim)::hash_cell
-  integer::ipart,icell,idim
+  integer::ipart,igrid,icell,idim
   real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
   real(kind=8)::scale_Np,scale_Fp,scale_inp,scale_inp_cell,scale_msun
   real(kind=8)::dx_loc,vol_loc
   real(kind=8)::z,mass,age,code2Gyr,dt_Gyr,dt_Gyr_parent,dt_loc_Gyr,t_SN_Gyr
-  type(oct),pointer::gridp
   type(msg_rt_emissivity_realdp)::dummy_rt_emissivity_realdp
   logical::ok_level
   real(kind=8),dimension(nrtgrp)::part_NpInp, lum
 
-
 #ifdef RT
 #if NDIM==3
-  associate(r=>s%r, g=>s%g, m=>s%m)
+  associate(r=>s%r, g=>s%g, m=>s%m, mdl=>s%mdl)
 
   ! Mesh spacing in that level
   dx_loc=r%boxlen/2**ilevel
@@ -98,11 +95,8 @@ subroutine star_rt_feedback(s, p, ilevel)
   t_SN_Gyr = r%t_SNII * 1d-3
 
   ! Open cache for array emissivity (flush)
-  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32, &
-                hilbert=m%domain,pack_size=storage_size(dummy_rt_emissivity_realdp)/32, &
-                pack=pack_fetch_emissivity, unpack=unpack_fetch_emissivity, &
-                init=init_flush_emissivity, flush=pack_flush_emissivity, &
-                combine=unpack_flush_emissivity)
+  call open_cache(mdl, m, pack_size=storage_size(dummy_rt_emissivity_realdp)/32, &
+       init=init_flush_emissivity, flush=pack_flush_emissivity, combine=unpack_flush_emissivity)
 
   ! Loop over particles in Hilbert order
   do ipart=p%headp(ilevel),p%tailp(ilevel)
@@ -119,10 +113,10 @@ subroutine star_rt_feedback(s, p, ilevel)
      ! Get parent cell at level ilevel using cache
      hash_cell(0)=ilevel+1
      hash_cell(1:ndim)=ckey(1:ndim)
-     call get_parent_cell(s,hash_cell,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
+     call get_parent_cell(s,hash_cell,igrid,icell,flush_cache=.true.,fetch_cache=.false.)
 
      ! If cell does not exist at current level, then find cell at coarser level
-     if(.not.associated(gridp))then
+     if(igrid==0)then
 
         ! NGP at level ilevel-1
         do idim=1,ndim
@@ -135,9 +129,8 @@ subroutine star_rt_feedback(s, p, ilevel)
         ! Get parent cell at level ilevel-1 using cache
         hash_cell(0)=ilevel
         hash_cell(1:ndim)=ckey(1:ndim)
-        call get_parent_cell(s,hash_cell,m%grid_dict,gridp,icell &
-                                ,flush_cache=.true.,fetch_cache=.false.)
-        if(.not.associated(gridp))ok_level=.false.
+        call get_parent_cell(s,hash_cell,igrid,icell,flush_cache=.true.,fetch_cache=.false.)
+        if(igrid==0)ok_level=.false.
 
      end if
 
@@ -175,106 +168,113 @@ subroutine star_rt_feedback(s, p, ilevel)
      lum(1:nrtgrp) = lum(1:nrtgrp) * scale_t ! back to code units
 
      ! Update parent cell emissivity
-     gridp%emissivity(icell,1:nrtgrp) = gridp%emissivity(icell,1:nrtgrp) + lum(1:nrtgrp)
+     m%emissivity(icell,1:nrtgrp,igrid) = m%emissivity(icell,1:nrtgrp,igrid) + lum(1:nrtgrp)
 
   end do
   ! End loop over particles
 
-  call close_cache(s,m%grid_dict)
+  call close_cache(mdl)
 
 end associate
 #endif
 #endif
 end subroutine star_rt_feedback
 !XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-subroutine pack_fetch_emissivity(grid,msg_size,msg_array)
-  use amr_parameters, only: ndim,twotondim
+subroutine pack_fetch_emissivity(mesh,igrid,msg_size,msg_array)
+  use amr_parameters, only: ndim, twotondim
   use rt_parameters, only: nrtgrp
-  use amr_commons, only: oct
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_rt_emissivity_realdp
-  type(oct)::grid
+  type(mesh_t)::mesh
+  integer::igrid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
   type(msg_rt_emissivity_realdp)::msg
 
 #ifdef RT  
-  msg%realdp=grid%emissivity
+  msg%realdp(:,:)=mesh%emissivity(:,:,igrid)
 #endif
 
   msg_array=transfer(msg,msg_array)
 
 end subroutine pack_fetch_emissivity
 !XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-subroutine unpack_fetch_emissivity(grid,msg_size,msg_array,hash_key)
-  use amr_parameters, only: ndim,twotondim
+subroutine unpack_fetch_emissivity(mesh,igrid,msg_size,msg_array,hash_key)
+  use amr_parameters, only: ndim, twotondim
   use rt_parameters, only: nrtgrp
-  use amr_commons, only: oct
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_rt_emissivity_realdp
-  type(oct)::grid
+  type(mesh_t)::mesh
+  integer::igrid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
   integer(kind=8),dimension(0:ndim)::hash_key
   type(msg_rt_emissivity_realdp)::msg
 
-  grid%lev=hash_key(0)
-  grid%ckey(1:ndim)=hash_key(1:ndim)
+  mesh%grid(igrid)%lev=hash_key(0)
+  mesh%grid(igrid)%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
 
 #ifdef RT
-  grid%emissivity=msg%realdp
+  mesh%emissivity(:,:,igrid)=msg%realdp(:,:)
 #endif
 
 end subroutine unpack_fetch_emissivity
 !XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-subroutine init_flush_emissivity(grid,hash_key)
-  use amr_parameters, only: ndim,twotondim
+subroutine init_flush_emissivity(mesh,igrid,hash_key)
+  use amr_parameters, only: ndim, twotondim
   use rt_parameters, only: nrtvar
-  use amr_commons, only: oct
-  type(oct)::grid
+  use amr_commons, only: mesh_t
+  type(mesh_t)::mesh
+  integer::igrid
   integer(kind=8),dimension(0:ndim)::hash_key
 
-  grid%lev=hash_key(0)
-  grid%ckey(1:ndim)=hash_key(1:ndim)
+  mesh%grid(igrid)%lev=hash_key(0)
+  mesh%grid(igrid)%ckey(1:ndim)=hash_key(1:ndim)
+
 #ifdef RT
-  grid%emissivity=0.0d0
+  mesh%emissivity(:,:,igrid)=0.0d0
 #endif
 
 end subroutine init_flush_emissivity
 !XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-subroutine pack_flush_emissivity(grid,msg_size,msg_array)
+subroutine pack_flush_emissivity(mesh,igrid,msg_size,msg_array)
   use amr_parameters, only: twotondim
   use rt_parameters, only: nrtgrp
-  use amr_commons, only: oct
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_rt_emissivity_realdp
-  type(oct)::grid
+  type(mesh_t)::mesh
+  integer::igrid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
   type(msg_rt_emissivity_realdp)::msg
 
 #ifdef RT
-  msg%realdp=grid%emissivity
+  msg%realdp(:,:)=mesh%emissivity(:,:,igrid)
 #endif
+
   msg_array=transfer(msg,msg_array)
 
 end subroutine pack_flush_emissivity
 !XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-subroutine unpack_flush_emissivity(grid,msg_size,msg_array,hash_key)
-  use amr_parameters, only: ndim,twotondim
+subroutine unpack_flush_emissivity(mesh,igrid,msg_size,msg_array,hash_key)
+  use amr_parameters, only: ndim, twotondim
   use rt_parameters, only: nrtgrp
-  use amr_commons, only: oct
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_rt_emissivity_realdp
-  type(oct)::grid
+  type(mesh_t)::mesh
+  integer::igrid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
   integer(kind=8),dimension(0:ndim)::hash_key
-
   type(msg_rt_emissivity_realdp)::msg
 
-  grid%lev=hash_key(0)
-  grid%ckey(1:ndim)=hash_key(1:ndim)
+  mesh%grid(igrid)%lev=hash_key(0)
+  mesh%grid(igrid)%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
+
 #ifdef RT
-  grid%emissivity=grid%emissivity+msg%realdp
+  mesh%emissivity(:,:,igrid)=mesh%emissivity(:,:,igrid)+msg%realdp(:,:)
 #endif
 
 end subroutine unpack_flush_emissivity

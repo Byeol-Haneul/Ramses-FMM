@@ -281,6 +281,7 @@ subroutine tree_clump(s)
   !----------------------------------------------------------------------
   call collect_test(s)
   if(s%c%ntest_tot==0)return
+
   !----------------------------------------------------------------------
   ! Count and collect all density peaks.
   ! We also compute for each test particle the coordinates of its
@@ -360,9 +361,9 @@ subroutine tree_in_peak(s,reset_tree_pos,count_tree)
   type(msg_tree_minid)::dummy_tree_minid
 
   logical::bound
-  real(kind=8)::pi,grav,rr,r2,v2,rad2,vel2,radius
+  real(kind=8)::pi,grav,r2,v2,rad2,vel2,radius
 
-  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c,p=>s%tree)
+  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c,p=>s%tree,mdl=>s%mdl)
 
   ! Compute constants
   pi=ACOS(-1.0D0)
@@ -383,17 +384,17 @@ subroutine tree_in_peak(s,reset_tree_pos,count_tree)
   !-----------------------------------------------
   if(reset_tree_pos)then
      c%min_tree_id=huge(0)
-     call open_cache_clump(s,pack_size=storage_size(dummy_tree_clump)/32,&
-          pack=pack_fetch_tree,unpack=unpack_fetch_tree,&
-          init=init_flush_minid,flush=pack_flush_minid,combine=unpack_flush_minid)
+     call open_cache_clump(mdl, c, pack_size=storage_size(dummy_tree_clump)/32, &
+          pack=pack_fetch_tree, unpack=unpack_fetch_tree, &
+          init=init_flush_minid, flush=pack_flush_minid, combine=unpack_flush_minid)
      do i=1+p%norphan_peak,p%npart
         ipart=p%sortp(i)
         global_peak_id=p%workp(i)
         call get_peak(s,global_peak_id,peak_nr,fetch_cache=.true.,flush_cache=.true.)
         ! Compute peak's central core properties
-        radius = MAX(4.0d0*r%boxlen/2**c%peak_level(peak_nr),0.1*c%clump_rad(peak_nr))
-        rad2 = radius**2
+        radius = 2d0*r%boxlen/2**c%peak_level(peak_nr)
         vel2 = grav*c%particle_mass(peak_nr)/radius
+        rad2 = radius**2
         ! Compute relative velocity
         v2 =     (p%vp(ipart,1) - c%peak_vel(peak_nr,1))**2 &
              & + (p%vp(ipart,2) - c%peak_vel(peak_nr,2))**2 &
@@ -402,9 +403,9 @@ subroutine tree_in_peak(s,reset_tree_pos,count_tree)
         r2 =     (p%xp(ipart,1) - c%peak_com(peak_nr,1))**2 &
              & + (p%xp(ipart,2) - c%peak_com(peak_nr,2))**2 &
              & + (p%xp(ipart,3) - c%peak_com(peak_nr,3))**2
-        rr = sqrt(r2)
         ! Compute boundness criteria
-        bound = ( rr < radius ) .and. ( v2 < 2d0*vel2*(1d0-rr/radius) )
+!        bound = ( v2/vel2 + r2/rad2 < 15d0 )
+        bound = ( v2/vel2 + 2d0*sqrt(r2/rad2) < 20d0 )
 
         if(bound)then
            ! If not merged yet then mark as merger candidate
@@ -421,14 +422,14 @@ subroutine tree_in_peak(s,reset_tree_pos,count_tree)
            c%min_tree_id(peak_nr)=min(c%min_tree_id(peak_nr),p%idp(ipart))
         endif
      end do
-     call close_cache(s,m%grid_dict)
+     call close_cache(mdl)
   endif
 
   !----------------------------------------------------
   ! Merge all tree particles that sit in the same clump
   !----------------------------------------------------
-  call open_cache_clump(s,pack_size=storage_size(dummy_tree_minid)/32,&
-       pack=pack_fetch_minid,unpack=unpack_fetch_minid)
+  call open_cache_clump(mdl, c, pack_size=storage_size(dummy_tree_minid)/32, &
+       pack=pack_fetch_minid, unpack=unpack_fetch_minid)
   ! Set tracking id to zero for orphan merger tree tracer particles
   do i=1,p%norphan_peak
      ipart=p%sortp(i)
@@ -454,7 +455,7 @@ subroutine tree_in_peak(s,reset_tree_pos,count_tree)
         p%idt(ipart)=global_peak_id
      endif
   end do
-  call close_cache(s,m%grid_dict)
+  call close_cache(mdl)
 
   !------------------------------------
   ! Count tree particles in each halo
@@ -462,19 +463,19 @@ subroutine tree_in_peak(s,reset_tree_pos,count_tree)
   if(count_tree)then
      ! Count trees in each peak
      c%ntree=0
-     call open_cache_clump(s,pack_size=storage_size(dummy_tree_clump)/32,&
-          init=init_flush_tree,flush=pack_flush_tree,combine=unpack_flush_tree)
+     call open_cache_clump(mdl, c, pack_size=storage_size(dummy_tree_clump)/32, &
+          init=init_flush_tree, flush=pack_flush_tree, combine=unpack_flush_tree)
      do i=1+p%norphan_peak,p%npart
         global_peak_id=p%workp(i)
         call get_peak(s,global_peak_id,peak_nr,fetch_cache=.false.,flush_cache=.true.)
         c%ntree(peak_nr)=c%ntree(peak_nr)+1
      end do
-     call close_cache(s,m%grid_dict)
+     call close_cache(mdl)
      ! Count trees hierarchically in each halo
      if(c%saddle_threshold>0)then
         do ilev=0,c%merge_levelmax
-           call open_cache_clump(s,pack_size=storage_size(dummy_tree_clump)/32,&
-                init=init_flush_tree,flush=pack_flush_tree,combine=unpack_flush_tree)
+           call open_cache_clump(mdl, c, pack_size=storage_size(dummy_tree_clump)/32, &
+                init=init_flush_tree, flush=pack_flush_tree, combine=unpack_flush_tree)
            do ipeak=1,c%npeak
               if(c%lev_peak(ipeak)==ilev)then
                  merge_to=c%new_peak(ipeak)
@@ -484,7 +485,7 @@ subroutine tree_in_peak(s,reset_tree_pos,count_tree)
                  endif
               endif
            end do
-           call close_cache(s,m%grid_dict)
+           call close_cache(mdl)
         end do
      endif
   endif

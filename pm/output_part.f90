@@ -46,6 +46,10 @@ recursive subroutine r_output_part(pst,input_array,input_size,output_array,outpu
            filename2=TRIM(filename)//'trac.'
            call backup_part(pst%s%r,pst%s%g,pst%s%trac,filename2)
         endif
+        if(pst%s%r%dust)then
+           filename2=TRIM(filename)//'dust.'
+           call backup_part(pst%s%r,pst%s%g,pst%s%dust,filename2)
+        endif
      else
         if(pst%s%r%part)then
            filename2=TRIM(filename)//'part.'
@@ -66,6 +70,10 @@ recursive subroutine r_output_part(pst,input_array,input_size,output_array,outpu
         if(pst%s%r%trac)then
            filename2=TRIM(filename)//'trac.'
            call output_part(pst%s,pst%s%trac,filename2)
+        endif
+        if(pst%s%r%dust)then
+           filename2=TRIM(filename)//'dust.'
+           call output_part(pst%s,pst%s%dust,filename2)
         endif
      endif
   endif
@@ -183,6 +191,26 @@ subroutine output_part(s,p,filename)
   if(allocated(p%tm))then
      do i=1,p%npart
         xsp(i)=p%tm(i)
+     end do
+     ivar=ivar+1
+     write(ilun,POS=nskip(ivar))
+     write(ilun)xsp
+  endif
+
+  ! Write size
+  if(allocated(p%size))then
+     do i=1,p%npart
+        xsp(i)=p%size(i)
+     end do
+     ivar=ivar+1
+     write(ilun,POS=nskip(ivar))
+     write(ilun)xsp
+  endif
+
+  ! Write charge
+  if(allocated(p%charge))then
+     do i=1,p%npart
+        xsp(i)=p%charge(i)
      end do
      ivar=ivar+1
      write(ilun,POS=nskip(ivar))
@@ -342,6 +370,22 @@ subroutine backup_part(r,g,p,filename)
   if(allocated(p%tm))then
      do i=1,p%npart
         xdp(i)=p%tm(i)
+     end do
+     write(ilun)xdp
+  endif
+
+  ! Write size
+  if(allocated(p%size))then
+     do i=1,p%npart
+        xdp(i)=p%size(i)
+     end do
+     write(ilun)xdp
+  endif
+
+  ! Write charge
+  if(allocated(p%charge))then
+     do i=1,p%npart
+        xdp(i)=p%charge(i)
      end do
      write(ilun)xdp
   endif

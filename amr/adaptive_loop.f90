@@ -30,7 +30,7 @@ subroutine adaptive_loop(pst)
   double precision::tt1,tt2
   real(kind=4)::core_mem
 
-  associate(mdl=>pst%s%mdl,r=>pst%s%r,m=>pst%s%m,g=>pst%s%g)
+  associate(r=>pst%s%r,g=>pst%s%g,mdl=>pst%s%mdl)
 
   tt1 = mdl_wtime(mdl)
 
@@ -79,10 +79,9 @@ subroutine adaptive_loop(pst)
   print '(A,F14.7)',' Time elapsed since startup:',tt2-tt1
 
   ! Output mesh structure
-  write(*,*)'Initial mesh structure'
   do ilevel=r%levelmin,r%nlevelmax
-     if(m%noct_tot(ilevel)>0)write(*,999)&
-          & ilevel,m%noct_tot(ilevel),m%noct_min(ilevel),m%noct_max(ilevel),m%noct_tot(ilevel)/mdl_threads(mdl)
+     if(pst%s%m%noct_tot(ilevel)>0)write(*,999)&
+          & ilevel,pst%s%m%noct_tot(ilevel),pst%s%m%noct_min(ilevel),pst%s%m%noct_max(ilevel),pst%s%m%noct_tot(ilevel)/mdl_threads(mdl)
   end do
 999 format(' Level ',I2,' has ',I11,' grids (',3(I8,','),')')
 

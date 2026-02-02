@@ -67,7 +67,7 @@ subroutine drive_turb(r,g,m,t,ilevel)
         ! Collect gas density
 #ifdef HYDRO
         do i=1,ngrid
-           rho(i)=m%grid(igrid+i-1)%uold(ind,1)
+           rho(i)=m%uold(ind,1,igrid+i-1)
         end do
 #endif
         ! Interpolate turbulent driving force field
@@ -77,7 +77,7 @@ subroutine drive_turb(r,g,m,t,ilevel)
 #ifdef TURB
         do idim=1,ndim
            do i=1,ngrid
-              m%grid(igrid+i-1)%fturb(ind,idim)=ff(i,idim)
+              m%fturb(ind,idim,igrid+i-1)=ff(i,idim)
            end do
         end do
 #endif

@@ -7,7 +7,7 @@ module amr_commons
   use rt_commons
   use hash
   use domain_m
-  
+
   type multipole_t
     real(kind=8),dimension(1:ndim+1)::q
   end type multipole_t
@@ -25,6 +25,7 @@ module amr_commons
      logical::sink    =.false.   ! Sinks and sink formation activated
      logical::tree    =.false.   ! Merger tree particles activated
      logical::trac    =.false.   ! Tracer particles activated
+     logical::dust    =.false.   ! Dust particles activated
      logical::orphan  =.false.   ! Orphan particles activated
      logical::verbose =.false.   ! Write everything
      logical::debug   =.false.   ! Debug mode activated
@@ -39,7 +40,7 @@ module amr_commons
      integer::geom    =1         ! 1: cartesian, 2: cylindrical, 3: spherical
      integer::overload=1         ! MPI domain overloading
      integer::nsuperoct=0        ! Number of superoct levels
-     
+
      ! Output parameters
      integer::noutput=1          ! Total number of outputs
      integer::foutput=1000000    ! Frequency of outputs
@@ -53,6 +54,10 @@ module amr_commons
      integer::bkp_modulo=0       ! Use modulo for backup file count
      integer::nfile=1            ! Number of file used per snapshot. Use -1 for nfile=ncpu
 
+     ! Trajectory output parameters (per-step particle traces)
+     integer::ntrajectories=0
+     integer,dimension(1:MAXOUT)::trajectories=0
+
      ! Mesh parameters
      integer::levelmin=1         ! Full refinement up to levelmin
      integer::nlevelmax=1        ! Maximum number of level
@@ -63,10 +68,19 @@ module amr_commons
      integer::nsinkmax=0         ! Maximum number of sink particles
      integer::ntreemax=0         ! Maximum number of tree particles
      integer::ntracmax=0         ! Maximum number of tracer particles
+     integer::ndustmax=0         ! Maximum number of dust particles
+     integer::ntrac_per_cell=1   ! Number of tracer particles per cell in ICs
+     integer::ndust_per_cell=1   ! Number of dust particles per cell in ICs
+     real(kind=8)::dust_to_gas_mass_ratio=0.0d0   ! Dust to gas mass ratio
+     real(kind=8)::grain_size_parameter=0.0d0   ! Dust particle size parameter (dimensionless)
+     real(kind=8)::grain_charge_parameter=0.0d0  ! Dust particle charge-to-mass ratio (dimensionless)
+     real(kind=8)::dust_gyro_factor=0.1d0  ! Fraction of gyro period allowed per step
+     logical :: analytic_dust_force = .false. ! If true use analytic drag+Lorentz
      integer,dimension(1:MAXLEVEL)::nexpand=1 ! Number of mesh expansion
      real(kind=8)::boxlen=1.0        ! Cell size at level 0 (total box size)
-          
+
      ! Poisson solver parameters
+     logical :: gravity_test=.false.  ! Use file rho_ana.f90 to test the Poisson solvers
      real(kind=8)::epsilon=1.0D-4     ! Convergence criterion for Poisson solvers
      real(kind=8),dimension(1:10)::gravity_params=0.0 ! Gravity parameters
      integer :: gravity_type=0     ! Type of force computation
@@ -83,6 +97,8 @@ module amr_commons
      integer :: tree_mass_deposition_scheme=1     ! tree mass deposition schemes
      integer :: tree_force_interpolation_scheme=1 ! tree force interpolation schemes
      integer :: trac_interpolation_scheme=1 ! tracer force interpolation schemes
+     integer :: dust_mass_deposition_scheme=1 ! dust mass deposition schemes
+     integer :: dust_force_interpolation_scheme=1 ! dust force interpolation schemes
 
      ! Movie parameters
      integer::levelmax_frame=0
@@ -104,7 +120,7 @@ module amr_commons
      character(LEN=5)::proj_axis='z' ! x->x, y->y, projection along z
      integer,dimension(0:NVAR+2+nrtgrp)::movie_vars=0
      character(len=5),dimension(0:NVAR+2+nrtgrp)::movie_vars_txt=''
-     
+
      ! Hydro solver parameters
      real(kind=8)::gamma=1.4d0
      real(kind=8)::courant_factor=0.5d0
@@ -128,7 +144,7 @@ module amr_commons
      real(kind=8)::switch_llf_pmin=-1
      real(kind=8),dimension(1:3)::constant_gravity
      integer::inener,ientropy,imetal,iturb,ichem
-     
+
      ! Physics parameters
      real(kind=8)::units_density=1.0 ! [g/cm^3]
      real(kind=8)::units_time=1.0    ! [seconds]
@@ -160,8 +176,8 @@ module amr_commons
      logical::pic_lock_refine=.false.
 
      ! Refinement parameters for hydro
-     integer ::interpol_var=0   ! Interpolated variables
-     integer ::interpol_type=1  ! Interpolation scheme
+     integer::interpol_var=0   ! Interpolated variables
+     integer::interpol_type=1  ! Interpolation scheme
      real(kind=8)::err_grad_d=-1.0  ! Density gradient
      real(kind=8)::err_grad_u=-1.0  ! Velocity gradient
      real(kind=8)::err_grad_p=-1.0  ! Pressure gradient
@@ -225,7 +241,7 @@ module amr_commons
      real(kind=8)::ic_scale_m=1.0d0
 
      ! Boundary conditions parameters
-     logical,dimension(1:NDIM)::periodic=.true.
+     logical,dimension(1:3)::periodic=.true.
      integer::nbound=0
      logical::no_inflow=.false.
      integer::bound_levelmin=1   ! AMR level to define boundary geometry
@@ -269,9 +285,9 @@ module amr_commons
      integer::eos_type=1 ! 1=isothermal, 2=polytrope, 3=isothermal+polytrope
      real(kind=8)::eos_nH=1d50,eos_index=1d0,eos_T2=10d0
      real(kind=8)::T2max
-     real(kind=8) ::mu_mol       = 1.2195d0           ! Mean molecular weight (std ISM value)
-     real(kind=8) ::X_H          = 0.7600d0           !                Hydrogen mass fraction
-     real(kind=8) ::Y_He         = 0.2400d0           !                  Helium mass fraction
+     real(kind=8)::mu_mol       = 1.2195d0           ! Mean molecular weight (std ISM value)
+     real(kind=8)::X_H          = 0.7600d0           !                Hydrogen mass fraction
+     real(kind=8)::Y_He         = 0.2400d0           !                  Helium mass fraction
      logical::is_init_xion=.false.          ! Initialize ionization from T profile (neq only)
      logical::isHe=.true.                             !      He ionization fractions tracked?
      logical::isH2=.false.                            !                           H2 tracked?
@@ -329,6 +345,7 @@ module amr_commons
      logical::output_peak_sink=.false.
      logical::output_peak_tree=.false.
      logical::output_peak_trac=.false.
+     logical::output_peak_dust=.false.
      integer::rho_type_clump=1
      real(kind=8)::relevance_threshold=2
      real(kind=8)::density_threshold=-1
@@ -338,14 +355,14 @@ module amr_commons
      real(kind=8)::fraction_threshold=0.1d0
 
      ! Lightcone parameters
-     logical :: lightcone = .false.   ! Lightcone activated
-     real(kind=8) :: cone_z_min = 0.0 ! Minimum redshift
-     real(kind=8) :: cone_z_max = 1.0 ! Maximum redshift
-     real(kind=8) :: cone_opening_angle_y = 0.0 ! Opening angle in y direction in degrees
-     real(kind=8) :: cone_opening_angle_z = 0.0 ! Opening angle in z direction in degrees
-     real(kind=8) :: cone_theta = 0.0 ! Rotation of the cone's x-axis around the box's y-axis in degrees
-     real(kind=8) :: cone_phi = 0.0 ! Rotation of the cone's x-axis around the box's z-axis in degrees
-     real(kind=8), dimension(1:3) :: cone_observer = (/0.0, 0.0, 0.0/) ! Observer position in code units
+     logical::lightcone = .false.   ! Lightcone activated
+     real(kind=8)::cone_z_min = 0.0 ! Minimum redshift
+     real(kind=8)::cone_z_max = 1.0 ! Maximum redshift
+     real(kind=8)::cone_opening_angle_y = 0.0 ! Opening angle in y direction in degrees
+     real(kind=8)::cone_opening_angle_z = 0.0 ! Opening angle in z direction in degrees
+     real(kind=8)::cone_theta = 0.0 ! Rotation of the cone's x-axis around the box's y-axis in degrees
+     real(kind=8)::cone_phi = 0.0 ! Rotation of the cone's x-axis around the box's z-axis in degrees
+     real(kind=8),dimension(1:3) :: cone_observer = (/0.0, 0.0, 0.0/) ! Observer position in code units
 
      ! Sink parameters
      integer::rho_type_sink=1
@@ -439,12 +456,11 @@ module amr_commons
      real(kind=8)::Tmu_dissoc=1d3              ! Dissociation temperature [K]                    !
      integer::iPEH_group=-1                ! Radiation group used for photo-electric heating !
      logical::cosmic_rays=.false.          ! Include cosmic ray ionisation                   !
-     
      character(LEN=128)::sed_dir=''        ! Dir containing stellar energy distributions     !
      !character(LEN=128)::uv_file=''       ! File containing UV background                   !
      ! SED statistics: Radiation emitted, total, last coarse step [#photons/10^50]-----------
      logical::rt_emission_stats=.false.    ! Print info about stellar emission in log        !
-     
+
      ! Initial condition RT regions parameters----------------------------------------------
      integer                           ::rt_nregion=0
      character(LEN=10),dimension(1:MAXREGION)::rt_region_type='square'
@@ -460,7 +476,7 @@ module amr_commons
      real(kind=8),dimension(1:MAXREGION)   ::rt_u_region=0.                     ! Photon flux
      real(kind=8),dimension(1:MAXREGION)   ::rt_v_region=0.                     ! Photon flux
      real(kind=8),dimension(1:MAXREGION)   ::rt_w_region=0.                     ! Photon flux
-     
+
      ! RT source regions parameters----------------------------------------------------------
      integer                           ::rt_nsource=0
      character(LEN=10),dimension(1:MAXREGION)::rt_source_type='square'
@@ -483,7 +499,7 @@ module amr_commons
      real(kind=8),dimension(1:MAXBOUND,1:nrtgrp)::rt_u_bound=0.0d0
      real(kind=8),dimension(1:MAXBOUND,1:nrtgrp)::rt_v_bound=0.0d0
      real(kind=8),dimension(1:MAXBOUND,1:nrtgrp)::rt_w_bound=0.0d0
-     
+
      ! RT groups parameters-------------------------------------------------------------------
      integer::sedprops_update=-1           ! Update sedprops from stellar populations        
      ! negative: never update, 0:update on init, pos x: update every x coarse steps
@@ -646,29 +662,50 @@ module amr_commons
      integer(kind=4),allocatable,dimension(:,:,:)::bound_ckey_min  ! Min. Cartesian key per level for the boundaries
      integer(kind=4),allocatable,dimension(:,:,:)::bound_ckey_max  ! Max. Cartesian key per level for the boundaries
 
-     integer(kind=4),allocatable,dimension(:)::head_cache ! Starting index in the cache for each level
-     integer(kind=4),allocatable,dimension(:)::tail_cache ! Final index in the cache for each level
-
      integer(kind=4)::noct_used,noct_used_max,noct_used_tot ! Total used octs in local memory
 
      integer(kind=4)::nx,ny,nz                   ! Size of mesh at levelmin
      real(kind=8),allocatable,dimension(:)::skip ! Coordinates of lower left corner of the box
 
-     ! Persistent array for the AMR grid
-     !type(oct),dimension(:),allocatable::grid
-     type(oct),dimension(:),pointer::grid
-     type(hash_table)::grid_dict   ! Oct hash table
+     ! Size of the oct array
+     integer(kind=4)::ngridmax
+
+     ! Persistent array for the grid
+     type(oct),allocatable,dimension(:)::grid
+
+     ! Grid hash table
+     type(hash_table)::grid_dict
+
+     ! Grid variables
+     integer,allocatable,dimension(:,:)::flag1
+     integer,allocatable,dimension(:,:)::flag2
+#ifdef HYDRO
+     real(dp),allocatable,dimension(:,:,:)::uold
+     real(dp),allocatable,dimension(:,:,:)::unew
+#endif
+#ifdef MHD
+     real(dp),allocatable,dimension(:,:,:)::bold
+     real(dp),allocatable,dimension(:,:,:)::bnew
+#endif
+#ifdef RT
+     real(dp),allocatable,dimension(:,:,:)::rtuold
+     real(dp),allocatable,dimension(:,:,:)::rtunew
+     real(dp),allocatable,dimension(:,:,:)::emissivity
+#endif
+#ifdef TURB
+     real(dp),allocatable,dimension(:,:,:)::fturb
+#endif
+#ifdef GRAV
+     real(dp),allocatable,dimension(:,:,:)::f
+     real(dp),allocatable,dimension(:,:)::rho
+     real(dp),allocatable,dimension(:,:)::phi
+     real(dp),allocatable,dimension(:,:)::phi_old
+     real(dp),allocatable,dimension(:,:)::nref
+#endif
 
      ! Clean/dirty octs for first neighbors
      integer(kind=4),allocatable,dimension(:)::indx_clean, head_clean, tail_clean, noct_clean
      integer(kind=4),allocatable,dimension(:)::indx_dirty, head_dirty, tail_dirty, noct_dirty
-
-     ! Arrays for the MG solver
-     type(hash_table)::mg_dict     ! MG hash table
-     integer(kind=4),allocatable,dimension(:)::head_mg ! Starting index for each level
-     integer(kind=4),allocatable,dimension(:)::tail_mg ! Final index for each level
-     integer(kind=4),allocatable,dimension(:)::noct_mg ! Number of octs for each level
-     integer(kind=4)::ifree_mg ! Starting index in free MG memory
 
      ! Software cache array for the AMR grid
      logical,allocatable,dimension(:)::dirty
@@ -677,7 +714,7 @@ module amr_commons
      integer,allocatable,dimension(:)::parent_cpu
      integer,allocatable,dimension(:)::ghost_parent_grid
      integer,allocatable,dimension(:)::ghost_parent_cell
-     integer::free_cache,ncache,nlocked,nlocked_max
+     integer::free_cache,ncache,ncachemax,nlocked,nlocked_max
 
      ! Software cache array for failed requests
      logical,allocatable,dimension(:)::occupied_null
@@ -686,20 +723,15 @@ module amr_commons
      integer::free_null,nnull
 
      ! Peano-Hilbert key boundaries for cpu domains
-     type(domain_t),pointer,dimension(:)::domain,domain_mg
-     type(domain_t),pointer,dimension(:)::domain_hilbert
+     type(domain_t),allocatable,dimension(:)::domain
 
      ! Hydro kernel workspace
      type(hydro_workspace_t)::hydro_w
-     
+
      ! RT kernel workspace
      type(rt_workspace_t)::rt_w
 
   end type mesh_t
-
-  ! Peano-Hilbert key boundaries for cpu domains
-  type(domain_t), allocatable, target, dimension(:)::domain,domain_mg
-  type(domain_t), pointer,             dimension(:)::domain_hilbert
 
 contains
 

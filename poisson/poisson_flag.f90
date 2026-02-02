@@ -46,14 +46,14 @@ subroutine poisson_flag(s,ilevel)
 #ifndef GRAV
 #ifdef HYDRO
         if(r%mass_sph>0.and.r%m_refine(ilevel)>=0)then
-           ok=(ok .or. m%grid(igrid)%uold(ind,1)>=r%m_refine(ilevel)*d_scale)
+           ok=(ok .or. m%uold(ind,1,igrid)>=r%m_refine(ilevel)*d_scale)
         endif
 #endif
 #endif
         ! Flag cells with density beyond the threshold
 #ifdef GRAV
         if(r%m_refine(ilevel)>=0)then
-           ok=(ok .or. m%grid(igrid)%nref(ind)>=r%m_refine(ilevel))
+           ok=(ok .or. m%nref(ind,igrid)>=r%m_refine(ilevel))
         endif
 #endif
 
@@ -61,12 +61,12 @@ subroutine poisson_flag(s,ilevel)
            ! Gather hydro variables
 #ifdef HYDRO
            do ivar=1,nvar
-              uu(ivar)=m%grid(igrid)%uold(ind,ivar)
+              uu(ivar)=m%uold(ind,ivar,igrid)
            end do
            bb=0.0
 #ifdef MHD
            do ivar=1,6
-              bb(ivar)=m%grid(igrid)%bold(ind,ivar)
+              bb(ivar)=m%bold(ind,ivar,igrid)
            end do
 #endif
            call jeans_length_refine(r,uu,bb,factG,dx_loc,r%jeans_refine(ilevel),ok)
@@ -74,8 +74,8 @@ subroutine poisson_flag(s,ilevel)
         endif
         
         ! Count only newly flagged cells
-        if(m%grid(igrid)%flag1(ind)==0.and.ok)g%nflag=g%nflag+1
-        if(ok)m%grid(igrid)%flag1(ind)=1
+        if(m%flag1(ind,igrid)==0.and.ok)g%nflag=g%nflag+1
+        if(ok)m%flag1(ind,igrid)=1
 
      end do
      ! End loop over cells

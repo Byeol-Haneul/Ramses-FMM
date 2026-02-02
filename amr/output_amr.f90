@@ -30,7 +30,7 @@ subroutine m_dump_all(pst,write_bkp_file)
   type(in_output_poisson_t)::in_output_poisson
 
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,star=>pst%s%star, &
-   & sink=>pst%s%sink,tree=>pst%s%tree,trac=>pst%s%trac,mdl=>pst%s%mdl)
+   & sink=>pst%s%sink,tree=>pst%s%tree,trac=>pst%s%trac,dust=>pst%s%dust,mdl=>pst%s%mdl)
 
   if(g%nstep_coarse==g%nstep_coarse_old.and.g%nstep_coarse>0)return
   if(g%nstep_coarse==0.and.r%nrestart>0)return
@@ -104,6 +104,10 @@ subroutine m_dump_all(pst,write_bkp_file)
      if(r%trac)then
         filename=TRIM(filedir)//'trac_header.txt'
         call output_header(r,g,trac,filename)
+     endif
+     if(r%dust)then
+        filename=TRIM(filedir)//'dust_header.txt'
+        call output_header(r,g,dust,filename)
      endif
      if(r%hydro)then
         filename=TRIM(filedir)//'hydro_header.txt'
@@ -693,6 +697,12 @@ subroutine output_header(r,g,p,filename)
   endif
   if(allocated(p%idt))then
      write(ilun,'(a)',advance='no')'tracking_id '
+  endif
+  if(allocated(p%size))then
+     write(ilun,'(a)',advance='no')'size '
+  endif
+  if(allocated(p%charge))then
+     write(ilun,'(a)',advance='no')'charge '
   endif
   close(ilun)
 

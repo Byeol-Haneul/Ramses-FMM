@@ -36,6 +36,9 @@ recursive subroutine r_init_part(pst)
      if(pst%s%r%trac)then
         call init_trac(pst%s%r,pst%s%g,pst%s%trac)
      end if
+     if(pst%s%r%dust)then
+        call init_dust(pst%s%r,pst%s%g,pst%s%dust)
+     end if
   endif
 
 end subroutine r_init_part
@@ -69,7 +72,7 @@ subroutine init_part(r,g,p)
   ! ALlocate workspace variables
   allocate(p%sortp (r%npartmax))
   allocate(p%workp (r%npartmax))
-  ! Allocate pointers to particle levels
+  ! Allocate head and tail of particle levels
   if(ANY(.not.r%periodic(1:ndim)))then
      allocate(p%headp(r%levelmin-1:r%nlevelmax))
      allocate(p%tailp(r%levelmin-1:r%nlevelmax))
@@ -113,7 +116,7 @@ subroutine init_star(r,g,p)
   ! Allocate workspace variables
   allocate(p%sortp (r%nstarmax))
   allocate(p%workp (r%nstarmax))
-  ! Allocate pointers to particle levels
+  ! Allocate head and tail of particle levels
   if(ANY(.not.r%periodic(1:ndim)))then
      allocate(p%headp(r%levelmin-1:r%nlevelmax))
      allocate(p%tailp(r%levelmin-1:r%nlevelmax))
@@ -159,7 +162,7 @@ subroutine init_sink(r,g,p)
   ! Allocate workspace variables
   allocate(p%sortp (r%nsinkmax))
   allocate(p%workp (r%nsinkmax))
-  ! Allocate pointers to particle levels
+  ! Allocate head and tail of particle levels
   if(ANY(.not.r%periodic(1:ndim)))then
      allocate(p%headp(r%levelmin-1:r%nlevelmax))
      allocate(p%tailp(r%levelmin-1:r%nlevelmax))
@@ -207,7 +210,7 @@ subroutine init_tree(r,g,p)
   ! Allocate workspace variables
   allocate(p%sortp (r%ntreemax))
   allocate(p%workp (r%ntreemax))
-  ! Allocate pointers to particle levels
+  ! Allocate head and tail of particle levels
   if(ANY(.not.r%periodic(1:ndim)))then
      allocate(p%headp(r%levelmin-1:r%nlevelmax))
      allocate(p%tailp(r%levelmin-1:r%nlevelmax))
@@ -259,6 +262,37 @@ end subroutine init_trac
 !#########################################################################
 !#########################################################################
 !#########################################################################
+subroutine init_dust(r,g,p)
+  use amr_parameters, only: ndim
+  use amr_commons, only: run_t,global_t
+  use pm_parameters, only: DUST_TYPE
+  use pm_commons, only: part_t
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(part_t)::p
+  !-----------------------------------
+  ! Allocate dust particle variables
+  !------------------------------------
+  p%type=DUST_TYPE
+  allocate(p%xp    (r%ndustmax,ndim))
+  allocate(p%vp    (r%ndustmax,ndim))
+  allocate(p%mp    (r%ndustmax))
+  allocate(p%levelp(r%ndustmax))
+  allocate(p%idp   (r%ndustmax))
+  allocate(p%size  (r%ndustmax))
+  allocate(p%charge(r%ndustmax)) 
+  p%nvaralloc=2*ndim+5
+
+  allocate(p%sortp (r%ndustmax))
+  allocate(p%workp (r%ndustmax))
+  allocate(p%headp(r%levelmin:r%nlevelmax))
+  allocate(p%tailp(r%levelmin:r%nlevelmax))
+  p%headp=1
+  p%tailp=0
+end subroutine init_dust
+!#########################################################################
+!#########################################################################
 subroutine allocate_gas(r,g,p)
   use amr_parameters, only: ndim
   use amr_commons, only: run_t,global_t
@@ -280,7 +314,7 @@ subroutine allocate_gas(r,g,p)
   ! Allocate workspace variables
   allocate(p%sortp (p%npart))
   allocate(p%workp (p%npart))
-  ! Allocate pointers to particle levels
+  ! Allocate head and tail of particle levels
   if(ANY(.not.r%periodic(1:ndim)))then
      allocate(p%headp(r%levelmin-1:r%nlevelmax))
      allocate(p%tailp(r%levelmin-1:r%nlevelmax))
