@@ -52,69 +52,64 @@ subroutine init_fmm(s,ilevel)
   integer(kind=8),dimension(1:nhilbert)::coarse_key
   integer,dimension(1:s%r%nlevelmax)::n_same,npatch
 
-  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
-  
-  allocate(m%head_mg(1:r%nlevelmax))
-  allocate(m%tail_mg(1:r%nlevelmax))
-  allocate(m%noct_mg(1:r%nlevelmax))
-  allocate(m%domain_mg(1:r%nlevelmax))
+  associate(r=>s%r,g=>s%g,m=>s%m,m_mg=>s%m_mg,mdl=>s%mdl)
 
-  call m%domain_mg(ilevel)%copy(m%domain(ilevel))
+  call m_mg%domain(ilevel)%copy(m%domain(ilevel))
   do ilev=ilevel-1,1,-1
-     call m%domain_mg(ilev)%copy(m%domain_mg(ilev+1))
-     do idom=0,m%domain_mg(ilev)%ncpu
-        m%domain_mg(ilev)%b(1:nhilbert,idom)=coarsen_key(m%domain_mg(ilev+1)%b(1:nhilbert,idom),ilev)
+     call m_mg%domain(ilev)%copy(m_mg%domain(ilev+1))
+     do idom=0,m_mg%domain(ilev)%ncpu
+        m_mg%domain(ilev)%b(1:nhilbert,idom)=coarsen_key(m_mg%domain(ilev+1)%b(1:nhilbert,idom),ilev)
      end do
   end do
   
   do ilev=r%bound_levelmin, r%levelmin-r%level_fmm_to_amr
     ! Compute starting grid index at that level
     if(ilev == r%bound_levelmin)then
-      m%ifree=m%noct_used+1 ! Jun-Young: start at index of the first free variable
-      istart=m%ifree 
-      m%ifree_mg=m%ifree ! Jun-Young: to recover, save curr ifree. 
+      m_mg%ifree=m_mg%noct_used+1 ! Jun-Young: start at index of the first free variable
+      istart=m_mg%ifree 
+      m_mg%ifree=m_mg%ifree ! Jun-Young: to recover, save curr ifree. 
     else
-      istart=m%tail_mg(ilev-1)+1
+      istart=m_mg%tail(ilev-1)+1
     endif
     hk=0
     ! New grid in current level
     igrid=istart-1
-    m%head_mg(ilev)=istart
-    m%tail_mg(ilev)=igrid
-    m%noct_mg(ilev)=0
+    m_mg%head(ilev)=istart
+    m_mg%tail(ilev)=igrid
+    m_mg%noct(ilev)=0
 
     ! Loop over the Cartesian grid in Hilbert order
-    do ikey=m%domain_mg(ilev)%b(1,g%myid-1), m%domain_mg(ilev)%b(1,g%myid)-1
+    do ikey=m_mg%domain(ilev)%b(1,g%myid-1), m_mg%domain(ilev)%b(1,g%myid)-1
       ! Compute Cartesian index from Hilbert index
       hk(1)=ikey
       ix=hilbert_reverse(hk,ilev-1)
-      if(ix(1).ge.m%box_ckey_min(1,ilev).and.ix(1).lt.m%box_ckey_max(1,ilev))then ! Jun-Young Lee if in the domain
+      if(ix(1).ge.m_mg%box_ckey_min(1,ilev).and.ix(1).lt.m_mg%box_ckey_max(1,ilev))then ! Jun-Young Lee if in the domain
 #if NDIM>1
-      if(ix(2).ge.m%box_ckey_min(2,ilev).and.ix(2).lt.m%box_ckey_max(2,ilev))then
+      if(ix(2).ge.m_mg%box_ckey_min(2,ilev).and.ix(2).lt.m_mg%box_ckey_max(2,ilev))then
 #endif
 #if NDIM>2
-      if(ix(3).ge.m%box_ckey_min(3,ilev).and.ix(3).lt.m%box_ckey_max(3,ilev))then
+      if(ix(3).ge.m_mg%box_ckey_min(3,ilev).and.ix(3).lt.m_mg%box_ckey_max(3,ilev))then
 #endif
           ! Insert new grid in main array
           igrid=igrid+1
-          if(igrid.GT.r%ngridmax)then
+          if(igrid.GT.m_mg%ngridmax)then
             write(*,*)'No more free memory'
             write(*,*)'Increase ngridmax'
             call mdl_abort(mdl)
           end if
-          if(igrid==istart)m%head_mg(ilev)=istart
-          m%tail_mg(ilev)=igrid
-          m%noct_mg(ilev)=m%noct_mg(ilev)+1
-          !m%noct(ilev)=m%noct(ilev)+1
-          !m%noct_used=m%noct_used+1
-          m%grid(igrid)%lev=ilev
-          m%grid(igrid)%ckey(1:ndim)=int(ix(1:ndim),kind=4)
-          m%grid(igrid)%hkey(1:nhilbert)=hk(1:nhilbert)
-          m%grid(igrid)%refined(1:twotondim)=.true.
+          if(igrid==istart)m_mg%head(ilev)=istart
+          m_mg%tail(ilev)=igrid
+          m_mg%noct(ilev)=m_mg%noct(ilev)+1
+          !m_mg%noct(ilev)=m_mg%noct(ilev)+1
+          !m_mg%noct_used=m_mg%noct_used+1
+          m_mg%grid(igrid)%lev=ilev
+          m_mg%grid(igrid)%ckey(1:ndim)=int(ix(1:ndim),kind=4)
+          m_mg%grid(igrid)%hkey(1:nhilbert)=hk(1:nhilbert)
+          m_mg%grid(igrid)%refined(1:twotondim)=.true.
           ! Insert new grid in hash table
           hash_key(0)=ilev
           hash_key(1:ndim)=ix(1:ndim)
-          call hash_setp(m%mg_dict,hash_key,m%grid(igrid))
+          call hash_setp(m_mg%grid_dict,hash_key,igrid)
       endif
 #if NDIM>1
       endif

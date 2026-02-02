@@ -13,7 +13,6 @@ subroutine fmm(pst,ilevel,icount)
   use amr_parameters, only: twotondim, nhilbert
   use poisson_parameters, only: ngs_fine, ngs_coarse, ncycles_coarse_safe
   use ramses_commons, only: pst_t
-  use phi_fine_cg_module, only: r_make_initial_phi, in_make_initial_phi_t
   use init_fmm_module, only: r_init_fmm
   use fmm_multipoles!, only: m_fmm_multipoles
   use cleanup_fmm_module, only: r_cleanup_fmm
@@ -23,7 +22,6 @@ subroutine fmm(pst,ilevel,icount)
   
   integer :: igrid, ifine, i, ierr, allmasked, ilev
   integer,dimension(1:4) :: output_array
-  type(in_make_initial_phi_t)::in_make_initial_phi
   
   if(pst%s%r%gravity_type>0)return
   if(pst%s%m%noct_tot(ilevel)==0)return
@@ -68,7 +66,7 @@ subroutine fmm(pst,ilevel,icount)
    if(pst%s%r%verbose) print '(A,I2)','Direct Force Calculation done', pst%s%r%levelmin
 
    !do ilev = 1, pst%s%r%levelmin - pst%s%r%level_fmm_to_amr
-   !  call dump_taylor(pst%s%r, pst%s%m, ilev)
+   !  call dump_taylor(pst%s%r, pst%s%m_mg, ilev)
    !end do 
     
   ! ---------------------------------------------------------------------
@@ -109,7 +107,7 @@ end subroutine r_fmm_downward
 !###########################################################
 subroutine fmm_downward(s, ilevel)
   use amr_parameters, only: ndim, twotondim, threetondim, multipole_size, taylor_size
-  use amr_commons, only: nbor, oct
+  use amr_commons, only: mesh_t
   use ramses_commons, only: ramses_t
   use nbors_utils
   use cache_commons
@@ -125,10 +123,10 @@ subroutine fmm_downward(s, ilevel)
   real(kind=8), dimension(ndim) :: xx_igrid, xx_icell, xx_jcell, xx_jcell_periodic, xx_pgrid, dx, diff ! box unit real coordinate
   real(kind=8) :: dx_loc, dist, D0, D1, D2, D3
   integer(kind=8), dimension(0:ndim) :: hash_key, hash_nbor, hash_nbor_periodic, hash_parent
-  type(nbor), dimension(1:threetondim) :: grid_nbor
+  integer, dimension(1:threetondim) :: grid_nbors
   integer, dimension(1:twotondim) :: ind_nbor_cells
 
-  type(oct), pointer :: gridp_nbor, gridp_parent
+  integer :: igrid_nbor, igrid_parent
   type(msg_large_realdp)::dummy_realdp
   real(kind=8), dimension(1:multipole_size) :: multipole, multipole_shifted
   real(kind=8), dimension(taylor_size) :: temp_taylor, parent_taylor
@@ -146,13 +144,12 @@ subroutine fmm_downward(s, ilevel)
         0, 0, 1, 1, 0, 0, 1, 1,  &
         0, 0, 0, 0, 1, 1, 1, 1   &
       ], [twotondim, ndim] )
-  associate(r=>s%r, g=>s%g, m=>s%m)
+  associate(r=>s%r, g=>s%g, m=>s%m, m_mg=>s%m_mg, mdl=>s%mdl)
 
   !if(m%noct_mg(ilevel)<1) return
 
   ! Open cache for multipoles
-  call open_cache(s,table=m%mg_dict,data_size=storage_size(m%grid(1))/32,& 
-            hilbert=m%domain_mg, pack_size=storage_size(dummy_realdp)/32,& 
+  call open_cache(mdl, m_mg, pack_size=storage_size(dummy_realdp)/32,& 
             pack=pack_fetch_taylor,unpack=unpack_fetch_taylor,& 
             init=init_flush_taylor, flush=pack_flush_taylor, combine=unpack_flush_taylor)
 
@@ -191,15 +188,15 @@ subroutine fmm_downward(s, ilevel)
   end do
 
   ! Loop over octs at this level
-  do ioct = m%head_mg(ilevel), m%tail_mg(ilevel)
+  do ioct = m_mg%head(ilevel), m_mg%tail(ilevel)
      accum_taylor(:, :) = 0.0D0
-     hash_key(1:ndim) = m%grid(ioct)%ckey(1:ndim)
+     hash_key(1:ndim) = m_mg%grid(ioct)%ckey(1:ndim)
 
-    call get_parent_cell(s, hash_key, m%mg_dict, gridp_parent, pcell, flush_cache=.false., fetch_cache=.true.)
+    call get_parent_cell(s, hash_key, igrid_parent, pcell, flush_cache=.false., fetch_cache=.true.)
 #ifdef FMM
-    parent_taylor = gridp_parent%taylor_coeff(pcell, :)
+    parent_taylor = m_mg%taylor_coeff(pcell, :, igrid_parent)
 #endif
-    hash_parent(1:ndim) = gridp_parent%ckey(1:ndim)
+    hash_parent(1:ndim) = m_mg%grid(igrid_parent)%ckey(1:ndim)
 
     ! Far Field Calculation
     do icell = 1, twotondim
@@ -211,14 +208,14 @@ subroutine fmm_downward(s, ilevel)
     end do
 
      ! Get neighboring parent grids (returns 3^n parent level grids)
-     call get_intermediate_nbor_grid(s, hash_key, m%mg_dict, grid_nbor, flush_cache=.false., fetch_cache=.true.)
+     call get_intermediate_nbor_grid(s, hash_key, grid_nbors, flush_cache=.false., fetch_cache=.true.)
      do inbor = 1, threetondim
        ! Get offset for neighboring parent grids (can reach off bounds)
        do idim=1,ndim
          offset(idim) = MOD((inbor-1)/3**(idim-1), 3) - 1
        end do
 
-       gridp_nbor => grid_nbor(inbor)%p
+       igrid_nbor = grid_nbors(inbor)
        hash_nbor_periodic(1:ndim) = hash_parent(1:ndim) + offset
 
        do jcell = 1, twotondim
@@ -234,7 +231,7 @@ subroutine fmm_downward(s, ilevel)
           if (direct_neighbor_list(inbor, jcell, pcell) .or. cycle_flag) cycle
           ! Shift multipole from origin -> source center (Need to use grid position)
 #ifdef FMM
-          multipole = gridp_nbor%multipole(jcell,:)
+          multipole = m_mg%multipole(jcell,:,igrid_nbor)
 #endif
           ! Get taylor coeffs from local
           do icell=1, twotondim
@@ -250,14 +247,14 @@ subroutine fmm_downward(s, ilevel)
      end do ! over neighboring grids 3^n 
      ! Add taylor coefficients from intermediate fields
 #ifdef FMM
-     m%grid(ioct)%taylor_coeff = m%grid(ioct)%taylor_coeff + accum_taylor
+     m_mg%taylor_coeff(:,:,ioct) = m_mg%taylor_coeff(:,:,ioct) + accum_taylor
 #endif
      ! Unlock neighbor octs
      do inbor = 1, threetondim
-        call unlock_cache(s, grid_nbor(inbor)%p)
+        call unlock_cache(m_mg, grid_nbors(inbor))
      end do
   end do
-  call close_cache(s, m%mg_dict)
+  call close_cache(mdl)
   end associate
 end subroutine fmm_downward
 !################################################################
@@ -290,7 +287,7 @@ end subroutine r_fmm_amr_intermediate
 !###########################################################
 subroutine fmm_amr_intermediate(s, ilevel)
   use amr_parameters, only: ndim, twotondim, threetondim, multipole_size, taylor_size
-  use amr_commons, only: nbor, oct
+  use amr_commons, only: mesh_t
   use ramses_commons, only: ramses_t
   use nbors_utils
   use cache_commons
@@ -311,8 +308,8 @@ subroutine fmm_amr_intermediate(s, ilevel)
   real(kind=8), dimension(twotondim, ndim) :: xx_icell_list, xx_jcell_list
   integer(kind=8), dimension(twotondim, ndim) :: cc_icell_list, cc_jcell_list
 
-  type(nbor), dimension(1:threetondim) :: grid_nbor
-  type(oct), pointer :: gridp_nbor, gridp_parent
+  integer, dimension(1:threetondim) :: grid_nbors
+  integer :: igrid_nbor, igrid_parent
   type(msg_large_realdp) :: dummy_realdp
   real(kind=8), dimension(1:multipole_size) :: multipole, multipole_shifted
   real(kind=8), dimension(taylor_size) :: temp_taylor, parent_taylor
@@ -337,13 +334,12 @@ subroutine fmm_amr_intermediate(s, ilevel)
   integer, allocatable :: fmm_grid_center_offset(:,:), fmm_cell_center_offset(:,:)
   logical, allocatable :: direct_neighbor_list(:,:,:)
 
-  associate(r=>s%r, g=>s%g, m=>s%m)
+  associate(r=>s%r, g=>s%g, m=>s%m, m_mg=>s%m_mg, mdl=>s%mdl)
   fourpi = 4.D0*ACOS(-1.0D0)
   if(r%cosmo) fourpi = 1.5D0*g%omega_m*g%aexp
 
   ! Open cache for multipoles
-  call open_cache(s,table=m%mg_dict,data_size=storage_size(m%grid(1))/32,&
-                  hilbert=m%domain_mg, pack_size=storage_size(dummy_realdp)/32,&
+  call open_cache(mdl, m_mg, pack_size=storage_size(dummy_realdp)/32,&
                   pack=pack_fetch_taylor, unpack=unpack_fetch_taylor,&
                   init=init_flush_taylor, flush=pack_flush_taylor, combine=unpack_flush_taylor)
 
@@ -426,20 +422,20 @@ subroutine fmm_amr_intermediate(s, ilevel)
     end do
 
     do icell=1,twotondim
-      m%grid(ioct)%phi(icell) = 0.0D0
+      m%phi(icell,ioct) = 0.0D0
     end do
 
     ! Check if we need to fetch neighbors & parent Taylor
     if (.not. all(hash_fmm_grid == prev_hash_fmm_grid)) then
       if (neighbors_cached) then
         do ind = 1, threetondim
-          call unlock_cache(s, grid_nbor(ind)%p)
+          call unlock_cache(m_mg, grid_nbors(ind))
         end do
       end if
 
-      call get_grid(s, hash_fmm_grid, m%mg_dict, gridp_parent, flush_cache=.false., fetch_cache=.true.)
+      call get_grid(s, hash_fmm_grid, igrid_parent, flush_cache=.false., fetch_cache=.true.)
 
-      call get_intermediate_nbor_grid(s, hash_fmm_cell, m%mg_dict, grid_nbor, flush_cache=.false., fetch_cache=.true.)
+      call get_intermediate_nbor_grid(s, hash_fmm_cell, grid_nbors, flush_cache=.false., fetch_cache=.true.)
       neighbors_cached = .true.
       prev_hash_fmm_grid = hash_fmm_grid
     end if
@@ -450,20 +446,20 @@ subroutine fmm_amr_intermediate(s, ilevel)
       pcell = pcell + nstride * MOD(hash_fmm_cell(idim), 2)
     end do
 #ifdef FMM
-    parent_taylor = gridp_parent%taylor_coeff(pcell, :)
+    parent_taylor = m_mg%taylor_coeff(pcell, :, igrid_parent)
 #endif
     ! Far field
     do icell = 1, twotondim
       diff = far_diff_list(igrid, icell, :)
       call calc_phi(parent_taylor, diff, phi)
 #ifdef FMM
-      m%grid(ioct)%phi(icell) = m%grid(ioct)%phi(icell) + phi
+      m%phi(icell, ioct) = m%phi(icell, ioct) + phi
 #endif
     end do
 
     ! Intermediate field
     do ind = 1, threetondim
-      gridp_nbor => grid_nbor(ind)%p
+      igrid_nbor = grid_nbors(ind)
       do jcell = 1, twotondim
         cycle_flag = .false.
         cc_jcell_periodic = hash_fmm_cell(1:ndim) - cell_diff_list(ind, jcell, igrid,:)
@@ -475,7 +471,7 @@ subroutine fmm_amr_intermediate(s, ilevel)
         end do
         if (cycle_flag .or. direct_neighbor_list(ind, jcell, igrid)) cycle
 #ifdef FMM
-        multipole = gridp_nbor%multipole(jcell, 1:multipole_size)
+        multipole = m_mg%multipole(jcell, 1:multipole_size, igrid_nbor)
 #endif
         do icell=1, twotondim
           diff  = intermediate_diff_list(ind, jcell, igrid, icell, :)
@@ -483,14 +479,14 @@ subroutine fmm_amr_intermediate(s, ilevel)
           D1 = D1_list(ind, jcell, igrid, icell)
           D2 = D2_list(ind, jcell, igrid, icell)
           call calc_phi_from_multipole(diff, D0, D1, D2, multipole, phi_out)
-          m%grid(ioct)%phi(icell) = m%grid(ioct)%phi(icell) + phi_out
+          m%phi(icell, ioct) = m%phi(icell, ioct) + phi_out
         end do
       end do
     end do
   end do
 
   deallocate(D0_list, D1_list, D2_list, intermediate_diff_list, far_diff_list, direct_neighbor_list, cell_diff_list, fmm_grid_center_offset, fmm_cell_center_offset)
-  call close_cache(s, m%mg_dict)
+  call close_cache(mdl)
   end associate
 end subroutine fmm_amr_intermediate
 !################################################################
@@ -523,7 +519,7 @@ end subroutine r_fmm_amr_direct
 !###########################################################
 subroutine fmm_amr_direct(s, ilevel)
   use amr_parameters, only: ndim, twotondim, threetondim, nhilbert
-  use amr_commons, only: nbor, oct
+  use amr_commons, only: mesh_t
   use ramses_commons, only: ramses_t
   use nbors_utils
   use cache_commons
@@ -542,7 +538,7 @@ subroutine fmm_amr_direct(s, ilevel)
   integer(kind=8), dimension(0:ndim) :: hash_key, hash_fmm_grid, hash_fmm_cell, &
                                         hash_direct, hash_prev_fmm_grid, prev_hash_fmm_cell
   real(kind=8), dimension(threetondim, ndim) :: offset_list
-  type(oct), pointer :: gridp_nbor
+  integer :: igrid_nbor
   type(msg_small_realdp) :: dummy_realdp
   logical :: cycle_flag, initialized
   integer, dimension(twotondim, ndim), parameter :: displacement_list = reshape( &
@@ -556,14 +552,13 @@ subroutine fmm_amr_direct(s, ilevel)
   real(kind=8), dimension(:,:,:), allocatable      :: mm_jcell_list
   real(kind=8), dimension(:,:,:,:,:), allocatable  :: inv_dist
 
-  associate(r=>s%r, g=>s%g, m=>s%m)
+  associate(r=>s%r, g=>s%g, m=>s%m, m_mg=>s%m_mg, mdl=>s%mdl)
 
   fourpi = 4.D0*ACOS(-1.0D0)
   if (r%cosmo) fourpi = 1.5D0*g%omega_m*g%aexp
 
   ! Open cache for multipoles (unchanged)
-  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-            hilbert=m%domain, pack_size=storage_size(dummy_realdp)/32,&
+  call open_cache(mdl, m, pack_size=storage_size(dummy_realdp)/32,&
             pack=pack_fetch_rho, unpack=unpack_fetch_rho,&
             init=init_flush_taylor, flush=pack_flush_taylor, combine=unpack_flush_taylor)
 
@@ -682,10 +677,10 @@ subroutine fmm_amr_direct(s, ilevel)
           if (cycle_flag) then
             mm_jcell_list(ind, jgrid, :) = 0.0d0
           else
-            call get_grid(s, hash_direct, m%grid_dict, gridp_nbor, flush_cache = .false., fetch_cache = .true.)
+            call get_grid(s, hash_direct, igrid_nbor, flush_cache = .false., fetch_cache = .true.)
             do jcell = 1, twotondim
 #ifdef FMM
-              mm_jcell_list(ind, jgrid, jcell) = gridp_nbor%rho(jcell)*dxn
+              mm_jcell_list(ind, jgrid, jcell) = m%rho(jcell,igrid_nbor)*dxn
 #endif
             end do
           end if
@@ -711,12 +706,12 @@ subroutine fmm_amr_direct(s, ilevel)
           end do 
         end do 
       end do
-      m%grid(ioct)%phi(icell) = m%grid(ioct)%phi(icell) + phi
+      m%phi(icell, ioct) = m%phi(icell, ioct) + phi
     end do
   end do ! end over all amr grids @ given ilevel
   deallocate(mm_jcell_list, inv_dist)
   
-  call close_cache(s, m%grid_dict)
+  call close_cache(mdl)
   end associate
 end subroutine fmm_amr_direct
 !################################################################
@@ -746,29 +741,31 @@ end function is_direct_neighbor
 !################################################################
 !################################################################
 !################################################################
-subroutine init_flush_taylor(grid,hash_key)
+subroutine init_flush_taylor(mesh,igrid,hash_key)
   use amr_parameters, only: ndim,twotondim
-  use amr_commons, only: oct
-  type(oct)::grid
+  use amr_commons, only: mesh_t
+  integer::igrid
+  type(mesh_t)::mesh
   integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind,ivar
 #ifdef FMM  
-  grid%lev=hash_key(0)
-  grid%ckey(1:ndim)=hash_key(1:ndim)
-  grid%multipole=0.0D0
-  grid%taylor_coeff=0.0D0
+  mesh%grid(igrid)%lev=hash_key(0)
+  mesh%grid(igrid)%ckey(1:ndim)=hash_key(1:ndim)
+  mesh%multipole(:,:,igrid)=0.0
+  mesh%taylor_coeff(:,:,igrid)=0.0
 #endif
 end subroutine init_flush_taylor
 !################################################################
 !################################################################
 !################################################################
 !################################################################
-subroutine pack_flush_taylor(grid,msg_size,msg_array)
+subroutine pack_flush_taylor(mesh,igrid,msg_size,msg_array)
   use amr_parameters, only: ndim,twotondim,taylor_size
-  use amr_commons, only: oct
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_large_realdp
-  type(oct)::grid
+  integer::igrid
+  type(mesh_t)::mesh
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
 
@@ -777,7 +774,7 @@ subroutine pack_flush_taylor(grid,msg_size,msg_array)
 #ifdef FMM
   do ind=1,twotondim
     do ivar=1,taylor_size
-      msg%realdp_fmm_taylor(ind, ivar)=grid%taylor_coeff(ind, ivar)
+      msg%realdp_fmm_taylor(ind, ivar)=mesh%taylor_coeff(ind, ivar, igrid)
     end do
   end do
 #endif
@@ -787,11 +784,12 @@ end subroutine pack_flush_taylor
 !################################################################
 !################################################################
 !################################################################
-subroutine unpack_flush_taylor(grid,msg_size,msg_array,hash_key)
+subroutine unpack_flush_taylor(mesh,igrid,msg_size,msg_array,hash_key)
   use amr_parameters, only: ndim,twotondim,taylor_size
-  use amr_commons, only: oct
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_large_realdp
-  type(oct)::grid
+  integer::igrid
+  type(mesh_t)::mesh
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
   integer(kind=8),dimension(0:ndim)::hash_key
@@ -799,13 +797,13 @@ subroutine unpack_flush_taylor(grid,msg_size,msg_array,hash_key)
   integer::ind,ivar
   type(msg_large_realdp)::msg
 
-  grid%lev=hash_key(0)
-  grid%ckey(1:ndim)=hash_key(1:ndim)
+  mesh%grid(igrid)%lev=hash_key(0)
+  mesh%grid(igrid)%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
 #ifdef FMM 
   do ind=1,twotondim
     do ivar=1,taylor_size
-      grid%taylor_coeff(ind,ivar)=grid%taylor_coeff(ind,ivar)+msg%realdp_fmm_taylor(ind,ivar)
+      mesh%taylor_coeff(ind,ivar,igrid)=mesh%taylor_coeff(ind,ivar,igrid)+msg%realdp_fmm_taylor(ind,ivar)
     end do
   end do
 #endif
@@ -814,20 +812,21 @@ end subroutine unpack_flush_taylor
 !################################################################
 !################################################################
 !################################################################
-subroutine pack_fetch_taylor(grid,msg_size,msg_array)
+subroutine pack_fetch_taylor(mesh,igrid,msg_size,msg_array)
   use amr_parameters, only: ndim,twotondim,multipole_size
   use hydro_parameters, only: nvar
-  use amr_commons, only: oct
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_large_realdp
-  type(oct)::grid
+  integer::igrid
+  type(mesh_t)::mesh
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
 
   integer::ind,ivar
   type(msg_large_realdp)::msg
 #ifdef FMM
-  msg%realdp_fmm_multipole=grid%multipole
-  msg%realdp_fmm_taylor=grid%taylor_coeff
+  msg%realdp_fmm_multipole=mesh%multipole(:,:,igrid)
+  msg%realdp_fmm_taylor=mesh%taylor_coeff(:,:,igrid)
 #endif
   msg_array=transfer(msg,msg_array)
 end subroutine pack_fetch_taylor
@@ -835,12 +834,13 @@ end subroutine pack_fetch_taylor
 !#####################################################################
 !#####################################################################
 !#####################################################################
-subroutine unpack_fetch_taylor(grid,msg_size,msg_array,hash_key)
+subroutine unpack_fetch_taylor(mesh,igrid,msg_size,msg_array,hash_key)
   use amr_parameters, only: ndim,twotondim
   use hydro_parameters, only: nvar
-  use amr_commons, only: oct
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_large_realdp
-  type(oct)::grid
+  integer::igrid
+  type(mesh_t)::mesh
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
   integer(kind=8),dimension(0:ndim)::hash_key
@@ -848,23 +848,24 @@ subroutine unpack_fetch_taylor(grid,msg_size,msg_array,hash_key)
   integer::ind,ivar
   type(msg_large_realdp)::msg
 
-  grid%lev=hash_key(0)
-  grid%ckey(1:ndim)=hash_key(1:ndim)
+  mesh%grid(igrid)%lev=hash_key(0)
+  mesh%grid(igrid)%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
 #ifdef FMM
-  grid%multipole=msg%realdp_fmm_multipole
-  grid%taylor_coeff=msg%realdp_fmm_taylor
+  mesh%multipole(:,:,igrid)=msg%realdp_fmm_multipole
+  mesh%taylor_coeff(:,:,igrid)=msg%realdp_fmm_taylor
 #endif
 end subroutine unpack_fetch_taylor
 !################################################################
 !################################################################
 !################################################################
 !################################################################
-subroutine pack_fetch_rho(grid,msg_size,msg_array)
+subroutine pack_fetch_rho(mesh,igrid,msg_size,msg_array)
   use amr_parameters, only: twotondim
-  use amr_commons, only: oct
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_small_realdp
-  type(oct)::grid
+  integer::igrid
+  type(mesh_t)::mesh
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
 
@@ -873,7 +874,7 @@ subroutine pack_fetch_rho(grid,msg_size,msg_array)
 
 #ifdef GRAV
   do ind=1,twotondim
-     msg%realdp(ind)=grid%rho(ind)
+     msg%realdp(ind)=mesh%rho(ind, igrid)
   end do
 #endif
 
@@ -884,11 +885,12 @@ end subroutine pack_fetch_rho
 !################################################################
 !################################################################
 !################################################################
-subroutine unpack_fetch_rho(grid,msg_size,msg_array,hash_key)
+subroutine unpack_fetch_rho(mesh,igrid,msg_size,msg_array,hash_key)
   use amr_parameters, only: ndim,twotondim
-  use amr_commons, only: oct
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_small_realdp
-  type(oct)::grid
+  integer::igrid
+  type(mesh_t)::mesh
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
   integer(kind=8),dimension(0:ndim)::hash_key
@@ -896,13 +898,13 @@ subroutine unpack_fetch_rho(grid,msg_size,msg_array,hash_key)
   integer::ind
   type(msg_small_realdp)::msg
 
-  grid%lev=hash_key(0)
-  grid%ckey(1:ndim)=hash_key(1:ndim)
+  mesh%grid(igrid)%lev=hash_key(0)
+  mesh%grid(igrid)%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
 
 #ifdef GRAV
   do ind=1,twotondim
-     grid%rho(ind)=msg%realdp(ind)
+     mesh%rho(ind, igrid)=msg%realdp(ind)
   end do
 #endif
 
@@ -929,8 +931,8 @@ subroutine dump_taylor(r, m, ilevel)
   unit_debug = 999
   open(unit_debug, file=filename, status="replace")
 #ifdef FMM
-  do ioct = m%head_mg(ilevel), m%tail_mg(ilevel)
-    write(unit_debug, '(3I6, 20E20.5)') m%grid(ioct)%ckey(1:ndim), m%grid(ioct)%taylor_coeff
+  do ioct = m%head(ilevel), m%tail(ilevel)
+    write(unit_debug, '(3I6, 20E20.5)') m%grid(ioct)%ckey(1:ndim), m%taylor_coeff(:,:,ioct)
   end do
 #endif
   close(unit_debug)

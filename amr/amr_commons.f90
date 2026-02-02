@@ -702,7 +702,10 @@ module amr_commons
      real(dp),allocatable,dimension(:,:)::phi_old
      real(dp),allocatable,dimension(:,:)::nref
 #endif
-
+#ifdef FMM
+     real(dp),allocatable,dimension(:,:,:)::multipole
+     real(dp),allocatable,dimension(:,:,:)::taylor_coeff
+#endif 
      ! Clean/dirty octs for first neighbors
      integer(kind=4),allocatable,dimension(:)::indx_clean, head_clean, tail_clean, noct_clean
      integer(kind=4),allocatable,dimension(:)::indx_dirty, head_dirty, tail_dirty, noct_dirty

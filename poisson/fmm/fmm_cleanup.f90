@@ -17,7 +17,7 @@ recursive subroutine r_cleanup_fmm(pst)
      call r_cleanup_fmm(pst%pLower)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call m_cleanup_fmm(pst%s%m)
+     call m_cleanup_fmm(pst%s%m_mg)
   endif
 end subroutine r_cleanup_fmm
 
@@ -30,17 +30,17 @@ subroutine m_cleanup_fmm(m)
   integer :: ilev
 
    ! Deallocate processor boundary array
-   deallocate(m%head_mg,m%tail_mg,m%noct_mg)
-   do ilev=1,size(m%domain_mg)
-      call m%domain_mg(ilev)%destroy
+   deallocate(m%head,m%tail,m%noct)
+   do ilev=1,size(m%domain)
+      call m%domain(ilev)%destroy
    end do
-   deallocate(m%domain_mg)
+   deallocate(m%domain)
 
   ! Reset the MG hash table
-  call reset_entire_hash(m%mg_dict,.false.)
+  call reset_entire_hash(m%grid_dict,.false.)
   
   ! Restore AMR grid array into its original state
-  m%ifree=m%ifree_mg
+  m%ifree=m%ifree
   m%noct_used=m%ifree-1
 
 end subroutine m_cleanup_fmm

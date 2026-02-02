@@ -73,7 +73,7 @@ end subroutine r_init_amr
 !###############################################
 !###############################################
 subroutine init_amr(r,g,m,type)
-  use amr_parameters, ONLY: nhilbert, ndim, twotondim
+  use amr_parameters, ONLY: nhilbert, ndim, twotondim, multipole_size, taylor_size
   use hydro_parameters, ONLY: nvar
   use rt_parameters, ONLY: nrtvar, nrtgrp
   use amr_commons, ONLY: run_t, global_t, mesh_t
@@ -451,7 +451,7 @@ end subroutine init_amr
 !###############################################
 subroutine init_params(mdl,r,g)
   use mdl_module
-  use amr_parameters, ONLY: nhilbert,ndim,multipole_size,taylor_size
+  use amr_parameters, ONLY: nhilbert,ndim
   use amr_commons, ONLY: run_t, global_t
   use hash
   use hilbert

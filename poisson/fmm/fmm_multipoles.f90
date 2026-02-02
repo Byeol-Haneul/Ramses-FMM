@@ -23,7 +23,7 @@ subroutine m_fmm_multipoles(pst,ilevel)
   type(multipole_t)::multipole_tot
   integer::i,input_size
   integer,dimension(1:2)::input_array
-  associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
+  associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,m_mg=>pst%s%m_mg,p=>pst%s%p,mdl=>pst%s%mdl)
 
   if(.not. r%poisson)return
   if(r%verbose)write(*,'(" Entering fmm_multipoles for level ",I2)')ilevel
@@ -92,7 +92,7 @@ end subroutine r_fmm_multipole_amr2fmm
 !###########################################################
 subroutine fmm_multipole_amr2fmm(s,ilevel)
   use amr_parameters, only: ndim, twotondim, multipole_size
-  use amr_commons, only: oct
+  use amr_commons, only: mesh_t
   use ramses_commons, only: ramses_t
   use nbors_utils
   use hydro_flag_module, only: pack_fetch_hydro, unpack_fetch_hydro
@@ -107,12 +107,11 @@ subroutine fmm_multipole_amr2fmm(s,ilevel)
   ! For pure particle runs, this is not necessary and the
   ! routine is not even called.
   !-------------------------------------------------------------------
-  integer::ind,idim,ivar,ioct,icell,nstride
+  integer::ind,idim,ivar,ioct,icell,nstride,igrid_fmm
   real(kind=8)::average
   integer(kind=8),dimension(0:ndim)::hash_key_amr, hash_key_fmm
   integer(kind=8),dimension(1:ndim)::ii
   logical::leaf_cell
-  type(oct),pointer::grid_fmm
   type(msg_large_realdp)::dummy_realdp
 
   integer :: nm, nd, nq
@@ -125,7 +124,7 @@ subroutine fmm_multipole_amr2fmm(s,ilevel)
   real(kind=8), dimension(1:ndim) :: dipole
   real(kind=8), dimension(1:int(ndim*(ndim+1)/2)) :: quadrupole
 
-  associate(r=>s%r,g=>s%g,m=>s%m)
+  associate(r=>s%r,g=>s%g,m=>s%m,m_mg=>s%m_mg,mdl=>s%mdl)
 
   !---------------------------------------------------
   ! Initialize constants
@@ -138,8 +137,7 @@ subroutine fmm_multipole_amr2fmm(s,ilevel)
   dx_loc = r%boxlen / 2.0D0**ilevel
   vol_loc = dx_loc**ndim
 
-  call open_cache(s,table=m%mg_dict,data_size=storage_size(m%grid(1))/32,&
-                     hilbert=m%domain_mg, pack_size=storage_size(dummy_realdp)/32,&
+  call open_cache(mdl,m_mg,pack_size=storage_size(dummy_realdp)/32,&
                      pack=pack_fetch_hydro,unpack=unpack_fetch_hydro,&
                      init=init_flush_multipole, flush=pack_flush_multipole, combine=unpack_flush_multipole)
 
@@ -157,7 +155,7 @@ subroutine fmm_multipole_amr2fmm(s,ilevel)
        icell=icell+2**(idim-1)*ii(idim) ! 1 to twotondim
      end do
      ! Get fmm grid using a write-only cache
-     call get_grid(s,hash_key_fmm,m%mg_dict,grid_fmm,flush_cache=.true.,fetch_cache=.false.)
+     call get_grid(s,hash_key_fmm,igrid_fmm,flush_cache=.true.,fetch_cache=.false.)
      multipole = 0.0D0
 
     ! Loop over cells
@@ -176,7 +174,7 @@ subroutine fmm_multipole_amr2fmm(s,ilevel)
            end do
 
            ! Gas mass contribution
-           mmm = m%grid(ioct)%rho(ind) * vol_loc
+           mmm = m%rho(ind,ioct) * vol_loc
            monopole = monopole + mmm
            dipole   = dipole   + mmm * xx
 
@@ -203,10 +201,10 @@ subroutine fmm_multipole_amr2fmm(s,ilevel)
         multipole(2+ndim:1+ndim+nq) = multipole(2+ndim:1+ndim+nq) + quadrupole
      end do  ! cell loop
 #ifdef FMM
-     grid_fmm%multipole(icell,:) = grid_fmm%multipole(icell,:) + multipole
+     m_mg%multipole(icell,:,igrid_fmm) = m_mg%multipole(icell,:,igrid_fmm) + multipole
 #endif
   end do
-  call close_cache(s,m%mg_dict)
+  call close_cache(mdl)
   end associate
 end subroutine fmm_multipole_amr2fmm
 !################################################################
@@ -239,7 +237,7 @@ end subroutine r_fmm_multipole_fmm2fmm
 !###########################################################
 subroutine fmm_multipole_fmm2fmm(s,ilevel)
   use amr_parameters, only: ndim, twotondim, multipole_size
-  use amr_commons, only: oct
+  use amr_commons, only: mesh_t
   use ramses_commons, only: ramses_t
   use nbors_utils
   use hydro_flag_module, only: pack_fetch_hydro, unpack_fetch_hydro
@@ -254,38 +252,36 @@ subroutine fmm_multipole_fmm2fmm(s,ilevel)
   ! For pure particle runs, this is not necessary and the
   ! routine is not even called.
   !-------------------------------------------------------------------
-  integer::ind,idim,ivar,ioct,icell
+  integer::ind,idim,ivar,ioct,icell,igrid
   real(kind=8)::average
   integer(kind=8),dimension(0:ndim)::hash_key
   logical::leaf_cell
-  type(oct),pointer::gridp
   type(msg_large_realdp)::dummy_realdp
 
   integer :: nm, nd, nq
   real(kind=8), dimension(1:multipole_size) :: multipole
 
-  associate(r=>s%r,g=>s%g,m=>s%m)
+  associate(r=>s%r,g=>s%g,m_mg=>s%m_mg,mdl=>s%mdl)
   
-  call open_cache(s,table=m%mg_dict,data_size=storage_size(m%grid(1))/32,&
-                     hilbert=m%domain_mg, pack_size=storage_size(dummy_realdp)/32,&
+  call open_cache(mdl,m_mg,pack_size=storage_size(dummy_realdp)/32,&
                      pack=pack_fetch_hydro,unpack=unpack_fetch_hydro,&
                      init=init_flush_multipole, flush=pack_flush_multipole, combine=unpack_flush_multipole)
 
   ! Loop over finer level grids
   hash_key(0)=ilevel+1
-  do ioct=m%head_mg(ilevel+1),m%tail_mg(ilevel+1)
-     hash_key(1:ndim)=m%grid(ioct)%ckey(1:ndim)
+  do ioct=m_mg%head(ilevel+1),m_mg%tail(ilevel+1)
+     hash_key(1:ndim)=m_mg%grid(ioct)%ckey(1:ndim)
      ! Get parent cell using a write-only cache
-     call get_parent_cell(s,hash_key,m%mg_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
+     call get_parent_cell(s,hash_key,igrid,icell,flush_cache=.true.,fetch_cache=.false.)
      multipole = 0.0D0
 #ifdef FMM
      do ind=1,twotondim
-       multipole = multipole + m%grid(ioct)%multipole(ind,:)
+       multipole = multipole + m_mg%multipole(ind,:,ioct)
      end do
-     gridp%multipole(icell,:) = gridp%multipole(icell,:) + multipole
+     m_mg%multipole(icell,:,igrid) = m_mg%multipole(icell,:,igrid) + multipole
 #endif
   end do
-  call close_cache(s,m%mg_dict)
+  call close_cache(mdl)
   end associate
 end subroutine fmm_multipole_fmm2fmm
 !################################################################
@@ -318,7 +314,7 @@ end subroutine r_fmm_multipole_shift_downward
 !###########################################################
 subroutine fmm_multipole_shift_downward(s,ilevel)
   use amr_parameters, only: ndim, twotondim, multipole_size
-  use amr_commons, only: oct
+  use amr_commons, only: mesh_t
   use ramses_commons, only: ramses_t
   use nbors_utils
   use hydro_flag_module, only: pack_fetch_hydro, unpack_fetch_hydro
@@ -335,12 +331,12 @@ subroutine fmm_multipole_shift_downward(s,ilevel)
   integer(kind=8), dimension(ndim) :: cc_icell! cartesian coordinate
   real(kind=8), dimension(ndim) :: xx_icell ! box unit real coordinate
 
-  associate(r=>s%r,g=>s%g,m=>s%m)
+  associate(r=>s%r,g=>s%g,m=>s%m,m_mg=>s%m_mg)
 
   dx_loc = r%boxlen / 2.0D0**ilevel
   hash_key(0)=ilevel
-  do ioct=m%head_mg(ilevel),m%tail_mg(ilevel)
-     hash_key(1:ndim)=m%grid(ioct)%ckey(1:ndim)
+  do ioct=m_mg%head(ilevel),m_mg%tail(ilevel)
+     hash_key(1:ndim)=m_mg%grid(ioct)%ckey(1:ndim)
      multipole = 0.0D0
      do icell = 1, twotondim
       do idim = 1, ndim
@@ -349,9 +345,9 @@ subroutine fmm_multipole_shift_downward(s,ilevel)
         xx_icell(idim) = (cc_icell(idim) + 0.5d0) * dx_loc - m%skip(idim)
       end do
 #ifdef FMM
-      multipole = m%grid(ioct)%multipole(icell, :)
+      multipole = m_mg%multipole(icell, :, ioct)
       call shift_multipole(multipole, xx_icell, multipole_shifted)
-      m%grid(ioct)%multipole(icell, :) = multipole_shifted
+      m_mg%multipole(icell, :, ioct) = multipole_shifted
 #endif
     end do
   end do
@@ -361,28 +357,30 @@ end subroutine fmm_multipole_shift_downward
 !################################################################
 !################################################################
 !################################################################
-subroutine init_flush_multipole(grid,hash_key)
+subroutine init_flush_multipole(mesh,igrid,hash_key)
   use amr_parameters, only: ndim,twotondim
-  use amr_commons, only: oct
-  type(oct)::grid
+  use amr_commons, only: mesh_t
+  integer::igrid
+  type(mesh_t)::mesh
   integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind,ivar
 #ifdef FMM
-  grid%lev=hash_key(0)
-  grid%ckey(1:ndim)=hash_key(1:ndim)
-  grid%multipole=0.0D0
+  mesh%grid(igrid)%lev=hash_key(0)
+  mesh%grid(igrid)%ckey(1:ndim)=hash_key(1:ndim)
+  mesh%multipole(:,:,igrid)=0.0
 #endif
 end subroutine init_flush_multipole
 !################################################################
 !################################################################
 !################################################################
 !################################################################
-subroutine pack_flush_multipole(grid,msg_size,msg_array)
+subroutine pack_flush_multipole(mesh,igrid,msg_size,msg_array)
   use amr_parameters, only: ndim,twotondim,multipole_size
-  use amr_commons, only: oct
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_large_realdp
-  type(oct)::grid
+  integer::igrid
+  type(mesh_t)::mesh
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
 
@@ -391,7 +389,7 @@ subroutine pack_flush_multipole(grid,msg_size,msg_array)
 #ifdef FMM
   do ivar=1,multipole_size
      do ind=1,twotondim
-        msg%realdp_fmm_multipole(ind,ivar)=grid%multipole(ind,ivar)
+        msg%realdp_fmm_multipole(ind,ivar)=mesh%multipole(ind,ivar,igrid)
      end do
   end do
   msg_array=transfer(msg,msg_array)
@@ -401,11 +399,12 @@ end subroutine pack_flush_multipole
 !################################################################
 !################################################################
 !################################################################
-subroutine unpack_flush_multipole(grid,msg_size,msg_array,hash_key)
+subroutine unpack_flush_multipole(mesh,igrid,msg_size,msg_array,hash_key)
   use amr_parameters, only: ndim,twotondim,multipole_size
-  use amr_commons, only: oct
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_large_realdp
-  type(oct)::grid
+  integer::igrid
+  type(mesh_t)::mesh
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
   integer(kind=8),dimension(0:ndim)::hash_key
@@ -413,14 +412,14 @@ subroutine unpack_flush_multipole(grid,msg_size,msg_array,hash_key)
   integer::ind,ivar
   type(msg_large_realdp)::msg
 
-  grid%lev=hash_key(0)
-  grid%ckey(1:ndim)=hash_key(1:ndim)
+  mesh%grid(igrid)%lev=hash_key(0)
+  mesh%grid(igrid)%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
 #ifdef FMM  
   do ivar=1,multipole_size
      do ind=1,twotondim
-        if(grid%refined(ind))then
-           grid%multipole(ind,ivar)=grid%multipole(ind,ivar)+msg%realdp_fmm_multipole(ind,ivar)
+        if(mesh%grid(igrid)%refined(ind))then
+           mesh%multipole(ind,ivar,igrid)=mesh%multipole(ind,ivar,igrid)+msg%realdp_fmm_multipole(ind,ivar)
         endif
      end do
   end do
@@ -446,7 +445,11 @@ recursive subroutine r_reset_multipoles_taylor(pst,ilevel,input_size)
      call r_reset_multipoles_taylor(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call reset_multipoles_taylor(pst%s%r,pst%s%g,pst%s%m,ilevel)
+     if (ilevel <= pst%s%r%levelmin-pst%s%r%level_fmm_to_amr) then
+        call reset_multipoles_taylor(pst%s%r,pst%s%g,pst%s%m_mg,ilevel)
+     else 
+        return
+     end if
   endif
 
 end subroutine r_reset_multipoles_taylor
@@ -464,20 +467,12 @@ subroutine reset_multipoles_taylor(r,g,m,ilevel)
   integer       :: ilevel
   integer :: igrid, ind
   integer :: first, last
-
-  if (ilevel <= r%levelmin-r%level_fmm_to_amr) then
-     first = m%head_mg(ilevel)
-     last  = m%tail_mg(ilevel)
-  else if (ilevel > r%nlevelmax .and. ilevel < r%levelmin) then
-     return
-  else
-     first = m%head(ilevel)
-     last  = m%tail(ilevel)
-  end if
+  first = m%head(ilevel)
+  last  = m%tail(ilevel)
 #ifdef FMM
   do igrid = first, last
-    m%grid(igrid)%multipole = 0.0D0
-    m%grid(igrid)%taylor_coeff = 0.0D0
+    m%multipole(:,:,igrid) = 0.0D0
+    m%taylor_coeff(:,:,igrid) = 0.0D0
   end do
 #endif
 end subroutine reset_multipoles_taylor
@@ -588,7 +583,7 @@ recursive subroutine r_dump_multipole(pst,ilevel,input_size)
      call r_dump_multipole(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call dump_multipole(pst%s%r,pst%s%g,pst%s%m,ilevel)
+     call dump_multipole(pst%s%r,pst%s%g,pst%s%m_mg,ilevel)
   endif
 
 end subroutine r_dump_multipole
@@ -598,7 +593,7 @@ end subroutine r_dump_multipole
 !###########################################################
 subroutine dump_multipole(r, g, m, ilevel)
   use amr_parameters, only: ndim, twotondim
-  use amr_commons, only: nbor, oct, run_t, global_t, mesh_t
+  use amr_commons, only: oct, run_t, global_t, mesh_t
   implicit none
   type(run_t)    :: r
   type(global_t) :: g
@@ -620,7 +615,7 @@ subroutine dump_multipole(r, g, m, ilevel)
 #endif
   open(unit_debug, file=filename, status="replace")
   dx_loc = r%boxlen / 2.0D0**ilevel
-  do ioct = m%head_mg(ilevel), m%tail_mg(ilevel)
+  do ioct = m%head(ilevel), m%tail(ilevel)
      do icell = 1, twotondim
         do idim = 1, ndim
           nstride = 2**(idim-1)
@@ -628,7 +623,7 @@ subroutine dump_multipole(r, g, m, ilevel)
           xx_icell(idim) = (cc_icell(idim) + 0.5D0) * dx_loc - m%skip(idim)
         end do
 #ifdef FMM
-        write(unit_debug, '(3I6, E20.4)') cc_icell, m%grid(ioct)%multipole(icell, 1)
+        write(unit_debug, '(3I6, E20.4)') cc_icell, m%multipole(icell, 1, ioct)
 #endif
      end do
   end do

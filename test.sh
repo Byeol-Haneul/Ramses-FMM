@@ -20,5 +20,22 @@ module purge
 module load openmpi/gcc/4.1.2
 module load anaconda3/2025.6
 
+srun -n 96 bin/mgmg namelist/fmm_tests/isolated_halo.nml
+python3 analyze/merge.py out lv9
+srun -n 96 bin/fmmfmm namelist/fmm_tests/isolated_halo.nml
+python3 analyze/merge.py out lv9
 
-srun -n 96 ramses3d namelist/fmm_tests/isolated_halo.nml
+srun -n 96 bin/mgmg namelist/fmm_tests/spheres_finer.nml
+python3 analyze/merge.py out lv9
+srun -n 96 bin/fmmfmm namelist/fmm_tests/spheres_finer.nml
+python3 analyze/merge.py out lv9
+
+
+srun -n 96 bin/mgmg namelist/fmm_tests/isolated.nml
+python3 analyze/merge.py out lv9
+srun -n 96 bin/fmmfmm namelist/fmm_tests/isolated.nml
+python3 analyze/merge.py out lv9
+
+#
+#srun -n 96 ramses_mg_dump namelist/isolated.nml
+#python3 analyze/merge.py out lv8

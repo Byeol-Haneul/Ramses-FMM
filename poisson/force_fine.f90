@@ -36,7 +36,7 @@ subroutine m_force_fine(pst,ilevel,icount)
         call r_force_analytic(pst,ilevel,1)
      endif
   endif
-  !call r_dump_phi(pst)
+  call r_dump_phi(pst)
 
   if(pst%s%r%verbose)write(*,'("   Gradient phi done for level ",I2)')ilevel
 
@@ -493,7 +493,7 @@ end subroutine r_dump_phi
 !#########################################################
 subroutine dump_phi(r, g, m)
   use amr_parameters, only: ndim, twotondim
-  use amr_commons,   only: nbor, oct, run_t, global_t, mesh_t
+  use amr_commons,   only: oct, run_t, global_t, mesh_t
   implicit none
   type(run_t)    :: r
   type(global_t) :: g
@@ -534,7 +534,7 @@ subroutine dump_phi(r, g, m)
           cc_icell(idim) = 2*m%grid(ioct)%ckey(idim) + MOD((icell-1)/nstride, 2)
           xx_icell(idim) = (cc_icell(idim) + 0.5D0) * dx_loc
         end do
-        write(unit_debug, '(3I6, 3E20.4, E20.4)') cc_icell, m%grid(ioct)%f(icell,1:ndim), m%grid(ioct)%phi(icell)
+        write(unit_debug, '(3I6, 3E20.4, E20.4)') cc_icell, m%f(icell,1:ndim,ioct), m%phi(icell,ioct)
      end do
   end do
 
