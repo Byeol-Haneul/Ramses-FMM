@@ -110,15 +110,9 @@ subroutine init_amr(r,g,m,type)
   m%ncachemax=r%ncachemax
 
   ! Allocate main oct array
-<<<<<<< HEAD
-  allocate(m%grid(1:r%ngridmax+r%ncachemax))
-  do igrid=1,r%ngridmax+r%ncachemax
-      m%grid(igrid)%lev=0
-=======
   allocate(m%grid(1:m%ngridmax+m%ncachemax))
   do igrid=1,m%ngridmax+m%ncachemax
      m%grid(igrid)%lev=0
->>>>>>> b41ce3f6f49a85df8a2c5219b79ac8de95f0ff6a
   end do
 
   ! Allocate grid arrays
@@ -159,7 +153,12 @@ subroutine init_amr(r,g,m,type)
      allocate(m%f(1:twotondim,1:3,1:m%ngridmax+m%ncachemax))
   endif
 #endif
-
+#ifdef FMM
+  if(type=='mg')then
+     allocate(m%multipole(1:twotondim,1:multipole_size,1:m%ngridmax+m%ncachemax))
+     allocate(m%taylor_coeff(1:twotondim,1:taylor_size,1:m%ngridmax+m%ncachemax))
+  endif
+#endif
   ! Allocate the device array
 #ifdef _CUDA
   if(type=='amr')then
@@ -190,16 +189,7 @@ subroutine init_amr(r,g,m,type)
 
   ! Allocate hash table for AMR data
   if(r%verbose.and.g%myid==1)write(*,*)'Initialize empty hash'
-<<<<<<< HEAD
-  call init_empty_hash(m%grid_dict,2*(r%ngridmax+r%ncachemax),'simple')
-
-  ! Allocate another smaller hash table for multigrid data
-  if(r%poisson)then
-      call init_empty_hash(m%mg_dict,2*(r%ngridmax+r%ncachemax)/7,'simple')
-  endif
-=======
   call init_empty_hash(m%grid_dict,2*(m%ngridmax+m%ncachemax),'simple')
->>>>>>> b41ce3f6f49a85df8a2c5219b79ac8de95f0ff6a
 
   ! Set initial cpu boundaries
   ! Set maximum Cartesian key per level
@@ -370,19 +360,11 @@ subroutine init_amr(r,g,m,type)
       m%domain(r%levelmin)%b(1,0) = 0
       m%domain(r%levelmin)%b(1,g%ncpu) = m%hkey_max(1,r%levelmin)
   else
-<<<<<<< HEAD
-      ngrid=ngrid_tot/g%ncpu
-      nremain=ngrid_tot-int(ngrid,kind=8)*g%ncpu
-      igrid=0
-      icpu=1
-      do ikey=1, m%hkey_max(1,r%levelmin)-1
-=======
      ngrid=int(ngrid_tot/int(g%ncpu,kind=8),kind=4)
      nremain=int(ngrid_tot-int(ngrid,kind=8)*int(g%ncpu,kind=8),kind=4)
      igrid=0
      icpu=1
      do ikey=1, m%hkey_max(1,r%levelmin)-1
->>>>>>> b41ce3f6f49a85df8a2c5219b79ac8de95f0ff6a
         hk(1)=ikey
         ix=hilbert_reverse(hk,r%levelmin-1)
         if(ix(1).ge.m%box_ckey_min(1,r%levelmin).and.ix(1).lt.m%box_ckey_max(1,r%levelmin))then
@@ -469,7 +451,7 @@ end subroutine init_amr
 !###############################################
 subroutine init_params(mdl,r,g)
   use mdl_module
-  use amr_parameters, ONLY: nhilbert,ndim
+  use amr_parameters, ONLY: nhilbert,ndim,multipole_size,taylor_size
   use amr_commons, ONLY: run_t, global_t
   use hash
   use hilbert
@@ -494,18 +476,10 @@ subroutine init_params(mdl,r,g)
 
   ! Read parameters from restart file
   if(r%nrestart>0)then
-<<<<<<< HEAD
-      ! Read parameters from restart file
-      call title(r%nrestart,nchar)
-      file_params='backup_'//TRIM(nchar)//'/params.bin'
-      inquire(file=file_params, exist=file_exist)
-      if(file_exist)then
-=======
      call title(r%nrestart,nchar)
      file_params='backup_'//TRIM(nchar)//'/params.bin'
      inquire(file=file_params, exist=file_exist)
      if(file_exist)then
->>>>>>> b41ce3f6f49a85df8a2c5219b79ac8de95f0ff6a
         call input_params(mdl,r,g,file_params,ncpu_file,levelmin_file,nlevelmax_file)
         if(g%myid==1)write(*,'(" Restarting from backup number ",I8)')r%nrestart
         if(g%myid==1)write(*,'(" Restart file has ",I8," files")')ncpu_file
@@ -514,13 +488,8 @@ subroutine init_params(mdl,r,g)
         stop
       endif
   else
-<<<<<<< HEAD
-      if(r%filetype=='ramses')then
-        ! Read parameters from ramses output file
-=======
   ! Read parameters from ramses output file
      if(r%filetype=='ramses')then
->>>>>>> b41ce3f6f49a85df8a2c5219b79ac8de95f0ff6a
         file_params=TRIM(r%initfile(r%levelmin))//'/params.bin'
         inquire(file=file_params, exist=file_exist)
         if(file_exist)then
