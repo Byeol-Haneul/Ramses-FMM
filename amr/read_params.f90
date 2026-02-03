@@ -90,8 +90,11 @@ subroutine m_read_params(pst)
   real(kind=8)::bkp_time_hrs=2   ! Backup file frequency in hours
   real(kind=8)::run_time_hrs=0   ! Estimated run time in hrs
   real(kind=8)::bkp_last_min=10  ! Backup file before the end of run in min
-  integer::bkp_modulo=0       ! Use modulo for backup file count
-  integer::nfile=1          ! Number of file per snapshot. Use -1 for nfile=ncpu
+  integer::bkp_modulo=0          ! Use modulo for backup file count
+  integer::nfile=1               ! Number of file per snapshot. Use -1 for nfile=ncpu
+  logical::output_part=.true. ! Output particle data in regular dumps (default: true)
+  logical::output_grav=.true. ! Output gravity data in regular dumps (default: true)
+  logical::output_amr=.true.  ! Output AMR data in regular dumps (default: true)
 
   ! Output times
   real(kind=8),dimension(1:MAXOUT)::aout=1.1  ! Output expansion factors
@@ -509,7 +512,8 @@ subroutine m_read_params(pst)
   ! Output parameters
   namelist/output_params/foutput,aout,tout,output_mode &
        & ,tend,delta_tout,aend,delta_aout,gadget_output &
-       & ,run_time_hrs,bkp_time_hrs,bkp_last_min,bkp_modulo,nfile
+       & ,run_time_hrs,bkp_time_hrs,bkp_last_min,bkp_modulo,nfile &
+       & ,output_part,output_grav,output_amr
   ! AMR grid basic parameters
   namelist/amr_params/levelmin,levelmax,ngridmax,ncachemax,ngridtot &
        & ,npartmax,nparttot,nexpand,boxlen
@@ -1168,6 +1172,9 @@ subroutine m_read_params(pst)
   s%r%bkp_last_min=bkp_last_min
   s%r%bkp_modulo=bkp_modulo
   s%r%nfile=nfile
+  s%r%output_part=output_part
+  s%r%output_grav=output_grav
+  s%r%output_amr=output_amr
 
   s%r%levelmin=levelmin
   s%r%nlevelmax=nlevelmax

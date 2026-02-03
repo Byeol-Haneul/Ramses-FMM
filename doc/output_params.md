@@ -14,3 +14,6 @@ This namelist block, called `&OUTPUT_PARAMS`, is used to set up the output strat
 | `run_time_hrs=0` | `real` | Esimated wallclock time of the current job in hours. This is used to dump a last backup file just before the end of the simulation. Default value of 0 means this is not used.|
 | `bkp_last_min=10` | `real` | Dump the last backup file just before the end of the simulation using the prescribed time in minutes. |
 | `foutput=N` | `integer` | Frequency of outputs in units of main time steps. If N=0 then no output files are generated. |
+| `output_part=.true.` | `logical` | When set to `.false.`, prevents writing individual particle data to regular output dumps. Particle data will still be written to backup files. Default is `.true.` |
+| `output_grav=.true.` | `logical` | When set to `.false.`, prevents writing gravity/potential data to regular output dumps. Gravity data will still be written to backup files. Default is `.true.` |
+| `output_amr=.true.` | `logical` | When set to `.false.`, prevents writing AMR grid structure data to regular output dumps. AMR data will still be written to backup files. Default is `.true.` |
