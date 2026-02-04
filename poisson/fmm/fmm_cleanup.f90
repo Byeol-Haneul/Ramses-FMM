@@ -28,20 +28,16 @@ subroutine m_cleanup_fmm(m)
   type(mesh_t)::m
 
   integer :: ilev
-
-   ! Deallocate processor boundary array
-   deallocate(m%head,m%tail,m%noct)
-   do ilev=1,size(m%domain)
-      call m%domain(ilev)%destroy
-   end do
-   deallocate(m%domain)
-
   ! Reset the MG hash table
   call reset_entire_hash(m%grid_dict,.false.)
   
   ! Restore AMR grid array into its original state
-  m%ifree=m%ifree
-  m%noct_used=m%ifree-1
+  m%head=1
+  m%tail=0
+  m%noct=0
+  m%ifree=1
+  m%noct_tot=0
+  m%noct_used=0
 
 end subroutine m_cleanup_fmm
 #endif

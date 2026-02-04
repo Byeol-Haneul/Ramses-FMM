@@ -67,7 +67,6 @@ subroutine init_fmm(s,ilevel)
     if(ilev == r%bound_levelmin)then
       m_mg%ifree=m_mg%noct_used+1 ! Jun-Young: start at index of the first free variable
       istart=m_mg%ifree 
-      m_mg%ifree=m_mg%ifree ! Jun-Young: to recover, save curr ifree. 
     else
       istart=m_mg%tail(ilev-1)+1
     endif
