@@ -66,7 +66,7 @@ subroutine fmm(pst,ilevel,icount)
    if(pst%s%r%verbose) print '(A,I2)','Direct Force Calculation done', pst%s%r%levelmin
 
    !do ilev = 1, pst%s%r%levelmin - pst%s%r%level_fmm_to_amr
-   !  call dump_taylor(pst%s%r, pst%s%m_mg, ilev)
+   !  call dump_taylor(pst%s%r, pst%s%m_fmm, ilev)
    !end do 
     
   ! ---------------------------------------------------------------------
@@ -144,12 +144,12 @@ subroutine fmm_downward(s, ilevel)
         0, 0, 1, 1, 0, 0, 1, 1,  &
         0, 0, 0, 0, 1, 1, 1, 1   &
       ], [twotondim, ndim] )
-  associate(r=>s%r, g=>s%g, m=>s%m, m_mg=>s%m_mg, mdl=>s%mdl)
+  associate(r=>s%r, g=>s%g, m=>s%m, m_fmm=>s%m_fmm, mdl=>s%mdl)
 
-  !if(m%noct_mg(ilevel)<1) return
+  !if(m%noct_fmm(ilevel)<1) return
 
   ! Open cache for multipoles
-  call open_cache(mdl, m_mg, pack_size=storage_size(dummy_realdp)/32,& 
+  call open_cache(mdl, m_fmm, pack_size=storage_size(dummy_realdp)/32,& 
             pack=pack_fetch_taylor,unpack=unpack_fetch_taylor,& 
             init=init_flush_taylor, flush=pack_flush_taylor, combine=unpack_flush_taylor)
 
@@ -188,15 +188,15 @@ subroutine fmm_downward(s, ilevel)
   end do
 
   ! Loop over octs at this level
-  do ioct = m_mg%head(ilevel), m_mg%tail(ilevel)
+  do ioct = m_fmm%head(ilevel), m_fmm%tail(ilevel)
      accum_taylor(:, :) = 0.0D0
-     hash_key(1:ndim) = m_mg%grid(ioct)%ckey(1:ndim)
+     hash_key(1:ndim) = m_fmm%grid(ioct)%ckey(1:ndim)
 
     call get_parent_cell(s, hash_key, igrid_parent, pcell, flush_cache=.false., fetch_cache=.true.)
 #ifdef FMM
-    parent_taylor = m_mg%taylor_coeff(pcell, :, igrid_parent)
+    parent_taylor = m_fmm%taylor_coeff(pcell, :, igrid_parent)
 #endif
-    hash_parent(1:ndim) = m_mg%grid(igrid_parent)%ckey(1:ndim)
+    hash_parent(1:ndim) = m_fmm%grid(igrid_parent)%ckey(1:ndim)
 
     ! Far Field Calculation
     do icell = 1, twotondim
@@ -231,7 +231,7 @@ subroutine fmm_downward(s, ilevel)
           if (direct_neighbor_list(inbor, jcell, pcell) .or. cycle_flag) cycle
           ! Shift multipole from origin -> source center (Need to use grid position)
 #ifdef FMM
-          multipole = m_mg%multipole(jcell,:,igrid_nbor)
+          multipole = m_fmm%multipole(jcell,:,igrid_nbor)
 #endif
           ! Get taylor coeffs from local
           do icell=1, twotondim
@@ -247,11 +247,11 @@ subroutine fmm_downward(s, ilevel)
      end do ! over neighboring grids 3^n 
      ! Add taylor coefficients from intermediate fields
 #ifdef FMM
-     m_mg%taylor_coeff(:,:,ioct) = m_mg%taylor_coeff(:,:,ioct) + accum_taylor
+     m_fmm%taylor_coeff(:,:,ioct) = m_fmm%taylor_coeff(:,:,ioct) + accum_taylor
 #endif
      ! Unlock neighbor octs
      do inbor = 1, threetondim
-        call unlock_cache(m_mg, grid_nbors(inbor))
+        call unlock_cache(m_fmm, grid_nbors(inbor))
      end do
   end do
   call close_cache(mdl)
@@ -334,12 +334,12 @@ subroutine fmm_amr_intermediate(s, ilevel)
   integer, allocatable :: fmm_grid_center_offset(:,:), fmm_cell_center_offset(:,:)
   logical, allocatable :: direct_neighbor_list(:,:,:)
 
-  associate(r=>s%r, g=>s%g, m=>s%m, m_mg=>s%m_mg, mdl=>s%mdl)
+  associate(r=>s%r, g=>s%g, m=>s%m, m_fmm=>s%m_fmm, mdl=>s%mdl)
   fourpi = 4.D0*ACOS(-1.0D0)
   if(r%cosmo) fourpi = 1.5D0*g%omega_m*g%aexp
 
   ! Open cache for multipoles
-  call open_cache(mdl, m_mg, pack_size=storage_size(dummy_realdp)/32,&
+  call open_cache(mdl, m_fmm, pack_size=storage_size(dummy_realdp)/32,&
                   pack=pack_fetch_taylor, unpack=unpack_fetch_taylor,&
                   init=init_flush_taylor, flush=pack_flush_taylor, combine=unpack_flush_taylor)
 
@@ -429,7 +429,7 @@ subroutine fmm_amr_intermediate(s, ilevel)
     if (.not. all(hash_fmm_grid == prev_hash_fmm_grid)) then
       if (neighbors_cached) then
         do ind = 1, threetondim
-          call unlock_cache(m_mg, grid_nbors(ind))
+          call unlock_cache(m_fmm, grid_nbors(ind))
         end do
       end if
 
@@ -446,7 +446,7 @@ subroutine fmm_amr_intermediate(s, ilevel)
       pcell = pcell + nstride * MOD(hash_fmm_cell(idim), 2)
     end do
 #ifdef FMM
-    parent_taylor = m_mg%taylor_coeff(pcell, :, igrid_parent)
+    parent_taylor = m_fmm%taylor_coeff(pcell, :, igrid_parent)
 #endif
     ! Far field
     do icell = 1, twotondim
@@ -471,7 +471,7 @@ subroutine fmm_amr_intermediate(s, ilevel)
         end do
         if (cycle_flag .or. direct_neighbor_list(ind, jcell, igrid)) cycle
 #ifdef FMM
-        multipole = m_mg%multipole(jcell, 1:multipole_size, igrid_nbor)
+        multipole = m_fmm%multipole(jcell, 1:multipole_size, igrid_nbor)
 #endif
         do icell=1, twotondim
           diff  = intermediate_diff_list(ind, jcell, igrid, icell, :)
@@ -552,7 +552,7 @@ subroutine fmm_amr_direct(s, ilevel)
   real(kind=8), dimension(:,:,:), allocatable      :: mm_jcell_list
   real(kind=8), dimension(:,:,:,:,:), allocatable  :: inv_dist
 
-  associate(r=>s%r, g=>s%g, m=>s%m, m_mg=>s%m_mg, mdl=>s%mdl)
+  associate(r=>s%r, g=>s%g, m=>s%m, m_fmm=>s%m_fmm, mdl=>s%mdl)
 
   fourpi = 4.D0*ACOS(-1.0D0)
   if (r%cosmo) fourpi = 1.5D0*g%omega_m*g%aexp

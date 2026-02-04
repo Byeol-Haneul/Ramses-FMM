@@ -23,7 +23,7 @@ subroutine m_fmm_multipoles(pst,ilevel)
   type(multipole_t)::multipole_tot
   integer::i,input_size
   integer,dimension(1:2)::input_array
-  associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,m_mg=>pst%s%m_mg,p=>pst%s%p,mdl=>pst%s%mdl)
+  associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,m_fmm=>pst%s%m_fmm,p=>pst%s%p,mdl=>pst%s%mdl)
 
   if(.not. r%poisson)return
   if(r%verbose)write(*,'(" Entering fmm_multipoles for level ",I2)')ilevel
@@ -124,7 +124,7 @@ subroutine fmm_multipole_amr2fmm(s,ilevel)
   real(kind=8), dimension(1:ndim) :: dipole
   real(kind=8), dimension(1:int(ndim*(ndim+1)/2)) :: quadrupole
 
-  associate(r=>s%r,g=>s%g,m=>s%m,m_mg=>s%m_mg,mdl=>s%mdl)
+  associate(r=>s%r,g=>s%g,m=>s%m,m_fmm=>s%m_fmm,mdl=>s%mdl)
 
   !---------------------------------------------------
   ! Initialize constants
@@ -137,7 +137,7 @@ subroutine fmm_multipole_amr2fmm(s,ilevel)
   dx_loc = r%boxlen / 2.0D0**ilevel
   vol_loc = dx_loc**ndim
 
-  call open_cache(mdl,m_mg,pack_size=storage_size(dummy_realdp)/32,&
+  call open_cache(mdl,m_fmm,pack_size=storage_size(dummy_realdp)/32,&
                      pack=pack_fetch_hydro,unpack=unpack_fetch_hydro,&
                      init=init_flush_multipole, flush=pack_flush_multipole, combine=unpack_flush_multipole)
 
@@ -201,7 +201,7 @@ subroutine fmm_multipole_amr2fmm(s,ilevel)
         multipole(2+ndim:1+ndim+nq) = multipole(2+ndim:1+ndim+nq) + quadrupole
      end do  ! cell loop
 #ifdef FMM
-     m_mg%multipole(icell,:,igrid_fmm) = m_mg%multipole(icell,:,igrid_fmm) + multipole
+     m_fmm%multipole(icell,:,igrid_fmm) = m_fmm%multipole(icell,:,igrid_fmm) + multipole
 #endif
   end do
   call close_cache(mdl)
@@ -261,24 +261,24 @@ subroutine fmm_multipole_fmm2fmm(s,ilevel)
   integer :: nm, nd, nq
   real(kind=8), dimension(1:multipole_size) :: multipole
 
-  associate(r=>s%r,g=>s%g,m_mg=>s%m_mg,mdl=>s%mdl)
+  associate(r=>s%r,g=>s%g,m_fmm=>s%m_fmm,mdl=>s%mdl)
   
-  call open_cache(mdl,m_mg,pack_size=storage_size(dummy_realdp)/32,&
+  call open_cache(mdl,m_fmm,pack_size=storage_size(dummy_realdp)/32,&
                      pack=pack_fetch_hydro,unpack=unpack_fetch_hydro,&
                      init=init_flush_multipole, flush=pack_flush_multipole, combine=unpack_flush_multipole)
 
   ! Loop over finer level grids
   hash_key(0)=ilevel+1
-  do ioct=m_mg%head(ilevel+1),m_mg%tail(ilevel+1)
-     hash_key(1:ndim)=m_mg%grid(ioct)%ckey(1:ndim)
+  do ioct=m_fmm%head(ilevel+1),m_fmm%tail(ilevel+1)
+     hash_key(1:ndim)=m_fmm%grid(ioct)%ckey(1:ndim)
      ! Get parent cell using a write-only cache
      call get_parent_cell(s,hash_key,igrid,icell,flush_cache=.true.,fetch_cache=.false.)
      multipole = 0.0D0
 #ifdef FMM
      do ind=1,twotondim
-       multipole = multipole + m_mg%multipole(ind,:,ioct)
+       multipole = multipole + m_fmm%multipole(ind,:,ioct)
      end do
-     m_mg%multipole(icell,:,igrid) = m_mg%multipole(icell,:,igrid) + multipole
+     m_fmm%multipole(icell,:,igrid) = m_fmm%multipole(icell,:,igrid) + multipole
 #endif
   end do
   call close_cache(mdl)
@@ -331,12 +331,12 @@ subroutine fmm_multipole_shift_downward(s,ilevel)
   integer(kind=8), dimension(ndim) :: cc_icell! cartesian coordinate
   real(kind=8), dimension(ndim) :: xx_icell ! box unit real coordinate
 
-  associate(r=>s%r,g=>s%g,m=>s%m,m_mg=>s%m_mg)
+  associate(r=>s%r,g=>s%g,m=>s%m,m_fmm=>s%m_fmm)
 
   dx_loc = r%boxlen / 2.0D0**ilevel
   hash_key(0)=ilevel
-  do ioct=m_mg%head(ilevel),m_mg%tail(ilevel)
-     hash_key(1:ndim)=m_mg%grid(ioct)%ckey(1:ndim)
+  do ioct=m_fmm%head(ilevel),m_fmm%tail(ilevel)
+     hash_key(1:ndim)=m_fmm%grid(ioct)%ckey(1:ndim)
      multipole = 0.0D0
      do icell = 1, twotondim
       do idim = 1, ndim
@@ -345,9 +345,9 @@ subroutine fmm_multipole_shift_downward(s,ilevel)
         xx_icell(idim) = (cc_icell(idim) + 0.5d0) * dx_loc - m%skip(idim)
       end do
 #ifdef FMM
-      multipole = m_mg%multipole(icell, :, ioct)
+      multipole = m_fmm%multipole(icell, :, ioct)
       call shift_multipole(multipole, xx_icell, multipole_shifted)
-      m_mg%multipole(icell, :, ioct) = multipole_shifted
+      m_fmm%multipole(icell, :, ioct) = multipole_shifted
 #endif
     end do
   end do
@@ -446,7 +446,7 @@ recursive subroutine r_reset_multipoles_taylor(pst,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
      if (ilevel <= pst%s%r%levelmin-pst%s%r%level_fmm_to_amr) then
-        call reset_multipoles_taylor(pst%s%r,pst%s%g,pst%s%m_mg,ilevel)
+        call reset_multipoles_taylor(pst%s%r,pst%s%g,pst%s%m_fmm,ilevel)
      else 
         return
      end if
@@ -583,7 +583,7 @@ recursive subroutine r_dump_multipole(pst,ilevel,input_size)
      call r_dump_multipole(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call dump_multipole(pst%s%r,pst%s%g,pst%s%m_mg,ilevel)
+     call dump_multipole(pst%s%r,pst%s%g,pst%s%m_fmm,ilevel)
   endif
 
 end subroutine r_dump_multipole
@@ -611,7 +611,7 @@ subroutine dump_multipole(r, g, m, ilevel)
 #ifdef FMM
     write(filename, '(A,I0,A,I0,A)') "out/mult_fmm_", ilevel, "mpi_", g%myid,".out"
 #else
-    write(filename, '(A,I0,A)') "out/mult_mg_", ilevel, ".out"
+    write(filename, '(A,I0,A)') "out/mult_fmm_", ilevel, ".out"
 #endif
   open(unit_debug, file=filename, status="replace")
   dx_loc = r%boxlen / 2.0D0**ilevel

@@ -17,7 +17,7 @@ recursive subroutine r_cleanup_fmm(pst)
      call r_cleanup_fmm(pst%pLower)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call m_cleanup_fmm(pst%s%m_mg)
+     call m_cleanup_fmm(pst%s%m_fmm)
   endif
 end subroutine r_cleanup_fmm
 

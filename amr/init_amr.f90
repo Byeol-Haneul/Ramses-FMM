@@ -58,8 +58,13 @@ recursive subroutine r_init_amr(pst)
      allocate(pst%s%m)
      call init_amr(pst%s%r,pst%s%g,pst%s%m,'amr')
      if(pst%s%r%poisson)then
+#ifdef FMM
+        allocate(pst%s%m_fmm)
+        call init_amr(pst%s%r,pst%s%g,pst%s%m_fmm,'fmm')
+#else
         allocate(pst%s%m_mg)
         call init_amr(pst%s%r,pst%s%g,pst%s%m_mg,'mg')
+#endif
      endif
      if(pst%s%r%clump_finder)then
         allocate(pst%s%c)
@@ -105,6 +110,9 @@ subroutine init_amr(r,g,m,type)
      m%ngridmax=r%ngridmax
   endif
   if(type=='mg')then
+     m%ngridmax=r%ngridmax/7
+  endif
+  if(type=='fmm')then
      m%ngridmax=r%ngridmax/7
   endif
   m%ncachemax=r%ncachemax
@@ -154,7 +162,7 @@ subroutine init_amr(r,g,m,type)
   endif
 #endif
 #ifdef FMM
-  if(type=='mg')then
+  if(type=='fmm')then
      allocate(m%multipole(1:twotondim,1:multipole_size,1:m%ngridmax+m%ncachemax))
      allocate(m%taylor_coeff(1:twotondim,1:taylor_size,1:m%ngridmax+m%ncachemax))
   endif
@@ -412,6 +420,9 @@ subroutine init_amr(r,g,m,type)
      ilevelmin=r%levelmin
   endif
   if(type=='mg')then
+     ilevelmin=1
+  endif
+  if(type=='fmm')then
      ilevelmin=1
   endif
   
