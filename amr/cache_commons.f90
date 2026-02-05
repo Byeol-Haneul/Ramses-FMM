@@ -35,6 +35,8 @@ module cache_commons
      integer(kind=4),dimension(1:twotondim)::int4
 #ifdef HYDRO
      real(kind=8),dimension(1:twotondim,1:nvar)::realdp
+     real(kind=8),dimension(1:twotondim,1:2*ndim+1)::realdp_mflux
+     real(kind=8),dimension(1:twotondim,1:2*ndim)::realdp_upwind_rho
 #endif
 #ifdef MHD
      real(kind=8),dimension(1:twotondim,1:6)::realdp_mhd

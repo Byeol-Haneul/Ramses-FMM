@@ -21,12 +21,25 @@ subroutine m_rho_fine(pst,ilevel,rtype)
   ! their grid Hilbert order.
   !------------------------------------------------------------------
   type(multipole_t)::multipole_tot
-  integer::i,input_size
+  integer::i,input_size,io_stat
   integer,dimension(1:2)::input_array
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
 
   if(m%noct_tot(ilevel)==0)return
   if(r%verbose)write(*,'(" Entering rho_fine for level ",I2)')ilevel
+  ! #region agent log - Debug I/O check at rho_fine entry
+  if(g%myid==0)then
+     open(unit=997,file='/Users/moseley/ramses-development/.cursor/debug.log',position='append',status='unknown',action='write',iostat=io_stat)
+     if(io_stat /= 0)then
+        write(*,'(" debug.log open failed, iostat=",I6)') io_stat
+     else
+        write(997,'(A,I6,A,I6,A)') '{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"io\",'// &
+             '\"location\":\"rho_fine.f90\",\"message\":\"entry\",\"data\":{\"ilevel\":',ilevel,',\"myid\":',g%myid,'}}'
+        flush(997)
+        close(997)
+     endif
+  endif
+  ! #endregion
 
   !---------------------------
   ! Reset multipole to zero
@@ -2052,6 +2065,21 @@ recursive subroutine sort_hilbert(r,g,m,p,head_part, tail_part, ix_coarse, cstat
         ix_part(idim) = int((p%xp(ind_part,idim)+m%skip(idim))*ckey_factor) - ix_ref(idim)
         ind_cart_part = ind_cart_part + ix_part(idim) * 2**(idim-1)
      end do
+     ! #region agent log - Hypothesis A/D/E: out-of-range Hilbert index
+     if(ind_cart_part < 0 .or. ind_cart_part >= twotondim)then
+        open(unit=998,file='/Users/moseley/ramses-development/.cursor/debug.log',position='append',status='unknown')
+        write(998,'(A,I12,A,I6,A,I6,A,I6,A,I6,A,E12.5,A,E12.5,A,E12.5,A)') &
+             '{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"A\",'// &
+             '\"location\":\"rho_fine.f90\",\"message\":\"ind_cart_out_of_range\",\"data\":{\"ipart\":',ipart, &
+             ',\"ind_part\":',ind_part,',\"ind_cart_part\":',ind_cart_part,',\"ilevel\":',ilevel, &
+             ',\"ix1\":',ix_part(1),',\"x1\":',p%xp(ind_part,1),',\"x2\":',p%xp(ind_part,2),',\"x3\":',p%xp(ind_part,3),'}}'
+        write(998,'(A,L1,A,L1,A,L1,A,E12.5,A)') &
+             '{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"A\",'// &
+             '\"location\":\"rho_fine.f90\",\"message\":\"periodic_flags\",\"data\":{\"per1\":',r%periodic(1), &
+             ',\"per2\":',r%periodic(2),',\"per3\":',r%periodic(3),',\"boxlen\":',r%boxlen,'}}'
+        close(998)
+     end if
+     ! #endregion
      ip = ind_hilbert(ind_cart_part)
      numb_part(ip) = numb_part(ip) + 1
   end do
@@ -2070,6 +2098,17 @@ recursive subroutine sort_hilbert(r,g,m,p,head_part, tail_part, ix_coarse, cstat
         ix_part(idim) = int((p%xp(ind_part,idim)+m%skip(idim))*ckey_factor) - ix_ref(idim)
         ind_cart_part = ind_cart_part + ix_part(idim) * 2**(idim-1)
      end do
+     ! #region agent log - Hypothesis A/D/E: out-of-range Hilbert index (second pass)
+     if(ind_cart_part < 0 .or. ind_cart_part >= twotondim)then
+        open(unit=998,file='/Users/moseley/ramses-development/.cursor/debug.log',position='append',status='unknown')
+        write(998,'(A,I12,A,I6,A,I6,A,I6,A,I6,A,E12.5,A,E12.5,A,E12.5,A)') &
+             '{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"A\",'// &
+             '\"location\":\"rho_fine.f90\",\"message\":\"ind_cart_out_of_range_pass2\",\"data\":{\"ipart\":',ipart, &
+             ',\"ind_part\":',ind_part,',\"ind_cart_part\":',ind_cart_part,',\"ilevel\":',ilevel, &
+             ',\"ix1\":',ix_part(1),',\"x1\":',p%xp(ind_part,1),',\"x2\":',p%xp(ind_part,2),',\"x3\":',p%xp(ind_part,3),'}}'
+        close(998)
+     end if
+     ! #endregion
      ip = ind_hilbert(ind_cart_part)
      numb_part(ip) = numb_part(ip) + 1
      new_ipart = offset(ip) + numb_part(ip)

@@ -266,8 +266,8 @@ subroutine max_sigma(r,m,ilevel,sigma_max)
   do igrid=m%head(ilevel),m%tail(ilevel)
      do ind=1,twotondim
         if(.not. m%grid(igrid)%refined(ind))then
-           dens_turb = max(dble(m%grid(igrid)%uold(ind,1)), r%smallr)
-           e_turb    = max(dble(m%grid(igrid)%uold(ind,r%iturb)), 0.0d0)
+           dens_turb = max(dble(m%uold(ind,1,igrid)), r%smallr)
+           e_turb    = max(dble(m%uold(ind,r%iturb,igrid)), 0.0d0)
            sigma_sq  = max(2.0d0*e_turb/dens_turb, dble(r%smallc)**2)
            sigma_cell = sqrt(sigma_sq)
            if(sigma_cell>sigma_max)sigma_max=sigma_cell

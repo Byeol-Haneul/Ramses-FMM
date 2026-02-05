@@ -1,5 +1,10 @@
 module move_fine_module
   use rho_fine_module, only: cic_weight, cic_index, tsc_weight, tsc_index, pcs_weight, pcs_index
+  use rng
+  implicit none
+  ! Module-level tracer RNG state
+  type(RngStream)::tracer_rng
+  logical::tracer_rng_ready=.false.
 contains
 !################################################################
 !################################################################
@@ -91,12 +96,33 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
         endif
      endif
      if(pst%s%r%trac)then
-        if(pst%s%r%trac_interpolation_scheme==1)then
+        ! #region agent log - Hypothesis E: Log which tracer scheme is used
+        if(pst%s%g%myid==0 .and. action_part==2)then
+           open(unit=999,file='/Users/moseley/ramses-development/.cursor/debug.log',position='append',status='unknown')
+           write(999,'(A,I2,A,I6,A,I2,A)') '{"hypothesisId":"dispatch","location":"r_kick_drift_part",&
+                &"message":"tracer_dispatch","data":{"scheme":',pst%s%r%trac_interpolation_scheme,&
+                &',"ilevel":',ilevel,',"action":',action_part,'}}'
+           close(999)
+        endif
+        ! #endregion
+        if(pst%s%r%trac_interpolation_scheme==0)then
+           call mc_trace_gas_part(pst%s,pst%s%trac,ilevel,action_part) ! Classical Monte Carlo (may not work with AMR)
+        elseif(pst%s%r%trac_interpolation_scheme==1)then
            call cic_trace_gas_part(pst%s,pst%s%trac,ilevel,action_part)
         elseif(pst%s%r%trac_interpolation_scheme==2)then
            call tsc_trace_gas_part(pst%s,pst%s%trac,ilevel,action_part)
         elseif(pst%s%r%trac_interpolation_scheme==3)then
            call pcs_trace_gas_part(pst%s,pst%s%trac,ilevel,action_part)
+        elseif(pst%s%r%trac_interpolation_scheme==4)then
+           call cic_trace_gas_part_ito_mc(pst%s,pst%s%trac,ilevel,action_part) ! Ito formulation of the flux-based Monte Carlo tracer
+        elseif(pst%s%r%trac_interpolation_scheme==5)then
+           call tsc_trace_gas_part_ito_mc(pst%s,pst%s%trac,ilevel,action_part) ! Ito MC tracer with TSC
+        elseif(pst%s%r%trac_interpolation_scheme==6)then
+           call cic_trace_gas_part_sgs_turb(pst%s,pst%s%trac,ilevel,action_part) ! SGS turbulent diffusion tracer with CIC
+        elseif(pst%s%r%trac_interpolation_scheme==7)then
+           call tsc_trace_gas_part_sgs_turb(pst%s,pst%s%trac,ilevel,action_part) ! SGS turbulent diffusion tracer with TSC
+        elseif(pst%s%r%trac_interpolation_scheme==8)then
+           call trace_gas_part_trivial(pst%s,pst%s%trac,ilevel,action_part) ! Trivial tracer: no interpolation, fixed velocity, random diffusion
         endif
      endif
      if(pst%s%r%dust)then
@@ -106,6 +132,14 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
            call tsc_kick_drift_dust(pst%s,pst%s%dust,ilevel,action_part)
         elseif(pst%s%r%dust_force_interpolation_scheme==3)then
            call pcs_kick_drift_dust(pst%s,pst%s%dust,ilevel,action_part)
+        elseif(pst%s%r%dust_force_interpolation_scheme==4)then
+           call cic_kick_drift_dust_ito_mc(pst%s,pst%s%dust,ilevel,action_part) ! Asymptotically approaches Ito MC tracer limit
+        elseif(pst%s%r%dust_force_interpolation_scheme==5)then
+           call tsc_kick_drift_dust_ito_mc(pst%s,pst%s%dust,ilevel,action_part) ! Asymptotically approaches Ito MC tracer limit
+        elseif(pst%s%r%dust_force_interpolation_scheme==6)then
+           call cic_kick_drift_dust_guiding_center(pst%s,pst%s%dust,ilevel,action_part) ! CIC guiding center
+        elseif(pst%s%r%dust_force_interpolation_scheme==7)then
+           call tsc_kick_drift_dust_guiding_center(pst%s,pst%s%dust,ilevel,action_part) ! TSC guiding center
         endif
      endif
   endif
@@ -820,20 +854,24 @@ subroutine pack_fetch_kick_trac(mesh,igrid,msg_size,msg_array)
   use amr_parameters, only: twotondim, ndim
   use hydro_parameters, only: nvar
   use amr_commons, only: mesh_t
-  use cache_commons, only: msg_nvar_realdp
+  use cache_commons, only: msg_hydro_mflux
   type(mesh_t)::mesh
   integer::igrid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
 
   integer::ind, ivar
-  type(msg_nvar_realdp)::msg
+  type(msg_hydro_mflux)::msg
 
 #ifdef HYDRO
   do ivar=1,nvar
      do ind=1,twotondim
         msg%realdp_hydro(ind,ivar)=mesh%uold(ind,ivar,igrid)
      end do
+  end do
+  do ind=1,twotondim
+     msg%realdp_mflux(ind,1:2*ndim+1)=mesh%mflux(ind,1:2*ndim+1,igrid)
+     msg%realdp_upwind_rho(ind,1:2*ndim)=mesh%upwind_rho(ind,1:2*ndim,igrid)
   end do
 #endif
 
@@ -846,14 +884,14 @@ subroutine unpack_fetch_kick_trac(mesh,igrid,msg_size,msg_array,hash_key)
   use amr_parameters, only: ndim, twotondim
   use hydro_parameters, only: nvar
   use amr_commons, only: mesh_t
-  use cache_commons, only: msg_nvar_realdp
+  use cache_commons, only: msg_hydro_mflux
   type(mesh_t)::mesh
   integer::igrid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
   integer(kind=8),dimension(0:ndim)::hash_key
   integer::ind,ivar
-  type(msg_nvar_realdp)::msg
+  type(msg_hydro_mflux)::msg
 
   mesh%grid(igrid)%lev=hash_key(0)
   mesh%grid(igrid)%ckey(1:ndim)=hash_key(1:ndim)
@@ -864,6 +902,10 @@ subroutine unpack_fetch_kick_trac(mesh,igrid,msg_size,msg_array,hash_key)
      do ind=1,twotondim
         mesh%uold(ind,ivar,igrid)=msg%realdp_hydro(ind,ivar)
      end do
+  end do
+  do ind=1,twotondim
+     mesh%mflux(ind,1:2*ndim+1,igrid)=msg%realdp_mflux(ind,1:2*ndim+1)
+     mesh%upwind_rho(ind,1:2*ndim,igrid)=msg%realdp_upwind_rho(ind,1:2*ndim)
   end do
 #endif
 
@@ -995,7 +1037,7 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
   real(kind=8),dimension(1:ndim)::ff,v_pred
   logical :: ok_level
   type(msg_three_realdp)::dummy_three_realdp
-  type(msg_nvar_realdp)::dummy_nvar_realdp
+  type(msg_hydro_mflux)::dummy_hydro_mflux
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
@@ -1005,8 +1047,8 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
   dx_loc=r%boxlen/2**ilevel
   vol_loc=dx_loc**ndim
   if (p%type/=TRAC_TYPE) return
-  ! Tracer hydro cache (uold only)
-  call open_cache(mdl, m, pack_size=storage_size(dummy_nvar_realdp)/32, &
+  ! Tracer hydro cache (uold, mflux, upwind_rho)
+  call open_cache(mdl, m, pack_size=storage_size(dummy_hydro_mflux)/32, &
        pack=pack_fetch_kick_trac, unpack=unpack_fetch_kick_trac)
   do ipart=p%headp(ilevel),p%tailp(ilevel)
      ! Position in cell units at current level
@@ -1210,7 +1252,7 @@ subroutine tsc_trace_gas_part(s,p,ilevel,action_part)
   real(kind=8),dimension(1:ndim)::ff,v_pred
   logical::ok_level
   type(msg_three_realdp)::dummy_three_realdp
-  type(msg_nvar_realdp)::dummy_nvar_realdp
+  type(msg_hydro_mflux)::dummy_hydro_mflux
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
@@ -1218,7 +1260,7 @@ subroutine tsc_trace_gas_part(s,p,ilevel,action_part)
   if (p%type/=TRAC_TYPE) return
 
   dx_loc=r%boxlen/2**ilevel
-  call open_cache(mdl, m, pack_size=storage_size(dummy_nvar_realdp)/32, &
+  call open_cache(mdl, m, pack_size=storage_size(dummy_hydro_mflux)/32, &
        pack=pack_fetch_kick_trac, unpack=unpack_fetch_kick_trac)
   do ipart=p%headp(ilevel),p%tailp(ilevel)
      do idim=1,ndim
@@ -1355,7 +1397,7 @@ subroutine pcs_trace_gas_part(s,p,ilevel,action_part)
   real(kind=8)::dx_loc
   real(kind=8),dimension(1:ndim)::ff,v_pred
   type(msg_large_realdp)::dummy_large_realdp
-  type(msg_nvar_realdp)::dummy_nvar_realdp
+  type(msg_hydro_mflux)::dummy_hydro_mflux
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
@@ -1363,7 +1405,7 @@ subroutine pcs_trace_gas_part(s,p,ilevel,action_part)
   if (p%type/=TRAC_TYPE) return
 
   dx_loc=r%boxlen/2**ilevel
-  call open_cache(mdl, m, pack_size=storage_size(dummy_nvar_realdp)/32, &
+  call open_cache(mdl, m, pack_size=storage_size(dummy_hydro_mflux)/32, &
        pack=pack_fetch_kick_trac, unpack=unpack_fetch_kick_trac)
   do ipart=p%headp(ilevel),p%tailp(ilevel)
      do idim=1,ndim
@@ -2269,6 +2311,1411 @@ subroutine compute_lorentz_analytic(driftvel, bfield, dt, charge_parameter)
   end if
 #endif
 end subroutine compute_lorentz_analytic
+
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+! Weight computation subroutines for CIC and TSC interpolation
+!#########################################################################
+subroutine cic_weights_and_derivs(x, w1d, dw1d, il_out, ir_out, vol_out)
+  !--------------------------------------------------------------
+  ! Compute 1D CIC weights, derivatives, and cell indices from position.
+  ! x(1:ndim) is the cell-centered coordinate.
+  ! w1d(dim,1) = left weight (dl), w1d(dim,2) = right weight (dr)
+  ! dw1d(dim,1) = -1, dw1d(dim,2) = +1 (CIC derivatives are constant)
+  ! il_out, ir_out = cell indices (optional)
+  ! vol_out(1:twotondim) = 3D volume weights (optional)
+  !--------------------------------------------------------------
+  use amr_parameters, only: ndim, twotondim
+  implicit none
+  real(kind=8),intent(in)::x(1:ndim)
+  real(kind=8),intent(out)::w1d(1:ndim,1:2),dw1d(1:ndim,1:2)
+  integer,intent(out),optional::il_out(1:ndim),ir_out(1:ndim)
+  real(kind=8),intent(out),optional::vol_out(1:twotondim)
+  integer::idim,ind,ix,iy,iz
+  real(kind=8)::xd
+
+  do idim=1,ndim
+     xd = x(idim) + 0.5d0
+     if(present(ir_out)) ir_out(idim) = int(xd)
+     xd = xd - int(xd)  ! fractional offset in [0,1)
+     w1d(idim,1) = 1.d0 - xd   ! left weight (dl)
+     w1d(idim,2) = xd          ! right weight (dr)
+     dw1d(idim,1) = -1.d0      ! derivative of left weight
+     dw1d(idim,2) = +1.d0      ! derivative of right weight
+     if(present(il_out).and.present(ir_out)) il_out(idim) = ir_out(idim) - 1
+  end do
+  ! 3D volume weights (optional output)
+  if(present(vol_out))then
+     ind = 0
+     do iz=1,2
+        do iy=1,2
+           do ix=1,2
+              ind = ind+1
+              vol_out(ind) = w1d(1,ix)*w1d(2,iy)*w1d(3,iz)
+           end do
+        end do
+     end do
+  end if
+end subroutine cic_weights_and_derivs
+
+subroutine tsc_weights_and_derivs(x, w1d, dw1d, il_out, ic_out, ir_out, vol_out)
+  !--------------------------------------------------------------
+  ! Compute 1D TSC weights, derivatives, and cell indices from position.
+  ! x(1:ndim) is the cell-centered coordinate.
+  ! w1d(dim,1:3) = left, center, right weights
+  ! dw1d(dim,1:3) = corresponding derivatives
+  ! il_out, ic_out, ir_out = cell indices (optional)
+  ! vol_out(1:threetondim) = 3D volume weights (optional)
+  !--------------------------------------------------------------
+  use amr_parameters, only: ndim, threetondim
+  implicit none
+  real(kind=8),intent(in)::x(1:ndim)
+  real(kind=8),intent(out)::w1d(1:ndim,1:3),dw1d(1:ndim,1:3)
+  integer,intent(out),optional::il_out(1:ndim),ic_out(1:ndim),ir_out(1:ndim)
+  real(kind=8),intent(out),optional::vol_out(1:threetondim)
+  integer::idim,il,ic,ir,ind,ix,iy,iz
+  real(kind=8)::xd,xl,xc,xr
+
+  do idim=1,ndim
+     xd = x(idim)
+     il = int(xd)-1
+     ic = int(xd)
+     ir = int(xd)+1
+     xl = dble(il)+0.5d0
+     xc = dble(ic)+0.5d0
+     xr = dble(ir)+0.5d0
+     ! TSC weights
+     w1d(idim,1) = 0.5d0*(1.5d0-abs(xd-xl))**2
+     w1d(idim,2) = 0.75d0-(xd-xc)**2
+     w1d(idim,3) = 0.5d0*(1.5d0-abs(xd-xr))**2
+     ! TSC derivatives
+     dw1d(idim,1) = -(1.5d0-abs(xd-xl))*sign(1.d0,xd-xl)
+     dw1d(idim,2) = -2.d0*(xd-xc)
+     dw1d(idim,3) = -(1.5d0-abs(xd-xr))*sign(1.d0,xd-xr)
+     ! Cell indices (optional output)
+     if(present(il_out)) il_out(idim) = il
+     if(present(ic_out)) ic_out(idim) = ic
+     if(present(ir_out)) ir_out(idim) = ir
+  end do
+  ! 3D volume weights (optional output)
+  if(present(vol_out))then
+     ind = 0
+     do iz=1,3
+        do iy=1,3
+           do ix=1,3
+              ind = ind+1
+              vol_out(ind) = w1d(1,ix)*w1d(2,iy)*w1d(3,iz)
+           end do
+        end do
+     end do
+  end if
+end subroutine tsc_weights_and_derivs
+
+subroutine pcs_1d_weights(x, wll_out, wl_out, wr_out, wrr_out, cll_out, cl_out, cr_out, crr_out)
+  !--------------------------------------------------------------
+  ! Compute 1D PCS weights and cell indices from position.
+  !--------------------------------------------------------------
+  use amr_parameters, only: ndim
+  implicit none
+  real(kind=8),intent(in)::x(1:ndim)
+  real(kind=8),intent(out)::wll_out(1:ndim),wl_out(1:ndim),wr_out(1:ndim),wrr_out(1:ndim)
+  integer,intent(out)::cll_out(1:ndim),cl_out(1:ndim),cr_out(1:ndim),crr_out(1:ndim)
+  integer::idim
+  real(kind=8)::xll,xl,xr,xrr
+
+  do idim=1,ndim
+     crr_out(idim) = int(x(idim)+1.5d0)
+     cr_out(idim)  = crr_out(idim)-1
+     cl_out(idim)  = crr_out(idim)-2
+     cll_out(idim) = crr_out(idim)-3
+     xll = dble(cll_out(idim))+0.5d0
+     xl  = dble(cl_out(idim))+0.5d0
+     xr  = dble(cr_out(idim))+0.5d0
+     xrr = dble(crr_out(idim))+0.5d0
+     wll_out(idim) = (2.d0-abs(x(idim)-xll))**3/6.d0
+     wl_out(idim)  = (4.d0-6.d0*(x(idim)-xl)**2+3.d0*abs(x(idim)-xl)**3)/6.d0
+     wr_out(idim)  = (4.d0-6.d0*(x(idim)-xr)**2+3.d0*abs(x(idim)-xr)**3)/6.d0
+     wrr_out(idim) = (2.d0-abs(x(idim)-xrr))**3/6.d0
+  end do
+end subroutine pcs_1d_weights
+
+!#########################################################################
+! Gradient computation subroutines for CIC and TSC interpolation
+!#########################################################################
+subroutine compute_gradient_cic_scalar(w1d, dw1d, field, grad_out)
+  !--------------------------------------------------------------
+  ! Compute gradient of a scalar field using CIC (2x2x2) weights.
+  !--------------------------------------------------------------
+  use amr_parameters, only: ndim, twotondim
+  implicit none
+  real(kind=8),intent(in)::w1d(1:ndim,1:2),dw1d(1:ndim,1:2)
+  real(kind=8),intent(in)::field(1:twotondim)
+  real(kind=8),intent(out)::grad_out(1:ndim)
+  integer::ix,iy,iz,ind
+
+  grad_out = 0.d0
+  ind = 0
+  do iz=1,2
+     do iy=1,2
+        do ix=1,2
+           ind = ind+1
+           grad_out(1) = grad_out(1) + dw1d(1,ix)*w1d(2,iy)*w1d(3,iz)*field(ind)
+           grad_out(2) = grad_out(2) + w1d(1,ix)*dw1d(2,iy)*w1d(3,iz)*field(ind)
+           grad_out(3) = grad_out(3) + w1d(1,ix)*w1d(2,iy)*dw1d(3,iz)*field(ind)
+        end do
+     end do
+  end do
+end subroutine compute_gradient_cic_scalar
+
+subroutine compute_gradient_cic(w1d, dw1d, field, grad_out)
+  !--------------------------------------------------------------
+  ! Compute gradient of a vector field using CIC (2x2x2) weights.
+  !--------------------------------------------------------------
+  use amr_parameters, only: ndim, twotondim
+  implicit none
+  real(kind=8),intent(in)::w1d(1:ndim,1:2),dw1d(1:ndim,1:2)
+  real(kind=8),intent(in)::field(1:ndim,1:twotondim)
+  real(kind=8),intent(out)::grad_out(1:ndim)
+  integer::ix,iy,iz,ind
+
+  grad_out = 0.d0
+  ind = 0
+  do iz=1,2
+     do iy=1,2
+        do ix=1,2
+           ind = ind+1
+           grad_out(1) = grad_out(1) + dw1d(1,ix)*w1d(2,iy)*w1d(3,iz)*field(1,ind)
+           grad_out(2) = grad_out(2) + w1d(1,ix)*dw1d(2,iy)*w1d(3,iz)*field(2,ind)
+           grad_out(3) = grad_out(3) + w1d(1,ix)*w1d(2,iy)*dw1d(3,iz)*field(3,ind)
+        end do
+     end do
+  end do
+end subroutine compute_gradient_cic
+
+subroutine compute_gradient_tsc_scalar(w1d, dw1d, field, grad_out)
+  !--------------------------------------------------------------
+  ! Compute gradient of a scalar field using TSC (3x3x3) weights.
+  !--------------------------------------------------------------
+  use amr_parameters, only: ndim, threetondim
+  implicit none
+  real(kind=8),intent(in)::w1d(1:ndim,1:3),dw1d(1:ndim,1:3)
+  real(kind=8),intent(in)::field(1:threetondim)
+  real(kind=8),intent(out)::grad_out(1:ndim)
+  integer::ix,iy,iz,ind
+
+  grad_out = 0.d0
+  ind = 0
+  do iz=1,3
+     do iy=1,3
+        do ix=1,3
+           ind = ind+1
+           grad_out(1) = grad_out(1) + dw1d(1,ix)*w1d(2,iy)*w1d(3,iz)*field(ind)
+           grad_out(2) = grad_out(2) + w1d(1,ix)*dw1d(2,iy)*w1d(3,iz)*field(ind)
+           grad_out(3) = grad_out(3) + w1d(1,ix)*w1d(2,iy)*dw1d(3,iz)*field(ind)
+        end do
+     end do
+  end do
+end subroutine compute_gradient_tsc_scalar
+
+subroutine compute_gradient_tsc(w1d, dw1d, field, grad_out)
+  !--------------------------------------------------------------
+  ! Compute gradient of a vector field using TSC (3x3x3) weights.
+  !--------------------------------------------------------------
+  use amr_parameters, only: ndim, threetondim
+  implicit none
+  real(kind=8),intent(in)::w1d(1:ndim,1:3),dw1d(1:ndim,1:3)
+  real(kind=8),intent(in)::field(1:ndim,1:threetondim)
+  real(kind=8),intent(out)::grad_out(1:ndim)
+  integer::ix,iy,iz,ind
+
+  grad_out = 0.d0
+  ind = 0
+  do iz=1,3
+     do iy=1,3
+        do ix=1,3
+           ind = ind+1
+           grad_out(1) = grad_out(1) + dw1d(1,ix)*w1d(2,iy)*w1d(3,iz)*field(1,ind)
+           grad_out(2) = grad_out(2) + w1d(1,ix)*dw1d(2,iy)*w1d(3,iz)*field(2,ind)
+           grad_out(3) = grad_out(3) + w1d(1,ix)*w1d(2,iy)*dw1d(3,iz)*field(3,ind)
+        end do
+     end do
+  end do
+end subroutine compute_gradient_tsc
+
+!#########################################################################
+! Helper routines for tracer particles
+!#########################################################################
+subroutine wrap_cell_coords(st,x_cell,levelp1)
+  use amr_parameters, only: ndim
+  use ramses_commons, only: ramses_t
+  implicit none
+  type(ramses_t),intent(in)::st
+  real(kind=8),intent(inout)::x_cell(1:ndim)
+  integer,intent(in)::levelp1
+  integer::jd
+  real(kind=8)::range
+
+  do jd=1,ndim
+     if(st%r%periodic(jd))then
+        range=dble(st%m%box_ckey_max(jd,levelp1)-st%m%box_ckey_min(jd,levelp1))
+        if(range<=0.d0)cycle
+        if(x_cell(jd)< dble(st%m%box_ckey_min(jd,levelp1)))x_cell(jd)=x_cell(jd)+range
+        if(x_cell(jd)>=dble(st%m%box_ckey_max(jd,levelp1)))x_cell(jd)=x_cell(jd)-range
+     endif
+  end do
+end subroutine wrap_cell_coords
+
+real(kind=8) function tracer_cell_kappa(dens_in,eturb_in,dx_in,smallr_in) result(kappa_val)
+  implicit none
+  real(kind=8),intent(in)::dens_in,eturb_in,dx_in,smallr_in
+  real(kind=8)::rho_eff,sigma_sq
+
+  rho_eff = max(dens_in,smallr_in)
+  sigma_sq = max(2.0d0*max(eturb_in,0.0d0)/rho_eff,0.0d0)
+  if(sigma_sq>0.0d0)then
+     kappa_val = dx_in*sqrt(sigma_sq)
+  else
+     kappa_val = 0.0d0
+  end if
+end function tracer_cell_kappa
+
+subroutine sample_tracer_gaussian(vec)
+  use amr_parameters, only: ndim
+  implicit none
+  real(kind=8),intent(out)::vec(1:ndim)
+  integer :: jd
+  real(kind=8)::u_rand,tmp
+  real(kind=8), external :: RngStream_RandUni
+  external :: gaussdev
+
+  vec=0.0d0
+  do jd=1,ndim
+     u_rand = RngStream_RandUni(tracer_rng)
+     call gaussdev(u_rand,tmp)
+     vec(jd)=tmp
+  end do
+end subroutine sample_tracer_gaussian
+
+subroutine sample_tracer_uniform(vec)
+  use amr_parameters, only: ndim
+  implicit none
+  real(kind=8),intent(out)::vec(1:ndim)
+  integer :: jd
+  real(kind=8)::u_rand
+  real(kind=8), external :: RngStream_RandUni
+
+  vec=0.0d0
+  do jd=1,ndim
+     u_rand = RngStream_RandUni(tracer_rng)
+     ! Uniform distribution [-sqrt(3), sqrt(3)] with variance 1
+     vec(jd) = (2.0d0*u_rand - 1.0d0) * sqrt(3.0d0)
+  end do
+end subroutine sample_tracer_uniform
+
+subroutine sample_tracer_piecewise_skew_uniform(vec, gamma1_vec)
+  !------------------------------------------------------------------------
+  ! Sample from a two-piece uniform distribution with mean 0, variance 1,
+  ! and skewness gamma1 (one value per dimension).
+  !------------------------------------------------------------------------
+  use amr_parameters, only: ndim
+  implicit none
+  real(kind=8),intent(out)::vec(1:ndim)
+  real(kind=8),intent(in)::gamma1_vec(1:ndim)
+  integer :: jd
+  real(kind=8)::u_rand,gamma1,k,a,b,p_left,apb
+  real(kind=8), external :: RngStream_RandUni
+
+  vec=0.0d0
+  do jd=1,ndim
+     gamma1 = gamma1_vec(jd)
+     ! Compute two-piece uniform parameters from skewness
+     k = 4.0d0 * gamma1 / 3.0d0
+     a = 0.5d0 * (-k + sqrt(k*k + 12.0d0))
+     b = a + k
+     apb = a + b
+     p_left = b / apb
+     ! Sample using inverse CDF
+     u_rand = RngStream_RandUni(tracer_rng)
+     if (u_rand < p_left) then
+        vec(jd) = -a + a * u_rand * apb / b
+     else
+        vec(jd) = b * (u_rand * apb - b) / a
+     endif
+  end do
+end subroutine sample_tracer_piecewise_skew_uniform
+
+real(kind=8) function mc_kernel_skewness(pr, pl) result(gamma1)
+  !------------------------------------------------------------------------
+  ! Compute the standardized skewness of the MC discrete kernel.
+  !------------------------------------------------------------------------
+  implicit none
+  real(kind=8),intent(in)::pr, pl
+  real(kind=8)::mu3, variance
+
+  mu3 = (pr - pl) * (1.0d0 - 3.0d0*pl + 4.0d0*pl**2 - 2.0d0*pl**3 &
+       & - 3.0d0*pr - 8.0d0*pl*pr + 2.0d0*pl**2*pr &
+       & + 4.0d0*pr**2 + 2.0d0*pl*pr**2 - 2.0d0*pr**3)
+  variance = pl - pl**2 + pr + 2.0d0*pl*pr - pr**2
+  if (variance > 0.0d0) then
+     gamma1 = mu3 / (variance**1.5d0)
+  else
+     gamma1 = 0.0d0
+  endif
+end function mc_kernel_skewness
+
+!#########################################################################
+! State gathering subroutines (converted from IMC pointer to vanilla integer pattern)
+!#########################################################################
+subroutine gather_cic_state(st,x_cell,level_in,dx_cell,use_sgs_in,vel_out,kappa_out)
+  use amr_parameters, only: ndim, twotondim
+  use ramses_commons, only: ramses_t
+  use nbors_utils
+  use cache
+  implicit none
+  type(ramses_t),intent(in)::st
+  real(kind=8),intent(in)::x_cell(1:ndim)
+  integer,intent(in)::level_in
+  real(kind=8),intent(in)::dx_cell
+  logical,intent(in)::use_sgs_in
+  real(kind=8),intent(out)::vel_out(1:ndim)
+  real(kind=8),intent(out)::kappa_out
+  integer,dimension(1:ndim)::il,ir
+  real(kind=8),dimension(1:twotondim)::vol
+  integer,dimension(1:ndim,1:twotondim)::ckey
+  real(kind=8),dimension(1:ndim,1:2)::w1d,dw1d
+  real(kind=8),dimension(1:ndim)::momentum
+  real(kind=8)::rho,kappa_sum
+  integer(kind=8),dimension(0:ndim)::hash_nbor
+  integer::ind,icell,jd,igrid
+
+  vel_out=0.d0
+  momentum=0.d0
+  rho=0.d0
+  kappa_sum=0.d0
+
+  ! Build CIC weights, indices, and volume weights
+  call cic_weights_and_derivs(x_cell, w1d, dw1d, il, ir, vol)
+  do jd=1,ndim
+     if(st%r%periodic(jd))then
+        if(il(jd)< st%m%box_ckey_min(jd,level_in+1))il(jd)=st%m%box_ckey_max(jd,level_in+1)-1
+        if(ir(jd)>=st%m%box_ckey_max(jd,level_in+1))ir(jd)=st%m%box_ckey_min(jd,level_in+1)
+     endif
+  end do
+  ckey = cic_index(il,ir)
+
+  hash_nbor(0)=level_in+1
+  do ind=1,twotondim
+     hash_nbor(1:ndim)=ckey(1:ndim,ind)
+     call get_parent_cell(st,hash_nbor,igrid,icell,flush_cache=.false.,fetch_cache=.true.)
+#ifdef HYDRO
+     if(igrid>0)then
+        momentum(1:ndim)=momentum(1:ndim)+st%m%uold(icell,2:ndim+1,igrid)*vol(ind)
+        rho=rho+st%m%uold(icell,1,igrid)*vol(ind)
+        if(use_sgs_in)then
+           kappa_sum=kappa_sum+tracer_cell_kappa(st%m%uold(icell,1,igrid),st%m%uold(icell,st%r%iturb,igrid),dx_cell,st%r%smallr)*vol(ind)
+        end if
+     end if
+#endif
+  end do
+
+  if(rho>0.d0)then
+     vel_out(1:ndim)=momentum(1:ndim)/max(rho,st%r%smallr)
+  else
+     vel_out(1:ndim)=0.d0
+  end if
+
+  if(use_sgs_in)then
+     kappa_out=max(kappa_sum,0.d0)
+  else
+     kappa_out=0.d0
+  end if
+end subroutine gather_cic_state
+
+subroutine gather_tsc_state(st,x_cell,level_in,dx_cell,use_sgs_in,vel_out,kappa_out)
+  use amr_parameters, only: ndim, threetondim
+  use ramses_commons, only: ramses_t
+  use nbors_utils
+  use cache
+  use rho_fine_module, only: tsc_index
+  implicit none
+  type(ramses_t),intent(in)::st
+  real(kind=8),intent(in)::x_cell(1:ndim)
+  integer,intent(in)::level_in
+  real(kind=8),intent(in)::dx_cell
+  logical,intent(in)::use_sgs_in
+  real(kind=8),intent(out)::vel_out(1:ndim)
+  real(kind=8),intent(out)::kappa_out
+  integer,dimension(1:ndim)::il,ic,ir
+  real(kind=8),dimension(1:threetondim)::vol
+  integer,dimension(1:ndim,1:threetondim)::ckey
+  real(kind=8),dimension(1:ndim,1:3)::w1d,dw1d
+  real(kind=8),dimension(1:ndim)::momentum
+  real(kind=8)::rho,kappa_sum
+  integer(kind=8),dimension(0:ndim)::hash_nbor
+  integer::ind,icell,jd,igrid
+
+  vel_out=0.d0
+  momentum=0.d0
+  rho=0.d0
+  kappa_sum=0.d0
+
+  ! Build TSC weights, indices, and volume weights
+  call tsc_weights_and_derivs(x_cell, w1d, dw1d, il, ic, ir, vol)
+  do jd=1,ndim
+     if(st%r%periodic(jd))then
+        if(il(jd)< st%m%box_ckey_min(jd,level_in+1))il(jd)=il(jd)-st%m%box_ckey_min(jd,level_in+1)+st%m%box_ckey_max(jd,level_in+1)
+        if(ir(jd)>=st%m%box_ckey_max(jd,level_in+1))ir(jd)=ir(jd)+st%m%box_ckey_min(jd,level_in+1)-st%m%box_ckey_max(jd,level_in+1)
+     endif
+  end do
+  ckey = tsc_index(il,ic,ir)
+
+  hash_nbor(0)=level_in+1
+  do ind=1,threetondim
+     hash_nbor(1:ndim)=ckey(1:ndim,ind)
+     call get_parent_cell(st,hash_nbor,igrid,icell,flush_cache=.false.,fetch_cache=.true.)
+#ifdef HYDRO
+     if(igrid>0)then
+        momentum(1:ndim)=momentum(1:ndim)+st%m%uold(icell,2:ndim+1,igrid)*vol(ind)
+        rho=rho+st%m%uold(icell,1,igrid)*vol(ind)
+        if(use_sgs_in)then
+           kappa_sum=kappa_sum+tracer_cell_kappa(st%m%uold(icell,1,igrid),st%m%uold(icell,st%r%iturb,igrid),dx_cell,st%r%smallr)*vol(ind)
+        end if
+     end if
+#endif
+  end do
+
+  if(rho>0.d0)then
+     vel_out(1:ndim)=momentum(1:ndim)/max(rho,st%r%smallr)
+  else
+     vel_out(1:ndim)=0.d0
+  end if
+
+  if(use_sgs_in)then
+     kappa_out=max(kappa_sum,0.d0)
+  else
+     kappa_out=0.d0
+  end if
+end subroutine gather_tsc_state
+
+subroutine gather_cic_scalar(st,x_cell,level_in,dx_cell,use_sgs_in,phi_cells)
+  use amr_parameters, only: ndim, twotondim
+  use ramses_commons, only: ramses_t
+  use nbors_utils
+  use cache
+  implicit none
+  type(ramses_t),intent(in)::st
+  real(kind=8),intent(in)::x_cell(1:ndim)
+  integer,intent(in)::level_in
+  real(kind=8),intent(in)::dx_cell
+  logical,intent(in)::use_sgs_in
+  real(kind=8),intent(out)::phi_cells(1:twotondim)
+  integer,dimension(1:ndim)::il,ir
+  integer,dimension(1:ndim,1:twotondim)::ckey
+  real(kind=8),dimension(1:ndim,1:2)::w1d,dw1d
+  integer(kind=8),dimension(0:ndim)::hash_nbor
+  integer::ind,jd,icell,igrid
+
+  phi_cells=0.d0
+  if(.not.use_sgs_in)return
+
+  ! Build CIC weights and indices
+  call cic_weights_and_derivs(x_cell, w1d, dw1d, il, ir)
+  do jd=1,ndim
+     if(st%r%periodic(jd))then
+        if(il(jd)< st%m%box_ckey_min(jd,level_in+1))il(jd)=st%m%box_ckey_max(jd,level_in+1)-1
+        if(ir(jd)>=st%m%box_ckey_max(jd,level_in+1))ir(jd)=st%m%box_ckey_min(jd,level_in+1)
+     endif
+  end do
+  ckey = cic_index(il,ir)
+
+  hash_nbor(0)=level_in+1
+  do ind=1,twotondim
+     hash_nbor(1:ndim)=ckey(1:ndim,ind)
+     call get_parent_cell(st,hash_nbor,igrid,icell,flush_cache=.false.,fetch_cache=.true.)
+#ifdef HYDRO
+     if(igrid>0)then
+        phi_cells(ind)=tracer_cell_kappa(st%m%uold(icell,1,igrid),st%m%uold(icell,st%r%iturb,igrid),dx_cell,st%r%smallr)
+     end if
+#endif
+  end do
+end subroutine gather_cic_scalar
+
+!#########################################################################
+! New tracer subroutines (ported from move_fine_imc.f90)
+!#########################################################################
+subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
+  use amr_parameters, only: ndim, twotondim
+  use pm_parameters
+  use pm_commons, only: part_t
+  use ramses_commons, only: ramses_t
+  use rng
+  use nbors_utils
+  use cache_commons
+  use cache
+  implicit none
+  type(ramses_t)::s
+  type(part_t)::p
+  integer::ilevel
+  integer::action_part
+  real(kind=8),dimension(1:ndim)::x,x_mid,v_pred,u_eff,u_mid,disp,xi,momentum
+  real(kind=8),dimension(1:ndim)::grad_at_part
+  real(kind=8),dimension(1:twotondim)::vol,kappa_cells
+  integer,dimension(1:ndim)::il,ir
+  integer,dimension(1:ndim,1:twotondim)::ckey
+  integer(kind=8),dimension(0:ndim)::hash_nbor
+  real(kind=8),dimension(1:ndim,1:2)::w1d,dw1d
+  real(kind=8)::dx_loc,dt_level,kappa_mid,noise_amp,rho
+  logical :: use_sgs
+  type(msg_hydro_mflux)::dummy_hydro_mflux
+  type(RngStream),external::RngStream_CreateStream
+  real(kind=8),external::RngStream_RandUni
+  integer(kind=8)::stream_skip
+  external :: RngStream_SetPackageSeed, RngStream_AdvanceState, gaussdev
+  integer :: ipart,idim,ind,icell,igrid
+
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
+  if(p%static)return
+  if (p%type/=TRAC_TYPE) return
+
+  dx_loc=r%boxlen/2**ilevel
+  dt_level=g%dtnew(ilevel)
+  use_sgs = r%sgs_turb .and. (r%iturb>0)
+
+  if(action_part==action_kick_only)then
+     do ipart=p%headp(ilevel),p%tailp(ilevel)
+        p%levelp(ipart)=ilevel
+     end do
+     return
+  endif
+
+  if(use_sgs .and. .not. tracer_rng_ready)then
+     call RngStream_SetPackageSeed(r%seed)
+     tracer_rng = RngStream_CreateStream('tracer_sgs')
+     stream_skip = int(2*g%myid,kind=8)
+     call RngStream_AdvanceState(tracer_rng,0_8,stream_skip)
+     tracer_rng_ready = .true.
+  end if
+
+  call open_cache(mdl, m, pack_size=storage_size(dummy_hydro_mflux)/32, &
+       pack=pack_fetch_kick_trac, unpack=unpack_fetch_kick_trac)
+
+  do ipart=p%headp(ilevel),p%tailp(ilevel)
+
+     do idim=1,ndim
+        x(idim)=(p%xp(ipart,idim)+m%skip(idim))/dx_loc
+     end do
+     call wrap_cell_coords(s,x,ilevel+1)
+
+     if (g%nstep>0) then
+        v_pred(1:ndim)=p%vp(ipart,1:ndim)
+     else
+        call gather_cic_state(s,x,ilevel,dx_loc,.false.,u_eff,kappa_mid)
+        v_pred(1:ndim)=u_eff(1:ndim)
+     endif
+
+     do idim=1,ndim
+        x_mid(idim)=x(idim)+0.5d0*dt_level*v_pred(idim)/dx_loc
+     end do
+     call wrap_cell_coords(s,x_mid,ilevel+1)
+
+     call cic_weights_and_derivs(x_mid, w1d, dw1d, il, ir, vol)
+     do idim=1,ndim
+        if(r%periodic(idim))then
+           if(il(idim)< m%box_ckey_min(idim,ilevel+1))il(idim)=m%box_ckey_max(idim,ilevel+1)-1
+           if(ir(idim)>=m%box_ckey_max(idim,ilevel+1))ir(idim)=m%box_ckey_min(idim,ilevel+1)
+        endif
+     end do
+     ckey = cic_index(il,ir)
+
+     momentum(1:ndim)=0.d0
+     rho=0.d0
+     kappa_mid=0.d0
+     kappa_cells(1:twotondim)=0.d0
+     hash_nbor(0)=ilevel+1
+     do ind=1,twotondim
+        hash_nbor(1:ndim)=ckey(1:ndim,ind)
+        call get_parent_cell(s,hash_nbor,igrid,icell,flush_cache=.false.,fetch_cache=.true.)
+#ifdef HYDRO
+        if(igrid>0)then
+           momentum(1:ndim)=momentum(1:ndim)+m%uold(icell,2:ndim+1,igrid)*vol(ind)
+           rho=rho+m%uold(icell,1,igrid)*vol(ind)
+           if(use_sgs)then
+              kappa_cells(ind)=tracer_cell_kappa(m%uold(icell,1,igrid),m%uold(icell,r%iturb,igrid),dx_loc,r%smallr)
+              kappa_mid=kappa_mid+kappa_cells(ind)*vol(ind)
+           end if
+        end if
+#endif
+     end do
+     if(rho>r%smallr)then
+        u_mid(1:ndim)=momentum(1:ndim)/rho
+     else
+        u_mid(1:ndim)=0.d0
+     end if
+
+     grad_at_part(1:ndim)=0.d0
+     if(use_sgs)then
+        call compute_gradient_cic_scalar(w1d, dw1d, kappa_cells, grad_at_part)
+     end if
+
+     disp(1:ndim)=(u_mid(1:ndim) + grad_at_part(1:ndim)/dx_loc)*dt_level
+
+     if(use_sgs .and. kappa_mid>0.0d0)then
+        call sample_tracer_gaussian(xi)
+        noise_amp = sqrt(2.0d0*kappa_mid*dt_level)
+        disp(1:ndim)=disp(1:ndim)+noise_amp*xi(1:ndim)
+     end if
+
+     p%levelp(ipart)=ilevel
+     p%vp(ipart,1:ndim)=u_mid(1:ndim)
+     p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+disp(1:ndim)
+
+  end do
+
+  call close_cache(mdl)
+
+  if(action_part==action_kick_drift)then
+     do ipart=p%headp(ilevel),p%tailp(ilevel)
+        do idim=1,ndim
+           if(r%periodic(idim))then
+              if(p%xp(ipart,idim)< 0.0d0           )p%xp(ipart,idim)=p%xp(ipart,idim)+r%box_size(idim)
+              if(p%xp(ipart,idim)>=r%box_size(idim))p%xp(ipart,idim)=p%xp(ipart,idim)-r%box_size(idim)
+           endif
+        end do
+     end do
+  end if
+
+  end associate
+end subroutine cic_trace_gas_part_sgs_turb
+
+subroutine tsc_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
+  use amr_parameters, only: ndim, threetondim
+  use pm_parameters
+  use pm_commons, only: part_t
+  use ramses_commons, only: ramses_t
+  use rng
+  use nbors_utils
+  use cache_commons
+  use cache
+  use rho_fine_module, only: tsc_index
+  implicit none
+  type(ramses_t)::s
+  type(part_t)::p
+  integer::ilevel
+  integer::action_part
+  real(kind=8),dimension(1:ndim)::x,x_mid,v_pred,u_eff,u_mid,disp,xi,momentum
+  real(kind=8),dimension(1:ndim)::grad_at_part
+  real(kind=8),dimension(1:threetondim)::vol,kappa_cells
+  integer,dimension(1:ndim)::il,ic,ir
+  integer,dimension(1:ndim,1:threetondim)::ckey
+  integer(kind=8),dimension(0:ndim)::hash_nbor
+  real(kind=8),dimension(1:ndim,1:3)::w1d,dw1d
+  real(kind=8)::dx_loc,dt_level,kappa_mid,noise_amp,rho
+  logical :: use_sgs
+  type(msg_hydro_mflux)::dummy_hydro_mflux
+  type(RngStream),external::RngStream_CreateStream
+  real(kind=8),external::RngStream_RandUni
+  integer(kind=8)::stream_skip
+  external :: RngStream_SetPackageSeed, RngStream_AdvanceState, gaussdev
+  integer :: ipart,idim,ind,icell,igrid
+
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
+  if(p%static)return
+  if (p%type/=TRAC_TYPE) return
+
+  dx_loc=r%boxlen/2**ilevel
+  dt_level=g%dtnew(ilevel)
+  use_sgs = r%sgs_turb .and. (r%iturb>0)
+
+  if(action_part==action_kick_only)then
+     do ipart=p%headp(ilevel),p%tailp(ilevel)
+        p%levelp(ipart)=ilevel
+     end do
+     return
+  endif
+
+  if(use_sgs .and. .not. tracer_rng_ready)then
+     call RngStream_SetPackageSeed(r%seed)
+     tracer_rng = RngStream_CreateStream('tracer_sgs')
+     stream_skip = int(2*g%myid,kind=8)
+     call RngStream_AdvanceState(tracer_rng,0_8,stream_skip)
+     tracer_rng_ready = .true.
+  end if
+
+  call open_cache(mdl, m, pack_size=storage_size(dummy_hydro_mflux)/32, &
+       pack=pack_fetch_kick_trac, unpack=unpack_fetch_kick_trac)
+
+  do ipart=p%headp(ilevel),p%tailp(ilevel)
+
+     do idim=1,ndim
+        x(idim)=(p%xp(ipart,idim)+m%skip(idim))/dx_loc
+     end do
+     call wrap_cell_coords(s,x,ilevel+1)
+
+     if (g%nstep>0) then
+        v_pred(1:ndim)=p%vp(ipart,1:ndim)
+     else
+        call gather_tsc_state(s,x,ilevel,dx_loc,.false.,u_eff,kappa_mid)
+        v_pred(1:ndim)=u_eff(1:ndim)
+     endif
+
+     do idim=1,ndim
+        x_mid(idim)=x(idim)+0.5d0*dt_level*v_pred(idim)/dx_loc
+     end do
+     call wrap_cell_coords(s,x_mid,ilevel+1)
+
+     call tsc_weights_and_derivs(x_mid, w1d, dw1d, il, ic, ir, vol)
+     do idim=1,ndim
+        if(r%periodic(idim))then
+           if(il(idim)< m%box_ckey_min(idim,ilevel+1))il(idim)=il(idim)-m%box_ckey_min(idim,ilevel+1)+m%box_ckey_max(idim,ilevel+1)
+           if(ir(idim)>=m%box_ckey_max(idim,ilevel+1))ir(idim)=ir(idim)+m%box_ckey_min(idim,ilevel+1)-m%box_ckey_max(idim,ilevel+1)
+        endif
+     end do
+     ckey = tsc_index(il,ic,ir)
+
+     momentum(1:ndim)=0.d0
+     rho=0.d0
+     kappa_mid=0.d0
+     kappa_cells(1:threetondim)=0.d0
+     hash_nbor(0)=ilevel+1
+     do ind=1,threetondim
+        hash_nbor(1:ndim)=ckey(1:ndim,ind)
+        call get_parent_cell(s,hash_nbor,igrid,icell,flush_cache=.false.,fetch_cache=.true.)
+#ifdef HYDRO
+        if(igrid>0)then
+           momentum(1:ndim)=momentum(1:ndim)+m%uold(icell,2:ndim+1,igrid)*vol(ind)
+           rho=rho+m%uold(icell,1,igrid)*vol(ind)
+           if(use_sgs)then
+              kappa_cells(ind)=tracer_cell_kappa(m%uold(icell,1,igrid),m%uold(icell,r%iturb,igrid),dx_loc,r%smallr)
+              kappa_mid=kappa_mid+kappa_cells(ind)*vol(ind)
+           end if
+        end if
+#endif
+     end do
+     if(rho>r%smallr)then
+        u_mid(1:ndim)=momentum(1:ndim)/rho
+     else
+        u_mid(1:ndim)=0.d0
+     end if
+
+     grad_at_part(1:ndim)=0.d0
+     if(use_sgs)then
+        call compute_gradient_tsc_scalar(w1d, dw1d, kappa_cells, grad_at_part)
+     end if
+
+     disp(1:ndim)=(u_mid(1:ndim) + grad_at_part(1:ndim)/dx_loc)*dt_level
+
+     if(use_sgs .and. kappa_mid>0.0d0)then
+        call sample_tracer_gaussian(xi)
+        noise_amp = sqrt(2.0d0*kappa_mid*dt_level)
+        disp(1:ndim)=disp(1:ndim)+noise_amp*xi(1:ndim)
+     end if
+
+     p%levelp(ipart)=ilevel
+     p%vp(ipart,1:ndim)=u_mid(1:ndim)
+     p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+disp(1:ndim)
+
+  end do
+
+  call close_cache(mdl)
+
+  if(action_part==action_kick_drift)then
+     do ipart=p%headp(ilevel),p%tailp(ilevel)
+        do idim=1,ndim
+           if(r%periodic(idim))then
+              if(p%xp(ipart,idim)< 0.0d0           )p%xp(ipart,idim)=p%xp(ipart,idim)+r%box_size(idim)
+              if(p%xp(ipart,idim)>=r%box_size(idim))p%xp(ipart,idim)=p%xp(ipart,idim)-r%box_size(idim)
+           endif
+        end do
+     end do
+  end if
+
+  end associate
+end subroutine tsc_trace_gas_part_sgs_turb
+
+subroutine trace_gas_part_trivial(s,p,ilevel,action_part)
+  use amr_parameters, only: ndim
+  use pm_parameters
+  use pm_commons, only: part_t
+  use ramses_commons, only: ramses_t
+  use rng
+  implicit none
+  type(ramses_t)::s
+  type(part_t)::p
+  integer::ilevel
+  integer::action_part
+  real(kind=8),dimension(1:ndim)::disp,xi
+  real(kind=8)::dx_loc,dt_level,kappa_fixed,noise_amp
+  type(RngStream),external::RngStream_CreateStream
+  real(kind=8),external::RngStream_RandUni
+  integer(kind=8)::stream_skip
+  external :: RngStream_SetPackageSeed, RngStream_AdvanceState, gaussdev
+  integer :: ipart,idim
+
+  associate(r=>s%r,g=>s%g,m=>s%m)
+  if(p%static)return
+  if (p%type/=TRAC_TYPE) return
+
+  dx_loc=r%boxlen/2**ilevel
+  dt_level=g%dtnew(ilevel)
+  kappa_fixed = dx_loc * r%smallc  ! Trivial diffusivity based on sound speed
+
+  if(action_part==action_kick_only)then
+     do ipart=p%headp(ilevel),p%tailp(ilevel)
+        p%levelp(ipart)=ilevel
+     end do
+     return
+  endif
+
+  if(.not. tracer_rng_ready)then
+     call RngStream_SetPackageSeed(r%seed)
+     tracer_rng = RngStream_CreateStream('tracer_trivial')
+     stream_skip = int(2*g%myid,kind=8)
+     call RngStream_AdvanceState(tracer_rng,0_8,stream_skip)
+     tracer_rng_ready = .true.
+  end if
+
+  do ipart=p%headp(ilevel),p%tailp(ilevel)
+     ! Fixed velocity (use stored or zero)
+     disp(1:ndim)=p%vp(ipart,1:ndim)*dt_level
+     ! Add diffusion
+     if(kappa_fixed>0.0d0)then
+        call sample_tracer_gaussian(xi)
+        noise_amp = sqrt(2.0d0*kappa_fixed*dt_level)
+        disp(1:ndim)=disp(1:ndim)+noise_amp*xi(1:ndim)
+     end if
+     p%levelp(ipart)=ilevel
+     p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+disp(1:ndim)
+  end do
+
+  if(action_part==action_kick_drift)then
+     do ipart=p%headp(ilevel),p%tailp(ilevel)
+        do idim=1,ndim
+           if(r%periodic(idim))then
+              if(p%xp(ipart,idim)< 0.0d0           )p%xp(ipart,idim)=p%xp(ipart,idim)+r%box_size(idim)
+              if(p%xp(ipart,idim)>=r%box_size(idim))p%xp(ipart,idim)=p%xp(ipart,idim)-r%box_size(idim)
+           endif
+        end do
+     end do
+  end if
+
+  end associate
+end subroutine trace_gas_part_trivial
+
+subroutine mc_trace_gas_part(s,p,ilevel,action_part)
+  ! Classical Monte Carlo tracer (scheme 0)
+  use amr_parameters, only: ndim, twotondim
+  use pm_parameters
+  use pm_commons, only: part_t
+  use ramses_commons, only: ramses_t
+  use rng
+  use nbors_utils
+  use cache_commons
+  use cache
+  implicit none
+  type(ramses_t)::s
+  type(part_t)::p
+  integer::ilevel
+  integer::action_part
+  real(kind=8),dimension(1:ndim)::x,exit_prob
+  integer,dimension(1:ndim)::il,ir
+  integer,dimension(1:ndim,1:twotondim)::ckey
+  integer(kind=8),dimension(0:ndim)::hash_nbor
+  real(kind=8)::dx_loc,u_rand,rho_cell,mflux_val,pr,pl
+  type(msg_hydro_mflux)::dummy_hydro_mflux
+  type(RngStream),external::RngStream_CreateStream
+  real(kind=8),external::RngStream_RandUni
+  integer(kind=8)::stream_skip
+  external :: RngStream_SetPackageSeed, RngStream_AdvanceState
+  integer :: ipart,idim,ind,icell,igrid,direction
+
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
+  if(p%static)return
+  if (p%type/=TRAC_TYPE) return
+
+  dx_loc=r%boxlen/2**ilevel
+
+  if(action_part==action_kick_only)then
+     do ipart=p%headp(ilevel),p%tailp(ilevel)
+        p%levelp(ipart)=ilevel
+     end do
+     return
+  endif
+
+  if(.not. tracer_rng_ready)then
+     call RngStream_SetPackageSeed(r%seed)
+     tracer_rng = RngStream_CreateStream('tracer_mc')
+     stream_skip = int(2*g%myid,kind=8)
+     call RngStream_AdvanceState(tracer_rng,0_8,stream_skip)
+     tracer_rng_ready = .true.
+  end if
+
+  call open_cache(mdl, m, pack_size=storage_size(dummy_hydro_mflux)/32, &
+       pack=pack_fetch_kick_trac, unpack=unpack_fetch_kick_trac)
+
+  ! #region agent log - Hypothesis A,B,C,D,E: Entry logging
+  if(g%myid==0 .and. action_part==action_kick_drift)then
+     open(unit=999,file='/Users/moseley/ramses-development/.cursor/debug.log',position='append',status='unknown')
+     write(999,'(A,I6,A,I8,A,I8,A)') '{"hypothesisId":"entry","location":"mc_trace_gas_part","message":"routine_entry",&
+          &"data":{"ilevel":',ilevel,',"npart":',p%tailp(ilevel)-p%headp(ilevel)+1,',"action":',action_part,'}}'
+     close(999)
+  endif
+  ! #endregion
+
+  do ipart=p%headp(ilevel),p%tailp(ilevel)
+     do idim=1,ndim
+        x(idim)=(p%xp(ipart,idim)+m%skip(idim))/dx_loc
+     end do
+     call wrap_cell_coords(s,x,ilevel+1)
+
+     ! Find current cell
+     do idim=1,ndim
+        il(idim) = int(x(idim))
+        ir(idim) = il(idim)
+     end do
+
+     hash_nbor(0)=ilevel+1
+     hash_nbor(1:ndim)=il(1:ndim)
+     call get_parent_cell(s,hash_nbor,igrid,icell,flush_cache=.false.,fetch_cache=.true.)
+
+     ! Skip particle if grid not found
+     if(igrid<=0)then
+        ! #region agent log - Hypothesis C: Grid not found
+        if(g%myid==0 .and. ipart<=p%headp(ilevel)+5)then
+           open(unit=999,file='/Users/moseley/ramses-development/.cursor/debug.log',position='append',status='unknown')
+           write(999,'(A,I8,A,I6,A,E12.5,A,E12.5,A,E12.5,A)') '{"hypothesisId":"C","location":"mc_trace_gas_part",&
+                &"message":"grid_not_found","data":{"ipart":',ipart,',"igrid":',igrid,',"x1":',x(1),',"x2":',x(2),',"x3":',x(3),'}}'
+           close(999)
+        endif
+        ! #endregion
+        p%levelp(ipart)=ilevel
+        cycle
+     endif
+
+     exit_prob(1:ndim)=0.d0
+#ifdef HYDRO
+     rho_cell = max(m%mflux(icell,1,igrid), r%smallr)
+
+     ! #region agent log - Hypothesis B: Check mflux values
+     if(g%myid==0 .and. ipart<=p%headp(ilevel)+5)then
+        if(rho_cell /= rho_cell .or. abs(rho_cell) > 1.0d30)then
+           open(unit=999,file='/Users/moseley/ramses-development/.cursor/debug.log',position='append',status='unknown')
+           write(999,'(A,I8,A,I6,A,I6,A,E12.5,A)') '{"hypothesisId":"B","location":"mc_trace_gas_part",&
+                &"message":"invalid_rho","data":{"ipart":',ipart,',"igrid":',igrid,',"icell":',icell,',"rho_cell":',rho_cell,'}}'
+           close(999)
+        endif
+     endif
+     ! #endregion
+
+     ! Compute exit probabilities from mflux
+     do idim=1,ndim
+        mflux_val = m%mflux(icell,1+idim,igrid)  ! left face flux
+        pl = max(-mflux_val, 0.d0) / rho_cell
+        mflux_val = m%mflux(icell,1+ndim+idim,igrid)  ! right face flux
+        pr = max(mflux_val, 0.d0) / rho_cell
+        exit_prob(idim) = pr - pl  ! Net exit probability
+
+        ! #region agent log - Hypothesis B: Check exit_prob for NaN/Inf
+        if(g%myid==0 .and. ipart<=p%headp(ilevel)+3)then
+           if(exit_prob(idim) /= exit_prob(idim) .or. abs(exit_prob(idim)) > 1.0d10)then
+              open(unit=999,file='/Users/moseley/ramses-development/.cursor/debug.log',position='append',status='unknown')
+              write(999,'(A,I8,A,I2,A,E12.5,A,E12.5,A,E12.5,A)') '{"hypothesisId":"B","location":"mc_trace_gas_part",&
+                   &"message":"invalid_exit_prob","data":{"ipart":',ipart,',"idim":',idim,',"exit_prob":',exit_prob(idim),&
+                   &',"pl":',pl,',"pr":',pr,'}}'
+              close(999)
+           endif
+        endif
+        ! #endregion
+     end do
+#endif
+
+     p%levelp(ipart)=ilevel
+
+     ! Sample movement direction using MC
+     do idim=1,ndim
+        u_rand = RngStream_RandUni(tracer_rng)
+        if(exit_prob(idim) > 0.d0 .and. u_rand < exit_prob(idim))then
+           p%xp(ipart,idim) = p%xp(ipart,idim) + dx_loc
+        elseif(exit_prob(idim) < 0.d0 .and. u_rand < abs(exit_prob(idim)))then
+           p%xp(ipart,idim) = p%xp(ipart,idim) - dx_loc
+        endif
+     end do
+
+     ! #region agent log - Hypothesis A: Check particle position after movement
+     if(g%myid==0 .and. ipart<=p%headp(ilevel)+3)then
+        if(p%xp(ipart,1) /= p%xp(ipart,1) .or. abs(p%xp(ipart,1)) > 1.0d10)then
+           open(unit=999,file='/Users/moseley/ramses-development/.cursor/debug.log',position='append',status='unknown')
+           write(999,'(A,I8,A,E12.5,A,E12.5,A,E12.5,A)') '{"hypothesisId":"A","location":"mc_trace_gas_part",&
+                &"message":"invalid_pos_after_move","data":{"ipart":',ipart,',"x":',p%xp(ipart,1),&
+                &',"y":',p%xp(ipart,2),',"z":',p%xp(ipart,3),'}}'
+           close(999)
+        endif
+     endif
+     ! #endregion
+  end do
+
+  call close_cache(mdl)
+
+  if(action_part==action_kick_drift)then
+     do ipart=p%headp(ilevel),p%tailp(ilevel)
+        do idim=1,ndim
+           if(r%periodic(idim))then
+              if(p%xp(ipart,idim)< 0.0d0           )p%xp(ipart,idim)=p%xp(ipart,idim)+r%box_size(idim)
+              if(p%xp(ipart,idim)>=r%box_size(idim))p%xp(ipart,idim)=p%xp(ipart,idim)-r%box_size(idim)
+           endif
+        end do
+
+        ! #region agent log - Hypothesis D: Check final position after wrap
+        if(g%myid==0 .and. ipart<=p%headp(ilevel)+3)then
+           if(p%xp(ipart,1) < 0.0d0 .or. p%xp(ipart,1) >= r%box_size(1) .or. &
+              p%xp(ipart,2) < 0.0d0 .or. p%xp(ipart,2) >= r%box_size(2) .or. &
+              p%xp(ipart,3) < 0.0d0 .or. p%xp(ipart,3) >= r%box_size(3))then
+              open(unit=999,file='/Users/moseley/ramses-development/.cursor/debug.log',position='append',status='unknown')
+              write(999,'(A,I8,A,E12.5,A,E12.5,A,E12.5,A,E12.5,A)') '{"hypothesisId":"D","location":"mc_trace_gas_part",&
+                   &"message":"pos_outside_box_after_wrap","data":{"ipart":',ipart,',"x":',p%xp(ipart,1),&
+                   &',"y":',p%xp(ipart,2),',"z":',p%xp(ipart,3),',"box_size":',r%box_size(1),'}}'
+              close(999)
+           endif
+        endif
+        ! #endregion
+     end do
+  end if
+
+  ! #region agent log - Hypothesis E: Exit logging
+  if(g%myid==0 .and. action_part==action_kick_drift)then
+     open(unit=999,file='/Users/moseley/ramses-development/.cursor/debug.log',position='append',status='unknown')
+     write(999,'(A)') '{"hypothesisId":"exit","location":"mc_trace_gas_part","message":"routine_exit","data":{}}'
+     close(999)
+  endif
+  ! #endregion
+
+  end associate
+end subroutine mc_trace_gas_part
+
+subroutine cic_trace_gas_part_ito_mc(s,p,ilevel,action_part)
+  ! Ito MC flux-based tracer with CIC (scheme 4) - matches move_fine_imc.f90
+  use amr_parameters, only: ndim, twotondim
+  use pm_parameters
+  use pm_commons, only: part_t
+  use ramses_commons, only: ramses_t
+  use rng
+  use nbors_utils
+  use cache_commons
+  use cache
+  implicit none
+  type(ramses_t)::s
+  type(part_t)::p
+  integer::ilevel
+  integer::action_part
+  real(kind=8),dimension(1:ndim)::x,disp,xi,u_eff,kappa_num
+  integer,dimension(1:ndim)::il,ir
+  integer,dimension(1:ndim,1:twotondim)::ckey
+  integer(kind=8),dimension(0:ndim)::hash_nbor
+  real(kind=8),dimension(1:twotondim)::vol
+  real(kind=8),dimension(1:ndim,1:twotondim)::u_cells,kappa_num_cells,skew_cells
+  real(kind=8),dimension(1:ndim)::skewness_eff
+  real(kind=8),dimension(1:ndim,1:2)::w1d,dw1d
+  real(kind=8)::dx_loc,dt_level,rho_cell,denom,fluxL,fluxR,jr,jl,noise_amp,cfl_plus,cfl_minus,pr,pl
+  type(msg_hydro_mflux)::dummy_hydro_mflux
+  type(RngStream),external::RngStream_CreateStream
+  real(kind=8),external::RngStream_RandUni
+  integer(kind=8)::stream_skip
+  external :: RngStream_SetPackageSeed, RngStream_AdvanceState
+  integer :: ipart,idim,ind,icell,igrid
+
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
+
+  if(p%static)return
+  if (p%type/=TRAC_TYPE) return
+
+  dx_loc=r%boxlen/2**ilevel
+
+  if(action_part==action_kick_only)then
+     do ipart=p%headp(ilevel),p%tailp(ilevel)
+        p%levelp(ipart)=ilevel
+     end do
+     return
+  endif
+
+  dt_level=g%dtnew(ilevel)
+
+  if(.not. tracer_rng_ready)then
+     call RngStream_SetPackageSeed(r%seed)
+     tracer_rng = RngStream_CreateStream('tracer_ito_mc')
+     stream_skip = int(2*g%myid,kind=8)
+     call RngStream_AdvanceState(tracer_rng,0_8,stream_skip)
+     tracer_rng_ready = .true.
+  end if
+
+  call open_cache(mdl, m, pack_size=storage_size(dummy_hydro_mflux)/32, &
+       pack=pack_fetch_kick_trac, unpack=unpack_fetch_kick_trac)
+
+  do ipart=p%headp(ilevel),p%tailp(ilevel)
+     do idim=1,ndim
+        x(idim)=(p%xp(ipart,idim)+m%skip(idim))/dx_loc
+     end do
+     call wrap_cell_coords(s,x,ilevel+1)
+
+     call cic_weights_and_derivs(x, w1d, dw1d, il, ir, vol)
+     do idim=1,ndim
+        if(r%periodic(idim))then
+           if(il(idim)< m%box_ckey_min(idim,ilevel+1))il(idim)=m%box_ckey_max(idim,ilevel+1)-1
+           if(ir(idim)>=m%box_ckey_max(idim,ilevel+1))ir(idim)=m%box_ckey_min(idim,ilevel+1)
+        endif
+     end do
+     ckey = cic_index(il,ir)
+
+     u_cells=0.d0
+     kappa_num_cells=0.d0
+     skew_cells=0.d0
+
+     hash_nbor(0)=ilevel+1
+     do ind=1,twotondim
+        hash_nbor(1:ndim)=ckey(1:ndim,ind)
+        call get_parent_cell(s,hash_nbor,igrid,icell,flush_cache=.false.,fetch_cache=.true.)
+#ifdef HYDRO
+        if(igrid>0)then
+           rho_cell = max(m%mflux(icell,1,igrid), r%smallr)
+           denom = rho_cell
+           do idim=1,ndim
+              fluxL = m%mflux(icell,1+idim,igrid)
+              fluxR = m%mflux(icell,1+idim+ndim,igrid)
+              jr = max(fluxR,0.d0)*dx_loc/dt_level
+              jl = max(-fluxL,0.d0)*dx_loc/dt_level
+              u_cells(idim,ind) = (jr-jl)/denom
+              cfl_plus = abs(jr+jl)/denom*dt_level/dx_loc
+              cfl_minus = abs(jl-jr)/denom*dt_level/dx_loc
+              kappa_num_cells(idim,ind) = 0.5d0*(cfl_plus - cfl_minus**2.d0)*dx_loc**2.d0/dt_level
+              pr = max(fluxR,0.d0)/denom
+              pl = max(-fluxL,0.d0)/denom
+              skew_cells(idim,ind) = mc_kernel_skewness(pr,pl)
+           end do
+        end if
+#endif
+     end do
+
+     u_eff=0.d0
+     kappa_num=0.d0
+     skewness_eff=0.d0
+     do ind=1,twotondim
+        do idim=1,ndim
+           u_eff(idim)=u_eff(idim)+u_cells(idim,ind)*vol(ind)
+           kappa_num(idim)=kappa_num(idim)+kappa_num_cells(idim,ind)*vol(ind)
+           skewness_eff(idim)=skewness_eff(idim)+skew_cells(idim,ind)*vol(ind)
+        end do
+     end do
+
+     if(trim(r%tracer_kick_pdf)=='gaussian')then
+        call sample_tracer_gaussian(xi)
+     elseif(trim(r%tracer_kick_pdf)=='uniform')then
+        call sample_tracer_uniform(xi)
+     else
+        call sample_tracer_piecewise_skew_uniform(xi,skewness_eff)
+     endif
+
+     do idim=1,ndim
+        disp(idim)=u_eff(idim)*dt_level
+        noise_amp = sqrt(max(0.d0,2.d0*kappa_num(idim)*dt_level))
+        disp(idim)=disp(idim)+noise_amp*xi(idim)
+     end do
+
+     p%levelp(ipart) = ilevel
+     p%vp(ipart,1:ndim)=u_eff(1:ndim)
+     p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+disp(1:ndim)
+  end do
+
+  call close_cache(mdl)
+
+  if(action_part==action_kick_drift)then
+     do ipart=p%headp(ilevel),p%tailp(ilevel)
+        do idim=1,ndim
+           if(r%periodic(idim))then
+              if(p%xp(ipart,idim)< 0.0d0           )p%xp(ipart,idim)=p%xp(ipart,idim)+r%box_size(idim)
+              if(p%xp(ipart,idim)>=r%box_size(idim))p%xp(ipart,idim)=p%xp(ipart,idim)-r%box_size(idim)
+           endif
+        end do
+     end do
+  end if
+
+  end associate
+end subroutine cic_trace_gas_part_ito_mc
+
+subroutine tsc_trace_gas_part_ito_mc(s,p,ilevel,action_part)
+  ! Ito MC flux-based tracer with TSC (scheme 5)
+  use amr_parameters, only: ndim, threetondim
+  use pm_parameters
+  use pm_commons, only: part_t
+  use ramses_commons, only: ramses_t
+  use rng
+  use nbors_utils
+  use cache_commons
+  use cache
+  use rho_fine_module, only: tsc_index
+  implicit none
+  type(ramses_t)::s
+  type(part_t)::p
+  integer::ilevel
+  integer::action_part
+  real(kind=8),dimension(1:ndim)::x,disp,xi,gamma1_vec
+  integer,dimension(1:ndim)::il,ic,ir
+  integer,dimension(1:ndim,1:threetondim)::ckey
+  integer(kind=8),dimension(0:ndim)::hash_nbor
+  real(kind=8),dimension(1:threetondim)::vol
+  real(kind=8),dimension(1:ndim,1:3)::w1d,dw1d
+  real(kind=8)::dx_loc,dt_level,rho_cell,pr,pl,var_dim,noise_amp
+  type(msg_hydro_mflux)::dummy_hydro_mflux
+  type(RngStream),external::RngStream_CreateStream
+  real(kind=8),external::RngStream_RandUni
+  integer(kind=8)::stream_skip
+  external :: RngStream_SetPackageSeed, RngStream_AdvanceState
+  integer :: ipart,idim,ind,icell,igrid
+
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
+  if(p%static)return
+  if (p%type/=TRAC_TYPE) return
+
+  dx_loc=r%boxlen/2**ilevel
+  dt_level=g%dtnew(ilevel)
+
+  if(action_part==action_kick_only)then
+     do ipart=p%headp(ilevel),p%tailp(ilevel)
+        p%levelp(ipart)=ilevel
+     end do
+     return
+  endif
+
+  if(.not. tracer_rng_ready)then
+     call RngStream_SetPackageSeed(r%seed)
+     tracer_rng = RngStream_CreateStream('tracer_ito_mc')
+     stream_skip = int(2*g%myid,kind=8)
+     call RngStream_AdvanceState(tracer_rng,0_8,stream_skip)
+     tracer_rng_ready = .true.
+  end if
+
+  call open_cache(mdl, m, pack_size=storage_size(dummy_hydro_mflux)/32, &
+       pack=pack_fetch_kick_trac, unpack=unpack_fetch_kick_trac)
+
+  do ipart=p%headp(ilevel),p%tailp(ilevel)
+     do idim=1,ndim
+        x(idim)=(p%xp(ipart,idim)+m%skip(idim))/dx_loc
+     end do
+     call wrap_cell_coords(s,x,ilevel+1)
+
+     call tsc_weights_and_derivs(x, w1d, dw1d, il, ic, ir, vol)
+     do idim=1,ndim
+        if(r%periodic(idim))then
+           if(il(idim)< m%box_ckey_min(idim,ilevel+1))il(idim)=il(idim)-m%box_ckey_min(idim,ilevel+1)+m%box_ckey_max(idim,ilevel+1)
+           if(ir(idim)>=m%box_ckey_max(idim,ilevel+1))ir(idim)=ir(idim)+m%box_ckey_min(idim,ilevel+1)-m%box_ckey_max(idim,ilevel+1)
+        endif
+     end do
+     ckey = tsc_index(il,ic,ir)
+
+     disp(1:ndim) = 0.d0
+     gamma1_vec(1:ndim) = 0.d0
+
+     hash_nbor(0)=ilevel+1
+     do ind=1,threetondim
+        hash_nbor(1:ndim)=ckey(1:ndim,ind)
+        call get_parent_cell(s,hash_nbor,igrid,icell,flush_cache=.false.,fetch_cache=.true.)
+#ifdef HYDRO
+        if(igrid>0)then
+           rho_cell = max(m%mflux(icell,1,igrid), r%smallr)
+           do idim=1,ndim
+              pl = max(-m%mflux(icell,1+idim,igrid), 0.d0) / rho_cell
+              pr = max(m%mflux(icell,1+ndim+idim,igrid), 0.d0) / rho_cell
+              disp(idim) = disp(idim) + (pr - pl) * vol(ind) * dx_loc
+              var_dim = pl + pr - (pr - pl)**2
+              if(var_dim > 0.d0)then
+                 gamma1_vec(idim) = gamma1_vec(idim) + mc_kernel_skewness(pr, pl) * vol(ind)
+              end if
+           end do
+        end if
+#endif
+     end do
+
+     if(trim(r%tracer_kick_pdf)=='piecewise_skew_uniform')then
+        call sample_tracer_piecewise_skew_uniform(xi, gamma1_vec)
+     else
+        call sample_tracer_uniform(xi)
+     end if
+     noise_amp = dx_loc
+     disp(1:ndim) = disp(1:ndim) + noise_amp * xi(1:ndim)
+
+     p%levelp(ipart) = ilevel
+     p%vp(ipart,1:ndim) = disp(1:ndim) / dt_level
+     p%xp(ipart,1:ndim) = p%xp(ipart,1:ndim) + disp(1:ndim)
+  end do
+
+  call close_cache(mdl)
+
+  if(action_part==action_kick_drift)then
+     do ipart=p%headp(ilevel),p%tailp(ilevel)
+        do idim=1,ndim
+           if(r%periodic(idim))then
+              if(p%xp(ipart,idim)< 0.0d0           )p%xp(ipart,idim)=p%xp(ipart,idim)+r%box_size(idim)
+              if(p%xp(ipart,idim)>=r%box_size(idim))p%xp(ipart,idim)=p%xp(ipart,idim)-r%box_size(idim)
+           endif
+        end do
+     end do
+  end if
+
+  end associate
+end subroutine tsc_trace_gas_part_ito_mc
+
+!#########################################################################
+! Stub routines for Ito MC dust (simplified versions)
+!#########################################################################
+subroutine cic_kick_drift_dust_ito_mc(s,p,ilevel,action_part)
+  use ramses_commons, only: ramses_t
+  use pm_commons, only: part_t
+  implicit none
+  type(ramses_t)::s
+  type(part_t)::p
+  integer::ilevel
+  integer::action_part
+  ! For now, fall back to regular CIC dust
+  call cic_kick_drift_dust(s,p,ilevel,action_part)
+end subroutine cic_kick_drift_dust_ito_mc
+
+subroutine tsc_kick_drift_dust_ito_mc(s,p,ilevel,action_part)
+  use ramses_commons, only: ramses_t
+  use pm_commons, only: part_t
+  implicit none
+  type(ramses_t)::s
+  type(part_t)::p
+  integer::ilevel
+  integer::action_part
+  ! For now, fall back to regular TSC dust
+  call tsc_kick_drift_dust(s,p,ilevel,action_part)
+end subroutine tsc_kick_drift_dust_ito_mc
+
+!#########################################################################
+! Stub routines for guiding center dust (not implemented)
+!#########################################################################
+subroutine cic_kick_drift_dust_guiding_center(s,p,ilevel,action_part)
+  use ramses_commons, only: ramses_t
+  use pm_commons, only: part_t
+  implicit none
+  type(ramses_t)::s
+  type(part_t)::p
+  integer::ilevel
+  integer::action_part
+  write(*,*)'ERROR: cic_kick_drift_dust_guiding_center not implemented'
+  stop
+end subroutine cic_kick_drift_dust_guiding_center
+
+subroutine tsc_kick_drift_dust_guiding_center(s,p,ilevel,action_part)
+  use ramses_commons, only: ramses_t
+  use pm_commons, only: part_t
+  implicit none
+  type(ramses_t)::s
+  type(part_t)::p
+  integer::ilevel
+  integer::action_part
+  write(*,*)'ERROR: tsc_kick_drift_dust_guiding_center not implemented'
+  stop
+end subroutine tsc_kick_drift_dust_guiding_center
 
 !#########################################################################
 !#########################################################################

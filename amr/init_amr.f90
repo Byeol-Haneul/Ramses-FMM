@@ -124,6 +124,8 @@ subroutine init_amr(r,g,m,type)
 #ifdef HYDRO
      allocate(m%uold(1:twotondim,1:nvar,1:m%ngridmax+m%ncachemax))
      allocate(m%unew(1:twotondim,1:nvar,1:m%ngridmax+m%ncachemax))
+     allocate(m%mflux(1:twotondim,1:2*ndim+1,1:m%ngridmax+m%ncachemax))
+     allocate(m%upwind_rho(1:twotondim,1:2*ndim,1:m%ngridmax+m%ncachemax))
 #endif
 #ifdef MHD
      allocate(m%bold(1:twotondim,1:6,1:m%ngridmax+m%ncachemax))
