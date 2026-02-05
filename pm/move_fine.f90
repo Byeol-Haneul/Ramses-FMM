@@ -2873,7 +2873,9 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
   real(kind=8),external::RngStream_RandUni
   integer(kind=8)::stream_skip
   external :: RngStream_SetPackageSeed, RngStream_AdvanceState, gaussdev
-  integer :: ipart,idim,ind,icell,igrid
+  integer :: ipart,idim,ind,icell,igrid,ii
+  character(LEN=80) :: filename,fileloc
+  character(LEN=5) :: nchar
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
   if(p%static)return
@@ -2970,6 +2972,21 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
      p%levelp(ipart)=ilevel
      p%vp(ipart,1:ndim)=u_mid(1:ndim)
      p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+disp(1:ndim)
+     if(s%r%ntrajectories>0)then
+        do ii=1,s%r%ntrajectories
+           if(s%r%trajectories(ii)==p%idp(ipart))then
+              call title(g%myid,nchar)
+              filename='trajectory.dat'
+              fileloc=TRIM(filename)//TRIM(nchar)
+              open(25+g%myid,file=fileloc,status='unknown',access='append')
+              write(25+g%myid,*) g%t, p%idp(ipart), &
+                   (p%xp(ipart,idim), idim=1,ndim), &
+                   (p%vp(ipart,idim), idim=1,ndim)
+              close(25+g%myid)
+              exit
+           endif
+        end do
+     endif
 
   end do
 
@@ -3018,7 +3035,9 @@ subroutine tsc_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
   real(kind=8),external::RngStream_RandUni
   integer(kind=8)::stream_skip
   external :: RngStream_SetPackageSeed, RngStream_AdvanceState, gaussdev
-  integer :: ipart,idim,ind,icell,igrid
+  integer :: ipart,idim,ind,icell,igrid,ii
+  character(LEN=80) :: filename,fileloc
+  character(LEN=5) :: nchar
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
   if(p%static)return
@@ -3115,6 +3134,21 @@ subroutine tsc_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
      p%levelp(ipart)=ilevel
      p%vp(ipart,1:ndim)=u_mid(1:ndim)
      p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+disp(1:ndim)
+     if(s%r%ntrajectories>0)then
+        do ii=1,s%r%ntrajectories
+           if(s%r%trajectories(ii)==p%idp(ipart))then
+              call title(g%myid,nchar)
+              filename='trajectory.dat'
+              fileloc=TRIM(filename)//TRIM(nchar)
+              open(25+g%myid,file=fileloc,status='unknown',access='append')
+              write(25+g%myid,*) g%t, p%idp(ipart), &
+                   (p%xp(ipart,idim), idim=1,ndim), &
+                   (p%vp(ipart,idim), idim=1,ndim)
+              close(25+g%myid)
+              exit
+           endif
+        end do
+     endif
 
   end do
 
@@ -3151,7 +3185,9 @@ subroutine trace_gas_part_trivial(s,p,ilevel,action_part)
   real(kind=8),external::RngStream_RandUni
   integer(kind=8)::stream_skip
   external :: RngStream_SetPackageSeed, RngStream_AdvanceState, gaussdev
-  integer :: ipart,idim
+  integer :: ipart,idim,ii
+  character(LEN=80) :: filename,fileloc
+  character(LEN=5) :: nchar
 
   associate(r=>s%r,g=>s%g,m=>s%m)
   if(p%static)return
@@ -3187,6 +3223,21 @@ subroutine trace_gas_part_trivial(s,p,ilevel,action_part)
      end if
      p%levelp(ipart)=ilevel
      p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+disp(1:ndim)
+     if(s%r%ntrajectories>0)then
+        do ii=1,s%r%ntrajectories
+           if(s%r%trajectories(ii)==p%idp(ipart))then
+              call title(g%myid,nchar)
+              filename='trajectory.dat'
+              fileloc=TRIM(filename)//TRIM(nchar)
+              open(25+g%myid,file=fileloc,status='unknown',access='append')
+              write(25+g%myid,*) g%t, p%idp(ipart), &
+                   (p%xp(ipart,idim), idim=1,ndim), &
+                   (p%vp(ipart,idim), idim=1,ndim)
+              close(25+g%myid)
+              exit
+           endif
+        end do
+     endif
   end do
 
   if(action_part==action_kick_drift)then
@@ -3230,7 +3281,9 @@ subroutine mc_trace_gas_part(s,p,ilevel,action_part)
   real(kind=8),external::RngStream_RandUni
   integer(kind=8)::stream_skip
   external :: RngStream_SetPackageSeed, RngStream_AdvanceState
-  integer :: igrid
+  integer :: igrid,ii
+  character(LEN=80) :: filename,fileloc
+  character(LEN=5) :: nchar
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
   if(p%static)return
@@ -3323,6 +3376,21 @@ subroutine mc_trace_gas_part(s,p,ilevel,action_part)
         idim=(selected+1)/2
         p%xp(ipart,idim)=p%xp(ipart,idim)+(-1)**selected*dx_loc
      endif
+     if(s%r%ntrajectories>0)then
+        do ii=1,s%r%ntrajectories
+           if(s%r%trajectories(ii)==p%idp(ipart))then
+              call title(g%myid,nchar)
+              filename='trajectory.dat'
+              fileloc=TRIM(filename)//TRIM(nchar)
+              open(25+g%myid,file=fileloc,status='unknown',access='append')
+              write(25+g%myid,*) g%t, p%idp(ipart), &
+                   (p%xp(ipart,idim), idim=1,ndim), &
+                   (p%vp(ipart,idim), idim=1,ndim)
+              close(25+g%myid)
+              exit
+           endif
+        end do
+     endif
   end do
 
   call close_cache(mdl)
@@ -3370,7 +3438,9 @@ subroutine cic_trace_gas_part_ito_mc(s,p,ilevel,action_part)
   real(kind=8),external::RngStream_RandUni
   integer(kind=8)::stream_skip
   external :: RngStream_SetPackageSeed, RngStream_AdvanceState
-  integer :: ipart,idim,ind,icell,igrid
+  integer :: ipart,idim,ind,icell,igrid,ii
+  character(LEN=80) :: filename,fileloc
+  character(LEN=5) :: nchar
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
@@ -3471,6 +3541,21 @@ subroutine cic_trace_gas_part_ito_mc(s,p,ilevel,action_part)
      p%levelp(ipart) = ilevel
      p%vp(ipart,1:ndim)=u_eff(1:ndim)
      p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+disp(1:ndim)
+     if(s%r%ntrajectories>0)then
+        do ii=1,s%r%ntrajectories
+           if(s%r%trajectories(ii)==p%idp(ipart))then
+              call title(g%myid,nchar)
+              filename='trajectory.dat'
+              fileloc=TRIM(filename)//TRIM(nchar)
+              open(25+g%myid,file=fileloc,status='unknown',access='append')
+              write(25+g%myid,*) g%t, p%idp(ipart), &
+                   (p%xp(ipart,idim), idim=1,ndim), &
+                   (p%vp(ipart,idim), idim=1,ndim)
+              close(25+g%myid)
+              exit
+           endif
+        end do
+     endif
   end do
 
   call close_cache(mdl)
@@ -3519,7 +3604,9 @@ subroutine tsc_trace_gas_part_ito_mc(s,p,ilevel,action_part)
   real(kind=8),external::RngStream_RandUni
   integer(kind=8)::stream_skip
   external :: RngStream_SetPackageSeed, RngStream_AdvanceState
-  integer :: ipart,idim,ind,icell,igrid
+  integer :: ipart,idim,ind,icell,igrid,ii
+  character(LEN=80) :: filename,fileloc
+  character(LEN=5) :: nchar
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
   if(p%static)return
@@ -3619,6 +3706,21 @@ subroutine tsc_trace_gas_part_ito_mc(s,p,ilevel,action_part)
      p%levelp(ipart) = ilevel
      p%vp(ipart,1:ndim)=u_eff(1:ndim)
      p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+disp(1:ndim)
+     if(s%r%ntrajectories>0)then
+        do ii=1,s%r%ntrajectories
+           if(s%r%trajectories(ii)==p%idp(ipart))then
+              call title(g%myid,nchar)
+              filename='trajectory.dat'
+              fileloc=TRIM(filename)//TRIM(nchar)
+              open(25+g%myid,file=fileloc,status='unknown',access='append')
+              write(25+g%myid,*) g%t, p%idp(ipart), &
+                   (p%xp(ipart,idim), idim=1,ndim), &
+                   (p%vp(ipart,idim), idim=1,ndim)
+              close(25+g%myid)
+              exit
+           endif
+        end do
+     endif
   end do
 
   call close_cache(mdl)
