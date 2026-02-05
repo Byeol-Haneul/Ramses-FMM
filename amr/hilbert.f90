@@ -340,7 +340,7 @@ contains
     use amr_parameters, only: nvector, ndim, twotondim
     implicit none
 
-    ! Inpu/Output variables:
+    ! Input/Output variables:
     integer        , intent(in)                  :: key_level, npoint
     integer(kind=8), intent(out), dimension(:,:) :: ix
     integer(kind=8), intent(in),  dimension(:,:) :: hkey
@@ -348,7 +348,7 @@ contains
     ! Descripton:
     ! Compute nvector cartesian keys from the corresponding 3-integer hilbert keys.
 
-    ! pointer to one of the three hkey arrays
+    ! Local variables:
     integer                               :: ip, ibit1, ikey, ilevel, idim
     integer(kind=4), dimension(1:nvector) :: cstate, nstate, ind
     integer(kind=4), dimension(1:nvector) :: sdigit

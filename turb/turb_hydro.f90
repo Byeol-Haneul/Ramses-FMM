@@ -80,24 +80,24 @@ subroutine turb_hydro(r,m,ilevel,dteff)
      do ind=1,twotondim
 
         ! Remove kinetic energy from total energy
-        ener=m%grid(igrid)%uold(ind,5)
+        ener=m%uold(ind,5,igrid)
         do idim=1,3
-           ener=max(ener-0.5d0*m%grid(igrid)%uold(ind,idim+1)**2/max(dble(m%grid(igrid)%uold(ind,1)),r%smallr),&
-           & m%grid(igrid)%uold(ind,1)*r%smallc**2)
+           ener=max(ener-0.5d0*m%uold(ind,idim+1,igrid)**2/max(dble(m%uold(ind,1,igrid)),r%smallr),&
+           & m%uold(ind,1,igrid)*r%smallc**2)
         end do
 #ifdef TURB
         ! Update momentum
         do idim=1,3
-           m%grid(igrid)%uold(ind,idim+1)=m%grid(igrid)%uold(ind,idim+1)+&
-                & max(m%grid(igrid)%uold(ind,1),r%smallr)*m%grid(igrid)%fturb(ind,idim)*dteff
+           m%uold(ind,idim+1,igrid)=m%uold(ind,idim+1,igrid)+&
+                & max(m%uold(ind,1,igrid),r%smallr)*m%fturb(ind,idim,igrid)*dteff
         end do
 #endif
         ! Update total energy
         do idim=1,3
-           ener=max(ener+0.5d0*m%grid(igrid)%uold(ind,idim+1)**2/max(dble(m%grid(igrid)%uold(ind,1)),r%smallr),&
-           & m%grid(igrid)%uold(ind,1)*r%smallc**2)
+           ener=max(ener+0.5d0*m%uold(ind,idim+1,igrid)**2/max(dble(m%uold(ind,1,igrid)),r%smallr),&
+           & m%uold(ind,1,igrid)*r%smallc**2)
         end do
-        m%grid(igrid)%uold(ind,5)=ener
+        m%uold(ind,5,igrid)=ener
 
      end do
      ! End loop over cells

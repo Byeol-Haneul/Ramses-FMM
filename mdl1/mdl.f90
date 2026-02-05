@@ -2,6 +2,8 @@ module mdl_module
 
   use mdl_parameters
   USE, INTRINSIC :: ISO_C_BINDING, ONLY: C_FUNPTR, C_PTR
+  use amr_commons, only: mesh_t
+  use clfind_commons, only: clump_t
 
   type ::comm_buff
      integer(kind=4),dimension(:),allocatable::array
@@ -80,6 +82,10 @@ module mdl_module
      type(c_funptr),dimension(0:200)::callback
      type(c_ptr),dimension(0:200)::p1opaque
      integer(kind=4),dimension(0:200)::input_size, output_size
+
+     ! Pointers to data structurs
+     type(mesh_t),pointer::m
+     type(clump_t),pointer::c
 
   end type mdl_t
 

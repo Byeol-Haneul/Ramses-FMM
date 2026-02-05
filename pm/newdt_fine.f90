@@ -206,9 +206,9 @@ subroutine max_B_and_Q(r,g,m,p,ilevel,max_b,max_q)
 #ifdef MHD
   do igrid=m%head(ilevel), m%tail(ilevel)
      do ind=1,twotondim
-        bx=0.5d0*(m%grid(igrid)%bold(ind,1)+m%grid(igrid)%bold(ind,4))
-        by=0.5d0*(m%grid(igrid)%bold(ind,2)+m%grid(igrid)%bold(ind,5))
-        bz=0.5d0*(m%grid(igrid)%bold(ind,3)+m%grid(igrid)%bold(ind,6))
+        bx=0.5d0*(m%bold(ind,1,igrid)+m%bold(ind,4,igrid))
+        by=0.5d0*(m%bold(ind,2,igrid)+m%bold(ind,5,igrid))
+        bz=0.5d0*(m%bold(ind,3,igrid)+m%bold(ind,6,igrid))
         bmag = sqrt(bx*bx + by*by + bz*bz)
         if(bmag>max_b) max_b=bmag
      end do

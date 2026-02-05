@@ -55,7 +55,16 @@ recursive subroutine r_init_amr(pst)
      call r_init_amr(pst%pLower)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call init_amr(pst%s%mdl,pst%s%r,pst%s%g,pst%s%m)
+     allocate(pst%s%m)
+     call init_amr(pst%s%r,pst%s%g,pst%s%m,'amr')
+     if(pst%s%r%poisson)then
+        allocate(pst%s%m_mg)
+        call init_amr(pst%s%r,pst%s%g,pst%s%m_mg,'mg')
+     endif
+     if(pst%s%r%clump_finder)then
+        allocate(pst%s%c)
+     endif
+     call init_params(pst%s%mdl,pst%s%r,pst%s%g)
   endif
 
 end subroutine r_init_amr
@@ -63,62 +72,103 @@ end subroutine r_init_amr
 !###############################################
 !###############################################
 !###############################################
-subroutine init_amr(mdl,r,g,m)
-  use mdl_module
-  use amr_parameters, ONLY: nhilbert,ndim
+subroutine init_amr(r,g,m,type)
+  use amr_parameters, ONLY: nhilbert, ndim, twotondim
+  use hydro_parameters, ONLY: nvar
+  use rt_parameters, ONLY: nrtvar, nrtgrp
   use amr_commons, ONLY: run_t, global_t, mesh_t
   use hash
   use hilbert
-  use output_amr_module, only: input_params
 #ifdef _CUDA
   use cudafor
   use gpu_runner
 #endif
   implicit none
-  type(mdl_t)::mdl
   type(run_t)::r
   type(global_t)::g
   type(mesh_t)::m
-
+  character(len=*)::type
   ! Local variables
 #ifdef _CUDA
   integer::err_code
 #endif
-  integer::ilevel,icpu,igrid,ibound
+  integer::idim,ilevel,icpu,igrid,ibound,ilevelmin
   integer(kind=8)::max_key
-  character(len=5)::nchar
-  character(len=80)::file_params
   real(kind=8)::dx
-  integer::idim,ncpu_file,levelmin_file,nlevelmax_file
   integer(kind=8)::ngrid_tot,ikey
   integer(kind=4)::ngrid,nremain
   integer(kind=8),dimension(1:nhilbert)::hk
   integer(kind=8),dimension(1:ndim)::ix
-  logical::file_exist
-  
-  ! Initial time step for each level
-  g%dtold=0.0D0
-  g%dtnew=0.0D0
+
+  ! Store size in mesh object
+  if(type=='amr')then
+     m%ngridmax=r%ngridmax
+  endif
+  if(type=='mg')then
+     m%ngridmax=r%ngridmax/7
+  endif
+  m%ncachemax=r%ncachemax
 
   ! Allocate main oct array
-  allocate(m%grid(1:r%ngridmax+r%ncachemax))
-  do igrid=1,r%ngridmax+r%ncachemax
+  allocate(m%grid(1:m%ngridmax+m%ncachemax))
+  do igrid=1,m%ngridmax+m%ncachemax
      m%grid(igrid)%lev=0
   end do
 
+  ! Allocate grid arrays
+  allocate(m%flag1(1:twotondim,1:m%ngridmax+m%ncachemax))
+  allocate(m%flag2(1:twotondim,1:m%ngridmax+m%ncachemax))
+
+  ! Allocate AMR specific arrays
+  if(type=='amr')then
+#ifdef HYDRO
+     allocate(m%uold(1:twotondim,1:nvar,1:m%ngridmax+m%ncachemax))
+     allocate(m%unew(1:twotondim,1:nvar,1:m%ngridmax+m%ncachemax))
+#endif
+#ifdef MHD
+     allocate(m%bold(1:twotondim,1:6,1:m%ngridmax+m%ncachemax))
+     allocate(m%bnew(1:twotondim,1:6,1:m%ngridmax+m%ncachemax))
+#endif
+#ifdef RT
+     allocate(m%rtuold(1:twotondim,1:nrtvar,1:m%ngridmax+m%ncachemax))
+     allocate(m%rtunew(1:twotondim,1:nrtvar,1:m%ngridmax+m%ncachemax))
+     allocate(m%emissivity(1:twotondim,1:nrtgrp,1:m%ngridmax+m%ncachemax))
+#endif
+#ifdef TURB
+     allocate(m%fturb(1:twotondim,1:3,1:m%ngridmax+m%ncachemax))
+#endif
+#ifdef GRAV
+     allocate(m%rho(1:twotondim,1:m%ngridmax+m%ncachemax))
+     allocate(m%phi(1:twotondim,1:m%ngridmax+m%ncachemax))
+     allocate(m%nref(1:twotondim,1:m%ngridmax+m%ncachemax))
+     allocate(m%f(1:twotondim,1:3,1:m%ngridmax+m%ncachemax))
+     allocate(m%phi_old(1:twotondim,1:m%ngridmax+m%ncachemax))
+#endif
+  endif
+
+  ! Allocate MG solver specific arrays
+#ifdef GRAV
+  if(type=='mg')then
+     allocate(m%phi(1:twotondim,1:m%ngridmax+m%ncachemax))
+     allocate(m%f(1:twotondim,1:3,1:m%ngridmax+m%ncachemax))
+  endif
+#endif
+
   ! Allocate the device array
 #ifdef _CUDA
-  err_code = cudaMalloc(grid_device_cptr, sizeof(m%grid))
-  call c_f_pointer(grid_device_cptr, grid_device, [r%ngridmax+r%ncachemax])
+  if(type=='amr')then
+     err_code = cudaMalloc(grid_device_cptr, sizeof(m%grid))
+     call c_f_pointer(grid_device_cptr, grid_device, [m%ngridmax+m%ncachemax])
+  endif
 #endif
 
   ! Allocate cache-related arrays
-  allocate(m%dirty(1:r%ncachemax))
-  allocate(m%locked(1:r%ncachemax))
-  allocate(m%occupied(1:r%ncachemax))
-  allocate(m%parent_cpu(1:r%ncachemax))
-  allocate(m%ghost_parent_grid(1:r%ncachemax))
-  allocate(m%ghost_parent_cell(1:r%ncachemax))
+  allocate(m%dirty(1:m%ncachemax))
+  allocate(m%locked(1:m%ncachemax))
+  allocate(m%occupied(1:m%ncachemax))
+  allocate(m%parent_cpu(1:m%ncachemax))
+  allocate(m%ghost_parent_grid(1:m%ncachemax))
+  allocate(m%ghost_parent_cell(1:m%ncachemax))
   m%dirty=.false.
   m%locked=.false.
   m%occupied=.false.
@@ -126,20 +176,15 @@ subroutine init_amr(mdl,r,g,m)
   m%ghost_parent_cell=0
   m%free_cache=1; m%ncache=0; m%nlocked=0; m%nlocked_max=0
 
-  allocate(m%lev_null(1:r%ncachemax))
-  allocate(m%ckey_null(1:ndim,1:r%ncachemax))
-  allocate(m%occupied_null(1:r%ncachemax))
+  allocate(m%lev_null(1:m%ncachemax))
+  allocate(m%ckey_null(1:ndim,1:m%ncachemax))
+  allocate(m%occupied_null(1:m%ncachemax))
   m%occupied_null=.false.
   m%free_null=1; m%nnull=0
 
   ! Allocate hash table for AMR data
   if(r%verbose.and.g%myid==1)write(*,*)'Initialize empty hash'
-  call init_empty_hash(m%grid_dict,2*(r%ngridmax+r%ncachemax),'simple')
-
-  ! Allocate another smaller hash table for multigrid data
-  if(r%poisson)then
-     call init_empty_hash(m%mg_dict,2*(r%ngridmax+r%ncachemax)/7,'simple')
-  endif
+  call init_empty_hash(m%grid_dict,2*(m%ngridmax+m%ncachemax),'simple')
 
   ! Set initial cpu boundaries
   ! Set maximum Cartesian key per level
@@ -310,8 +355,8 @@ subroutine init_amr(mdl,r,g,m)
      m%domain(r%levelmin)%b(1,0) = 0
      m%domain(r%levelmin)%b(1,g%ncpu) = m%hkey_max(1,r%levelmin)
   else
-     ngrid=ngrid_tot/g%ncpu
-     nremain=ngrid_tot-int(ngrid,kind=8)*g%ncpu
+     ngrid=int(ngrid_tot/int(g%ncpu,kind=8),kind=4)
+     nremain=int(ngrid_tot-int(ngrid,kind=8)*int(g%ncpu,kind=8),kind=4)
      igrid=0
      icpu=1
      do ikey=1, m%hkey_max(1,r%levelmin)-1
@@ -357,16 +402,24 @@ subroutine init_amr(mdl,r,g,m)
      end do
   end do
 
+  ! Set effective levelmin
+  if(type=='amr')then
+     ilevelmin=r%levelmin
+  endif
+  if(type=='mg')then
+     ilevelmin=1
+  endif
+  
   ! Allocate head, tail and numbers for each level
   if(r%verbose.and.g%myid==1)write(*,*)'Initialize oct decomposition'
-  allocate(m%head(r%levelmin:r%nlevelmax))
-  allocate(m%tail(r%levelmin:r%nlevelmax))
-  allocate(m%head_cache(1:r%nlevelmax))
-  allocate(m%tail_cache(1:r%nlevelmax))
-  allocate(m%noct(r%levelmin:r%nlevelmax))
-  allocate(m%noct_min(r%levelmin:r%nlevelmax))
-  allocate(m%noct_max(r%levelmin:r%nlevelmax))
-  allocate(m%noct_tot(r%levelmin:r%nlevelmax))
+  allocate(m%head(ilevelmin:r%nlevelmax))
+  allocate(m%tail(ilevelmin:r%nlevelmax))
+  allocate(m%noct(ilevelmin:r%nlevelmax))
+  allocate(m%noct_min(ilevelmin:r%nlevelmax))
+  allocate(m%noct_max(ilevelmin:r%nlevelmax))
+  allocate(m%noct_tot(ilevelmin:r%nlevelmax))
+
+  ! Initialize level-based arrays
   m%head=1       ! Head oct in the level
   m%tail=0       ! Tail oct in the level
   m%noct=0       ! Number of oct in the level and in the cpu
@@ -377,17 +430,47 @@ subroutine init_amr(mdl,r,g,m)
   m%noct_used_tot=0  ! Total number of oct used (all cpus)
 
   ! Allocate head, tail, numbers and indice for clean and dirty octs at each level
-  allocate(m%head_clean(r%levelmin:r%nlevelmax))
-  allocate(m%tail_clean(r%levelmin:r%nlevelmax))
-  allocate(m%noct_clean(r%levelmin:r%nlevelmax))
-  allocate(m%indx_clean(1:r%ngridmax))
-  allocate(m%head_dirty(r%levelmin:r%nlevelmax))
-  allocate(m%tail_dirty(r%levelmin:r%nlevelmax))
-  allocate(m%noct_dirty(r%levelmin:r%nlevelmax))
-  allocate(m%indx_dirty(1:r%ngridmax))
+  allocate(m%head_clean(ilevelmin:r%nlevelmax))
+  allocate(m%tail_clean(ilevelmin:r%nlevelmax))
+  allocate(m%noct_clean(ilevelmin:r%nlevelmax))
+  allocate(m%indx_clean(1:m%ngridmax))
+  allocate(m%head_dirty(ilevelmin:r%nlevelmax))
+  allocate(m%tail_dirty(ilevelmin:r%nlevelmax))
+  allocate(m%noct_dirty(ilevelmin:r%nlevelmax))
+  allocate(m%indx_dirty(1:m%ngridmax))
 
+end subroutine init_amr
+!###############################################
+!###############################################
+!###############################################
+!###############################################
+subroutine init_params(mdl,r,g)
+  use mdl_module
+  use amr_parameters, ONLY: nhilbert,ndim
+  use amr_commons, ONLY: run_t, global_t
+  use hash
+  use hilbert
+  use output_amr_module, only: input_params
+#ifdef _CUDA
+  use cudafor
+  use gpu_runner
+#endif
+  implicit none
+  type(mdl_t)::mdl
+  type(run_t)::r
+  type(global_t)::g
+
+  character(len=5)::nchar
+  character(len=80)::file_params
+  integer::ncpu_file,levelmin_file,nlevelmax_file
+  logical::file_exist
+  
+  ! Initial time step for each level
+  g%dtold=0.0D0
+  g%dtnew=0.0D0
+
+  ! Read parameters from restart file
   if(r%nrestart>0)then
-     ! Read parameters from restart file
      call title(r%nrestart,nchar)
      file_params='backup_'//TRIM(nchar)//'/params.bin'
      inquire(file=file_params, exist=file_exist)
@@ -400,8 +483,8 @@ subroutine init_amr(mdl,r,g,m)
         stop
      endif
   else
+  ! Read parameters from ramses output file
      if(r%filetype=='ramses')then
-        ! Read parameters from ramses output file
         file_params=TRIM(r%initfile(r%levelmin))//'/params.bin'
         inquire(file=file_params, exist=file_exist)
         if(file_exist)then
@@ -415,7 +498,7 @@ subroutine init_amr(mdl,r,g,m)
      endif
   endif
 
-end subroutine init_amr
+end subroutine init_params
 !###############################################
 !###############################################
 !###############################################

@@ -87,6 +87,7 @@ subroutine courant_fine(r,g,m,ilevel,mass,ekin,eint,emag,dt)
   ! Loop over active grids by vector sweeps
 !$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(igrid, ind, ivar, idim, uu, bb, gg, dt_lev) REDUCTION(+:mass, ekin, eint, emag) REDUCTION(MIN:dt)
   do igrid=m%head(ilevel),m%tail(ilevel)
+
      ! Loop over cells
      do ind=1,twotondim                
 
@@ -95,20 +96,20 @@ subroutine courant_fine(r,g,m,ilevel,mass,ekin,eint,emag,dt)
 
            ! Gather hydro variables
            do ivar=1,nvar
-              uu(ivar)=m%grid(igrid)%uold(ind,ivar)
+              uu(ivar)=m%uold(ind,ivar,igrid)
            end do
 
            ! Gather MHD variables
            bb=0.0d0
 #ifdef MHD
            do ivar=1,6
-              bb(ivar)=m%grid(igrid)%bold(ind,ivar)
+              bb(ivar)=m%bold(ind,ivar,igrid)
            end do
 #endif
            ! Gather gravitational acceleration
 #ifdef GRAV
            do idim=1,ndim
-              gg(idim)=m%grid(igrid)%f(ind,idim)
+              gg(idim)=m%f(ind,idim,igrid)
            end do
 #else
            do idim=1,ndim
@@ -119,7 +120,7 @@ subroutine courant_fine(r,g,m,ilevel,mass,ekin,eint,emag,dt)
 #ifdef TURB
            if(r%turb)then
               do idim=1,ndim
-                 gg(idim)=gg(idim)+m%grid(igrid)%fturb(ind,idim)
+                 gg(idim)=gg(idim)+m%fturb(ind,idim,igrid)
               end do
            endif
 #endif
@@ -221,31 +222,31 @@ subroutine reset_init(r,g,m,ilevel)
            emag=0.0d0
 #ifdef MHD
            ! Compute magnetic energy for all cells
-           bx=0.5d0*(m%grid(igrid+i-1)%bold(ind,1)+m%grid(igrid+i-1)%bold(ind,4))
-           by=0.5d0*(m%grid(igrid+i-1)%bold(ind,2)+m%grid(igrid+i-1)%bold(ind,5))
-           bz=0.5d0*(m%grid(igrid+i-1)%bold(ind,3)+m%grid(igrid+i-1)%bold(ind,6))
+           bx=0.5d0*(m%bold(ind,1,igrid+i-1)+m%bold(ind,4,igrid+i-1))
+           by=0.5d0*(m%bold(ind,2,igrid+i-1)+m%bold(ind,5,igrid+i-1))
+           bz=0.5d0*(m%bold(ind,3,igrid+i-1)+m%bold(ind,6,igrid+i-1))
            emag=0.5d0*(bx**2+by**2+bz**2)
 #endif
            erad=0.0d0
 #if NENER>0
            ! Compute non-thermal energy densities
            do irad=1,nener
-              m%grid(igrid+i-1)%uold(ind,5+irad)=qq(i,5+irad)/(r%gamma_rad(irad)-1.0d0)
-              erad=erad+m%grid(igrid+i-1)%uold(ind,5+irad)
+              m%uold(ind,5+irad,igrid+i-1)=qq(i,5+irad)/(r%gamma_rad(irad)-1.0d0)
+              erad=erad+m%uold(ind,5+irad,igrid+i-1)
            end do
 #endif
            ! Compute total fluid energy density
-           m%grid(igrid+i-1)%uold(ind,5)=eint+ekin+erad+emag
+           m%uold(ind,5,igrid+i-1)=eint+ekin+erad+emag
            ! Compute momentum density
            do idim=1,3
-              m%grid(igrid+i-1)%uold(ind,idim+1)=rr*qq(i,idim+1)
+              m%uold(ind,idim+1,igrid+i-1)=rr*qq(i,idim+1)
            end do
            ! Compute mass density
-           m%grid(igrid+i-1)%uold(ind,1)=rr
+           m%uold(ind,1,igrid+i-1)=rr
 #if NVAR>5+NENER
            ! Compute passive scalar density
            do ivar=6+nener,nvar
-              m%grid(igrid+i-1)%uold(ind,ivar)=rr*qq(i,ivar)
+              m%uold(ind,ivar,igrid+i-1)=rr*qq(i,ivar)
            enddo
 #endif
         end do

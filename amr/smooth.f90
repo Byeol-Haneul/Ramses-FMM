@@ -34,13 +34,12 @@ end subroutine r_smooth_fine
 !############################################################
 !############################################################
 subroutine smooth_fine(s,ilevel,nflag)
-  use amr_parameters, only: ndim,twotondim,twondim
+  use amr_parameters, only: ndim, twotondim, twondim
   use ramses_commons, only: ramses_t
   use cache_commons
   use cache
   use marshal, only: pack_fetch_flag, unpack_fetch_flag
   use boundaries, only: init_bound_flag
-  use amr_commons, only: nbor
   use nbors_utils
   implicit none
   type(ramses_t)::s
@@ -56,10 +55,9 @@ subroutine smooth_fine(s,ilevel,nflag)
   ! -------------------------------------------------------------------
   integer::ismooth,count_nbor,ig,in
   integer::igrid,idim,ind,i_nbor,igrid_nbor,icell_nbor
-  integer,dimension(1:3),save::n_nbor=(/1,2,2/)
+  integer,dimension(1:3)::n_nbor=(/1,2,2/)
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer,dimension(0:twondim)::igridn
-  type(nbor),dimension(0:twondim)::gridn
   type(msg_int4)::dummy_int4
 
   integer,dimension(1:3,1:6),save::shift=reshape(&
@@ -81,7 +79,7 @@ subroutine smooth_fine(s,ilevel,nflag)
        &   5,6,7,8,1,2,3,4,&
        &   5,6,7,8,1,2,3,4/),(/8,6/))
 
-  associate(r=>s%r,g=>s%g,m=>s%m)
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
   hash_nbor(0)=ilevel
 
@@ -91,21 +89,19 @@ subroutine smooth_fine(s,ilevel,nflag)
      ! Initialize flag2 to 0
      do igrid=m%head(ilevel),m%tail(ilevel)
         do ind=1,twotondim
-           m%grid(igrid)%flag2(ind)=0
+           m%flag2(ind,igrid)=0
         end do
      end do
 
-     call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-                hilbert=m%domain,pack_size=storage_size(dummy_int4)/32,&
-                pack=pack_fetch_flag,unpack=unpack_fetch_flag,&
-                bound=init_bound_flag)
+     call open_cache(mdl, m, pack_size=storage_size(dummy_int4)/32, &
+          pack=pack_fetch_flag, unpack=unpack_fetch_flag, &
+          bound=init_bound_flag)
 
      ! Count neighbors and set flag2 accordingly
      do igrid=m%head(ilevel),m%tail(ilevel)
 
         ! Get neighboring octs
         igridn(0)=igrid
-        gridn(0)%p => m%grid(igrid)
         do i_nbor=1,twondim
            hash_nbor(1:ndim)=m%grid(igrid)%ckey(1:ndim)+shift(1:ndim,i_nbor)
            ! Periodic boundary conditions
@@ -115,7 +111,7 @@ subroutine smooth_fine(s,ilevel,nflag)
                  if(hash_nbor(idim)>=m%box_ckey_max(idim,ilevel))hash_nbor(idim)=m%box_ckey_min(idim,ilevel)
               endif
            enddo
-           call get_grid(s,hash_nbor,m%grid_dict,gridn(i_nbor)%p,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
+           call get_grid(s,hash_nbor,igridn(i_nbor),flush_cache=.false.,fetch_cache=.true.,lock=.true.)
         end do
 
         ! Count neighbors and set flag2 accordingly        
@@ -124,33 +120,33 @@ subroutine smooth_fine(s,ilevel,nflag)
            do in=1,twondim
               ig=ggg(ind,in)
               icell_nbor=hhh(ind,in)
-              if(associated(gridn(ig)%p))then
-                 count_nbor=count_nbor+gridn(ig)%p%flag1(icell_nbor)
+              if(igridn(ig)>0)then
+                 count_nbor=count_nbor+m%flag1(icell_nbor,igridn(ig))
               endif
            end do
            ! flag2 cell if necessary
            if(count_nbor>=n_nbor(ismooth))then
-              m%grid(igrid)%flag2(ind)=1
+              m%flag2(ind,igrid)=1
            endif
         end do
 
         do i_nbor=1,twondim
-           call unlock_cache(s,gridn(i_nbor)%p)
+           call unlock_cache(m,igridn(i_nbor))
         end do
 
      end do
      ! End loop over grids
 
-    call close_cache(s,m%grid_dict)
+    call close_cache(mdl)
 
      ! Set flag1=1 for cells with flag2=1
      do igrid=m%head(ilevel),m%tail(ilevel)
         do ind=1,twotondim
-           if(m%grid(igrid)%flag1(ind)==1)m%grid(igrid)%flag2(ind)=0
+           if(m%flag1(ind,igrid)==1)m%flag2(ind,igrid)=0
         end do
         do ind=1,twotondim
-           if(m%grid(igrid)%flag2(ind)==1)then
-              m%grid(igrid)%flag1(ind)=1
+           if(m%flag2(ind,igrid)==1)then
+              m%flag1(ind,igrid)=1
               g%nflag=g%nflag+1
            endif
         end do

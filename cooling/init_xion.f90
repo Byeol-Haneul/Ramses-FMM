@@ -89,8 +89,7 @@ subroutine init_xion(r,g,m,tables,ilevel)
   integer::counter, iE, iI
 #endif
 
-  if(r%verbose.and.g%myid==1) &
-                  write(*,'("   Entering init_xion for level ",I2)')ilevel
+  if(r%verbose.and.g%myid==1)write(*,'("   Entering init_xion for level ",I2)')ilevel
 
   associate(ixHI=>r%ixHi, ixHII=>r%ixHII, ixHeII=>r%ixHeII, ixHeIII=>r%ixHeIII)
 
@@ -117,13 +116,13 @@ subroutine init_xion(r,g,m,tables,ilevel)
 
         ! Compute rho
         do i=1,nleaf
-           nH(i)=MAX(dble(m%grid(ind_leaf(i))%uold(ind,1)),r%smallr)
+           nH(i)=MAX(dble(m%uold(ind,1,ind_leaf(i))),r%smallr)
         end do
 
         ! Compute metallicity in solar units
         if(r%metal)then
            do i=1,nleaf
-              Zsolar(i)=m%grid(ind_leaf(i))%uold(ind,r%imetal)/nH(i)/0.02d0
+              Zsolar(i)=m%uold(ind,r%imetal,ind_leaf(i))/nH(i)/0.02d0
            end do
         else
            do i=1,nleaf
@@ -132,7 +131,7 @@ subroutine init_xion(r,g,m,tables,ilevel)
         endif
 
         do i=1,nleaf ! Total energy
-           T2(i)=m%grid(ind_leaf(i))%uold(ind,5)
+           T2(i)=m%uold(ind,5,ind_leaf(i))
         end do
 
         do i=1,nleaf ! Kinetic energy
@@ -140,7 +139,7 @@ subroutine init_xion(r,g,m,tables,ilevel)
         end do
         do idim=1,3
            do i=1,nleaf
-              ekk(i)=ekk(i)+0.5d0*m%grid(ind_leaf(i))%uold(ind,idim+1)**2/nH(i)
+              ekk(i)=ekk(i)+0.5d0*m%uold(ind,idim+1,ind_leaf(i))**2/nH(i)
            end do
         end do
 
@@ -150,7 +149,7 @@ subroutine init_xion(r,g,m,tables,ilevel)
 #if NENER>0
         do irad=1,nener
            do i=1,nleaf
-              err(i)=err(i)+m%grid(ind_leaf(i))%uold(ind,5+irad)
+              err(i)=err(i)+m%uold(ind,5+irad,ind_leaf(i))
            end do
         end do
 #endif
@@ -160,8 +159,8 @@ subroutine init_xion(r,g,m,tables,ilevel)
 #ifdef MHD
         do idim=1,3
            do i=1,nleaf
-              emag(i)=emag(i)+0.125d0*(m%grid(ind_leaf(i))%bold(ind,idim) &
-                   &                  +m%grid(ind_leaf(i))%bold(ind,idim+3))**2
+              emag(i)=emag(i)+0.125d0*(m%bold(ind,idim  ,ind_leaf(i)) &
+                   &                  +m%bold(ind,idim+3,ind_leaf(i)))**2
            end do
         end do
 #endif
@@ -189,7 +188,7 @@ subroutine init_xion(r,g,m,tables,ilevel)
                    if (iI.eq.1) then 
                       x = 1.d0
                    end if
-                   m%grid(ind_leaf(i))%uold(ind,r%iIons-1+counter) = x*m%grid(ind_leaf(i))%uold(ind,1)
+                   m%uold(ind,r%iIons-1+counter,ind_leaf(i)) = x*m%uold(ind,1,ind_leaf(i))
                    counter = counter + 1
                 end do  ! end loop over ions + molecules
              end if
@@ -197,39 +196,29 @@ subroutine init_xion(r,g,m,tables,ilevel)
         end do ! end loop over cells
 #else
         do i=1,nleaf
-          call cmp_equilibrium_abundances(r, tables, &
-                         T2(i),nH(i),pHI_rates(:),mu,nSpec(i,:),Zsolar(i))
+           call cmp_equilibrium_abundances(r,tables,T2(i),nH(i),pHI_rates(:),mu,nSpec(i,:),Zsolar(i))
         end do
 
-        ! nspec:    1=ne, 2=nH2, 3=nHI, 4=nHII, 5=nHeI, 6=nHeII, 7=n_HEIII
+        ! nspec: 1=ne, 2=nH2, 3=nHI, 4=nHII, 5=nHeI, 6=nHeII, 7=n_HEIII
         do i=1,nleaf ! Update ionization states in uold
 
           if(r%isH2) then
               if(r%nrestart==0 .and. r%cosmo) then      ! No primordial H2
-                  x = (2.*nSpec(i,2)+nSpec(i,3)) &
-                    / (2.*nSpec(i,2)+nSpec(i,3)+nspec(i,4))  ! HI fraction
+                  x = (2.*nSpec(i,2)+nSpec(i,3))/(2.*nSpec(i,2)+nSpec(i,3)+nspec(i,4))  ! HI fraction
               else
-                  x = nSpec(i,3) &
-                    /(2.*nSpec(i,2)+nSpec(i,3)+nspec(i,4))   ! HI fraction
+                  x = nSpec(i,3)/(2.*nSpec(i,2)+nSpec(i,3)+nspec(i,4))   ! HI fraction
               endif
-              m%grid(ind_leaf(i))%uold(ind,r%iIons-1+ixHI) = &
-                                         x*m%grid(ind_leaf(i))%uold(ind,1)
+              m%uold(ind,r%iIons-1+ixHI,ind_leaf(i)) = x*m%uold(ind,1,ind_leaf(i))
           endif
 
-          x = nSpec(i,4) &
-              /(2.*nSpec(i,2)+nSpec(i,3)+nspec(i,4))        ! HII fraction
-          m%grid(ind_leaf(i))%uold(ind,r%iIons-1+ixHII) = &
-                                         x*m%grid(ind_leaf(i))%uold(ind,1)
+          x = nSpec(i,4)/(2.*nSpec(i,2)+nSpec(i,3)+nspec(i,4))        ! HII fraction
+          m%uold(ind,r%iIons-1+ixHII,ind_leaf(i)) = x*m%uold(ind,1,ind_leaf(i))
 
           if(r%Y_He .gt. 0d0 .and. r%isHe) then
-              x = nSpec(i,6) &
-                      /(nSpec(i,5)+nSpec(i,6)+nSpec(i,7)) !  HeII fraction
-              m%grid(ind_leaf(i))%uold(ind,r%iIons-1+ixHeII) = &
-                                         x*m%grid(ind_leaf(i))%uold(ind,1)
-              x = nSpec(i,7) &
-                      /(nSpec(i,5)+nSpec(i,6)+nSpec(i,7)) ! HeIII fraction
-              m%grid(ind_leaf(i))%uold(ind,r%iIons-1+ixHeIII) = &
-                                         x*m%grid(ind_leaf(i))%uold(ind,1)
+              x = nSpec(i,6)/(nSpec(i,5)+nSpec(i,6)+nSpec(i,7)) !  HeII fraction
+              m%uold(ind,r%iIons-1+ixHeII,ind_leaf(i)) = x*m%uold(ind,1,ind_leaf(i))
+              x = nSpec(i,7)/(nSpec(i,5)+nSpec(i,6)+nSpec(i,7)) ! HeIII fraction
+              m%uold(ind,r%iIons-1+ixHeIII,ind_leaf(i)) = x*m%uold(ind,1,ind_leaf(i))
           endif
         end do
 #endif
@@ -247,7 +236,14 @@ end subroutine init_xion
 !#########################################################################
 !#########################################################################
 #ifndef RTZ
-subroutine calc_equilibrium_xion(s, gridp, icell, ilevel, xion)
+subroutine calc_equilibrium_xion(s, uold, &
+#ifdef MHD
+     & bold, &
+#endif
+#ifdef RT
+     & rtuold, &
+#endif
+     & ilevel, xion)
 
 ! Calculate and return photoionization equilibrium abundance states for
 ! a cell
@@ -257,16 +253,23 @@ subroutine calc_equilibrium_xion(s, gridp, icell, ilevel, xion)
 ! xion      <= Returned equilibrium ionization fractions of cell
 !-------------------------------------------------------------------------
   use amr_commons, only: oct
-  use amr_parameters, only:ndim
-  use hydro_parameters, only: nener, nion
+  use amr_parameters, only: ndim
+  use hydro_parameters, only: nvar, nener, nion
   use neq_cooling_module, only: cmp_equilibrium_abundances
   use ramses_commons, only: ramses_t
-  use rt_parameters, only: nrtgrp
+  use rt_parameters, only: nrtvar, nrtgrp
   implicit none
   type(ramses_t)::s
-  type(oct),pointer::gridp
-  integer::icell, ilevel
+  real(kind=8),dimension(1:nvar)::uold
+#ifdef MHD
+  real(kind=8),dimension(1:6)::bold
+#endif
+#ifdef RT
+  real(kind=8),dimension(1:nrtvar)::rtuold
+#endif
+  integer::ilevel
   real(kind=8),dimension(nion)::xion
+!-------------------------------------------------------------------------
   integer::ip, iI, idim, iNp
   real(kind=8)::scale_nH, scale_T2, scale_l, scale_d, scale_t, scale_v
   real(kind=8)::scale_Np,scale_Fp,nH,T2,ekk,err,emag,mu,Zsolar,ss_factor
@@ -289,33 +292,33 @@ subroutine calc_equilibrium_xion(s, gridp, icell, ilevel, xion)
 #ifdef RT
      do iI=1,nion
         phI_rates(iI) = phI_rates(iI) &
-                      + gridp%rtuold(icell, iNp) &
+                      + rtuold(iNp) &
                       * scale_Np*s%tables%signc(ip,iI,ilevel)
      end do
 #endif
   end do
 
-  nH = MAX(dble(gridp%uold(icell,1)),s%r%smallr)      !   Nb density of gas [UU]
+  nH = MAX(dble(uold(1)),s%r%smallr)      !   Nb density of gas [UU]
 
   Zsolar = s%r%z_ave
-  if(s%r%metal) Zsolar=gridp%uold(icell,s%r%imetal)/nH/0.02  ! Z (Solar U)
+  if(s%r%metal) Zsolar=uold(s%r%imetal)/nH/0.02  ! Z (Solar U)
 
   ! Compute temperature from energy density
-  T2 = gridp%uold(icell, 5)               ! Energy density (kin+heat) [UU]
-  ekk = 0.0d0                             !            Kinetic energy [UU]
+  T2 = uold(5)               ! Energy density (kin+heat) [UU]
+  ekk = 0.0d0                !            Kinetic energy [UU]
   do idim=1,3
-     ekk=ekk+0.5d0*gridp%uold(icell,1+idim)**2/nH
+     ekk=ekk+0.5d0*uold(1+idim)**2/nH
   end do
   err = 0.0d0
 #if NENER>0
   do irad=1,nener
-     err=err+gridp%uold(icell,5+irad)
+     err=err+uold(5+irad)
   end do
 #endif
   emag=0.0d0
 #ifdef MHD
   do idim=1,3
-     emag=emag+0.125d0*(gridp%bold(icell,idim)+gridp%bold(icell,idim+3))**2
+     emag=emag+0.125d0*(bold(idim)+bold(idim+3))**2
   end do
 #endif
   ! Gas thermal pressure

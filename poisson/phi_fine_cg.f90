@@ -1,14 +1,9 @@
 module phi_fine_cg_module
-
-  type in_make_initial_phi_t
-    integer::ilevel, icount
-  end type in_make_initial_phi_t
-
-  type in_recurrence_t
-    integer::ilevel
-    real(kind=8)::cg
-  end type in_recurrence_t
-
+  use multigrid_fine_coarse, only: level_count_t
+  type recurrence_t
+     integer::ilevel
+     real(kind=8)::cg
+  end type recurrence_t
 contains
 #ifdef GRAV
 !###########################################################
@@ -36,8 +31,8 @@ subroutine m_phi_fine_cg(pst,ilevel,icount)
   real(kind=8)::error,error_ini
   real(kind=8)::r2_old=0,alpha_cg,beta_cg
   real(kind=8)::r2,pAp,rhs_norm
-  type(in_make_initial_phi_t)::in_make_initial_phi
-  type(in_recurrence_t)::in_recurrence
+  type(level_count_t)::level_count
+  type(recurrence_t)::recurrence
 
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,mdl=>pst%s%mdl)
     
@@ -49,9 +44,9 @@ subroutine m_phi_fine_cg(pst,ilevel,icount)
   !===============================
   ! Compute initial phi
   !===============================
-  in_make_initial_phi%ilevel=ilevel
-  in_make_initial_phi%icount=icount
-  call r_make_initial_phi(pst,in_make_initial_phi,storage_size(in_make_initial_phi)/32)
+  level_count%ilevel=ilevel
+  level_count%icount=icount
+  call r_make_initial_phi(pst,level_count,storage_size(level_count)/32)
 
   !===============================
   ! Compute right-hand side norm
@@ -63,7 +58,7 @@ subroutine m_phi_fine_cg(pst,ilevel,icount)
   ! Compute r = b - Ax and store it into f(i,1)
   ! Also set p = r and store it into f(i,2)
   !==============================================
-  call r_cmp_residual_cg(pst,in_make_initial_phi,storage_size(in_make_initial_phi)/32)
+  call r_cmp_residual_cg(pst,level_count,storage_size(level_count)/32)
 
   !====================================
   ! Main iteration loop
@@ -92,9 +87,9 @@ subroutine m_phi_fine_cg(pst,ilevel,icount)
      !====================================
      ! Recurrence on p
      !====================================
-     in_recurrence%ilevel=ilevel
-     in_recurrence%cg=beta_cg
-     call r_recurrence_on_p(pst,in_recurrence,storage_size(in_recurrence)/32)
+     recurrence%ilevel=ilevel
+     recurrence%cg=beta_cg
+     call r_recurrence_on_p(pst,recurrence,storage_size(recurrence)/32)
 
      !==============================================
      ! Compute z = Ap and store it into f(i,3)
@@ -114,9 +109,9 @@ subroutine m_phi_fine_cg(pst,ilevel,icount)
      !====================================
      ! Recurrence on x and r
      !====================================
-     in_recurrence%ilevel=ilevel
-     in_recurrence%cg=alpha_cg
-     call r_recurrence_x_and_r(pst,in_recurrence,storage_size(in_recurrence)/32)
+     recurrence%ilevel=ilevel
+     recurrence%cg=alpha_cg
+     call r_recurrence_x_and_r(pst,recurrence,storage_size(recurrence)/32)
 
      !====================================
      ! Compute error
@@ -150,7 +145,7 @@ recursive subroutine r_recurrence_on_p(pst,input,input_size)
   implicit none
   type(pst_t)::pst
   integer,VALUE::input_size
-  type(in_recurrence_t)::input
+  type(recurrence_t)::input
 
   integer::ind,igrid,ilevel
   real(kind=8)::beta_cg
@@ -165,7 +160,7 @@ recursive subroutine r_recurrence_on_p(pst,input,input_size)
      beta_cg=input%cg
      do igrid=pst%s%m%head(ilevel),pst%s%m%tail(ilevel)
         do ind=1,twotondim
-           pst%s%m%grid(igrid)%f(ind,2)=pst%s%m%grid(igrid)%f(ind,1)+beta_cg*pst%s%m%grid(igrid)%f(ind,2)
+           pst%s%m%f(ind,2,igrid)=pst%s%m%f(ind,1,igrid)+beta_cg*pst%s%m%f(ind,2,igrid)
         end do
      end do
   endif
@@ -183,7 +178,7 @@ recursive subroutine r_recurrence_x_and_r(pst,input,input_size)
   implicit none
   type(pst_t)::pst
   integer,VALUE::input_size
-  type(in_recurrence_t)::input
+  type(recurrence_t)::input
 
   integer::ind,igrid,ilevel
   real(kind=8)::alpha_cg
@@ -199,13 +194,13 @@ recursive subroutine r_recurrence_x_and_r(pst,input,input_size)
      ! Recurrence on x
      do igrid=pst%s%m%head(ilevel),pst%s%m%tail(ilevel)
         do ind=1,twotondim
-           pst%s%m%grid(igrid)%phi(ind)=pst%s%m%grid(igrid)%phi(ind)+alpha_cg*pst%s%m%grid(igrid)%f(ind,2)
+           pst%s%m%phi(ind,igrid)=pst%s%m%phi(ind,igrid)+alpha_cg*pst%s%m%f(ind,2,igrid)
         end do
      end do
      ! Recurrence on r
      do igrid=pst%s%m%head(ilevel),pst%s%m%tail(ilevel)
         do ind=1,twotondim
-           pst%s%m%grid(igrid)%f(ind,1)=pst%s%m%grid(igrid)%f(ind,1)-alpha_cg*pst%s%m%grid(igrid)%f(ind,3)
+           pst%s%m%f(ind,1,igrid)=pst%s%m%f(ind,1,igrid)-alpha_cg*pst%s%m%f(ind,3,igrid)
         end do
      end do
   endif
@@ -223,7 +218,7 @@ recursive subroutine r_cmp_residual_cg(pst,input,input_size)
   implicit none
   type(pst_t)::pst
   integer,VALUE::input_size
-  type(in_make_initial_phi_t)::input
+  type(level_count_t)::input
 
   integer::ilevel,icount
   integer::rID
@@ -241,8 +236,8 @@ end subroutine r_cmp_residual_cg
 subroutine cmp_residual_cg(s,ilevel,icount)
   use mdl_module
   use amr_parameters, only: ndim, twondim, twotondim, threetondim, nvector
-  use amr_commons, only: nbor, oct
   use ramses_commons, only: ramses_t
+  use interpol_phi_module, only: interpol_phi
   use nbors_utils
   use cache_commons
   use cache
@@ -263,10 +258,9 @@ subroutine cmp_residual_cg(s,ilevel,icount)
   real(kind=8),dimension(1:twotondim,0:twondim)::phi_nbor
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer,dimension(1:threetondim)::ind_nbor
-  type(nbor),dimension(1:threetondim)::grid_nbor
+  integer,dimension(1:threetondim)::igrid_nbor
   integer,dimension(1:3,1:6),save::shift=reshape(&
        & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
-  type(oct),pointer::gridp
   type(msg_three_realdp)::dummy_three_realdp
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
@@ -314,9 +308,8 @@ subroutine cmp_residual_cg(s,ilevel,icount)
      tfrac=0.0
   end if
 
-  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-                hilbert=m%domain,pack_size=storage_size(dummy_three_realdp)/32,&
-                pack=pack_fetch_interpol,unpack=unpack_fetch_interpol)
+  call open_cache(mdl, m, pack_size=storage_size(dummy_three_realdp)/32, &
+       pack=pack_fetch_interpol, unpack=unpack_fetch_interpol)
 
   hash_nbor(0)=ilevel
 
@@ -325,7 +318,7 @@ subroutine cmp_residual_cg(s,ilevel,icount)
 
      ! Get central oct potential
      do ind=1,twotondim
-        phi_nbor(ind,0)=m%grid(igrid)%phi(ind)
+        phi_nbor(ind,0)=m%phi(ind,igrid)
      end do
 
      ! Get neighboring octs potential
@@ -343,21 +336,21 @@ subroutine cmp_residual_cg(s,ilevel,icount)
         enddo
 
         ! Get neighbouring grid using a read-only cache
-        call get_grid(s,hash_nbor,m%grid_dict,gridp,flush_cache=.false.,fetch_cache=.true.)
+        call get_grid(s,hash_nbor,igridn,flush_cache=.false.,fetch_cache=.true.)
 
         ! If grid exists, then copy into array
-        if(associated(gridp))then
+        if(igridn>0)then
            do ind=1,twotondim
-              phi_nbor(ind,inbor)=gridp%phi(ind)
+              phi_nbor(ind,inbor)=m%phi(ind,igridn)
            end do
 
         ! Otherwise interpolate from coarser level
         else
            ! Get 3**ndim neighbouring parent cell using a read-only cache
-           call get_threetondim_nbor_parent_cell(s,hash_nbor,m%grid_dict,grid_nbor,ind_nbor,flush_cache=.false.,fetch_cache=.true.)
-           call interpol_phi(mdl,m,grid_nbor,ind_nbor,ccc,bbb,tfrac,phi_nbor(1,inbor))
+           call get_threetondim_nbor_parent_cell(s,hash_nbor,igrid_nbor,ind_nbor,flush_cache=.false.,fetch_cache=.true.)
+           call interpol_phi(m,igrid_nbor,ind_nbor,ccc,bbb,tfrac,phi_nbor(1,inbor))
            do ind=1,threetondim
-              call unlock_cache(s,grid_nbor(ind)%p)
+              call unlock_cache(m,igrid_nbor(ind))
            end do
         endif
 
@@ -368,19 +361,19 @@ subroutine cmp_residual_cg(s,ilevel,icount)
      do ind=1,twotondim
 
         ! Compute residual using 6 neighbors potential
-        residu=m%grid(igrid)%phi(ind)
+        residu=m%phi(ind,igrid)
         do idim=1,ndim
            id1=jjj(idim,1,ind); ig1=iii(idim,1,ind)
            id2=jjj(idim,2,ind); ig2=iii(idim,2,ind)
            residu=residu-oneoversix*(phi_nbor(id1,ig1)+phi_nbor(id2,ig2))
         end do
-        residu=residu+fact*(m%grid(igrid)%rho(ind)-g%rho_tot)
+        residu=residu+fact*(m%rho(ind,igrid)-g%rho_tot)
 
         ! Store results in f(ind,1)
-        m%grid(igrid)%f(ind,1)=residu
+        m%f(ind,1,igrid)=residu
 
         ! Store results in f(ind,2)
-        m%grid(igrid)%f(ind,2)=residu
+        m%f(ind,2,igrid)=residu
 
      end do
      ! End loop over cells
@@ -388,7 +381,7 @@ subroutine cmp_residual_cg(s,ilevel,icount)
   end do
   ! End loop over grids
 
-  call close_cache(s,m%grid_dict)
+  call close_cache(mdl)
 
   end associate
 
@@ -420,7 +413,6 @@ end subroutine r_cmp_Ap_cg
 
 subroutine cmp_Ap_cg(s,ilevel)
   use amr_parameters, only: ndim, twondim, twotondim, threetondim, nvector
-  use amr_commons, only: oct
   use ramses_commons, only: ramses_t
   use nbors_utils
   use cache_commons
@@ -440,10 +432,9 @@ subroutine cmp_Ap_cg(s,ilevel)
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer,dimension(1:3,1:6),save::shift=reshape(&
        & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
-  type(oct),pointer::gridp
   type(msg_small_realdp)::dummy_small_realdp
 
-  associate(r=>s%r,g=>s%g,m=>s%m)
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
   ! Set constants
   oneoversix=1.0D0/dble(twondim)
@@ -455,9 +446,8 @@ subroutine cmp_Ap_cg(s,ilevel)
   iii(3,1,1:8)=(/5,5,5,5,0,0,0,0/); jjj(3,1,1:8)=(/5,6,7,8,1,2,3,4/)
   iii(3,2,1:8)=(/0,0,0,0,6,6,6,6/); jjj(3,2,1:8)=(/5,6,7,8,1,2,3,4/)
 
-  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-                hilbert=m%domain,pack_size=storage_size(dummy_small_realdp)/32,&
-                pack=pack_fetch_cg,unpack=unpack_fetch_cg)
+  call open_cache(mdl, m, pack_size=storage_size(dummy_small_realdp)/32, &
+       pack=pack_fetch_cg, unpack=unpack_fetch_cg)
 
   hash_nbor(0)=ilevel
 
@@ -466,7 +456,7 @@ subroutine cmp_Ap_cg(s,ilevel)
 
      ! Get central oct potential
      do ind=1,twotondim
-        phi_nbor(ind,0)=m%grid(igrid)%f(ind,2)
+        phi_nbor(ind,0)=m%f(ind,2,igrid)
      end do
 
      ! Get neighboring octs potential
@@ -484,12 +474,12 @@ subroutine cmp_Ap_cg(s,ilevel)
         enddo
 
         ! Get neighbouring grid using read-only cache
-        call get_grid(s,hash_nbor,m%grid_dict,gridp,flush_cache=.false.,fetch_cache=.true.)
+        call get_grid(s,hash_nbor,igridn,flush_cache=.false.,fetch_cache=.true.)
 
         ! If grid exists, then copy into array
-        if(associated(gridp))then
+        if(igridn>0)then
            do ind=1,twotondim
-              phi_nbor(ind,inbor)=gridp%f(ind,2)
+              phi_nbor(ind,inbor)=m%f(ind,2,igridn)
            end do
         else
            do ind=1,twotondim
@@ -504,7 +494,7 @@ subroutine cmp_Ap_cg(s,ilevel)
      do ind=1,twotondim
 
         ! Compute Ap using neighbors potential
-        residu=-m%grid(igrid)%f(ind,2)
+        residu=-m%f(ind,2,igrid)
         do idim=1,ndim
            id1=jjj(idim,1,ind); ig1=iii(idim,1,ind)
            id2=jjj(idim,2,ind); ig2=iii(idim,2,ind)
@@ -512,7 +502,7 @@ subroutine cmp_Ap_cg(s,ilevel)
         end do
 
         ! Store results in f(ind,3)
-        m%grid(igrid)%f(ind,3)=residu
+        m%f(ind,3,igrid)=residu
 
      end do
      ! End loop over cells
@@ -520,7 +510,7 @@ subroutine cmp_Ap_cg(s,ilevel)
   end do
   ! End loop over grids
 
-  call close_cache(s,m%grid_dict)
+  call close_cache(mdl)
 
   end associate
 
@@ -537,7 +527,7 @@ recursive subroutine r_make_initial_phi(pst,input,input_size)
   implicit none
   type(pst_t)::pst
   integer,VALUE::input_size
-  type(in_make_initial_phi_t)::input
+  type(level_count_t)::input
 
   integer::ilevel,icount
   integer::rID
@@ -558,8 +548,8 @@ end subroutine r_make_initial_phi
 subroutine make_initial_phi(s,ilevel,icount)
   use mdl_module
   use amr_parameters, only: ndim, twondim, twotondim, threetondim, nvector
-  use amr_commons, only: nbor
   use ramses_commons, only: ramses_t
+  use interpol_phi_module, only: interpol_phi
   use nbors_utils
   use cache_commons
   use cache
@@ -578,7 +568,7 @@ subroutine make_initial_phi(s,ilevel,icount)
   real(kind=8),dimension(1:nvector)::pp
   integer(kind=8),dimension(0:ndim)::hash_key
   integer,dimension(1:threetondim)::ind_nbor
-  type(nbor),dimension(1:threetondim)::grid_nbor
+  integer,dimension(1:threetondim)::igrid_nbor
   real(kind=8),dimension(1:twotondim)::phi_int
   type(msg_three_realdp)::dummy_three_realdp
 
@@ -613,9 +603,8 @@ subroutine make_initial_phi(s,ilevel,icount)
      tfrac=0.0
   end if
 
-  call open_cache(s, table=m%grid_dict, data_size=storage_size(m%grid(1))/32,&
-       hilbert=m%domain, pack_size=storage_size(dummy_three_realdp)/32,&
-       pack=pack_fetch_interpol, unpack=unpack_fetch_interpol,&
+  call open_cache(mdl, m, pack_size=storage_size(dummy_three_realdp)/32, &
+       pack=pack_fetch_interpol, unpack=unpack_fetch_interpol, &
        bound=init_bound_phi)
 
   hash_key(0)=ilevel
@@ -630,9 +619,9 @@ subroutine make_initial_phi(s,ilevel,icount)
 
      ! Loop over cells
      do ind=1,twotondim
-        m%grid(igrid)%phi(ind)=0.0d0
+        m%phi(ind,igrid)=0.0d0
         do idim=1,ndim
-           m%grid(igrid)%f(ind,idim)=0.0
+           m%f(ind,idim,igrid)=0.0
         end do
      end do
      ! End loop over cells
@@ -642,15 +631,15 @@ subroutine make_initial_phi(s,ilevel,icount)
 
         hash_key(1:ndim)=m%grid(igrid)%ckey(1:ndim)
         ! Get 3**ndim neghbouring parent cell using read-only cache
-        call get_threetondim_nbor_parent_cell(s,hash_key,m%grid_dict,grid_nbor,ind_nbor,flush_cache=.false.,fetch_cache=.true.)
-        call interpol_phi(mdl,m,grid_nbor,ind_nbor,ccc,bbb,tfrac,phi_int)
+        call get_threetondim_nbor_parent_cell(s,hash_key,igrid_nbor,ind_nbor,flush_cache=.false.,fetch_cache=.true.)
+        call interpol_phi(m,igrid_nbor,ind_nbor,ccc,bbb,tfrac,phi_int)
         do ind=1,threetondim
-           call unlock_cache(s,grid_nbor(ind)%p)
+           call unlock_cache(m,igrid_nbor(ind))
         end do
 
         ! Loop over cells
         do ind=1,twotondim
-           m%grid(igrid)%phi(ind)=phi_int(ind)
+           m%phi(ind,igrid)=phi_int(ind)
         end do
         ! End loop over cells
 
@@ -665,7 +654,7 @@ subroutine make_initial_phi(s,ilevel,icount)
            end do
            ! Call analytical potential routine
            call phiana(r,g,xx,pp,dx,1)
-           m%grid(igrid)%phi(ind)=pp(1)
+           m%phi(ind,igrid)=pp(1)
         end do
         ! End loop over cells
 
@@ -674,17 +663,18 @@ subroutine make_initial_phi(s,ilevel,icount)
   end do
   ! End loop over grids
 
-  call close_cache(s,m%grid_dict)
+  call close_cache(mdl)
 
   end associate
 
 end subroutine make_initial_phi
 
-subroutine pack_fetch_interpol(grid,msg_size,msg_array)
+subroutine pack_fetch_interpol(mesh,igrid,msg_size,msg_array)
   use amr_parameters, only: twotondim
-  use amr_commons, only: oct
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_three_realdp
-  type(oct)::grid
+  type(mesh_t)::mesh
+  integer::igrid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
 
@@ -693,9 +683,9 @@ subroutine pack_fetch_interpol(grid,msg_size,msg_array)
 
 #ifdef GRAV
   do ind=1,twotondim
-     msg%realdp_phi(ind)=grid%phi(ind)
-     msg%realdp_phi_old(ind)=grid%phi_old(ind)
-     msg%realdp_dis(ind)=grid%f(ind,3)
+     msg%realdp_phi(ind)=mesh%phi(ind,igrid)
+     msg%realdp_phi_old(ind)=mesh%phi_old(ind,igrid)
+     msg%realdp_dis(ind)=mesh%f(ind,3,igrid)
   end do
 #endif
 
@@ -703,11 +693,12 @@ subroutine pack_fetch_interpol(grid,msg_size,msg_array)
 
 end subroutine pack_fetch_interpol
 
-subroutine unpack_fetch_interpol(grid,msg_size,msg_array,hash_key)
+subroutine unpack_fetch_interpol(mesh,igrid,msg_size,msg_array,hash_key)
   use amr_parameters, only: ndim,twotondim
-  use amr_commons, only: oct
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_three_realdp
-  type(oct)::grid
+  type(mesh_t)::mesh
+  integer::igrid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
   integer(kind=8),dimension(0:ndim)::hash_key
@@ -715,15 +706,15 @@ subroutine unpack_fetch_interpol(grid,msg_size,msg_array,hash_key)
   integer::ind
   type(msg_three_realdp)::msg
 
-  grid%lev=hash_key(0)
-  grid%ckey(1:ndim)=hash_key(1:ndim)
+  mesh%grid(igrid)%lev=hash_key(0)
+  mesh%grid(igrid)%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
-  
+
 #ifdef GRAV
   do ind=1,twotondim
-     grid%phi(ind)=msg%realdp_phi(ind)
-     grid%phi_old(ind)=msg%realdp_phi_old(ind)
-     grid%f(ind,3)=msg%realdp_dis(ind)
+     mesh%phi(ind,igrid)=msg%realdp_phi(ind)
+     mesh%phi_old(ind,igrid)=msg%realdp_phi_old(ind)
+     mesh%f(ind,3,igrid)=msg%realdp_dis(ind)
   end do
 #endif
 
@@ -732,11 +723,12 @@ end subroutine unpack_fetch_interpol
 ! ########################################################################
 ! ########################################################################
 ! ########################################################################
-subroutine pack_fetch_cg(grid,msg_size,msg_array)
+subroutine pack_fetch_cg(mesh,igrid,msg_size,msg_array)
   use amr_parameters, only: twotondim
-  use amr_commons, only: oct
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_small_realdp
-  type(oct)::grid
+  type(mesh_t)::mesh
+  integer::igrid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
 
@@ -745,7 +737,7 @@ subroutine pack_fetch_cg(grid,msg_size,msg_array)
 
 #ifdef GRAV
   do ind=1,twotondim
-     msg%realdp(ind)=grid%f(ind,2)
+     msg%realdp(ind)=mesh%f(ind,2,igrid)
   end do
 #endif
 
@@ -756,11 +748,12 @@ end subroutine pack_fetch_cg
 ! ########################################################################
 ! ########################################################################
 ! ########################################################################
-subroutine unpack_fetch_cg(grid,msg_size,msg_array,hash_key)
-  use amr_parameters, only: ndim,twotondim
-  use amr_commons, only: oct
+subroutine unpack_fetch_cg(mesh,igrid,msg_size,msg_array,hash_key)
+  use amr_parameters, only: ndim, twotondim
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_small_realdp
-  type(oct)::grid
+  type(mesh_t)::mesh
+  integer::igrid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
   integer(kind=8),dimension(0:ndim)::hash_key
@@ -768,13 +761,13 @@ subroutine unpack_fetch_cg(grid,msg_size,msg_array,hash_key)
   integer::ind
   type(msg_small_realdp)::msg
 
-  grid%lev=hash_key(0)
-  grid%ckey(1:ndim)=hash_key(1:ndim)
+  mesh%grid(igrid)%lev=hash_key(0)
+  mesh%grid(igrid)%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
-  
+
 #ifdef GRAV
   do ind=1,twotondim
-     grid%f(ind,2)=msg%realdp(ind)
+     mesh%f(ind,2,igrid)=msg%realdp(ind)
   end do
 #endif
 
@@ -817,7 +810,7 @@ recursive subroutine r_cmp_rhs_norm(pst,ilevel,input_size,rhs_norm,output_size)
      rhs_norm=0.d0
      do igrid=pst%s%m%head(ilevel),pst%s%m%tail(ilevel)
         do ind=1,twotondim
-           rhs_norm=rhs_norm+fact2*(pst%s%m%grid(igrid)%rho(ind)-pst%s%g%rho_tot)**2
+           rhs_norm=rhs_norm+fact2*(pst%s%m%rho(ind,igrid)-pst%s%g%rho_tot)**2
         end do
      end do
   endif
@@ -852,7 +845,7 @@ recursive subroutine r_cmp_r2_cg(pst,ilevel,input_size,r2,output_size)
      r2=0.0d0
      do igrid=pst%s%m%head(ilevel),pst%s%m%tail(ilevel)
         do ind=1,twotondim
-           r2=r2+pst%s%m%grid(igrid)%f(ind,1)**2
+           r2=r2+pst%s%m%f(ind,1,igrid)**2
         end do
      end do
   endif
@@ -887,7 +880,7 @@ recursive subroutine r_cmp_pAp_cg(pst,ilevel,input_size,pAp,output_size)
      pAp=0.0d0
      do igrid=pst%s%m%head(ilevel),pst%s%m%tail(ilevel)
         do ind=1,twotondim
-           pAp=pAp+pst%s%m%grid(igrid)%f(ind,2)*pst%s%m%grid(igrid)%f(ind,3)
+           pAp=pAp+pst%s%m%f(ind,2,igrid)*pst%s%m%f(ind,3,igrid)
         end do
      end do
   endif
@@ -897,6 +890,5 @@ end subroutine r_cmp_pAp_cg
 ! ########################################################################
 ! ########################################################################
 ! ########################################################################
-
 #endif
 end module phi_fine_cg_module

@@ -21,7 +21,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   use output_amr_module, only: m_dump_all
   use synchro_hydro_fine_module, only: m_synchro_hydro_fine, r_gravity_hydro_fine
   use source_hydro_fine_module, only: r_source_hydro_fine
-  use nbors_utils, only: r_save_phi_old
+  use interpol_phi_module, only: r_save_phi_old
   use godunov_fine_module, only: r_godunov_fine,r_set_unew,r_set_uold
   use cooling_fine_module, only: r_cooling_fine
   use newdt_fine_module, only: m_newdt_fine,r_broadcast_dt,in_broadcast_dt_t
@@ -162,11 +162,12 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   endif
 
   !---------------
-  ! Poisson solver
+  ! Gravity solver
   !---------------
 #ifdef GRAV
-  if(r%poisson)then
+  if(r%poisson.and.r%gravity_type<=0)then
      call m_timer(pst,'poisson','start')
+
      ! Save old potential for time-extrapolation at level boundaries
      call r_save_phi_old(pst,ilevel,1)
 
@@ -183,10 +184,12 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
 
      ! Initial old potential
      if (g%nstep==0)call r_save_phi_old(pst,ilevel,1)
+  endif
 
-     ! Compute gravitational acceleration
+  ! Compute gravitational acceleration
+  if(r%poisson)then
+     call m_timer(pst,'grav force','start')
      call m_force_fine(pst,ilevel,icount)
-
   end if
 #endif
 

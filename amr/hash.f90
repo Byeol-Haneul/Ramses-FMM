@@ -10,19 +10,16 @@
 ! - COLLISIONS: A linked list is used to deal with collisions.
 
 module hash
-  USE, INTRINSIC :: ISO_C_BINDING, ONLY: C_PTR
   use amr_parameters, only: ndim, nvector
   implicit none
 
   ! General module parameters
   integer, dimension(0:3), parameter :: constants = (/5, -1640531527, 97, 1003313/)
 
-  ! Define a bucket as a derived type (sequence statement!) for better
-  ! cache efficiency.
-  type,bind(c) :: bucket
-     !sequence
+  ! Define a bucket as a derived type
+  type bucket
      integer(kind=8), dimension(0:ndim) :: key
-     type(C_PTR) :: valuep
+     integer :: valuep
      integer :: next_ibucket
   end type bucket
 
@@ -34,15 +31,14 @@ module hash
 
   ! The actual hash table is an array of buckets
   type hash_table
-     type(bucket), allocatable, dimension(:)  :: data
-     integer         :: total_size, head_free, nfree_chain, nfree
-     integer(kind=8) :: size
-     integer(kind=8) :: bitmask
+     type(bucket), allocatable, dimension(:) :: data
+     integer :: total_size, head_free, nfree_chain, nfree
+     integer(kind=8) :: size, bitmask
      integer, allocatable, dimension(:) :: next_free
   end type hash_table
 
   type hash_simple
-     type(bucket_simple), allocatable, dimension(:)  :: data
+     type(bucket_simple), allocatable, dimension(:) :: data
      integer :: total_size, head_free, nfree_chain, nfree
      integer :: size
      integer, allocatable, dimension(:) :: next_free
@@ -157,7 +153,7 @@ contains
           deallocate(htable%data, htable%next_free)
        end if
     end if
-    
+
     ! Compute sizes and allocate arrays
     htable%total_size = int(htable%size/4,kind=4) + int(htable%size,kind=4)
     htable%nfree = int(htable%size,kind=4)
@@ -234,11 +230,10 @@ contains
 
   ! =============================================================================
   subroutine hash_setp(htable, key, val)
-    USE, INTRINSIC :: ISO_C_BINDING, ONLY: C_LOC, C_NULL_PTR
     implicit none
-    type(hash_table),                    intent(inout) :: htable
-    integer(kind=8) , dimension(0:ndim), intent(in)    :: key
-    type(*),optional,target,             intent(in)    :: val
+    type(hash_table),                   intent(inout) :: htable
+    integer(kind=8), dimension(0:ndim), intent(in)    :: key
+    integer,                            intent(in)    :: val
     ! Add a key/value pair to the hash table. If there is already a key/value
     ! pair stored for this key, return an error message.
     integer(kind=8) :: full_hash
@@ -252,11 +247,7 @@ contains
 
        ! Bucket is empty, simply insert value       
        htable%data(ibucket)%next_ibucket = 0
-       if (present(val)) then
-         htable%data(ibucket)%valuep       = C_LOC(val)
-       else
-         htable%data(ibucket)%valuep       = C_NULL_PTR
-       endif
+       htable%data(ibucket)%valuep = val
        htable%data(ibucket)%key(0:ndim) = key(0:ndim)
        htable%nfree = htable%nfree - 1
 
@@ -266,8 +257,11 @@ contains
        do while (htable%data(ibucket)%next_ibucket .ne. 0)
           ! Check if key already exists - abort if so
           if (same_keys(htable%data(ibucket)%key(0:ndim),key(0:ndim)))then
-             write(*,*) "trying to insert already existing key: ",key !htable%data(ibucket)%valuep
-             write(*,*) "existing key: ", htable%data(ibucket)%key(0:ndim)
+             write(*,*) "trying to insert already existing key"
+             write(*,*) "new key: ",key
+             write(*,*) "new value: ",val
+             write(*,*) "existing key: ",htable%data(ibucket)%key(0:ndim)
+             write(*,*) "existing value: ",htable%data(ibucket)%valuep
              stop
           end if
           ibucket = htable%data(ibucket)%next_ibucket
@@ -275,31 +269,34 @@ contains
 
        ! Check again (at the end of linked list)
        if (same_keys(htable%data(ibucket)%key(0:ndim),key(0:ndim)))then
-          write(*,*) "trying to insert already existing key: ",key
+          write(*,*) "trying to insert already existing key"
+          write(*,*) "new key: ",key
+          write(*,*) "new value: ",val
+          write(*,*) "existing key: ",htable%data(ibucket)%key(0:ndim)
+          write(*,*) "existing value: ",htable%data(ibucket)%valuep
           CALL ABORT
           stop
        end if
-       
+
        ! Have reached end of chain, val not present yet -> add
        htable%data(ibucket)%next_ibucket = htable%head_free
        ibucket = htable%head_free
        htable%data(ibucket)%next_ibucket = 0
-       if (present(val)) then
-         htable%data(ibucket)%valuep       = C_LOC(val)
-       else
-         htable%data(ibucket)%valuep       = C_NULL_PTR
-       endif
+       htable%data(ibucket)%valuep = val
        htable%data(ibucket)%key(0:ndim) = key(0:ndim)
 
        ! remove bucket from head of free linked list
-       htable%head_free   = htable%next_free(htable%head_free)
+       htable%head_free = htable%next_free(htable%head_free)
        htable%nfree_chain = htable%nfree_chain - 1
 
     else
+
        write(*,*)"hash chaining space full "
        call hash_stats(htable)
        stop
+
     end if
+
   end subroutine hash_setp
   ! =============================================================================
 
@@ -363,25 +360,19 @@ contains
   ! =============================================================================
 
   ! =============================================================================
-  function hash_getp(htable, key, absent)
-    USE, INTRINSIC :: ISO_C_BINDING, ONLY: C_PTR, C_NULL_PTR, C_ASSOCIATED
-    USE oct_commons
+  function hash_getp(htable, key)
     implicit none
     type(hash_table),                    intent(in) :: htable
     integer(kind=8) , dimension(0:ndim), intent(in) :: key
-    type(C_PTR)                                     :: hash_getp
-    logical,optional,                    intent(out):: absent
+    integer                                         :: hash_getp
     ! Function which retrieves the hash table value for a given key. If no entry exists, return 0.
     integer(kind=8) :: ibucket, full_hash
-
-    if(present(absent)) absent = .false.
 
     full_hash = hash_func(key)
     ibucket = IAND(full_hash, htable%bitmask) + 1
 
     if (same_keys(htable%data(ibucket)%key(0:ndim), key(0:ndim)))then
        hash_getp = htable%data(ibucket)%valuep
-       if(present(absent) .and. .not.C_ASSOCIATED(hash_getp)) absent = .true.
        return
     end if
 
@@ -390,20 +381,18 @@ contains
        ibucket = htable%data(ibucket)%next_ibucket
        if (same_keys(htable%data(ibucket)%key(0:ndim), key(0:ndim)))then
           hash_getp = htable%data(ibucket)%valuep
-          if(present(absent) .and. .not.C_ASSOCIATED(hash_getp)) absent = .true.
           return
        end if
     end do
 
     ! Nothing found...
-    hash_getp = C_NULL_PTR
+    hash_getp = 0
 
   end function hash_getp
   ! =============================================================================
 
   ! =============================================================================
   function hash_getp_simple(htable, key)
-    USE oct_commons
     implicit none
     type(hash_simple), intent(in) :: htable
     integer(kind=8),   intent(in) :: key
@@ -434,23 +423,17 @@ contains
   ! =============================================================================
 
   ! =============================================================================`
-  function hash_getp_vec(htable, keys, absent, n)
-    USE, INTRINSIC :: ISO_C_BINDING, ONLY: C_PTR, C_NULL_PTR, C_ASSOCIATED
-    use oct_commons
+  function hash_getp_vec(htable, keys, n)
     implicit none
-    type(hash_table),                                 intent(in) :: htable
-    integer(kind = 8) , dimension(1:nvector, 0:ndim), intent(in) :: keys
-    type(C_PTR),dimension(1:nvector)                             :: hash_getp_vec
-    logical, optional,dimension(1:nvector)       , intent(inout) :: absent
-    integer                                                      :: n
+    type(hash_table),                              intent(in) :: htable
+    integer(kind=8), dimension(1:nvector, 0:ndim), intent(in) :: keys
+    integer,dimension(1:nvector)                              :: hash_getp_vec
+    integer                                                   :: n
     ! Function to obtain up to nvector values from the hash key at once.
-    ! This subroutine is only valid if the simple hash is used.
     integer(kind = 8), dimension(1:nvector)         :: ibucket, full_hash
     integer(kind = 8), dimension(1:nvector, 0:ndim) :: bucket_keys
     logical,           dimension(1:nvector)         :: ok
     integer :: i, idim, n_coll
-
-    if(present(absent)) absent = .false.
 
     full_hash = 0
     do idim = 0, ndim
@@ -485,12 +468,6 @@ contains
        endif
     end do
 
-    if(present(absent))then
-       do i = 1, n
-          if(ok(i) .and. .not. C_ASSOCIATED(hash_getp_vec(i))) absent(i) = .true.
-       end do
-    end if
-
     if(n_coll == 0)return
 
     do i = 1, n
@@ -501,12 +478,11 @@ contains
              if (same_keys(htable%data(ibucket(i))%key(0:ndim), keys(i,0:ndim)))then
                 hash_getp_vec(i) = htable%data(ibucket(i))%valuep
                 ok(i) = .true.
-                if(present(absent) .and. .not. C_ASSOCIATED(hash_getp_vec(i))) absent(i)=.true.
              end if
           end do
           ! Nothing found...
           if (.not. ok(i))then
-             hash_getp_vec(i) = C_NULL_PTR
+             hash_getp_vec(i) = 0
           end if
        end if
     end do
@@ -516,7 +492,6 @@ contains
 
   ! =============================================================================
   function hash_is_clean(htable, key)
-    USE oct_commons
     implicit none
     type(hash_table),                    intent(in) :: htable
     integer(kind=8) , dimension(0:ndim), intent(in) :: key
@@ -546,66 +521,6 @@ contains
     hash_is_clean = .false.
 
   end function hash_is_clean
-  ! =============================================================================
-
-  ! =============================================================================`
-  function get_index_clean(htable, keys, n, n1, n2)
-    USE, INTRINSIC :: ISO_C_BINDING, ONLY: C_PTR, C_NULL_PTR, C_ASSOCIATED
-    use oct_commons
-    implicit none
-    integer, dimension(1:nvector)                                :: get_index_clean
-    type(hash_table),                                 intent(in) :: htable
-    integer(kind = 8) , dimension(1:nvector, 0:ndim), intent(in) :: keys
-    integer                                                      :: n, n1, n2
-    ! Function to obtain up to nvector values from the hash key at once.
-    ! This subroutine is only valid if the simple hash is used
-    ! and for clean octs only
-    integer(kind = 8), dimension(1:nvector)         :: ibucket, full_hash
-    logical          , dimension(1:nvector)         :: ok
-    integer :: i, idim, n_coll
-
-    full_hash = 0
-    do idim = 0, ndim
-       do i = 1, n
-          full_hash(i) = full_hash(i) + keys(i, idim) * constants(idim)
-       end do
-    end do
-
-    do i = 1, n
-       ibucket(i) = IAND(full_hash(i), htable%bitmask) + 1
-    end do
-
-    ok = .true.
-    do idim = 0, ndim
-       do i = 1, n
-          ok(i) = ok(i) .and. (same_keys(htable%data(ibucket(i))%key(0:ndim), keys(i,0:ndim)))
-       end do
-    end do
-
-    n_coll = 0
-    do i = 1, n
-       if (ok(i)) then
-          get_index_clean(i) = (loc(htable%data(ibucket(i))%valuep)-n1)/(n2-n1)
-       else
-          n_coll = n_coll + 1
-       endif
-    end do
-
-    if(n_coll == 0)return
-
-    do i = 1, n
-       if (.not. ok(i)) then
-          ! Walk linked list until key is found or to the end is reached
-          do while( htable%data(ibucket(i))%next_ibucket > 0)
-             ibucket(i) = htable%data(ibucket(i))%next_ibucket
-             if (same_keys(htable%data(ibucket(i))%key(0:ndim), keys(i,0:ndim)))then
-                get_index_clean(i) = (loc(htable%data(ibucket(i))%valuep)-n1)/(n2-n1)
-             end if
-          end do
-       end if
-    end do
-
-  end function get_index_clean
   ! =============================================================================
 
   ! =============================================================================

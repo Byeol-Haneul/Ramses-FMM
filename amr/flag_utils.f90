@@ -91,10 +91,8 @@ end subroutine r_init_flag
 !################################################################
 !################################################################
 subroutine init_flag(s,ilevel,nflag)
-  use amr_parameters, only: ndim,twotondim
-  use amr_commons, only: oct
+  use amr_parameters, only: ndim, twotondim
   use ramses_commons, only: ramses_t
-  use marshal, only: pack_fetch_flag, unpack_fetch_flag
   use cache_commons
   use cache
   use nbors_utils
@@ -109,16 +107,15 @@ subroutine init_flag(s,ilevel,nflag)
   integer::igrid,ichild,icell,ind
   logical::ok
   integer(kind=8),dimension(0:ndim)::hash_key
-  type(oct),pointer::gridp
   type(msg_int4)::dummy_int4
 
-  associate(r=>s%r,g=>s%g,m=>s%m)
+  associate(g=>s%g,m=>s%m,mdl=>s%mdl)
 
   ! Initialize flag1 to 0 for ilevel grids
   g%nflag=0
   do igrid=m%head(ilevel),m%tail(ilevel)
      do ind=1,twotondim
-        m%grid(igrid)%flag1(ind)=0
+        m%flag1(ind,igrid)=0
      end do
   end do
   !---------------------------------------------------------
@@ -126,29 +123,27 @@ subroutine init_flag(s,ilevel,nflag)
   ! flagged son or a refined son.
   ! This ensures that refinement rules are satisfied.
   !---------------------------------------------------------
-  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-                hilbert=m%domain,pack_size=storage_size(dummy_int4)/32,&
-                pack=pack_fetch_flag,unpack=unpack_fetch_flag,&
-                init=init_flush_initflag, flush=pack_flush_initflag, combine=unpack_flush_initflag)
+  call open_cache(mdl, m, pack_size=storage_size(dummy_int4)/32, &
+       init=init_flush_initflag, flush=pack_flush_initflag, combine=unpack_flush_initflag)
 
   ! Loop over finer level grids
   hash_key(0)=ilevel+1
   do ichild=m%head(ilevel+1),m%tail(ilevel+1)
      hash_key(1:ndim)=m%grid(ichild)%ckey(1:ndim)
-     call get_parent_cell(s,hash_key,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
+     call get_parent_cell(s,hash_key,igrid,icell,flush_cache=.true.,fetch_cache=.false.)
      ok=.false.
      ! Loop over cells
      do ind=1,twotondim
         ok=(ok.or.(m%grid(ichild)%refined(ind)))
-        ok=(ok.or.(m%grid(ichild)%flag1(ind)==1))
+        ok=(ok.or.(m%flag1(ind,ichild)==1))
      end do
      if(ok)then
-        gridp%flag1(icell)=1
+        m%flag1(icell,igrid)=1
         g%nflag=g%nflag+1
      endif
   end do
 
-  call close_cache(s,m%grid_dict)
+  call close_cache(mdl)
 
   nflag=g%nflag
 
@@ -159,18 +154,19 @@ end subroutine init_flag
 !###############################################################
 !###############################################################
 !###############################################################
-subroutine init_flush_initflag(grid,hash_key)
-  use amr_parameters, only: ndim,twotondim
-  use amr_commons, only: oct
-  type(oct)::grid
+subroutine init_flush_initflag(mesh,igrid,hash_key)
+  use amr_parameters, only: ndim, twotondim
+  use amr_commons, only: mesh_t
+  type(mesh_t)::mesh
+  integer::igrid
   integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind
-  
-  grid%lev=hash_key(0)
-  grid%ckey(1:ndim)=hash_key(1:ndim)
+
+  mesh%grid(igrid)%lev=hash_key(0)
+  mesh%grid(igrid)%ckey(1:ndim)=hash_key(1:ndim)
   do ind=1,twotondim
-     grid%flag1(ind)=0
+     mesh%flag1(ind,igrid)=0
   end do
 
 end subroutine init_flush_initflag
@@ -178,11 +174,12 @@ end subroutine init_flush_initflag
 !###############################################################
 !###############################################################
 !###############################################################
-subroutine pack_flush_initflag(grid,msg_size,msg_array)
+subroutine pack_flush_initflag(mesh,igrid,msg_size,msg_array)
   use amr_parameters, only: twotondim
-  use amr_commons, only: oct
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_int4
-  type(oct)::grid
+  type(mesh_t)::mesh
+  integer::igrid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
 
@@ -190,7 +187,7 @@ subroutine pack_flush_initflag(grid,msg_size,msg_array)
   type(msg_int4)::msg
 
   do ind=1,twotondim
-     msg%int4(ind)=grid%flag1(ind)
+     msg%int4(ind)=mesh%flag1(ind,igrid)
   end do
 
   msg_array=transfer(msg,msg_array)
@@ -200,11 +197,12 @@ end subroutine pack_flush_initflag
 !###############################################################
 !###############################################################
 !###############################################################
-subroutine unpack_flush_initflag(grid,msg_size,msg_array,hash_key)
+subroutine unpack_flush_initflag(mesh,igrid,msg_size,msg_array,hash_key)
   use amr_parameters, only: ndim,twotondim
-  use amr_commons, only: oct
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_int4
-  type(oct)::grid
+  type(mesh_t)::mesh
+  integer::igrid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
   integer(kind=8),dimension(0:ndim)::hash_key
@@ -212,12 +210,12 @@ subroutine unpack_flush_initflag(grid,msg_size,msg_array,hash_key)
   integer::ind
   type(msg_int4)::msg
 
-  grid%lev=hash_key(0)
-  grid%ckey(1:ndim)=hash_key(1:ndim)
+  mesh%grid(igrid)%lev=hash_key(0)
+  mesh%grid(igrid)%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
-  
+
   do ind=1,twotondim
-     grid%flag1(ind)=MAX(grid%flag1(ind),msg%int4(ind))
+     mesh%flag1(ind,igrid)=MAX(mesh%flag1(ind,igrid),msg%int4(ind))
   end do
 
 end subroutine unpack_flush_initflag
@@ -339,15 +337,13 @@ subroutine ensure_ref_rules(s,ilevel)
   ! strict refinement rule. 
   ! Used in case of adaptive time steps only.
   !-----------------------------------------------------------------
-  integer::idim,ind,igrid,ichild
-  integer::i1,j1,k1
-  integer::i1min,i1max,j1min,j1max,k1min,k1max
+  integer::idim,ind,igrid,igrid_nbor
+  integer::i1,j1,k1,i1min,i1max,j1min,j1max,k1min,k1max
   integer(kind=8),dimension(0:ndim)::hash_nbor
-  logical::ok
-  type(oct),pointer::gridp
   type(msg_int4)::dummy_int4
+  logical::ok
 
-  associate(r=>s%r,g=>s%g,m=>s%m)
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
   ! Integer constants
   i1min=0; i1max=0; j1min=0; j1max=0; k1min=0; k1max=0
@@ -361,10 +357,8 @@ subroutine ensure_ref_rules(s,ilevel)
   k1max=2
 #endif
 
-  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-                hilbert=m%domain,pack_size=storage_size(dummy_int4)/32,&
-                pack=pack_fetch_flag,unpack=unpack_fetch_flag,&
-                bound=init_bound_flag)
+  call open_cache(mdl, m, pack_size=storage_size(dummy_int4)/32, &
+       pack=pack_fetch_flag, unpack=unpack_fetch_flag, bound=init_bound_flag)
 
   hash_nbor(0)=ilevel
   do igrid=m%head(ilevel),m%tail(ilevel)
@@ -395,8 +389,8 @@ subroutine ensure_ref_rules(s,ilevel)
               enddo
 
               ! Get neighboring grid index
-              call get_grid(s,hash_nbor,m%grid_dict,gridp,flush_cache=.false.,fetch_cache=.true.)
-              ok=ok.and.(associated(gridp))
+              call get_grid(s,hash_nbor,igrid_nbor,flush_cache=.false.,fetch_cache=.true.)
+              ok=ok.and.(igrid_nbor>0)
 
            end do
         end do
@@ -404,13 +398,13 @@ subroutine ensure_ref_rules(s,ilevel)
 
      if(.not. ok)then
         do ind=1,twotondim
-           m%grid(igrid)%flag1(ind)=0
+           m%flag1(ind,igrid)=0
         end do
      end if
 
   end do
 
-  call close_cache(s,m%grid_dict)
+  call close_cache(mdl)
 
   end associate
   
@@ -420,123 +414,119 @@ end subroutine ensure_ref_rules
 !############################################################
 !############################################################
 subroutine sink_flag(s,p,ilevel)
-   use amr_parameters, only: ndim, twotondim
-   use amr_commons, only: nbor, oct
-   use ramses_commons, only: ramses_t
-   use pm_commons, only: part_t
-   use nbors_utils
-   use cache_commons
-   use cache
-   use marshal, only: pack_fetch_flag, unpack_fetch_flag
-   use hilbert
-   implicit none
-   type(ramses_t)::s
-   type(part_t)::p
-   integer::ilevel
-   !==================================================================
-   ! This routine flag for refinement cells that are close enough
-   ! from sink particles.
-   !==================================================================
-   real(kind=8),dimension(:,:),allocatable::x_nei
-   integer,dimension(1:ndim)::ckey,ckey_ref,ckey_nbor
-   integer(kind=8),dimension(0:ndim)::hash_cell,hash_nbor
-   integer::i,j,k,ipart,icellp,icelln,ind,idim,i_nei,n_nei,nrad
-   integer,dimension(1:ndim)::ix
-   real(kind=8)::dx_loc,vol_loc,x,y,z,rrad,rr
-   real(kind=8),dimension(1:3)::xcen,xnei
-   type(oct),pointer::gridp,gridn
-   type(msg_int4)::dummy_int4
+  use amr_parameters, only: ndim, twotondim
+  use ramses_commons, only: ramses_t
+  use pm_commons, only: part_t
+  use nbors_utils
+  use cache_commons
+  use cache
+  use marshal, only: pack_fetch_flag, unpack_fetch_flag
+  use hilbert
+  implicit none
+  type(ramses_t)::s
+  type(part_t)::p
+  integer::ilevel
+  !==================================================================
+  ! This routine flag for refinement cells that are close enough
+  ! from sink particles.
+  !==================================================================
+  real(kind=8),dimension(:,:),allocatable::x_nei
+  integer,dimension(1:ndim)::ckey,ckey_ref,ckey_nbor
+  integer(kind=8),dimension(0:ndim)::hash_cell,hash_nbor
+  integer::i,j,k,ipart,igridn,icelln,ind,idim,i_nei,n_nei,nrad
+  integer,dimension(1:ndim)::ix
+  real(kind=8)::dx_loc,vol_loc,x,y,z,rrad,rr
+  real(kind=8),dimension(1:3)::xcen,xnei
+  type(msg_int4)::dummy_int4
 
 #ifdef HYDRO
 #if NDIM==3
-   associate(r=>s%r,g=>s%g,m=>s%m)
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
-   ! Mesh spacing in that level
-   dx_loc=r%boxlen/2**ilevel
-   vol_loc=dx_loc**ndim
+  ! Mesh spacing in that level
+  dx_loc=r%boxlen/2**ilevel
+  vol_loc=dx_loc**ndim
 
-   ! Compute number of cells within sink sphere
-   nrad = r%sink_b_spline_order
-   rrad = dble(nrad)
-   n_nei = 0
-   do k = -nrad, nrad
-      z = dble(k) / dble(nrad) * rrad
-      do j = -nrad, nrad
-         y = dble(j) / dble(nrad) * rrad
-         do i = -nrad, nrad
-            x = dble(i) / dble(nrad) * rrad
-            rr = sqrt(dble(x*x+y*y+z*z))
-            if(rr .le. rrad) n_nei = n_nei + 1
-         enddo
-      enddo
-   enddo
-   allocate(x_nei(1:ndim,1:n_nei))
-   i_nei = 0
-   do k = -nrad, nrad
-      z = dble(k) / dble(nrad) * rrad
-      do j = -nrad, nrad
-         y = dble(j) / dble(nrad) * rrad
-         do i = -nrad, nrad
-            x = dble(i) / dble(nrad) * rrad
-            rr = sqrt(dble(x*x+y*y+z*z))
-            if(rr .le. rrad)then
-               i_nei = i_nei + 1
-               x_nei(1, i_nei) = x
-               x_nei(2, i_nei) = y
-               x_nei(3, i_nei) = z
-            endif
-         enddo
-      enddo
-   enddo
+  ! Compute number of cells within sink sphere
+  nrad = r%sink_b_spline_order
+  rrad = dble(nrad)
+  n_nei = 0
+  do k = -nrad, nrad
+     z = dble(k) / dble(nrad) * rrad
+     do j = -nrad, nrad
+        y = dble(j) / dble(nrad) * rrad
+        do i = -nrad, nrad
+           x = dble(i) / dble(nrad) * rrad
+           rr = sqrt(dble(x*x+y*y+z*z))
+           if(rr .le. rrad) n_nei = n_nei + 1
+        enddo
+     enddo
+  enddo
+  allocate(x_nei(1:ndim,1:n_nei))
+  i_nei = 0
+  do k = -nrad, nrad
+     z = dble(k) / dble(nrad) * rrad
+     do j = -nrad, nrad
+        y = dble(j) / dble(nrad) * rrad
+        do i = -nrad, nrad
+           x = dble(i) / dble(nrad) * rrad
+           rr = sqrt(dble(x*x+y*y+z*z))
+           if(rr .le. rrad)then
+              i_nei = i_nei + 1
+              x_nei(1, i_nei) = x
+              x_nei(2, i_nei) = y
+              x_nei(3, i_nei) = z
+           endif
+        enddo
+     enddo
+  enddo
 
-   ! Open cache for array uold (fetch) and unew (flush)
-   call open_cache(s, table=m%grid_dict, data_size=storage_size(m%grid(1))/32, &
-                 hilbert=m%domain, pack_size=storage_size(dummy_int4)/32, &
-                 pack=pack_fetch_flag, unpack=unpack_fetch_flag, &
-                 init=init_flush_initflag, flush=pack_flush_initflag, combine=unpack_flush_initflag)
+  ! Open cache for array uold (fetch) and unew (flush)
+  call open_cache(mdl, m, pack_size=storage_size(dummy_int4)/32, &
+       init=init_flush_initflag, flush=pack_flush_initflag, combine=unpack_flush_initflag)
 
-   ! Loop over sink particles at current level and finer levels
-   hash_nbor(0) = ilevel+1
-   do ipart = p%headp(ilevel), p%npart
+  ! Loop over sink particles at current level and finer levels
+  hash_nbor(0) = ilevel+1
+  do ipart = p%headp(ilevel), p%npart
 
-      ! Sink sphere center in units of current level Cartesian coordinates
-      xcen(1:ndim) = (p%xp(ipart,1:ndim)+m%skip(1:ndim)) / dx_loc
+     ! Sink sphere center in units of current level Cartesian coordinates
+     xcen(1:ndim) = (p%xp(ipart,1:ndim)+m%skip(1:ndim)) / dx_loc
 
-      ! Collect sink sphere sampling points
-      do i_nei = 1, n_nei
+     ! Collect sink sphere sampling points
+     do i_nei = 1, n_nei
 
-         ! Compute neighboring cell coordinates
-         xnei(1:ndim) = xcen(1:ndim) + x_nei(1:ndim, i_nei)
+        ! Compute neighboring cell coordinates
+        xnei(1:ndim) = xcen(1:ndim) + x_nei(1:ndim, i_nei)
 
-         ! Periodic boundary conditions
-         do idim=1,ndim
-            if(r%periodic(idim))then
-               if(xnei(idim)< m%box_ckey_min(idim,ilevel+1))xnei(idim)=xnei(idim)-m%box_ckey_min(idim,ilevel+1)+m%box_ckey_max(idim,ilevel+1)
-               if(xnei(idim)>=m%box_ckey_max(idim,ilevel+1))xnei(idim)=xnei(idim)+m%box_ckey_min(idim,ilevel+1)-m%box_ckey_max(idim,ilevel+1)
-            endif
-         end do
+        ! Periodic boundary conditions
+        do idim=1,ndim
+           if(r%periodic(idim))then
+              if(xnei(idim)< m%box_ckey_min(idim,ilevel+1))xnei(idim)=xnei(idim)-m%box_ckey_min(idim,ilevel+1)+m%box_ckey_max(idim,ilevel+1)
+              if(xnei(idim)>=m%box_ckey_max(idim,ilevel+1))xnei(idim)=xnei(idim)+m%box_ckey_min(idim,ilevel+1)-m%box_ckey_max(idim,ilevel+1)
+           endif
+        end do
 
-         ! Get neighboring cell at current level
-         hash_nbor(1:ndim) = int(xnei(1:ndim))
-         call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.true.,fetch_cache=.false.)
+        ! Get neighboring cell at current level
+        hash_nbor(1:ndim) = int(xnei(1:ndim))
+        call get_parent_cell(s,hash_nbor,igridn,icelln,flush_cache=.true.,fetch_cache=.false.)
 
-         ! If missing, then cycle. This should never happens if sink_refine=.true.
-         if(.not.associated(gridn))cycle
+        ! If missing, then cycle. This should never happens if sink_refine=.true.
+        if(igridn<=0)cycle
 
-         ! Set refinement map flag1 to 1
-         gridn%flag1(icelln)=1
+        ! Set refinement map flag1 to 1
+        m%flag1(icelln,igridn)=1
 
-      end do
-      ! End loop over sink sphere sampling points
+     end do
+     ! End loop over sink sphere sampling points
 
-   end do
-   ! End loop over particles
+  end do
+  ! End loop over particles
 
-   call close_cache(s,m%grid_dict)
+  call close_cache(mdl)
 
-   deallocate(x_nei)
+  deallocate(x_nei)
 
-   end associate
+  end associate
 #endif
 #endif
 end subroutine sink_flag

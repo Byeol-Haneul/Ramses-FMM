@@ -115,10 +115,10 @@ subroutine m_update_time(pst,ilevel,done)
         ! Output fine step information and used memory
         !----------------------------------------------
         if(r%part)then
-           write(*,888)g%nstep,g%t,dt,g%aexp,real(100.0D0*dble(m%noct_used_max)/dble(r%ngridmax)),&
+           write(*,888)g%nstep,g%t,dt,g%aexp,real(100.0D0*dble(m%noct_used_max)/dble(m%ngridmax)),&
                 & real(100.0D0*dble(p%npart_max)/dble(r%npartmax+1))
         else
-           write(*,888)g%nstep,g%t,dt,g%aexp,real(100.0D0*dble(m%noct_used_max)/dble(r%ngridmax))
+           write(*,888)g%nstep,g%t,dt,g%aexp,real(100.0D0*dble(m%noct_used_max)/dble(m%ngridmax))
         endif
         itest=1
      end if
@@ -145,10 +145,10 @@ subroutine m_update_time(pst,ilevel,done)
   if(mod(g%nstep,r%ncontrol)==0)then
      if(itest==0)then
         if(r%part)then
-           write(*,888)g%nstep,g%t,dt,g%aexp,real(100.0D0*dble(m%noct_used_max)/dble(r%ngridmax)),&
+           write(*,888)g%nstep,g%t,dt,g%aexp,real(100.0D0*dble(m%noct_used_max)/dble(m%ngridmax)),&
                 & real(100.0D0*dble(p%npart_max)/dble(r%npartmax+1))
         else
-           write(*,888)g%nstep,g%t,dt,g%aexp,real(100.0D0*dble(m%noct_used_max)/dble(r%ngridmax))
+           write(*,888)g%nstep,g%t,dt,g%aexp,real(100.0D0*dble(m%noct_used_max)/dble(m%ngridmax))
         endif
      end if
   end if

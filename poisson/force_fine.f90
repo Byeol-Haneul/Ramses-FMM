@@ -1,13 +1,11 @@
 module force_fine_module
-  type :: in_gradient_phi_t
-    integer::ilevel,icount
-  end type in_gradient_phi_t
+  use multigrid_fine_coarse, only: level_count_t
 contains
-!#########################################################
-!#########################################################
-!#########################################################
-!#########################################################
 #ifdef GRAV  
+!#########################################################
+!#########################################################
+!#########################################################
+!#########################################################
 subroutine m_force_fine(pst,ilevel,icount)
   use amr_parameters, only: ndim, twotondim, nvector
   use ramses_commons, only: pst_t
@@ -20,7 +18,7 @@ subroutine m_force_fine(pst,ilevel,icount)
   !----------------------------------------------------------
   integer::dummy(2)
   real(kind=8)::rhomax,epot
-  type(in_gradient_phi_t)::in_gradient_phi
+  type(level_count_t)::level_count
  
   if(pst%s%m%noct_tot(ilevel)==0)return
   if(pst%s%r%verbose)write(*,'("   Entering force_fine for level ",I2)')ilevel
@@ -30,9 +28,13 @@ subroutine m_force_fine(pst,ilevel,icount)
      call r_force_analytic(pst,ilevel,1)
   else
      ! Compute gradient of potential
-     in_gradient_phi%ilevel=ilevel
-     in_gradient_phi%icount=icount
-     call r_gradient_phi(pst,in_gradient_phi,2)
+     level_count%ilevel=ilevel
+     level_count%icount=icount
+     call r_gradient_phi(pst,level_count,2)
+     ! Add external acceleration
+     if(pst%s%r%gravity_type<0)then 
+        call r_force_analytic(pst,ilevel,1)
+     endif
   endif
   if(pst%s%r%verbose)write(*,'("   Gradient phi done for level ",I2)')ilevel
 
@@ -93,6 +95,11 @@ subroutine force_analytic(r,g,m,ilevel)
   ! Mesh size at level ilevel in code units
   dx=r%boxlen/2**ilevel
 
+  ! Initialize force zero
+  if(r%gravity_type>0)then
+     m%f(1:twotondim,1:ndim,m%head(ilevel):m%tail(ilevel))=0d0
+  endif
+
   ! Loop over grids by vector sweeps
   do igrid=m%head(ilevel),m%tail(ilevel),nvector
      ngrid=MIN(nvector,m%tail(ilevel)-igrid+1)
@@ -114,7 +121,7 @@ subroutine force_analytic(r,g,m,ilevel)
         ! Scatter variables to main memory
         do idim=1,ndim
            do i=1,ngrid
-              m%grid(igrid+i-1)%f(ind,idim)=ff(i,idim)
+              m%f(ind,idim,igrid+i-1)=m%f(ind,idim,igrid+i-1)+ff(i,idim)
            end do
         end do
 
@@ -136,7 +143,7 @@ recursive subroutine r_gradient_phi(pst,input,input_size)
   implicit none
   type(pst_t)::pst
   integer,VALUE::input_size
-  type(in_gradient_phi_t)::input
+  type(level_count_t)::input
 
   integer::rID
 
@@ -156,12 +163,12 @@ end subroutine r_gradient_phi
 subroutine gradient_phi(s,ilevel,icount)
   use mdl_module
   use amr_parameters, only: ndim, twondim, twotondim, threetondim, nvector
-  use amr_commons, only: nbor, oct
   use ramses_commons, only: ramses_t
   use nbors_utils
   use cache_commons
   use cache
-  use phi_fine_cg_module, only: pack_fetch_interpol,unpack_fetch_interpol
+  use interpol_phi_module, only: interpol_phi
+  use phi_fine_cg_module, only: pack_fetch_interpol, unpack_fetch_interpol
   use boundaries, only: init_bound_phi
   implicit none
   type(ramses_t)::s
@@ -177,7 +184,6 @@ subroutine gradient_phi(s,ilevel,icount)
   integer,dimension(1:3,1:4,1:8)::ggg,hhh
   integer,dimension(1:8,1:8)::ccc
   integer,dimension(1:threetondim)::igrid_nbor,ind_nbor
-  type(nbor),dimension(1:threetondim)::grid_nbor
   integer,dimension(1:3,1:6)::shift=reshape(&
        & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
   integer(kind=8),dimension(0:ndim)::hash_nbor
@@ -185,7 +191,6 @@ subroutine gradient_phi(s,ilevel,icount)
   real(kind=8)::dx,a,b,aa,bb,cc,dd,tfrac
   real(kind=8)::phi1,phi2,phi3,phi4
   real(kind=8),dimension(1:twotondim,0:twondim)::phi_nbor
-  type(oct),pointer::gridp
   type(msg_three_realdp)::dummy_three_realdp
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
@@ -242,9 +247,8 @@ subroutine gradient_phi(s,ilevel,icount)
      tfrac=0.0
   end if
 
-  call open_cache(s, table=m%grid_dict, data_size=storage_size(m%grid(1))/32,&
-       hilbert=m%domain, pack_size=storage_size(dummy_three_realdp)/32,&
-       pack=pack_fetch_interpol, unpack=unpack_fetch_interpol,&
+  call open_cache(mdl, m, pack_size=storage_size(dummy_three_realdp)/32, &
+       pack=pack_fetch_interpol, unpack=unpack_fetch_interpol, &
        bound=init_bound_phi)
 
   hash_nbor(0)=ilevel
@@ -254,7 +258,7 @@ subroutine gradient_phi(s,ilevel,icount)
      
      ! Get central oct potential
      do ind=1,twotondim
-        phi_nbor(ind,0)=m%grid(igrid)%phi(ind)
+        phi_nbor(ind,0)=m%phi(ind,igrid)
      end do
 
      ! Get neighboring octs potential
@@ -272,21 +276,21 @@ subroutine gradient_phi(s,ilevel,icount)
         enddo
 
         ! Get neighbouring grid using read-only cache
-        call get_grid(s,hash_nbor,m%grid_dict,gridp,flush_cache=.false.,fetch_cache=.true.)
+        call get_grid(s,hash_nbor,igridn,flush_cache=.false.,fetch_cache=.true.)
 
         ! If grid exists, then copy into array
-        if(associated(gridp))then
+        if(igridn>0)then
            do ind=1,twotondim
-              phi_nbor(ind,i_nbor)=gridp%phi(ind)
+              phi_nbor(ind,i_nbor)=m%phi(ind,igridn)
            end do
 
         ! Otherwise interpolate from coarser level
         else
            ! Get 3**ndim parent cell using read-only cache
-           call get_threetondim_nbor_parent_cell(s,hash_nbor,m%grid_dict,grid_nbor,ind_nbor,flush_cache=.false.,fetch_cache=.true.)
-           call interpol_phi(mdl,m,grid_nbor,ind_nbor,ccc,bbb,tfrac,phi_nbor(1,i_nbor))
+           call get_threetondim_nbor_parent_cell(s,hash_nbor,igrid_nbor,ind_nbor,flush_cache=.false.,fetch_cache=.true.)
+           call interpol_phi(m,igrid_nbor,ind_nbor,ccc,bbb,tfrac,phi_nbor(1,i_nbor))
            do ind=1,threetondim
-              call unlock_cache(s,grid_nbor(ind)%p)
+              call unlock_cache(m,igrid_nbor(ind))
            end do
         endif
 
@@ -312,7 +316,7 @@ subroutine gradient_phi(s,ilevel,icount)
            phi4=phi_nbor(id4,ig4)
 
            ! Compute acceleration
-           m%grid(igrid)%f(ind,idim)=a*(phi1-phi2)-b*(phi3-phi4)
+           m%f(ind,idim,igrid)=a*(phi1-phi2)-b*(phi3-phi4)
 
         end do
         ! End loop over dimensions
@@ -323,10 +327,10 @@ subroutine gradient_phi(s,ilevel,icount)
   end do
   ! End loop over grids
 
-  call close_cache(s,m%grid_dict)
+  call close_cache(mdl)
 
   end associate
-  
+
 end subroutine gradient_phi
 !#########################################################
 !#########################################################
@@ -391,7 +395,7 @@ subroutine compute_epot(r,g,m,ilevel,epot)
         ! Loop over dimensions
         do idim=1,ndim
            if(.not.m%grid(igrid)%refined(ind))then
-              epot=epot+fact*m%grid(igrid)%f(ind,idim)**2
+              epot=epot+fact*m%f(ind,idim,igrid)**2
            endif
         end do
      end do
@@ -452,7 +456,7 @@ subroutine compute_rhomax(r,g,m,ilevel,rhomax)
   do igrid=m%head(ilevel),m%tail(ilevel)
      ! Loop over cells
      do ind=1,twotondim
-        rhomax=MAX(rhomax,dble(abs(m%grid(igrid)%rho(ind))))
+        rhomax=MAX(rhomax,dble(abs(m%rho(ind,igrid))))
      end do
      ! End loop over cells
   end do

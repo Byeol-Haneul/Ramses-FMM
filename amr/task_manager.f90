@@ -121,7 +121,7 @@ function worker_init(mdl) result(pst)
   use output_part_module, only: r_output_part
   use synchro_hydro_fine_module, only: r_synchro_hydro_fine, r_gravity_hydro_fine
   use source_hydro_fine_module, only: r_source_hydro_fine
-  use nbors_utils, only: r_save_phi_old
+  use interpol_phi_module, only: r_save_phi_old
   use courant_fine_module, only: r_courant_fine
   use godunov_fine_module, only: r_godunov_fine,r_set_unew,r_set_uold
   use cooling_fine_module, only: r_cooling_fine
@@ -605,23 +605,20 @@ end subroutine kill_cache_clump
 !##############################################################
 !##############################################################
 !##############################################################
-subroutine check_mail(s,comm_id,hash_dict)
-  USE, INTRINSIC :: ISO_C_BINDING, ONLY : C_F_POINTER, C_ASSOCIATED
+subroutine check_mail(mdl,comm_id)
   use mdl_module
-  use amr_parameters, only: ndim,nhilbert,twotondim
-  use hydro_parameters, only: nvar
-  use ramses_commons, only: ramses_t
+  use amr_parameters, only: ndim, nhilbert, twotondim
+  use amr_commons, only: mesh_t
+  use clfind_commons, only: clump_t
+  use cache, only: cache_oct, get_tile
   use cache_commons
-  use amr_commons, only: oct,nbor
   use hilbert
   use hash
-  use cache, only:cache_key_ptr,get_tile
 #ifndef WITHOUTMPI
   use mpi
 #endif
   implicit none
-  type(ramses_t)::s
-  type(hash_table)::hash_dict
+  type(mdl_t)::mdl
   integer::comm_id
   !
   ! This routine checks for incoming messages.
@@ -630,7 +627,7 @@ subroutine check_mail(s,comm_id,hash_dict)
   ! It can be a flush message, and the routine
   ! unpacks it and combine it in the local memory.
   !
-  integer::i,info,iskip,ichild,igrid
+  integer::i,info,iskip
   integer::grid_cpu,peak_cpu,ilevel,itile,ntile_reply,nflush,ibuf
   integer::buffer_size_fetch_array,buffer_size_msg_array
   integer::buffer_size_fetch_array_clump,buffer_size_msg_array_clump
@@ -644,17 +641,15 @@ subroutine check_mail(s,comm_id,hash_dict)
   integer(kind=8), dimension(0:ndim)::hash_key,hash_child
   integer(kind=8)::global_peak_id
   integer::local_peak_id
-  type(oct),pointer::child
-  integer(kind=8), dimension(0:ndim,1:ntilemax),target::raw_keys
-  type(cache_key_ptr),dimension(1:ntilemax)::keys
-  type(nbor),dimension(1:ntilemax)::grid
+  integer::child
+  type(cache_oct),dimension(1:ntilemax)::tile
   type(msg_large_realdp)::dummy_large_realdp
   type(msg_unbind_clump)::dummy_large_clump
   logical::child_exist
 
 #ifndef WITHOUTMPI
 
-  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c,mdl=>s%mdl)
+  associate(m=>mdl%m,c=>mdl%c)
 
   comm_completed=.false.
   do while (.not. comm_completed)
@@ -674,7 +669,7 @@ subroutine check_mail(s,comm_id,hash_dict)
               ilevel=mdl%recv_request_array(1)
               hash_key(0)=ilevel
               hash_key(1:ndim)=mdl%recv_request_array(2:ndim+1)
-              call c_f_pointer(hash_getp(hash_dict,hash_key),child)
+              child=hash_getp(m%grid_dict,hash_key)
               grid_cpu=request_status(MPI_SOURCE)+1
 
               ! Identify the corresponding communication buffer
@@ -695,11 +690,8 @@ subroutine check_mail(s,comm_id,hash_dict)
               endif
 
               child_exist=.true.
-              child_exist=child_exist.and.associated(child)
-              if(associated(child))then
-                 igrid=int((loc(child)-loc(m%grid(1)))/(loc(m%grid(2))-loc(m%grid(1)))+1,kind=4)
-                 child_exist=child_exist.and.igrid<=r%ngridmax
-              endif
+              child_exist=child_exist.and.(child>0)
+              child_exist=child_exist.and.(child<=m%ngridmax)
 
               ! If grid does not exist, send a null reply
               if(.not.child_exist)then
@@ -712,10 +704,7 @@ subroutine check_mail(s,comm_id,hash_dict)
               else
                  iskip=1
                  ! Record the location of where we want the keys to be stored, then ask for a tile
-                 do i=1,ntilemax
-                    keys(i)%p(0:ndim) => raw_keys(0:ndim,i)
-                 end do
-                 call get_tile(s,child,ntilemax,keys,grid,ntile_reply)
+                 call get_tile(m,child,tile,ntile_reply)
 
                  ! Store type of reply and number of entries
                  mdl%send_fetch(ibuf)%array(iskip)=1
@@ -725,9 +714,9 @@ subroutine check_mail(s,comm_id,hash_dict)
 
                  ! Store data, depending on reply type
                  do i=1,ntile_reply
-                    mdl%send_fetch(ibuf)%array(iskip:iskip+ndim)=int(raw_keys(0:ndim,i),kind=4)
+                    mdl%send_fetch(ibuf)%array(iskip:iskip+ndim)=int(tile(i)%key(0:ndim),kind=4)
                     iskip=iskip+1+ndim ! Skip over the key already present
-                    call pack_fetch%proc(grid(i)%p,mdl%size_msg_array,mdl%send_fetch(ibuf)%array(iskip:iskip+mdl%size_msg_array-1))
+                    call pack_fetch%proc(m,tile(i)%igrid,mdl%size_msg_array,mdl%send_fetch(ibuf)%array(iskip:iskip+mdl%size_msg_array-1))
                     iskip=iskip+mdl%size_msg_array
                  end do
               endif
@@ -767,9 +756,9 @@ subroutine check_mail(s,comm_id,hash_dict)
                     hash_child(1:ndim)=mdl%recv_flush_array(iskip+1:iskip+ndim)
                     iskip=iskip+ndim+1
                     ! Get grid from hash table
-                    call c_f_pointer(hash_getp(hash_dict,hash_child),child)
-                    if(ASSOCIATED(child))then
-                       call unpack_flush%proc(child,mdl%size_msg_array,mdl%recv_flush_array(iskip:iskip+mdl%size_msg_array-1),hash_child)
+                    child=hash_getp(m%grid_dict,hash_child)
+                    if(child>0)then
+                       call unpack_flush%proc(m,child,mdl%size_msg_array,mdl%recv_flush_array(iskip:iskip+mdl%size_msg_array-1),hash_child)
                     endif
 
                     iskip=iskip+mdl%size_msg_array
@@ -791,32 +780,32 @@ subroutine check_mail(s,comm_id,hash_dict)
                     iskip=iskip+ndim+1
 
                     ! Create new grid if grid does not exist
-                    if(.not.C_ASSOCIATED(hash_getp(hash_dict,hash_child)))then
+                    if(hash_getp(m%grid_dict,hash_child)<=0)then
 
                        ! Compute Hilbert keys of new octs
                        ix(1:ndim)=hash_child(1:ndim)
                        hk(1:nhilbert)=hilbert_key(ix,ilevel-1)
 
                        ! Set grid index to a virtual grid in local main memory
-                       ichild=m%ifree
+                       child=m%ifree
 
                        ! Go to next main memory free line
                        m%ifree=m%ifree+1
-                       if(m%ifree.GT.r%ngridmax)then
+                       if(m%ifree.GT.m%ngridmax)then
                           write(*,*)'No more free memory'
                           write(*,*)'Increase ngridmax'
                           call mdl_abort(mdl)
                        endif
-                       m%grid(ichild)%hkey(1:nhilbert)=hk(1:nhilbert)
-                       m%grid(ichild)%superoct=1
-                       m%grid(ichild)%flag1(1:twotondim)=0
-                       m%grid(ichild)%flag2(1:twotondim)=0
+                       m%grid(child)%hkey(1:nhilbert)=hk(1:nhilbert)
+                       m%grid(child)%superoct=1
+                       m%flag1(1:twotondim,child)=0
+                       m%flag2(1:twotondim,child)=0
 
                        ! Insert new grid in hash table
-                       call hash_setp(hash_dict,hash_child,m%grid(ichild))
+                       call hash_setp(m%grid_dict,hash_child,child)
 
                        ! Unpack message content
-                       call unpack_flush%proc(m%grid(ichild),mdl%size_msg_array,mdl%recv_flush_array(iskip:iskip+mdl%size_msg_array-1),hash_child)
+                       call unpack_flush%proc(m,child,mdl%size_msg_array,mdl%recv_flush_array(iskip:iskip+mdl%size_msg_array-1),hash_child)
 
                     endif
 
@@ -846,7 +835,7 @@ subroutine check_mail(s,comm_id,hash_dict)
 
               ! Assemble a reply and send it back
               global_peak_id=transfer(mdl%recv_request_array_clump(1:2),global_peak_id)
-              local_peak_id=int(global_peak_id-c%npeak_cum(g%myid-1),kind=4)
+              local_peak_id=int(global_peak_id-c%npeak_cum(mdl_self(mdl)-1),kind=4)
               peak_cpu=request_status_clump(MPI_SOURCE)+1
 
               ! Identify the corresponding communication buffer
@@ -879,7 +868,7 @@ subroutine check_mail(s,comm_id,hash_dict)
               ! Store data, depending on reply type
               do i=1,ntile_reply
                  local_peak_id=itile*ntilemax+i
-                 global_peak_id=c%npeak_cum(g%myid-1)+local_peak_id
+                 global_peak_id=c%npeak_cum(mdl_self(mdl)-1)+local_peak_id
                  mdl%send_fetch_clump(ibuf)%array(iskip:iskip+1)=transfer(global_peak_id,local_peak_id,2)
                  iskip=iskip+2
                  call pack_fetch_clump%proc(c,local_peak_id,mdl%size_msg_array_clump,mdl%send_fetch_clump(ibuf)%array(iskip:iskip+mdl%size_msg_array_clump-1))
@@ -916,7 +905,7 @@ subroutine check_mail(s,comm_id,hash_dict)
               do i=1,nflush
                  global_peak_id=transfer(mdl%recv_flush_array_clump(iskip:iskip+1),global_peak_id)
                  iskip=iskip+2
-                 local_peak_id=int(global_peak_id-c%npeak_cum(g%myid-1),kind=4)
+                 local_peak_id=int(global_peak_id-c%npeak_cum(mdl_self(mdl)-1),kind=4)
                  call unpack_flush_clump%proc(c,local_peak_id,mdl%size_msg_array_clump,mdl%recv_flush_array_clump(iskip:iskip+mdl%size_msg_array_clump-1))
                  iskip=iskip+mdl%size_msg_array_clump
               end do
@@ -948,19 +937,16 @@ end subroutine check_mail
 !##############################################################
 !##############################################################
 !##############################################################
-subroutine destage(s,igrid,hash_dict)
-  USE, INTRINSIC :: ISO_C_BINDING, ONLY : C_F_POINTER, C_ASSOCIATED
-  use amr_parameters, only: ndim,nhilbert,twotondim
-  use hydro_parameters, only: nvar
-  use ramses_commons, only: ramses_t
+subroutine destage(mdl,igrid)
+  use amr_parameters, only: ndim
+  use mdl_module
   use cache_commons
   use hash
 #ifndef WITHOUTMPI
   use mpi
 #endif
   implicit none
-  type(ramses_t)::s
-  type(hash_table)::hash_dict
+  type(mdl_t)::mdl
   integer::igrid
   !
   ! This routine frees the cache memory.
@@ -973,22 +959,22 @@ subroutine destage(s,igrid,hash_dict)
   integer(kind=8),dimension(0:ndim)::hash_key
   type(msg_large_realdp)::dummy_large_realdp
 
-  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
+  associate(m=>mdl%m)
 
   hash_key(0)=m%grid(igrid)%lev
   hash_key(1:ndim)=m%grid(igrid)%ckey(1:ndim)
 
-  if(.not.C_ASSOCIATED(hash_getp(hash_dict,hash_key)))then
-     write(*,*)'PE ',g%myid,' trying to free non existing grid'
+  if(hash_getp(m%grid_dict,hash_key)<=0)then
+     write(*,*)'PE ',mdl_self(mdl),' trying to free non existing grid'
      stop
   endif
 
-  call hash_free(hash_dict,hash_key)
+  call hash_free(m%grid_dict,hash_key)
 
 #ifndef WITHOUTMPI
 
   ! Check if the destage requires a flush
-  icache=igrid-r%ngridmax
+  icache=igrid-m%ngridmax
 
   if(m%dirty(icache))then
      grid_cpu=m%parent_cpu(icache)
@@ -1021,7 +1007,7 @@ subroutine destage(s,igrid,hash_dict)
         ! Post send
         call MPI_ISSEND(mdl%send_flush(ibuf)%array(iskip),mdl%size_flush_array,MPI_INTEGER,grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)
         ! While waiting for completion, check on incoming messages and perform actions
-        call check_mail(s,send_flush_id,hash_dict)
+        call check_mail(mdl,send_flush_id)
         ! Reset counter
         mdl%send_flush(ibuf)%array(iskip)=0
      endif
@@ -1039,7 +1025,7 @@ subroutine destage(s,igrid,hash_dict)
      iskip=iskip+ndim+1
 
      ! Pack message content
-     call pack_flush%proc(m%grid(igrid),mdl%size_msg_array,mdl%send_flush(ibuf)%array(iskip:iskip+mdl%size_msg_array-1))
+     call pack_flush%proc(m,igrid,mdl%size_msg_array,mdl%send_flush(ibuf)%array(iskip:iskip+mdl%size_msg_array-1))
 
   endif
 #endif
@@ -1051,18 +1037,16 @@ end subroutine destage
 !##############################################################
 !##############################################################
 !##############################################################
-subroutine destage_clump(s,local_peak_id,hash_dict)
-  use amr_parameters, only: ndim,nhilbert,twotondim
-  use hydro_parameters, only: nvar
-  use ramses_commons, only: ramses_t
+subroutine destage_clump(mdl,local_peak_id)
+  use amr_parameters, only: ndim
+  use mdl_module
   use cache_commons
   use hash
 #ifndef WITHOUTMPI
   use mpi
 #endif
   implicit none
-  type(ramses_t)::s
-  type(hash_table)::hash_dict
+  type(mdl_t)::mdl
   integer::local_peak_id
   !
   ! This routine frees the clump cache memory.
@@ -1075,14 +1059,14 @@ subroutine destage_clump(s,local_peak_id,hash_dict)
   integer(kind=8)::global_peak_id
   type(msg_unbind_clump)::dummy_large_clump
 
-  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c,mdl=>s%mdl)
+  associate(c=>mdl%c)
 
   ! Free hash table at global peak position
   icache = local_peak_id-c%npeak
   global_peak_id = c%gid(icache)
 
-  if(hash_getp_simple(c%peak_dict,global_peak_id) == 0)then
-     write(*,*)'PE ',g%myid,' trying to free non existing peak'
+  if(hash_getp_simple(c%peak_dict,global_peak_id)==0)then
+     write(*,*)'PE ',mdl_self(mdl),' trying to free non existing peak'
      stop
   endif
 
@@ -1122,7 +1106,7 @@ subroutine destage_clump(s,local_peak_id,hash_dict)
         ! Post send
         call MPI_ISSEND(mdl%send_flush_clump(ibuf)%array(iskip),mdl%size_flush_array_clump,MPI_INTEGER,peak_cpu-1,flush_tag_clump,MPI_COMM_WORLD,send_flush_id_clump,info)
         ! While waiting for completion, check on incoming messages and perform actions
-        call check_mail(s,send_flush_id_clump,hash_dict)
+        call check_mail(mdl,send_flush_id_clump)
         ! Reset counter
         mdl%send_flush_clump(ibuf)%array(iskip)=0
      endif

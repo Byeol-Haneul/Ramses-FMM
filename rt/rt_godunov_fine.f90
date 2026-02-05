@@ -50,10 +50,9 @@ subroutine rt_godunov_fine(s,ilevel)
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
-  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-       hilbert=m%domain,pack_size=storage_size(dummy_large_realdp)/32,&
-       pack=pack_fetch_refine,unpack=unpack_fetch_refine,&
-       init=init_flush_rt_godunov, flush=pack_flush_rt_godunov,&
+  call open_cache(mdl, m, pack_size=storage_size(dummy_large_realdp)/32, &
+       pack=pack_fetch_refine, unpack=unpack_fetch_refine, &
+       init=init_flush_rt_godunov, flush=pack_flush_rt_godunov, &
        combine=unpack_flush_rt_godunov, bound=init_bound_refine)
 
   ! Loop over active grids by vector sweeps
@@ -77,7 +76,7 @@ subroutine rt_godunov_fine(s,ilevel)
      igrid=igrid+m%grid(igrid)%superoct
   end do
 
-  call close_cache(s,m%grid_dict)
+  call close_cache(mdl)
 
   end associate
 
@@ -103,8 +102,8 @@ recursive subroutine r_set_emissivity(pst,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
 #ifdef RT
-     do i = pst%s%m%head(ilevel),pst%s%m%tail(ilevel)
-        pst%s%m%grid(i)%emissivity = 0
+     do i=pst%s%m%head(ilevel),pst%s%m%tail(ilevel)
+        pst%s%m%emissivity(:,:,i)=0
      end do
 #endif
   endif
@@ -152,8 +151,8 @@ subroutine set_rtunew(m,ilevel)
 
   ! Set rtunew to rtuold for myid cells
 #ifdef RT
-  do i = m%head(ilevel),m%tail(ilevel)
-     m%grid(i)%rtunew = m%grid(i)%rtuold
+  do i=m%head(ilevel),m%tail(ilevel)
+     m%rtunew(:,:,i)=m%rtuold(:,:,i)
   end do
 #endif
 
@@ -204,11 +203,11 @@ subroutine set_rtuold(r, g, m, ilevel)
   ! Add emissivity source term
 #ifdef RT
   if(.not.r%neq_chem)then
-     do ig = 1, nrtgrp
-        iN = 1 + (ig-1)*ndim
-        do i = m%head(ilevel), m%tail(ilevel)
-           m%grid(i)%rtunew(1:twotondim,iN) = m%grid(i)%rtunew(1:twotondim,iN) + &
-                & m%grid(i)%emissivity(1:twotondim,ig)*g%dtnew(ilevel)
+     do ig=1,nrtgrp
+        iN=1+(ig-1)*ndim
+        do i=m%head(ilevel),m%tail(ilevel)
+           m%rtunew(1:twotondim,iN,i)=m%rtunew(1:twotondim,iN,i) + &
+                & m%emissivity(1:twotondim,ig,i)*g%dtnew(ilevel)
         end do
      end do
   endif
@@ -219,7 +218,7 @@ subroutine set_rtuold(r, g, m, ilevel)
  ! Set rtuold to rtunew
 #ifdef RT
   do i = m%head(ilevel), m%tail(ilevel)
-     m%grid(i)%rtuold = m%grid(i)%rtunew
+     m%rtuold(:,:,i) = m%rtunew(:,:,i)
   end do
 
   ! Make a photon conservation fix (prevent light explosions)
@@ -228,13 +227,13 @@ subroutine set_rtuold(r, g, m, ilevel)
       do i = m%head(ilevel), m%tail(ilevel)
         do j = 1, twotondim
           ! No negative photon densities:
-          m%grid(i)%rtuold(j,iN) = max(m%grid(i)%rtuold(j,iN),smallNp)
-          Npc=m%grid(i)%rtuold(j,iN)*g%rt_c(ilevel)
+          m%rtuold(j,iN,i) = max(m%rtuold(j,iN,i),smallNp)
+          Npc=m%rtuold(j,iN,i)*g%rt_c(ilevel)
           ! Reduced flux, should always be .le. 1
-          fred = sqrt(sum((m%grid(i)%rtuold(j,iN+1:iN+ndim))**2))/Npc
+          fred = sqrt(sum((m%rtuold(j,iN+1:iN+ndim,i))**2))/Npc
           if(fred .gt. 1d0) then ! Too big so normalize flux to one
-            m%grid(i)%rtuold(j,iN+1:iN+ndim) &
-                = m%grid(i)%rtuold(j,iN+1:iN+ndim)/fred
+            m%rtuold(j,iN+1:iN+ndim,i) &
+                = m%rtuold(j,iN+1:iN+ndim,i)/fred
           endif
         end do
       end do
@@ -251,7 +250,6 @@ end subroutine set_rtuold
 subroutine rt_godfine1(s,ind_grid,ilevel,h)
   use mdl_module
   use amr_parameters, only: ndim, twondim, twotondim
-  use amr_commons, only: nbor, oct
   use rt_parameters, only: nrtvar
   use ramses_commons, only: ramses_t
   use nbors_utils
@@ -274,6 +272,7 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
   !-------------------------------------------------------------------
   integer::ivar,idim,ind_son,ind_oct
   integer::icell,inbor,ipass
+  integer::igrid,ichild
   integer::i0,j0,k0,i1,j1,k1,i2,j2,k2,i3,j3,k3
   integer::ii0,jj0,kk0,ii1,jj1,kk1
   integer::i1min,i1max,j1min,j1max,k1min,k1max
@@ -282,20 +281,19 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
   integer::i3min,i3max,j3min,j3max,k3min,k3max
   integer,dimension(1:ndim)::ckey_corner,ckey
   integer(kind=8),dimension(0:ndim)::hash_nbor
-  integer,dimension(0:twondim)::ind_nbor
-  type(nbor),dimension(0:twondim)::grid_nbor
+  integer,dimension(0:twondim)::icell_nbor
+  integer,dimension(0:twondim)::igrid_nbor
   real(kind=8)::dx,oneontwotondim,rt_c_diff
   real(kind=8),dimension(0:twondim  ,1:nrtvar)::u1
   real(kind=8),dimension(1:twotondim,1:nrtvar)::u2
   logical::okx,oky,okz,oknbor
-  type(oct),pointer::gridp,childp
 
   i2min=0; i2max=0; j2min=0; j2max=0; k2min=0; k2max=0
   i3min=1; i3max=1; j3min=1; j3max=1; k3min=1; k3max=1
   okx=.true.; oky=.true.; okz=.true.
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
-  
+
   oneontwotondim = 1.d0/dble(twotondim)
 
   ! Mesh spacing in that level
@@ -384,9 +382,9 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
 #if NDIM>2
               kk1=ckey(3)+1
 #endif
-              h%childloc(ii1,jj1,kk1)%p=>m%grid(ind_oct)
+              h%childloc(ii1,jj1,kk1)=ind_oct
               h%inkernel(ii1,jj1,kk1)=.true.
-              nullify(h%gridloc(ii1,jj1,kk1)%p)
+              h%gridloc(ii1,jj1,kk1)=0
               h%cellloc(ii1,jj1,kk1)=0
 
               ! Loop over 2x2x2 cells
@@ -405,7 +403,7 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
                        ! Gather RT variables
                        do ivar=1,nrtvar
 #ifdef RT
-                          h%rtuloc(i3,j3,k3,ivar)=m%grid(ind_oct)%rtuold(ind_son,ivar)
+                          h%rtuloc(i3,j3,k3,ivar)=m%rtuold(ind_son,ivar,ind_oct)
 #endif
                        end do
                        ! Gather refinement flag
@@ -438,23 +436,23 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
                  endif
               enddo
               
-              ! Set pointers to null
+              ! Set grid index to null
               icell=0
-              nullify(gridp)
+              igrid=0
               do inbor=0,twondim
-                 nullify(grid_nbor(inbor)%p)
+                 igrid_nbor(inbor)=0
               end do
               ! Get neighboring grid index with read-only cache
-              call get_grid(s,hash_nbor,m%grid_dict,childp,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
+              call get_grid(s,hash_nbor,ichild,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
 
               !----------------------------------------------------
               ! If grid does not exist, interpolate RT variables
               !----------------------------------------------------
-              if(.not.associated(childp))then
+              if(ichild==0)then
 
                  ! Get parent father cell with read-write cache
-                 call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.true.,lock=.true.)
-                 if(.not.associated(gridp))then
+                 call get_parent_cell(s,hash_nbor,igrid,icell,flush_cache=.true.,fetch_cache=.true.,lock=.true.)
+                 if(igrid==0)then
                     write(*,*)'RT-GODUNOV: parent_cell should exist'
                     write(*,*)'PE ',g%myid,hash_nbor
                     call mdl_abort(mdl)
@@ -462,18 +460,18 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
 
                  ! Get 2ndim neighboring father cells with read-write cache
                  ! Note that possible cache grids are locked inside the routine
-                 call get_twondim_nbor_parent_cell(s,hash_nbor,m%grid_dict,grid_nbor,ind_nbor,flush_cache=.true.,fetch_cache=.true.)
+                 call get_twondim_nbor_parent_cell(s,hash_nbor,igrid_nbor,icell_nbor,flush_cache=.true.,fetch_cache=.true.)
                  oknbor=.true.
                  do inbor=0,twondim
-                    oknbor=oknbor.and.associated(grid_nbor(inbor)%p)
+                    oknbor=oknbor.and.(igrid_nbor(inbor)>0)
                  end do
                  if(.not. oknbor)then
                     write(*,*)"RT-GODUNOV: parent neighbors should exist"
                     write(*,*)'PE ',g%myid,hash_nbor
-                    write(*,*)associated(grid_nbor(0)%p)
+                    write(*,*)igrid_nbor(0)
                     do idim=1,ndim
-                       write(*,*)associated(grid_nbor(2*idim-1)%p)
-                       write(*,*)associated(grid_nbor(2*idim)%p)
+                       write(*,*)igrid_nbor(2*idim-1)
+                       write(*,*)igrid_nbor(2*idim)
                     end do
                     call mdl_abort(mdl)
                  endif
@@ -482,7 +480,7 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
                  do inbor=0,twondim
                     do ivar=1,nrtvar
 #ifdef RT
-                       u1(inbor,ivar)=grid_nbor(inbor)%p%rtuold(ind_nbor(inbor),ivar)
+                       u1(inbor,ivar)=m%rtuold(icell_nbor(inbor),ivar,igrid_nbor(inbor))
 #endif
                     end do
                  end do
@@ -491,18 +489,18 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
               endif
 
               ! Store grid index
-              h%childloc(i1,j1,k1)%p=>childp
+              h%childloc(i1,j1,k1)=ichild
               h%inkernel(i1,j1,k1)=.true.
-              h%gridloc (i1,j1,k1)%p=>gridp
+              h%gridloc (i1,j1,k1)=igrid
               h%cellloc (i1,j1,k1)=icell
               do inbor=1,twondim
-                 h%nborloc(i1,j1,k1,inbor)%p=>grid_nbor(inbor)%p
+                 h%nborloc(i1,j1,k1,inbor)=igrid_nbor(inbor)
               end do
 
               ! Loop over 2x2x2 cells
               do k2=k2min,k2max
                  do j2=j2min,j2max
-                    do i2=i2min,i2max                       
+                    do i2=i2min,i2max
                        ind_son=1+i2+2*j2+4*k2
                        i3=1; j3=1; k3=1
                        i3=1+2*(i1-1)+i2
@@ -515,14 +513,14 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
                        !----------------------------------------------------
                        ! If neighboring grid exists, use refined grid values
                        !----------------------------------------------------
-                       if(associated(childp))then
+                       if(ichild>0)then
 
                           ! Gather refinement flag
-                          h%okloc(i3,j3,k3)=childp%refined(ind_son)
+                          h%okloc(i3,j3,k3)=m%grid(ichild)%refined(ind_son)
                           ! Gather RT variables
                           do ivar=1,nrtvar
 #ifdef RT
-                             h%rtuloc(i3,j3,k3,ivar)=childp%rtuold(ind_son,ivar)
+                             h%rtuloc(i3,j3,k3,ivar)=m%rtuold(ind_son,ivar,ichild)
 #endif
                           end do
 
@@ -614,7 +612,7 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
         do j1=j1min+jj0,j1max-jj0
            do i1=i1min+ii0,i1max-ii0
               ! Get oct index
-              childp=>h%childloc(i1,j1,k1)%p
+              ichild=h%childloc(i1,j1,k1)
               ! Loop over cells
               do k2=k2min,k2max
                  do j2=j2min,j2max
@@ -631,7 +629,7 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
                        ! Update conservative variables new state vector
                        do ivar=1,nrtvar
 #ifdef RT
-                          childp%rtunew(ind_son,ivar)=childp%rtunew(ind_son,ivar)+ &
+                          m%rtunew(ind_son,ivar,ichild)=m%rtunew(ind_son,ivar,ichild)+ &
                                & (h%rtflux(i3   ,j3   ,k3   ,ivar,idim) &
                                & -h%rtflux(i3+i0,j3+j0,k3+k0,ivar,idim))
 #endif
@@ -685,11 +683,11 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
         do j1=jj1min,jj1max
            do i1=ii1min,ii1max
               ! Get oct index
-              childp=>h%childloc(i1,j1,k1)%p
+              ichild=h%childloc(i1,j1,k1)
               ! Check that parent cell is not refined
-              if(.not.associated(childp))then
+              if(ichild==0)then
                  ! Get parent cell index
-                 gridp=>h%gridloc(i1,j1,k1)%p
+                 igrid=h%gridloc(i1,j1,k1)
                  icell=h%cellloc(i1,j1,k1)
                  ! Loop over inner cell left faces
                  do k2=k2min,k2max-k0
@@ -712,7 +710,7 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
                                 rt_c_diff=1.d0
                              end if
 #ifdef RT
-                             gridp%rtunew(icell,ivar)=gridp%rtunew(icell,ivar) &
+                             m%rtunew(icell,ivar,igrid)=m%rtunew(icell,ivar,igrid) &
                                   & -h%rtflux(i3,j3,k3,ivar,idim)              &
                                   & * oneontwotondim * rt_c_diff
 #endif
@@ -741,11 +739,11 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
         do j1=jj1min,jj1max
            do i1=ii1min,ii1max
               ! Get oct index
-              childp=>h%childloc(i1,j1,k1)%p
+              ichild=h%childloc(i1,j1,k1)
               ! Check that parent cell is not refined
-              if(.not.associated(childp))then
+              if(ichild==0)then
                  ! Get parent cell index
-                 gridp=>h%gridloc(i1,j1,k1)%p
+                 igrid=h%gridloc(i1,j1,k1)
                  icell=h%cellloc(i1,j1,k1)
                  ! Loop over inner cell right faces
                  do k2=k2min+k0,k2max
@@ -767,7 +765,7 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
                                 rt_c_diff=1.d0
                              end if
 #ifdef RT
-                             gridp%rtunew(icell,ivar)=gridp%rtunew(icell,ivar) &
+                             m%rtunew(icell,ivar,igrid)=m%rtunew(icell,ivar,igrid) &
                                   & +h%rtflux(i3+i0,j3+j0,k3+k0,ivar,idim)     &
                                   & *oneontwotondim * rt_c_diff
 #endif
@@ -796,18 +794,18 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
            ! Check if in kernel
            if(.not.h%inkernel(i1,j1,k1))cycle
            ! Get oct index
-           childp=>h%childloc(i1,j1,k1)%p
+           ichild=h%childloc(i1,j1,k1)
            ! Check that parent cell is not refined
-           if(associated(childp))then
-              call unlock_cache(s,childp)
+           if(ichild>0)then
+              call unlock_cache(m,ichild)
            else
               ! Get parent cell index
-              gridp=>h%gridloc(i1,j1,k1)%p
-              call unlock_cache(s,gridp)
+              igrid=h%gridloc(i1,j1,k1)
+              call unlock_cache(m,igrid)
               ! Get neighbouring parent oct index
               do inbor=1,twondim
-                 gridp=>h%nborloc(i1,j1,k1,inbor)%p
-                 call unlock_cache(s,gridp)
+                 igrid=h%nborloc(i1,j1,k1,inbor)
+                 call unlock_cache(m,igrid)
               end do
            endif
         end do
@@ -821,47 +819,53 @@ end subroutine rt_godfine1
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine init_flush_rt_godunov(grid,hash_key)
-  use amr_parameters, only: ndim,twotondim
+subroutine init_flush_rt_godunov(mesh,igrid,hash_key)
+  use amr_parameters, only: ndim, twotondim
   use rt_parameters, only: nrtvar
-  use amr_commons, only: oct
-  type(oct)::grid
+  use amr_commons, only: mesh_t
+  type(mesh_t)::mesh
+  integer::igrid
   integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind,ivar
 
-  grid%lev=hash_key(0)
-  grid%ckey(1:ndim)=hash_key(1:ndim)
+  mesh%grid(igrid)%lev=hash_key(0)
+  mesh%grid(igrid)%ckey(1:ndim)=hash_key(1:ndim)
+
+#ifdef RT
   do ivar=1,nrtvar
      do ind=1,twotondim
-#ifdef RT
-        grid%rtunew(ind,ivar)=0.0d0
-#endif
+        mesh%rtunew(ind,ivar,igrid)=0.0d0
      enddo
   enddo
+#endif
+
 end subroutine init_flush_rt_godunov
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine pack_flush_rt_godunov(grid,msg_size,msg_array)
+subroutine pack_flush_rt_godunov(mesh,igrid,msg_size,msg_array)
   use amr_parameters, only: twotondim
   use rt_parameters, only: nrtvar
-  use amr_commons, only: oct
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_large_realdp
-  type(oct)::grid
+  type(mesh_t)::mesh
+  integer::igrid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
 
   integer::ind,ivar
   type(msg_large_realdp)::msg
+
+#ifdef RT
   do ivar=1,nrtvar
      do ind=1,twotondim
-#ifdef RT
-        msg%realdp_rt(ind,ivar)=grid%rtunew(ind,ivar)
-#endif
+        msg%realdp_rt(ind,ivar)=mesh%rtunew(ind,ivar,igrid)
      end do
   end do
+#endif
+
   msg_array=transfer(msg,msg_array)
 
 end subroutine pack_flush_rt_godunov
@@ -869,12 +873,13 @@ end subroutine pack_flush_rt_godunov
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine unpack_flush_rt_godunov(grid,msg_size,msg_array,hash_key)
-  use amr_parameters, only: ndim,twotondim
+subroutine unpack_flush_rt_godunov(mesh,igrid,msg_size,msg_array,hash_key)
+  use amr_parameters, only: ndim, twotondim
   use rt_parameters, only: nrtvar
-  use amr_commons, only: oct
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_large_realdp
-  type(oct)::grid
+  type(mesh_t)::mesh
+  integer::igrid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
   integer(kind=8),dimension(0:ndim)::hash_key
@@ -882,16 +887,18 @@ subroutine unpack_flush_rt_godunov(grid,msg_size,msg_array,hash_key)
   integer::ind,ivar
   type(msg_large_realdp)::msg
 
-  grid%lev=hash_key(0)
-  grid%ckey(1:ndim)=hash_key(1:ndim)
+  mesh%grid(igrid)%lev=hash_key(0)
+  mesh%grid(igrid)%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
+
+#ifdef RT
   do ivar=1,nrtvar
      do ind=1,twotondim
-#ifdef RT
-        grid%rtunew(ind,ivar)=grid%rtunew(ind,ivar)+msg%realdp_rt(ind,ivar)
-#endif
+        mesh%rtunew(ind,ivar,igrid)=mesh%rtunew(ind,ivar,igrid)+msg%realdp_rt(ind,ivar)
      end do
   end do
+#endif
+
 end subroutine unpack_flush_rt_godunov
 !###########################################################
 !###########################################################

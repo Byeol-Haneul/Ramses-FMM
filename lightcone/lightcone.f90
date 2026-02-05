@@ -357,10 +357,10 @@ contains
 
                    if (is_in_lightcone_sector(position, r_inner, r_outer, angle_y, angle_z)) then
 #ifdef GRAV
-                      rho = s%m%grid(igrid)%rho(ind)
-                      phi = s%m%grid(igrid)%phi(ind)
-                      accel(:) = s%m%grid(igrid)%f(ind,:)
-                      dphidt = ( s%m%grid(igrid)%phi(ind) - s%m%grid(igrid)%phi_old(ind) ) / s%g%dtold(s%r%levelmin) 
+                      rho = s%m%rho(ind,igrid)
+                      phi = s%m%phi(ind,igrid)
+                      accel(:) = s%m%f(ind,:,igrid)
+                      dphidt = ( s%m%phi(ind,igrid) - s%m%phi_old(ind,igrid) ) / s%g%dtold(s%r%levelmin) 
 #endif
                       call add_to_buffer_grav(buffer, real(position(:), kind=4), real(rho, kind=4), real(phi, kind=4), real(accel(:), kind=4), real(dphidt, kind=4))
 

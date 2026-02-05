@@ -510,7 +510,7 @@ subroutine find_conj_pair(i,j,k,ii,jj,kk)
     real(kind=8), intent(out)    :: real_field(0:TGRID_X)
                                            ! Result of transforms
 #ifdef TURB
-    integer (kind=ILP)   :: plan           ! FFTW plan pointer
+    integer (kind=ILP)   :: plan           ! FFTW plan
     complex(kind=8), allocatable :: fftfield(:) ! Memory for FFT
 
     ! Allocate storage for performing FFTs
@@ -544,7 +544,7 @@ subroutine find_conj_pair(i,j,k,ii,jj,kk)
                                            ! Result of transforms
 #ifdef TURB
     integer              :: d               ! Dimension counter
-    integer (kind=ILP)   :: plan            ! FFTW plan pointer
+    integer (kind=ILP)   :: plan            ! FFTW plan
     complex(kind=8), allocatable :: fftfield(:,:) ! Memory for FFT
 
     ! Allocate storage for performing FFTs
@@ -580,7 +580,7 @@ subroutine find_conj_pair(i,j,k,ii,jj,kk)
                                            ! Result of transforms
 #ifdef TURB
     integer              :: d               ! Dimension counter
-    integer (kind=ILP)   :: plan            ! FFTW plan pointer
+    integer (kind=ILP)   :: plan            ! FFTW plan
     complex(kind=8), allocatable :: fftfield(:,:,:) ! Memory for FFT
 
     ! Allocate storage for performing FFTs
