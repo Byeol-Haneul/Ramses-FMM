@@ -65,11 +65,13 @@ module cache_commons
   type msg_hydro_mflux
      real(kind=8),dimension(1:twotondim,1:nvar)::realdp_hydro
      real(kind=8),dimension(1:twotondim,1:2*ndim+1)::realdp_mflux
+     real(kind=8),dimension(1:twotondim,1:2*ndim)::realdp_upwind_rho
   end type msg_hydro_mflux
   type msg_upload_hydro_mflux_mhd
      integer(kind=4),dimension(1:twotondim)::int4
      real(kind=8),dimension(1:twotondim,1:nvar)::realdp_hydro
      real(kind=8),dimension(1:twotondim,1:2*ndim+1)::realdp_mflux
+     real(kind=8),dimension(1:twotondim,1:2*ndim)::realdp_upwind_rho
 #ifdef MHD
      real(kind=8),dimension(1:twotondim,1:6)::realdp_mhd
 #endif
@@ -87,6 +89,7 @@ module cache_commons
      real(kind=8),dimension(1:twotondim,1:ndim+2)::realdp_poisson
 #endif
      real(kind=8),dimension(1:twotondim,1:2*ndim+1)::realdp_mflux
+     real(kind=8),dimension(1:twotondim,1:2*ndim)::realdp_upwind_rho
   end type msg_large_realdp
   type msg_rt_emissivity_realdp
      real(kind=8),dimension(1:twotondim,1:nrtgrp)::realdp

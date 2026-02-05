@@ -69,6 +69,10 @@ module amr_commons
      integer::ntreemax=0         ! Maximum number of tree particles
      integer::ntracmax=0         ! Maximum number of tracer particles
      integer::ndustmax=0         ! Maximum number of dust particles
+     integer,dimension(1:MAXLEVEL)::nexpand=1 ! Number of mesh expansion
+     real(kind=8)::boxlen=1.0        ! Cell size at level 0 (total box size)
+
+     ! Tracer and dust parameters
      integer::ntrac_per_cell=1   ! Number of tracer particles per cell in ICs
      integer::ndust_per_cell=1   ! Number of dust particles per cell in ICs
      logical :: part_subcell_positions=.true. ! Use subcell offsets when seeding parts
@@ -77,9 +81,8 @@ module amr_commons
      real(kind=8)::grain_charge_parameter=0.0d0  ! Dust particle charge-to-mass ratio (dimensionless)
      real(kind=8)::dust_gyro_factor=0.1d0  ! Fraction of gyro period allowed per step
      logical :: analytic_dust_force = .false. ! If true use analytic drag+Lorentz
-     integer,dimension(1:MAXLEVEL)::nexpand=1 ! Number of mesh expansion
-     real(kind=8)::boxlen=1.0        ! Cell size at level 0 (total box size)
-          
+     character(LEN=32)::tracer_kick_pdf='piecewise_skew_uniform' ! Tracer kick PDF
+
      ! Poisson solver parameters
      real(kind=8)::epsilon=1.0D-4     ! Convergence criterion for Poisson solvers
      real(kind=8),dimension(1:10)::gravity_params=0.0 ! Gravity parameters

@@ -144,6 +144,7 @@ subroutine set_unew(r,g,m,ilevel)
   do i = m%head(ilevel),m%tail(ilevel)
      m%grid(i)%unew = m%grid(i)%uold
      m%grid(i)%mflux = 0.0d0
+     m%grid(i)%upwind_rho = 0.0d0
   end do
   !$OMP END PARALLEL DO
 #endif
@@ -275,6 +276,7 @@ subroutine godfine1(s,ind_grid,ilevel,h)
   integer,dimension(0:twondim)::ind_nbor
   type(nbor),dimension(0:twondim)::grid_nbor
   real(kind=8)::dx,oneontwotondim
+  real(kind=8)::fluxL,fluxR,rhoL,rhoC,rhoR,upwindL,upwindR
   real(kind=8),dimension(0:twondim  ,1:nvar)::u1
   real(kind=8),dimension(1:twotondim,1:nvar)::u2
   logical::okx,oky,okz,oknbor
@@ -755,12 +757,31 @@ subroutine godfine1(s,ind_grid,ilevel,h)
 #if NDIM>2
                        k3=1+2*(k1-1)+k2
 #endif
-                       ! Store old density for MC tracers
+                      ! Store old density for MC tracers
                        childp%mflux(ind_son,1) = max(childp%uold(ind_son,1), r%smallr)
 
                        ! Store time-integrated mass flux on the two faces along the current direction
-                       childp%mflux(ind_son,1+idim)=h%flux(i3   ,j3   ,k3   ,1,idim)
-                       childp%mflux(ind_son,1+ndim+idim)=h%flux(i3+i0,j3+j0,k3+k0,1,idim)
+                      fluxL = h%flux(i3   ,j3   ,k3   ,1,idim)
+                      fluxR = h%flux(i3+i0,j3+j0,k3+k0,1,idim)
+                      childp%mflux(ind_son,1+idim)=fluxL
+                      childp%mflux(ind_son,1+ndim+idim)=fluxR
+
+                      ! Store upwind densities for each face (aligned to mflux indices 2..2*ndim+1)
+                      rhoC = h%uloc(i3,j3,k3,1)
+                      rhoL = h%uloc(i3-i0,j3-j0,k3-k0,1)
+                      rhoR = h%uloc(i3+i0,j3+j0,k3+k0,1)
+                      if(fluxL >= 0.d0)then
+                         upwindL = rhoL
+                      else
+                         upwindL = rhoC
+                      endif
+                      if(fluxR >= 0.d0)then
+                         upwindR = rhoC
+                      else
+                         upwindR = rhoR
+                      endif
+                      childp%upwind_rho(ind_son,idim) = max(upwindL, r%smallr)
+                      childp%upwind_rho(ind_son,idim+ndim) = max(upwindR, r%smallr)
 
                        ! Update conservative variables new state vector
                        do ivar=1,5
@@ -1348,6 +1369,7 @@ subroutine init_flush_godunov(grid,hash_key)
      enddo
   enddo
   grid%mflux=0.0d0
+  grid%upwind_rho=0.0d0
 #endif
 
 #ifdef MHD
