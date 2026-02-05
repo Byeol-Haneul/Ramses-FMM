@@ -56,7 +56,6 @@ subroutine upload_fine(s,ilevel)
   use mdl_module
   use hydro_parameters, only: nvar,nener
   use amr_parameters, only: ndim, twotondim
-  use amr_commons, only: oct
   use ramses_commons, only: ramses_t
   use nbors_utils
   use cache_commons
@@ -71,12 +70,11 @@ subroutine upload_fine(s,ilevel)
 #if NENER>0
   integer::irad
 #endif
-  integer::ioct,ind,ivar,icell,idim
+  integer::ioct,ind,ivar,icell,idim,igrid
   integer(kind=8),dimension(0:ndim)::hash_key
   integer,dimension(1:6,1:4)::hh
   real(kind=8)::average,ekin,erad,emag
-  type(oct),pointer::gridp
-  type(msg_upload_hydro_mflux_mhd)::dummy_upload
+  type(msg_realdp)::dummy_realdp
 
 #ifdef HYDRO
 
@@ -94,33 +92,23 @@ subroutine upload_fine(s,ilevel)
      do ivar=1,nvar
         do ind=1,twotondim
            if(m%grid(ioct)%refined(ind))then
-              m%grid(ioct)%uold(ind,ivar)=0.0
+              m%uold(ind,ivar,ioct)=0.0
            endif
         end do
      end do
-#ifdef HYDRO
-     do ind=1,twotondim
-        if(m%grid(ioct)%refined(ind))then
-           m%grid(ioct)%mflux(ind,1:2*ndim+1)=0.0d0
-          m%grid(ioct)%upwind_rho(ind,1:2*ndim)=0.0d0
-        endif
-     end do
-#endif
 #ifdef MHD
      do ivar=1,6
         do ind=1,twotondim
            if(m%grid(ioct)%refined(ind))then
-              m%grid(ioct)%bold(ind,ivar)=0.0
+              m%bold(ind,ivar,ioct)=0.0
            endif
         end do
      end do
 #endif
   end do
 
-  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-                     hilbert=m%domain, pack_size=storage_size(dummy_upload)/32,&
-                     pack=pack_fetch_upload, unpack=unpack_fetch_upload,&
-                     init=init_flush_upload, flush=pack_flush_upload, combine=unpack_flush_upload)
+  call open_cache(mdl, m, pack_size=storage_size(dummy_realdp)/32, &
+       init=init_flush_upload, flush=pack_flush_upload, combine=unpack_flush_upload)
 
   ! Loop over finer level grids
   hash_key(0)=ilevel+1
@@ -128,41 +116,16 @@ subroutine upload_fine(s,ilevel)
 
      ! Get parent cell and grid index
      hash_key(1:ndim)=m%grid(ioct)%ckey(1:ndim)
-     call get_parent_cell(s,hash_key,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
+     call get_parent_cell(s,hash_key,igrid,icell,flush_cache=.true.,fetch_cache=.false.)
 
      ! Average conservative variables
      do ivar=1,nvar
         average=0.0d0
         do ind=1,twotondim
-           average=average+m%grid(ioct)%uold(ind,ivar)
+           average=average+m%uold(ind,ivar,ioct)
         end do
         ! Scatter result to parent cell
-        gridp%uold(icell,ivar)=average/dble(twotondim)
-     end do
-
-     ! Average old density (stored in mflux(:,1))
-     average=0.0d0
-     do ind=1,twotondim
-        average=average+m%grid(ioct)%mflux(ind,1)
-     end do
-     gridp%mflux(icell,1)=average/dble(twotondim)
-
-     ! Average face-centered time-integrated mass flux (book-keeping, like face-centered B)
-     ! mflux(:,2:1+ndim)   : left faces
-     ! mflux(:,2+ndim:1+2*ndim) : right faces
-     do idim=1,ndim
-        ! Left face in parent cell
-        average=0.0d0
-        do ind=1,twotondim/2
-           average=average+m%grid(ioct)%mflux(hh(2*idim-1,ind),1+idim)
-        end do
-        gridp%mflux(icell,1+idim)=average/dble(twotondim/2)
-        ! Right face in parent cell
-        average=0.0d0
-        do ind=1,twotondim/2
-           average=average+m%grid(ioct)%mflux(hh(2*idim,ind),1+idim+ndim)
-        end do
-        gridp%mflux(icell,1+idim+ndim)=average/dble(twotondim/2)
+        m%uold(icell,ivar,igrid)=average/dble(twotondim)
      end do
 
      ! Average cell-centered magnetic field
@@ -171,21 +134,21 @@ subroutine upload_fine(s,ilevel)
      ! Average cell-centered Bz
      average=0.0d0
      do ind=1,twotondim
-        average=average+m%grid(ioct)%bold(ind,3)
+        average=average+m%bold(ind,3,ioct)
      end do
      ! Scatter result to parent cell
-     gridp%bold(icell,3)=average/dble(twotondim)
-     gridp%bold(icell,6)=average/dble(twotondim)
+     m%bold(icell,3,igrid)=average/dble(twotondim)
+     m%bold(icell,6,igrid)=average/dble(twotondim)
 #if NDIM==1
      ! Average cell-centered Bx and By
      do idim=1,2
         average=0.0d0
         do ind=1,twotondim
-           average=average+m%grid(ioct)%bold(ind,idim)
+           average=average+m%bold(ind,idim,ioct)
         end do
-        ! Scatter result to parentcell
-        gridp%bold(icell,idim)=average/dble(twotondim)
-        gridp%bold(icell,idim+3)=average/dble(twotondim)
+        ! Scatter result to parent cell
+        m%bold(icell,idim,igrid)=average/dble(twotondim)
+        m%bold(icell,idim+3,igrid)=average/dble(twotondim)
      end do
 #endif
 #endif
@@ -199,15 +162,15 @@ subroutine upload_fine(s,ilevel)
         ! Left magnetic field in parent cell
         average=0.0d0
         do ind=1,twotondim/2
-           average=average+m%grid(ioct)%bold(hh(2*idim-1,ind),idim)
+           average=average+m%bold(hh(2*idim-1,ind),idim,ioct)
         end do
-        gridp%bold(icell,idim)=average/dble(twotondim/2)
+        m%bold(icell,idim,igrid)=average/dble(twotondim/2)
         ! Right magnetic field in parent cell
         average=0.0d0
         do ind=1,twotondim/2
-           average=average+m%grid(ioct)%bold(hh(2*idim,ind),idim+3)
+           average=average+m%bold(hh(2*idim,ind),idim+3,ioct)
         end do
-        gridp%bold(icell,idim+3)=average/dble(twotondim/2)
+        m%bold(icell,idim+3,igrid)=average/dble(twotondim/2)
      end do
 #endif
 #endif
@@ -218,183 +181,115 @@ subroutine upload_fine(s,ilevel)
         do ind=1,twotondim
            ekin=0.0d0
            do idim=1,3
-              ekin=ekin+0.5d0*m%grid(ioct)%uold(ind,idim+1)**2/max(dble(m%grid(ioct)%uold(ind,1)),r%smallr)
+              ekin=ekin+0.5d0*m%uold(ind,idim+1,ioct)**2/max(dble(m%uold(ind,1,ioct)),r%smallr)
            end do
            emag=0.0d0
 #ifdef MHD
            do idim=1,3
-              emag=emag+0.125d0*(m%grid(ioct)%bold(ind,idim)+m%grid(ioct)%bold(ind,idim+3))
+              emag=emag+0.125d0*(m%bold(ind,idim,ioct)+m%bold(ind,idim+3,ioct))
            end do
 #endif
            erad=0.0d0
 #if NENER>0
            do irad=1,nener
-              erad=erad+m%grid(ioct)%uold(ind,5+irad)
+              erad=erad+m%uold(ind,5+irad,ioct)
            end do
 #endif
-           average=average+m%grid(ioct)%uold(ind,5)-ekin-erad-emag
+           average=average+m%uold(ind,5,ioct)-ekin-erad-emag
         end do
         ! Scatter result to parent cell
         ekin=0.0d0
         do idim=1,3
-           ekin=ekin+0.5d0*gridp%uold(icell,idim+1)**2/max(dble(gridp%uold(icell,1)),r%smallr)
+           ekin=ekin+0.5d0*m%uold(icell,idim+1,igrid)**2/max(dble(m%uold(icell,1,igrid)),r%smallr)
         end do
         emag=0.0d0
 #ifdef MHD
         do idim=1,3
-           emag=emag+0.125d0*(gridp%bold(icell,idim)+gridp%bold(icell,idim+3))
+           emag=emag+0.125d0*(m%bold(icell,idim,igrid)+m%bold(icell,idim+3,igrid))
         end do
 #endif
         erad=0.0d0
 #if NENER>0
         do irad=1,nener
-           erad=erad+gridp%uold(icell,5+irad)
+           erad=erad+m%uold(icell,5+irad,igrid)
         end do
 #endif
-        gridp%uold(icell,5)=average/dble(twotondim)+ekin+erad+emag
+        m%uold(icell,5,igrid)=average/dble(twotondim)+ekin+erad+emag
      endif
   end do
 
-  call close_cache(s,m%grid_dict)
+  call close_cache(mdl)
 
   end associate
 
 #endif
 
 end subroutine upload_fine
-
 !##########################################################################
-! Fetch pack/unpack for upload_fine (explicitly includes mflux)
 !##########################################################################
-subroutine pack_fetch_upload(grid,msg_size,msg_array)
-  use amr_parameters, only: twotondim
+!##########################################################################
+!##########################################################################
+subroutine init_flush_upload(mesh,igrid,hash_key)
+  use amr_parameters, only: ndim, twotondim
   use hydro_parameters, only: nvar
-  use amr_commons, only: oct
-  use cache_commons, only: msg_upload_hydro_mflux_mhd
-  type(oct)::grid
-  integer::msg_size
-  integer,dimension(1:msg_size),optional::msg_array
-  integer::ind,ivar
-  type(msg_upload_hydro_mflux_mhd)::msg
-
-  do ind=1,twotondim
-     msg%int4(ind)=merge(1,0,grid%refined(ind))
-  end do
-
-#ifdef HYDRO
-  do ivar=1,nvar
-     do ind=1,twotondim
-        msg%realdp_hydro(ind,ivar)=grid%uold(ind,ivar)
-     end do
-  end do
-  msg%realdp_mflux=grid%mflux
-  msg%realdp_upwind_rho=grid%upwind_rho
-#endif
-
-#ifdef MHD
-  msg%realdp_mhd=grid%bold
-#endif
-
-  msg_array=transfer(msg,msg_array)
-end subroutine pack_fetch_upload
-
-subroutine unpack_fetch_upload(grid,msg_size,msg_array,hash_key)
-  use amr_parameters, only: ndim,twotondim
-  use hydro_parameters, only: nvar
-  use amr_commons, only: oct
-  use cache_commons, only: msg_upload_hydro_mflux_mhd
-  type(oct)::grid
-  integer::msg_size
-  integer,dimension(1:msg_size),optional::msg_array
-  integer(kind=8),dimension(0:ndim)::hash_key
-  integer::ind,ivar
-  type(msg_upload_hydro_mflux_mhd)::msg
-
-  grid%lev=hash_key(0)
-  grid%ckey(1:ndim)=hash_key(1:ndim)
-  msg=transfer(msg_array,msg)
-
-  do ind=1,twotondim
-     grid%refined(ind)= (msg%int4(ind)==1)
-  end do
-
-#ifdef HYDRO
-  do ivar=1,nvar
-     do ind=1,twotondim
-        grid%uold(ind,ivar)=msg%realdp_hydro(ind,ivar)
-     end do
-  end do
-  grid%mflux=msg%realdp_mflux
-  grid%upwind_rho=msg%realdp_upwind_rho
-#endif
-
-#ifdef MHD
-  grid%bold=msg%realdp_mhd
-#endif
-
-end subroutine unpack_fetch_upload
-!##########################################################################
-!##########################################################################
-!##########################################################################
-!##########################################################################
-subroutine init_flush_upload(grid,hash_key)
-  use amr_parameters, only: ndim,twotondim
-  use hydro_parameters, only: nvar
-  use amr_commons, only: oct
-  type(oct)::grid
+  use amr_commons, only: mesh_t
+  type(mesh_t)::mesh
+  integer::igrid
   integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind,ivar
-  
-  grid%lev=hash_key(0)
-  grid%ckey(1:ndim)=hash_key(1:ndim)
+
+  mesh%grid(igrid)%lev=hash_key(0)
+  mesh%grid(igrid)%ckey(1:ndim)=hash_key(1:ndim)
+
 #ifdef HYDRO
   do ivar=1,nvar
      do ind=1,twotondim
-        grid%uold(ind,ivar)=0.0d0
+        mesh%uold(ind,ivar,igrid)=0.0d0
      end do
   end do
-  grid%mflux=0.0d0
 #endif
+
 #ifdef MHD
-  grid%bold=0.0d0
+  do ivar=1,6
+     do ind=1,twotondim
+        mesh%bold(ind,ivar,igrid)=0.0d0
+     end do
+  end do
 #endif
-  
+
 end subroutine init_flush_upload
 !##########################################################################
 !##########################################################################
 !##########################################################################
 !##########################################################################
-subroutine pack_flush_upload(grid,msg_size,msg_array)
+subroutine pack_flush_upload(mesh,igrid,msg_size,msg_array)
   use amr_parameters, only: twotondim
   use hydro_parameters, only: nvar
-  use amr_commons, only: oct
-  use cache_commons, only: msg_upload_hydro_mflux_mhd
-  type(oct)::grid
+  use amr_commons, only: mesh_t
+  use cache_commons, only: msg_realdp
+  type(mesh_t)::mesh
+  integer::igrid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
 
   integer::ind,ivar
-  type(msg_upload_hydro_mflux_mhd)::msg
-
-  do ind=1,twotondim
-     msg%int4(ind)=merge(1,0,grid%refined(ind))
-  end do
+  type(msg_realdp)::msg
 
 #ifdef HYDRO
   do ivar=1,nvar
      do ind=1,twotondim
-        msg%realdp_hydro(ind,ivar)=grid%uold(ind,ivar)
+        msg%realdp(ind,ivar)=mesh%uold(ind,ivar,igrid)
      end do
   end do
 #endif
 
-#ifdef HYDRO
-  msg%realdp_mflux=grid%mflux
-#endif
-
 #ifdef MHD
-  msg%realdp_mhd=grid%bold
+  do ivar=1,6
+     do ind=1,twotondim
+        msg%realdp_mhd(ind,ivar)=mesh%bold(ind,ivar,igrid)
+     end do
+  end do
 #endif
 
   msg_array=transfer(msg,msg_array)
@@ -404,46 +299,39 @@ end subroutine pack_flush_upload
 !##########################################################################
 !##########################################################################
 !##########################################################################
-subroutine unpack_flush_upload(grid,msg_size,msg_array,hash_key)
-  use amr_parameters, only: ndim,twotondim
+subroutine unpack_flush_upload(mesh,igrid,msg_size,msg_array,hash_key)
+  use amr_parameters, only: ndim, twotondim
   use hydro_parameters, only: nvar
-  use amr_commons, only: oct
-  use cache_commons, only: msg_upload_hydro_mflux_mhd
-  type(oct)::grid
+  use amr_commons, only: mesh_t
+  use cache_commons, only: msg_realdp
+  type(mesh_t)::mesh
+  integer::igrid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
   integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind,ivar
-  type(msg_upload_hydro_mflux_mhd)::msg
+  type(msg_realdp)::msg
 
-  grid%lev=hash_key(0)
-  grid%ckey(1:ndim)=hash_key(1:ndim)
+  mesh%grid(igrid)%lev=hash_key(0)
+  mesh%grid(igrid)%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
-  
+
 #ifdef HYDRO
   do ivar=1,nvar
      do ind=1,twotondim
-        if(grid%refined(ind))then
-           grid%uold(ind,ivar)=grid%uold(ind,ivar)+msg%realdp_hydro(ind,ivar)
+        if(mesh%grid(igrid)%refined(ind))then
+           mesh%uold(ind,ivar,igrid)=mesh%uold(ind,ivar,igrid)+msg%realdp(ind,ivar)
         endif
      end do
-  end do
-#endif
-
-#ifdef HYDRO
-  do ind=1,twotondim
-     if(grid%refined(ind))then
-        grid%mflux(ind,1:2*ndim+1)=grid%mflux(ind,1:2*ndim+1)+msg%realdp_mflux(ind,1:2*ndim+1)
-     endif
   end do
 #endif
 
 #ifdef MHD
   do ivar=1,6
      do ind=1,twotondim
-        if(grid%refined(ind))then
-           grid%bold(ind,ivar)=grid%bold(ind,ivar)+msg%realdp_mhd(ind,ivar)
+        if(mesh%grid(igrid)%refined(ind))then
+           mesh%bold(ind,ivar,igrid)=mesh%bold(ind,ivar,igrid)+msg%realdp_mhd(ind,ivar)
         endif
      end do
   end do

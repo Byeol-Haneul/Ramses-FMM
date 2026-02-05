@@ -42,7 +42,7 @@ subroutine godunov_fine(s,ilevel)
   use ramses_commons, only: ramses_t
   use cache_commons
   use cache
-  use marshal, only: pack_fetch_refine,unpack_fetch_refine
+  use marshal, only: pack_fetch_refine, unpack_fetch_refine
   use boundaries, only: init_bound_refine
   implicit none
   type(ramses_t)::s
@@ -60,11 +60,10 @@ subroutine godunov_fine(s,ilevel)
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
-  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-                hilbert=m%domain,pack_size=storage_size(dummy_large_realdp)/32,&
-                pack=pack_fetch_refine,unpack=unpack_fetch_refine,&
-                init=init_flush_godunov, flush=pack_flush_godunov,&
-                combine=unpack_flush_godunov, bound=init_bound_refine)
+  call open_cache(mdl, m, pack_size=storage_size(dummy_large_realdp)/32, &
+       pack=pack_fetch_refine, unpack=unpack_fetch_refine, &
+       init=init_flush_godunov, flush=pack_flush_godunov, &
+       combine=unpack_flush_godunov, bound=init_bound_refine)
 
   ! Loop over active grids by vector sweeps
   igrid=m%head(ilevel)
@@ -86,7 +85,7 @@ subroutine godunov_fine(s,ilevel)
      igrid=igrid+m%grid(igrid)%superoct
   end do
 
-  call close_cache(s,m%grid_dict)
+  call close_cache(mdl)
 
   end associate
 end subroutine godunov_fine
@@ -142,9 +141,7 @@ subroutine set_unew(r,g,m,ilevel)
   ! Set unew to uold for myid cells
   !$OMP PARALLEL DO
   do i = m%head(ilevel),m%tail(ilevel)
-     m%grid(i)%unew = m%grid(i)%uold
-     m%grid(i)%mflux = 0.0d0
-     m%grid(i)%upwind_rho = 0.0d0
+     m%unew(:,:,i) = m%uold(:,:,i)
   end do
   !$OMP END PARALLEL DO
 #endif
@@ -152,7 +149,7 @@ subroutine set_unew(r,g,m,ilevel)
   ! Set bnew to bold for myid cells
   !$OMP PARALLEL DO
   do i = m%head(ilevel),m%tail(ilevel)
-     m%grid(i)%bnew = m%grid(i)%bold
+     m%bnew(:,:,i) = m%bold(:,:,i)
   end do
   !$OMP END PARALLEL DO
 #endif
@@ -209,7 +206,7 @@ subroutine set_uold(r,g,m,ilevel)
   ! Set uold to unew
   !$OMP PARALLEL DO
   do i = m%head(ilevel),m%tail(ilevel)
-     m%grid(i)%uold = m%grid(i)%unew
+     m%uold(:,:,i) = m%unew(:,:,i)
   end do
   !$OMP END PARALLEL DO
 #endif
@@ -217,7 +214,7 @@ subroutine set_uold(r,g,m,ilevel)
   ! Set bold to bnew
   !$OMP PARALLEL DO
   do i = m%head(ilevel),m%tail(ilevel)
-     m%grid(i)%bold = m%grid(i)%bnew
+     m%bold(:,:,i) = m%bnew(:,:,i)
   end do
   !$OMP END PARALLEL DO
 #endif
@@ -230,12 +227,10 @@ end subroutine set_uold
 subroutine godfine1(s,ind_grid,ilevel,h)
   use mdl_module
   use amr_parameters, only: ndim, twondim, twotondim
-  use amr_commons, only: nbor, oct
   use hydro_parameters, only: nvar
   use ramses_commons, only: ramses_t
   use nbors_utils
   use hydro_commons
-  use hash
   implicit none
   type(ramses_t)::s
   integer::ind_grid,ilevel
@@ -266,22 +261,21 @@ subroutine godfine1(s,ind_grid,ilevel,h)
   logical,dimension(1:twondim)::refined
   integer,dimension(1:3,1:6),save::shift=reshape(&
        & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
-  type(oct),pointer::grid1,grid2,grid3,gridn
+  integer::igrid1,igrid2,igrid3,igridn
   integer::icell1,icell2,icell3
   real(kind=8)::dflux,dflux_x,dflux_y,dflux_z,weight
-  type(nbor),dimension(1:twondim)::grid_son_nbor
+  integer,dimension(1:twondim)::igrid_son_nbor
 #endif
   integer,dimension(1:ndim)::ckey_corner,ckey
   integer(kind=8),dimension(0:ndim)::hash_nbor,hash_son_nbor
   integer,dimension(0:twondim)::ind_nbor
-  type(nbor),dimension(0:twondim)::grid_nbor
+  integer,dimension(0:twondim)::igrid_nbor
   real(kind=8)::dx,oneontwotondim
-  real(kind=8)::fluxL,fluxR,rhoL,rhoC,rhoR,upwindL,upwindR
   real(kind=8),dimension(0:twondim  ,1:nvar)::u1
   real(kind=8),dimension(1:twotondim,1:nvar)::u2
   logical::okx,oky,okz,oknbor
   logical::ok1,ok2,ok3
-  type(oct),pointer::gridp,childp
+  integer::igrid,ichild
 
 #ifdef MHD
   jj(1:8,1)=(/4,1,4,1,4,1,4,1/)
@@ -295,8 +289,8 @@ subroutine godfine1(s,ind_grid,ilevel,h)
 #ifdef HYDRO
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
-  
-  oneontwotondim = 1.d0/dble(twotondim)
+
+  oneontwotondim=1.d0/dble(twotondim)
 
   ! Mesh spacing in that level
   dx=r%boxlen/2**ilevel
@@ -312,9 +306,6 @@ subroutine godfine1(s,ind_grid,ilevel,h)
 #if NDIM>2
   k2max=1; k3min=h%ku1+2; k3max=h%ku2-2
 #endif
-
-  ! Reset gravitational acceleration
-  h%gloc=0.0d0
 
   !---------------------
   ! Gather hydro stencil
@@ -390,8 +381,8 @@ subroutine godfine1(s,ind_grid,ilevel,h)
 #if NDIM>2
               kk1=ckey(3)+1
 #endif
-              h%childloc(ii1,jj1,kk1)%p=>m%grid(ind_oct)
-              nullify(h%gridloc(ii1,jj1,kk1)%p)
+              h%childloc(ii1,jj1,kk1)=ind_oct
+              h%gridloc(ii1,jj1,kk1)=0
               h%cellloc(ii1,jj1,kk1)=0
 
               ! Loop over 2x2x2 cells
@@ -409,18 +400,18 @@ subroutine godfine1(s,ind_grid,ilevel,h)
 #endif             
                        ! Gather hydro variables
                        do ivar=1,nvar
-                          h%uloc(i3,j3,k3,ivar)=m%grid(ind_oct)%uold(ind_son,ivar)
+                          h%uloc(i3,j3,k3,ivar)=m%uold(ind_son,ivar,ind_oct)
                        end do
 #ifdef MHD
                        ! Gather MHD variables
                        do ivar=1,6
-                          h%bloc(i3,j3,k3,ivar)=m%grid(ind_oct)%bold(ind_son,ivar)
+                          h%bloc(i3,j3,k3,ivar)=m%bold(ind_son,ivar,ind_oct)
                        end do
 #endif
 #ifdef GRAV
                        ! Gather self-gravitational acceleration
                        do idim=1,ndim
-                          h%gloc(i3,j3,k3,idim)=m%grid(ind_oct)%f(ind_son,idim)
+                          h%gloc(i3,j3,k3,idim)=m%f(ind_son,idim,ind_oct)
                        end do
 #else
                        ! Gather constant gravitational acceleration
@@ -457,29 +448,29 @@ subroutine godfine1(s,ind_grid,ilevel,h)
                     if(hash_nbor(idim)>=m%box_ckey_max(idim,ilevel))hash_nbor(idim)=m%box_ckey_min(idim,ilevel)
                  endif
               enddo
-              
-              ! Set pointers to null
+
+              ! Set grid index to null
               icell=0
-              nullify(gridp)
+              igrid=0
               do inbor=0,twondim
-                 nullify(grid_nbor(inbor)%p)
+                 igrid_nbor(inbor)=0
               end do
 #ifdef MHD
               do inbor=1,twondim
-                 nullify(grid_son_nbor(inbor)%p)
+                 igrid_son_nbor(inbor)=0
               end do
 #endif
               ! Get neighboring grid index with read-only cache
-              call get_grid(s,hash_nbor,m%grid_dict,childp,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
+              call get_grid(s,hash_nbor,ichild,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
 
               !----------------------------------------------------
               ! If grid does not exist, interpolate hydro variables
               !----------------------------------------------------
-              if(.not.associated(childp))then
+              if(ichild==0)then
 
                  ! Get parent father cell with read-write cache
-                 call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.true.,lock=.true.)
-                 if(.not.associated(gridp))then
+                 call get_parent_cell(s,hash_nbor,igrid,icell,flush_cache=.true.,fetch_cache=.true.,lock=.true.)
+                 if(igrid==0)then
                     write(*,*)'GODUNOV: parent_cell should exist'
                     write(*,*)'PE ',g%myid,hash_nbor
                     call mdl_abort(mdl)
@@ -487,18 +478,18 @@ subroutine godfine1(s,ind_grid,ilevel,h)
 
                  ! Get 2ndim neighboring father cells with read-write cache
                  ! Note that possible cache grids are locked inside the routine
-                 call get_twondim_nbor_parent_cell(s,hash_nbor,m%grid_dict,grid_nbor,ind_nbor,flush_cache=.true.,fetch_cache=.true.)
+                 call get_twondim_nbor_parent_cell(s,hash_nbor,igrid_nbor,ind_nbor,flush_cache=.true.,fetch_cache=.true.)
                  oknbor=.true.
                  do inbor=0,twondim
-                    oknbor=oknbor.and.associated(grid_nbor(inbor)%p)
+                    oknbor=oknbor.and.(igrid_nbor(inbor)>0)
                  end do
                  if(.not. oknbor)then
                     write(*,*)"GODUNOV: parent neighbors should exist"
                     write(*,*)'PE ',g%myid,hash_nbor
-                    write(*,*)associated(grid_nbor(0)%p)
+                    write(*,*)igrid_nbor(0)
                     do idim=1,ndim
-                       write(*,*)associated(grid_nbor(2*idim-1)%p)
-                       write(*,*)associated(grid_nbor(2*idim)%p)
+                       write(*,*)igrid_nbor(2*idim-1)
+                       write(*,*)igrid_nbor(2*idim)
                     end do
                     call mdl_abort(mdl)
                  endif
@@ -506,14 +497,14 @@ subroutine godfine1(s,ind_grid,ilevel,h)
                  ! Gather hydro variables
                  do inbor=0,twondim
                     do ivar=1,nvar
-                       u1(inbor,ivar)=grid_nbor(inbor)%p%uold(ind_nbor(inbor),ivar)
+                       u1(inbor,ivar)=m%uold(ind_nbor(inbor),ivar,igrid_nbor(inbor))
                     end do
                  end do
 #ifdef MHD
                  ! Gather MHD variables
                  do inbor=0,twondim
                     do ivar=1,6
-                       b1(inbor,ivar)=grid_nbor(inbor)%p%bold(ind_nbor(inbor),ivar)
+                       b1(inbor,ivar)=m%bold(ind_nbor(inbor),ivar,igrid_nbor(inbor))
                     end do
                  end do
                  ! Get neighboring children grids
@@ -527,13 +518,13 @@ subroutine godfine1(s,ind_grid,ilevel,h)
                           if(hash_son_nbor(idim)>=m%box_ckey_max(idim,ilevel))hash_son_nbor(idim)=m%box_ckey_min(idim,ilevel)
                        endif
                     enddo
-                    call get_grid(s,hash_son_nbor,m%grid_dict,gridn,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
-                    grid_son_nbor(inbor)%p => gridn
-                    refined(inbor)=associated(gridn)
+                    call get_grid(s,hash_son_nbor,igridn,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
+                    igrid_son_nbor(inbor)=igridn
+                    refined(inbor)=(igridn>0)
                     if(refined(inbor))then
                        do ind=1,twotondim
                           do ivar=1,6
-                             b3(inbor,ind,ivar)=gridn%bold(ind,ivar)
+                             b3(inbor,ind,ivar)=m%bold(ind,ivar,igridn)
                           end do
                        end do
                     endif
@@ -548,13 +539,13 @@ subroutine godfine1(s,ind_grid,ilevel,h)
               endif
 
               ! Store grid index
-              h%childloc(i1,j1,k1)%p=>childp
-              h%gridloc (i1,j1,k1)%p=>gridp
+              h%childloc(i1,j1,k1)=ichild
+              h%gridloc (i1,j1,k1)=igrid
               h%cellloc (i1,j1,k1)=icell
               do inbor=1,twondim
-                 h%nborloc(i1,j1,k1,inbor)%p=>grid_nbor(inbor)%p
+                 h%nborloc(i1,j1,k1,inbor)=igrid_nbor(inbor)
 #ifdef MHD
-                 h%nborsonloc(i1,j1,k1,inbor)%p=>grid_son_nbor(inbor)%p
+                 h%nborsonloc(i1,j1,k1,inbor)=igrid_son_nbor(inbor)
 #endif
               end do
 
@@ -574,22 +565,22 @@ subroutine godfine1(s,ind_grid,ilevel,h)
                        !----------------------------------------------------
                        ! If neighboring grid exists, use refined grid values
                        !----------------------------------------------------
-                       if(associated(childp))then
+                       if(ichild>0)then
 
                           ! Gather hydro variables
                           do ivar=1,nvar
-                             h%uloc(i3,j3,k3,ivar)=childp%uold(ind_son,ivar)
+                             h%uloc(i3,j3,k3,ivar)=m%uold(ind_son,ivar,ichild)
                           end do
 #ifdef MHD
                           ! Gather MHD variables
                           do ivar=1,6
-                             h%bloc(i3,j3,k3,ivar)=childp%bold(ind_son,ivar)
+                             h%bloc(i3,j3,k3,ivar)=m%bold(ind_son,ivar,ichild)
                           end do
 #endif
 #ifdef GRAV
                           ! Gather self-gravitational acceleration
                           do idim=1,ndim
-                             h%gloc(i3,j3,k3,idim)=childp%f(ind_son,idim)
+                             h%gloc(i3,j3,k3,idim)=m%f(ind_son,idim,ichild)
                           end do
 #else
                           ! Gather constant gravitational acceleration
@@ -598,7 +589,7 @@ subroutine godfine1(s,ind_grid,ilevel,h)
                           end do
 #endif
                           ! Gather refinement flag
-                          h%okloc(i3,j3,k3)=childp%refined(ind_son)
+                          h%okloc(i3,j3,k3)=m%grid(ichild)%refined(ind_son)
 
                        !-----------------------------------------------------------
                        ! If neighboring grid doesn't exist, use interpolated values
@@ -618,7 +609,7 @@ subroutine godfine1(s,ind_grid,ilevel,h)
 #ifdef GRAV
                           ! Gather self-gravitational acceleration
                           do idim=1,ndim
-                             h%gloc(i3,j3,k3,idim)=gridp%f(icell,idim)
+                             h%gloc(i3,j3,k3,idim)=m%f(icell,idim,igrid)
                           end do
 #else
                           ! Gather constant gravitational acceleration
@@ -743,7 +734,7 @@ subroutine godfine1(s,ind_grid,ilevel,h)
         do j1=j1min+jj0,j1max-jj0
            do i1=i1min+ii0,i1max-ii0
               ! Get oct index
-              childp=>h%childloc(i1,j1,k1)%p
+              ichild=h%childloc(i1,j1,k1)
               ! Loop over cells
               do k2=k2min,k2max
                  do j2=j2min,j2max
@@ -757,58 +748,32 @@ subroutine godfine1(s,ind_grid,ilevel,h)
 #if NDIM>2
                        k3=1+2*(k1-1)+k2
 #endif
-                      ! Store old density for MC tracers
-                       childp%mflux(ind_son,1) = max(childp%uold(ind_son,1), r%smallr)
-
-                       ! Store time-integrated mass flux on the two faces along the current direction
-                      fluxL = h%flux(i3   ,j3   ,k3   ,1,idim)
-                      fluxR = h%flux(i3+i0,j3+j0,k3+k0,1,idim)
-                      childp%mflux(ind_son,1+idim)=fluxL
-                      childp%mflux(ind_son,1+ndim+idim)=fluxR
-
-                      ! Store upwind densities for each face (aligned to mflux indices 2..2*ndim+1)
-                      rhoC = h%uloc(i3,j3,k3,1)
-                      rhoL = h%uloc(i3-i0,j3-j0,k3-k0,1)
-                      rhoR = h%uloc(i3+i0,j3+j0,k3+k0,1)
-                      if(fluxL >= 0.d0)then
-                         upwindL = rhoL
-                      else
-                         upwindL = rhoC
-                      endif
-                      if(fluxR >= 0.d0)then
-                         upwindR = rhoC
-                      else
-                         upwindR = rhoR
-                      endif
-                      childp%upwind_rho(ind_son,idim) = max(upwindL, r%smallr)
-                      childp%upwind_rho(ind_son,idim+ndim) = max(upwindR, r%smallr)
-
                        ! Update conservative variables new state vector
                        do ivar=1,5
-                          childp%unew(ind_son,ivar)=childp%unew(ind_son,ivar)+ &
+                          m%unew(ind_son,ivar,ichild)=m%unew(ind_son,ivar,ichild)+ &
                                & (h%flux(i3   ,j3   ,k3   ,ivar,idim) &
                                & -h%flux(i3+i0,j3+j0,k3+k0,ivar,idim))
                        end do
 #if NVAR>5
                        do ivar=6,nvar
-                          childp%unew(ind_son,ivar)=childp%unew(ind_son,ivar)+ &
+                          m%unew(ind_son,ivar,ichild)=m%unew(ind_son,ivar,ichild)+ &
                                & (h%flux(i3   ,j3   ,k3   ,ivar+ie-5,idim) &
                                & -h%flux(i3+i0,j3+j0,k3+k0,ivar+ie-5,idim))
                        end do
 #endif
 #ifdef MHD
 #if NDIM<3
-                       childp%bnew(ind_son,3)=childp%bnew(ind_son,3)+ &
+                       m%bnew(ind_son,3,ichild)=m%bnew(ind_son,3,ichild)+ &
                             & (h%flux(i3   ,j3   ,k3   ,8,idim) &
                             & -h%flux(i3+i0,j3+j0,k3+k0,8,idim))
-                       childp%bnew(ind_son,6)=childp%bnew(ind_son,6)+ &
+                       m%bnew(ind_son,6,ichild)=m%bnew(ind_son,6,ichild)+ &
                             & (h%flux(i3   ,j3   ,k3   ,8,idim) &
                             & -h%flux(i3+i0,j3+j0,k3+k0,8,idim))
 #if NDIM==1
-                       childp%bnew(ind_son,2)=childp%bnew(ind_son,2)+ &
+                       m%bnew(ind_son,2,ichild)=m%bnew(ind_son,2,ichild)+ &
                             & (h%flux(i3   ,j3   ,k3   ,7,idim) &
                             & -h%flux(i3+i0,j3+j0,k3+k0,7,idim))
-                       childp%bnew(ind_son,5)=childp%bnew(ind_son,5)+ &
+                       m%bnew(ind_son,5,ichild)=m%bnew(ind_son,5,ichild)+ &
                             & (h%flux(i3   ,j3   ,k3   ,7,idim) &
                             & -h%flux(i3+i0,j3+j0,k3+k0,7,idim))
 #endif
@@ -836,7 +801,7 @@ subroutine godfine1(s,ind_grid,ilevel,h)
      do j1=j1min+jj0,j1max-jj0
         do i1=i1min+ii0,i1max-ii0
            ! Get oct index
-           childp=>h%childloc(i1,j1,k1)%p
+           ichild=h%childloc(i1,j1,k1)
            ! Loop over cells
            do k2=k2min,k2max
               do j2=j2min,j2max
@@ -855,14 +820,14 @@ subroutine godfine1(s,ind_grid,ilevel,h)
 #else
                     dflux_x=-(h%emfz(i3,j3,k3)-h%emfz(i3,j3+1,k3))
 #endif
-                    childp%bnew(ind_son,1)=childp%bnew(ind_son,1)+dflux_x
+                    m%bnew(ind_son,1,ichild)=m%bnew(ind_son,1,ichild)+dflux_x
 #if NDIM==3
                     dflux_x=( h%emfy(i3+1,j3,k3)-h%emfy(i3+1,j3,k3+1) ) &
                          & -( h%emfz(i3+1,j3,k3)-h%emfz(i3+1,j3+1,k3) )
 #else
                     dflux_x=-(h%emfz(i3+1,j3,k3)-h%emfz(i3+1,j3+1,k3))
 #endif
-                    childp%bnew(ind_son,4)=childp%bnew(ind_son,4)+dflux_x
+                    m%bnew(ind_son,4,ichild)=m%bnew(ind_son,4,ichild)+dflux_x
 
                     ! Update By using constrained transport
 #if NDIM==3
@@ -871,22 +836,22 @@ subroutine godfine1(s,ind_grid,ilevel,h)
 #else
                     dflux_y=(h%emfz(i3,j3,k3)-h%emfz(i3+1,j3,k3))
 #endif
-                    childp%bnew(ind_son,2)=childp%bnew(ind_son,2)+dflux_y
+                    m%bnew(ind_son,2,ichild)=m%bnew(ind_son,2,ichild)+dflux_y
 #if NDIM==3
                     dflux_y=( h%emfz(i3,j3+1,k3)-h%emfz(i3+1,j3+1,k3) ) &
                          & -( h%emfx(i3,j3+1,k3)-h%emfx(i3,j3+1,k3+1) )
 #else
                     dflux_y=(h%emfz(i3,j3+1,k3)-h%emfz(i3+1,j3+1,k3))
 #endif
-                    childp%bnew(ind_son,5)=childp%bnew(ind_son,5)+dflux_y
+                    m%bnew(ind_son,5,ichild)=m%bnew(ind_son,5,ichild)+dflux_y
 #if NDIM==3
                     ! Update Bz using constrained transport
                     dflux_z=( h%emfx(i3,j3,k3)-h%emfx(i3,j3+1,k3) ) &
                          & -( h%emfy(i3,j3,k3)-h%emfy(i3+1,j3,k3) )
-                    childp%bnew(ind_son,3)=childp%bnew(ind_son,3)+dflux_z
+                    m%bnew(ind_son,3,ichild)=m%bnew(ind_son,3,ichild)+dflux_z
                     dflux_z=( h%emfx(i3,j3,k3+1)-h%emfx(i3,j3+1,k3+1) ) &
                          & -( h%emfy(i3,j3,k3+1)-h%emfy(i3+1,j3,k3+1) )
-                    childp%bnew(ind_son,6)=childp%bnew(ind_son,6)+dflux_z
+                    m%bnew(ind_son,6,ichild)=m%bnew(ind_son,6,ichild)+dflux_z
 #endif
                  end do
               end do
@@ -897,7 +862,7 @@ subroutine godfine1(s,ind_grid,ilevel,h)
 #endif
 #endif
 
-  ! If sitting in coarsest level, skip.
+  ! If coarsest level, skip.
   if(ilevel>r%levelmin)then
 
   !--------------------------------------
@@ -937,11 +902,11 @@ subroutine godfine1(s,ind_grid,ilevel,h)
         do j1=jj1min,jj1max
            do i1=ii1min,ii1max
               ! Get oct index
-              childp=>h%childloc(i1,j1,k1)%p
+              ichild=h%childloc(i1,j1,k1)
               ! Check that parent cell is not refined
-              if(.not.associated(childp))then
+              if(ichild==0)then
                  ! Get parent cell index
-                 gridp=>h%gridloc(i1,j1,k1)%p
+                 igrid=h%gridloc(i1,j1,k1)
                  icell=h%cellloc(i1,j1,k1)
                  ! Loop over inner cell left faces
                  do k2=k2min,k2max-k0
@@ -957,25 +922,25 @@ subroutine godfine1(s,ind_grid,ilevel,h)
 #endif
                           ! Conservative update of new state variables
                           do ivar=1,5
-                             gridp%unew(icell,ivar)=gridp%unew(icell,ivar) &
+                             m%unew(icell,ivar,igrid)=m%unew(icell,ivar,igrid) &
                                   & -h%flux(i3,j3,k3,ivar,idim)*oneontwotondim
                           end do
 #if NVAR>5
                           do ivar=6,nvar
-                             gridp%unew(icell,ivar)=gridp%unew(icell,ivar) &
+                             m%unew(icell,ivar,igrid)=m%unew(icell,ivar,igrid) &
                                   & -h%flux(i3,j3,k3,ivar+ie-5,idim)*oneontwotondim
                           end do
 #endif
 #ifdef MHD
 #if NDIM<3
-                          gridp%bnew(icell,3)=gridp%bnew(icell,3) &
+                          m%bnew(icell,3,igrid)=m%bnew(icell,3,igrid) &
                                & -h%flux(i3,j3,k3,8,idim)*oneontwotondim
-                          gridp%bnew(icell,6)=gridp%bnew(icell,6) &
+                          m%bnew(icell,6,igrid)=m%bnew(icell,6,igrid) &
                                & -h%flux(i3,j3,k3,8,idim)*oneontwotondim
 #if NDIM==1
-                          gridp%bnew(icell,2)=gridp%bnew(icell,2) &
+                          m%bnew(icell,2,igrid)=m%bnew(icell,2,igrid) &
                                & -h%flux(i3,j3,k3,7,idim)*oneontwotondim
-                          gridp%bnew(icell,5)=gridp%bnew(icell,5) &
+                          m%bnew(icell,5,igrid)=m%bnew(icell,5,igrid) &
                                & -h%flux(i3,j3,k3,7,idim)*oneontwotondim
 #endif
 #endif
@@ -1004,11 +969,11 @@ subroutine godfine1(s,ind_grid,ilevel,h)
         do j1=jj1min,jj1max
            do i1=ii1min,ii1max
               ! Get oct index
-              childp=>h%childloc(i1,j1,k1)%p
+              ichild=h%childloc(i1,j1,k1)
               ! Check that parent cell is not refined
-              if(.not.associated(childp))then
+              if(ichild==0)then
                  ! Get parent cell index
-                 gridp=>h%gridloc(i1,j1,k1)%p
+                 igrid=h%gridloc(i1,j1,k1)
                  icell=h%cellloc(i1,j1,k1)
                  ! Loop over inner cell right faces
                  do k2=k2min+k0,k2max
@@ -1024,25 +989,25 @@ subroutine godfine1(s,ind_grid,ilevel,h)
 #endif
                           ! Conservative update of new state variables
                           do ivar=1,5
-                             gridp%unew(icell,ivar)=gridp%unew(icell,ivar) &
+                             m%unew(icell,ivar,igrid)=m%unew(icell,ivar,igrid) &
                                   & +h%flux(i3+i0,j3+j0,k3+k0,ivar,idim)*oneontwotondim
                           end do
 #if NVAR>5
                           do ivar=6,nvar
-                             gridp%unew(icell,ivar)=gridp%unew(icell,ivar) &
+                             m%unew(icell,ivar,igrid)=m%unew(icell,ivar,igrid) &
                                   & +h%flux(i3+i0,j3+j0,k3+k0,ivar+ie-5,idim)*oneontwotondim
                           end do
 #endif
 #ifdef MHD
 #if NDIM<3
-                          gridp%bnew(icell,3)=gridp%bnew(icell,3) &
+                          m%bnew(icell,3,igrid)=m%bnew(icell,3,igrid) &
                                & +h%flux(i3+i0,j3+j0,k3+k0,8,idim)*oneontwotondim
-                          gridp%bnew(icell,6)=gridp%bnew(icell,6) &
+                          m%bnew(icell,6,igrid)=m%bnew(icell,6,igrid) &
                                & +h%flux(i3+i0,j3+j0,k3+k0,8,idim)*oneontwotondim
 #if NDIM==1
-                          gridp%bnew(icell,2)=gridp%bnew(icell,2) &
+                          m%bnew(icell,2,igrid)=m%bnew(icell,2,igrid) &
                                & +h%flux(i3+i0,j3+j0,k3+k0,7,idim)*oneontwotondim
-                          gridp%bnew(icell,5)=gridp%bnew(icell,5) &
+                          m%bnew(icell,5,igrid)=m%bnew(icell,5,igrid) &
                                & +h%flux(i3+i0,j3+j0,k3+k0,7,idim)*oneontwotondim
 #endif
 #endif
@@ -1089,9 +1054,9 @@ subroutine godfine1(s,ind_grid,ilevel,h)
            !--------------------------------------
 
            ! Update coarse Bx and By using fine EMFz on X=0 and Y=0 grid edge
-           ok1=associated(h%childloc(i1  ,j1-1,k1)%p); grid1=>h%gridloc(i1  ,j1-1,k1)%p; icell1=h%cellloc(i1  ,j1-1,k1)
-           ok2=associated(h%childloc(i1-1,j1-1,k1)%p); grid2=>h%gridloc(i1-1,j1-1,k1)%p; icell2=h%cellloc(i1-1,j1-1,k1)
-           ok3=associated(h%childloc(i1-1,j1  ,k1)%p); grid3=>h%gridloc(i1-1,j1  ,k1)%p; icell3=h%cellloc(i1-1,j1  ,k1)
+           ok1=(h%childloc(i1  ,j1-1,k1)>0); igrid1=h%gridloc(i1  ,j1-1,k1); icell1=h%cellloc(i1  ,j1-1,k1)
+           ok2=(h%childloc(i1-1,j1-1,k1)>0); igrid2=h%gridloc(i1-1,j1-1,k1); icell2=h%cellloc(i1-1,j1-1,k1)
+           ok3=(h%childloc(i1-1,j1  ,k1)>0); igrid3=h%gridloc(i1-1,j1  ,k1); icell3=h%cellloc(i1-1,j1  ,k1)
            if(.not.ok1 .or. .not.ok3)then
               weight=1.0
               if(ok1 .or. ok2 .or. ok3)weight=0.5
@@ -1100,18 +1065,18 @@ subroutine godfine1(s,ind_grid,ilevel,h)
 #else
               dflux=(h%emfz(i3,j3,k3))*0.5*weight
 #endif
-              if(.not.ok1)grid1%bnew(icell1,5)=grid1%bnew(icell1,5)+dflux
-              if(.not.ok1)grid1%bnew(icell1,1)=grid1%bnew(icell1,1)+dflux
-              if(.not.ok2)grid2%bnew(icell2,4)=grid2%bnew(icell2,4)+dflux
-              if(.not.ok2)grid2%bnew(icell2,5)=grid2%bnew(icell2,5)-dflux
-              if(.not.ok3)grid3%bnew(icell3,2)=grid3%bnew(icell3,2)-dflux
-              if(.not.ok3)grid3%bnew(icell3,4)=grid3%bnew(icell3,4)-dflux
+              if(.not.ok1)m%bnew(icell1,5,igrid1)=m%bnew(icell1,5,igrid1)+dflux
+              if(.not.ok1)m%bnew(icell1,1,igrid1)=m%bnew(icell1,1,igrid1)+dflux
+              if(.not.ok2)m%bnew(icell2,4,igrid2)=m%bnew(icell2,4,igrid2)+dflux
+              if(.not.ok2)m%bnew(icell2,5,igrid2)=m%bnew(icell2,5,igrid2)-dflux
+              if(.not.ok3)m%bnew(icell3,2,igrid3)=m%bnew(icell3,2,igrid3)-dflux
+              if(.not.ok3)m%bnew(icell3,4,igrid3)=m%bnew(icell3,4,igrid3)-dflux
            endif
 
            ! Update coarse Bx and By using fine EMFz on X=0 and Y=1 grid edge
-           ok1=associated(h%childloc(i1-1,j1  ,k1)%p); grid1=>h%gridloc(i1-1,j1  ,k1)%p; icell1=h%cellloc(i1-1,j1  ,k1)
-           ok2=associated(h%childloc(i1-1,j1+1,k1)%p); grid2=>h%gridloc(i1-1,j1+1,k1)%p; icell2=h%cellloc(i1-1,j1+1,k1)
-           ok3=associated(h%childloc(i1  ,j1+1,k1)%p); grid3=>h%gridloc(i1  ,j1+1,k1)%p; icell3=h%cellloc(i1  ,j1+1,k1)
+           ok1=(h%childloc(i1-1,j1  ,k1)>0); igrid1=h%gridloc(i1-1,j1  ,k1); icell1=h%cellloc(i1-1,j1  ,k1)
+           ok2=(h%childloc(i1-1,j1+1,k1)>0); igrid2=h%gridloc(i1-1,j1+1,k1); icell2=h%cellloc(i1-1,j1+1,k1)
+           ok3=(h%childloc(i1  ,j1+1,k1)>0); igrid3=h%gridloc(i1  ,j1+1,k1); icell3=h%cellloc(i1  ,j1+1,k1)
            if(.not.ok1 .or. .not.ok3)then
               weight=1.0
               if(ok1 .or. ok2 .or. ok3)weight=0.5
@@ -1120,18 +1085,18 @@ subroutine godfine1(s,ind_grid,ilevel,h)
 #else
               dflux=(h%emfz(i3,j3+2,k3))*0.5*weight
 #endif
-              if(.not.ok1)grid1%bnew(icell1,4)=grid1%bnew(icell1,4)+dflux
-              if(.not.ok1)grid1%bnew(icell1,5)=grid1%bnew(icell1,5)-dflux
-              if(.not.ok2)grid2%bnew(icell2,2)=grid2%bnew(icell2,2)-dflux
-              if(.not.ok2)grid2%bnew(icell2,4)=grid2%bnew(icell2,4)-dflux
-              if(.not.ok3)grid3%bnew(icell3,1)=grid3%bnew(icell3,1)-dflux
-              if(.not.ok3)grid3%bnew(icell3,2)=grid3%bnew(icell3,2)+dflux
+              if(.not.ok1)m%bnew(icell1,4,igrid1)=m%bnew(icell1,4,igrid1)+dflux
+              if(.not.ok1)m%bnew(icell1,5,igrid1)=m%bnew(icell1,5,igrid1)-dflux
+              if(.not.ok2)m%bnew(icell2,2,igrid2)=m%bnew(icell2,2,igrid2)-dflux
+              if(.not.ok2)m%bnew(icell2,4,igrid2)=m%bnew(icell2,4,igrid2)-dflux
+              if(.not.ok3)m%bnew(icell3,1,igrid3)=m%bnew(icell3,1,igrid3)-dflux
+              if(.not.ok3)m%bnew(icell3,2,igrid3)=m%bnew(icell3,2,igrid3)+dflux
            endif
 
            ! Update coarse Bx and By using fine EMFz on X=1 and Y=1 grid edge
-           ok1=associated(h%childloc(i1  ,j1+1,k1)%p); grid1=>h%gridloc(i1  ,j1+1,k1)%p; icell1=h%cellloc(i1  ,j1+1,k1)
-           ok2=associated(h%childloc(i1+1,j1+1,k1)%p); grid2=>h%gridloc(i1+1,j1+1,k1)%p; icell2=h%cellloc(i1+1,j1+1,k1)
-           ok3=associated(h%childloc(i1+1,j1  ,k1)%p); grid3=>h%gridloc(i1+1,j1  ,k1)%p; icell3=h%cellloc(i1+1,j1  ,k1)
+           ok1=(h%childloc(i1  ,j1+1,k1)>0); igrid1=h%gridloc(i1  ,j1+1,k1); icell1=h%cellloc(i1  ,j1+1,k1)
+           ok2=(h%childloc(i1+1,j1+1,k1)>0); igrid2=h%gridloc(i1+1,j1+1,k1); icell2=h%cellloc(i1+1,j1+1,k1)
+           ok3=(h%childloc(i1+1,j1  ,k1)>0); igrid3=h%gridloc(i1+1,j1  ,k1); icell3=h%cellloc(i1+1,j1  ,k1)
            if(.not.ok1 .or. .not.ok3)then
               weight=1.0
               if(ok1 .or. ok2 .or. ok3)weight=0.5
@@ -1140,18 +1105,18 @@ subroutine godfine1(s,ind_grid,ilevel,h)
 #else
               dflux=(h%emfz(i3+2,j3+2,k3))*0.5*weight
 #endif
-              if(.not.ok1)grid1%bnew(icell1,2)=grid1%bnew(icell1,2)-dflux
-              if(.not.ok1)grid1%bnew(icell1,4)=grid1%bnew(icell1,4)-dflux
-              if(.not.ok2)grid2%bnew(icell2,1)=grid2%bnew(icell2,1)-dflux
-              if(.not.ok2)grid2%bnew(icell2,2)=grid2%bnew(icell2,2)+dflux
-              if(.not.ok3)grid3%bnew(icell3,5)=grid3%bnew(icell3,5)+dflux
-              if(.not.ok3)grid3%bnew(icell3,1)=grid3%bnew(icell3,1)+dflux
+              if(.not.ok1)m%bnew(icell1,2,igrid1)=m%bnew(icell1,2,igrid1)-dflux
+              if(.not.ok1)m%bnew(icell1,4,igrid1)=m%bnew(icell1,4,igrid1)-dflux
+              if(.not.ok2)m%bnew(icell2,1,igrid2)=m%bnew(icell2,1,igrid2)-dflux
+              if(.not.ok2)m%bnew(icell2,2,igrid2)=m%bnew(icell2,2,igrid2)+dflux
+              if(.not.ok3)m%bnew(icell3,5,igrid3)=m%bnew(icell3,5,igrid3)+dflux
+              if(.not.ok3)m%bnew(icell3,1,igrid3)=m%bnew(icell3,1,igrid3)+dflux
            endif
 
            ! Update coarse Bx and By using fine EMFz on X=1 and Y=0 grid edge
-           ok1=associated(h%childloc(i1+1,j1  ,k1)%p); grid1=>h%gridloc(i1+1,j1  ,k1)%p; icell1=h%cellloc(i1+1,j1  ,k1)
-           ok2=associated(h%childloc(i1+1,j1-1,k1)%p); grid2=>h%gridloc(i1+1,j1-1,k1)%p; icell2=h%cellloc(i1+1,j1-1,k1)
-           ok3=associated(h%childloc(i1  ,j1-1,k1)%p); grid3=>h%gridloc(i1  ,j1-1,k1)%p; icell3=h%cellloc(i1  ,j1-1,k1)
+           ok1=(h%childloc(i1+1,j1  ,k1)>0); igrid1=h%gridloc(i1+1,j1  ,k1); icell1=h%cellloc(i1+1,j1  ,k1)
+           ok2=(h%childloc(i1+1,j1-1,k1)>0); igrid2=h%gridloc(i1+1,j1-1,k1); icell2=h%cellloc(i1+1,j1-1,k1)
+           ok3=(h%childloc(i1  ,j1-1,k1)>0); igrid3=h%gridloc(i1  ,j1-1,k1); icell3=h%cellloc(i1  ,j1-1,k1)
            if(.not.ok1 .or. .not.ok3)then
               weight=1.0
               if(ok1 .or. ok2 .or. ok3)weight=0.5
@@ -1160,12 +1125,12 @@ subroutine godfine1(s,ind_grid,ilevel,h)
 #else
               dflux=(h%emfz(i3+2,j3,k3))*0.5*weight
 #endif
-              if(.not.ok1)grid1%bnew(icell1,1)=grid1%bnew(icell1,1)-dflux
-              if(.not.ok1)grid1%bnew(icell1,2)=grid1%bnew(icell1,2)+dflux
-              if(.not.ok2)grid2%bnew(icell2,5)=grid2%bnew(icell2,5)+dflux
-              if(.not.ok2)grid2%bnew(icell2,1)=grid2%bnew(icell2,1)+dflux
-              if(.not.ok3)grid3%bnew(icell3,4)=grid3%bnew(icell3,4)+dflux
-              if(.not.ok3)grid3%bnew(icell3,5)=grid3%bnew(icell3,5)-dflux
+              if(.not.ok1)m%bnew(icell1,1,igrid1)=m%bnew(icell1,1,igrid1)-dflux
+              if(.not.ok1)m%bnew(icell1,2,igrid1)=m%bnew(icell1,2,igrid1)+dflux
+              if(.not.ok2)m%bnew(icell2,5,igrid2)=m%bnew(icell2,5,igrid2)+dflux
+              if(.not.ok2)m%bnew(icell2,1,igrid2)=m%bnew(icell2,1,igrid2)+dflux
+              if(.not.ok3)m%bnew(icell3,4,igrid3)=m%bnew(icell3,4,igrid3)+dflux
+              if(.not.ok3)m%bnew(icell3,5,igrid3)=m%bnew(icell3,5,igrid3)-dflux
            endif
 #if NDIM==3
            !--------------------------------------
@@ -1173,67 +1138,67 @@ subroutine godfine1(s,ind_grid,ilevel,h)
            !--------------------------------------
 
            ! Update coarse By and Bz using fine EMFx on Y=0 and Z=0 grid edge
-           ok1=associated(h%childloc(i1,j1  ,k1-1)%p); grid1=>h%gridloc(i1,j1  ,k1-1)%p; icell1=h%cellloc(i1,j1  ,k1-1)
-           ok2=associated(h%childloc(i1,j1-1,k1-1)%p); grid2=>h%gridloc(i1,j1-1,k1-1)%p; icell2=h%cellloc(i1,j1-1,k1-1)
-           ok3=associated(h%childloc(i1,j1-1,k1  )%p); grid3=>h%gridloc(i1,j1-1,k1  )%p; icell3=h%cellloc(i1,j1-1,k1  )
+           ok1=(h%childloc(i1,j1  ,k1-1)>0); igrid1=h%gridloc(i1,j1  ,k1-1); icell1=h%cellloc(i1,j1  ,k1-1)
+           ok2=(h%childloc(i1,j1-1,k1-1)>0); igrid2=h%gridloc(i1,j1-1,k1-1); icell2=h%cellloc(i1,j1-1,k1-1)
+           ok3=(h%childloc(i1,j1-1,k1  )>0); igrid3=h%gridloc(i1,j1-1,k1  ); icell3=h%cellloc(i1,j1-1,k1  )
            if(.not.ok1 .or. .not.ok3)then
               weight=1.0
               if(ok1 .or. ok2 .or. ok3)weight=0.5
               dflux=(h%emfx(i3,j3,k3)+h%emfx(i3+1,j3,k3))*0.25*weight
-              if(.not.ok1)grid1%bnew(icell1,6)=grid1%bnew(icell1,6)+dflux
-              if(.not.ok1)grid1%bnew(icell1,2)=grid1%bnew(icell1,2)+dflux
-              if(.not.ok2)grid2%bnew(icell2,5)=grid2%bnew(icell2,5)+dflux
-              if(.not.ok2)grid2%bnew(icell2,6)=grid2%bnew(icell2,6)-dflux
-              if(.not.ok3)grid3%bnew(icell3,3)=grid3%bnew(icell3,3)-dflux
-              if(.not.ok3)grid3%bnew(icell3,5)=grid3%bnew(icell3,5)-dflux
+              if(.not.ok1)m%bnew(icell1,6,igrid1)=m%bnew(icell1,6,igrid1)+dflux
+              if(.not.ok1)m%bnew(icell1,2,igrid1)=m%bnew(icell1,2,igrid1)+dflux
+              if(.not.ok2)m%bnew(icell2,5,igrid2)=m%bnew(icell2,5,igrid2)+dflux
+              if(.not.ok2)m%bnew(icell2,6,igrid2)=m%bnew(icell2,6,igrid2)-dflux
+              if(.not.ok3)m%bnew(icell3,3,igrid3)=m%bnew(icell3,3,igrid3)-dflux
+              if(.not.ok3)m%bnew(icell3,5,igrid3)=m%bnew(icell3,5,igrid3)-dflux
            endif
 
            ! Update coarse By and Bz using fine EMFx on Y=0 and Z=1 grid edge
-           ok1=associated(h%childloc(i1,j1-1,k1  )%p); grid1=>h%gridloc(i1,j1-1,k1  )%p; icell1=h%cellloc(i1,j1-1,k1  )
-           ok2=associated(h%childloc(i1,j1-1,k1+1)%p); grid2=>h%gridloc(i1,j1-1,k1+1)%p; icell2=h%cellloc(i1,j1-1,k1+1)
-           ok3=associated(h%childloc(i1,j1  ,k1+1)%p); grid3=>h%gridloc(i1,j1  ,k1+1)%p; icell3=h%cellloc(i1,j1  ,k1+1)
+           ok1=(h%childloc(i1,j1-1,k1  )>0); igrid1=h%gridloc(i1,j1-1,k1  ); icell1=h%cellloc(i1,j1-1,k1  )
+           ok2=(h%childloc(i1,j1-1,k1+1)>0); igrid2=h%gridloc(i1,j1-1,k1+1); icell2=h%cellloc(i1,j1-1,k1+1)
+           ok3=(h%childloc(i1,j1  ,k1+1)>0); igrid3=h%gridloc(i1,j1  ,k1+1); icell3=h%cellloc(i1,j1  ,k1+1)
            if(.not.ok1 .or. .not.ok3)then
               weight=1.0
               if(ok1 .or. ok2 .or. ok3)weight=0.5
               dflux=(h%emfx(i3,j3,k3+2)+h%emfx(i3+1,j3,k3+2))*0.25*weight
-              if(.not.ok1)grid1%bnew(icell1,5)=grid1%bnew(icell1,5)+dflux
-              if(.not.ok1)grid1%bnew(icell1,6)=grid1%bnew(icell1,6)-dflux
-              if(.not.ok2)grid2%bnew(icell2,3)=grid2%bnew(icell2,3)-dflux
-              if(.not.ok2)grid2%bnew(icell2,5)=grid2%bnew(icell2,5)-dflux
-              if(.not.ok3)grid3%bnew(icell3,2)=grid3%bnew(icell3,2)-dflux
-              if(.not.ok3)grid3%bnew(icell3,3)=grid3%bnew(icell3,3)+dflux
+              if(.not.ok1)m%bnew(icell1,5,igrid1)=m%bnew(icell1,5,igrid1)+dflux
+              if(.not.ok1)m%bnew(icell1,6,igrid1)=m%bnew(icell1,6,igrid1)-dflux
+              if(.not.ok2)m%bnew(icell2,3,igrid2)=m%bnew(icell2,3,igrid2)-dflux
+              if(.not.ok2)m%bnew(icell2,5,igrid2)=m%bnew(icell2,5,igrid2)-dflux
+              if(.not.ok3)m%bnew(icell3,2,igrid3)=m%bnew(icell3,2,igrid3)-dflux
+              if(.not.ok3)m%bnew(icell3,3,igrid3)=m%bnew(icell3,3,igrid3)+dflux
            endif
 
            ! Update coarse By and Bz using fine EMFx on Y=1 and Z=1 grid edge
-           ok1=associated(h%childloc(i1,j1  ,k1+1)%p); grid1=>h%gridloc(i1,j1  ,k1+1)%p; icell1=h%cellloc(i1,j1  ,k1+1)
-           ok2=associated(h%childloc(i1,j1+1,k1+1)%p); grid2=>h%gridloc(i1,j1+1,k1+1)%p; icell2=h%cellloc(i1,j1+1,k1+1)
-           ok3=associated(h%childloc(i1,j1+1,k1  )%p); grid3=>h%gridloc(i1,j1+1,k1  )%p; icell3=h%cellloc(i1,j1+1,k1  )
+           ok1=(h%childloc(i1,j1  ,k1+1)>0); igrid1=h%gridloc(i1,j1  ,k1+1); icell1=h%cellloc(i1,j1  ,k1+1)
+           ok2=(h%childloc(i1,j1+1,k1+1)>0); igrid2=h%gridloc(i1,j1+1,k1+1); icell2=h%cellloc(i1,j1+1,k1+1)
+           ok3=(h%childloc(i1,j1+1,k1  )>0); igrid3=h%gridloc(i1,j1+1,k1  ); icell3=h%cellloc(i1,j1+1,k1  )
            if(.not.ok1 .or. .not.ok3)then
               weight=1.0
               if(ok1 .or. ok2 .or. ok3)weight=0.5
               dflux=(h%emfx(i3,j3+2,k3+2)+h%emfx(i3+1,j3+2,k3+2))*0.25*weight
-              if(.not.ok1)grid1%bnew(icell1,3)=grid1%bnew(icell1,3)-dflux
-              if(.not.ok1)grid1%bnew(icell1,5)=grid1%bnew(icell1,5)-dflux
-              if(.not.ok2)grid2%bnew(icell2,2)=grid2%bnew(icell2,2)-dflux
-              if(.not.ok2)grid2%bnew(icell2,3)=grid2%bnew(icell2,3)+dflux
-              if(.not.ok3)grid3%bnew(icell3,6)=grid3%bnew(icell3,6)+dflux
-              if(.not.ok3)grid3%bnew(icell3,2)=grid3%bnew(icell3,2)+dflux
+              if(.not.ok1)m%bnew(icell1,3,igrid1)=m%bnew(icell1,3,igrid1)-dflux
+              if(.not.ok1)m%bnew(icell1,5,igrid1)=m%bnew(icell1,5,igrid1)-dflux
+              if(.not.ok2)m%bnew(icell2,2,igrid2)=m%bnew(icell2,2,igrid2)-dflux
+              if(.not.ok2)m%bnew(icell2,3,igrid2)=m%bnew(icell2,3,igrid2)+dflux
+              if(.not.ok3)m%bnew(icell3,6,igrid3)=m%bnew(icell3,6,igrid3)+dflux
+              if(.not.ok3)m%bnew(icell3,2,igrid3)=m%bnew(icell3,2,igrid3)+dflux
            endif
 
            ! Update coarse By and Bz using fine EMFx on Y=1 and Z=0 grid edge
-           ok1=associated(h%childloc(i1,j1+1,k1  )%p); grid1=>h%gridloc(i1,j1+1,k1  )%p; icell1=h%cellloc(i1,j1+1,k1  )
-           ok2=associated(h%childloc(i1,j1+1,k1-1)%p); grid2=>h%gridloc(i1,j1+1,k1-1)%p; icell2=h%cellloc(i1,j1+1,k1-1)
-           ok3=associated(h%childloc(i1,j1  ,k1-1)%p); grid3=>h%gridloc(i1,j1  ,k1-1)%p; icell3=h%cellloc(i1,j1  ,k1-1)
+           ok1=(h%childloc(i1,j1+1,k1  )>0); igrid1=h%gridloc(i1,j1+1,k1  ); icell1=h%cellloc(i1,j1+1,k1  )
+           ok2=(h%childloc(i1,j1+1,k1-1)>0); igrid2=h%gridloc(i1,j1+1,k1-1); icell2=h%cellloc(i1,j1+1,k1-1)
+           ok3=(h%childloc(i1,j1  ,k1-1)>0); igrid3=h%gridloc(i1,j1  ,k1-1); icell3=h%cellloc(i1,j1  ,k1-1)
            if(.not.ok1 .or. .not.ok3)then
               weight=1.0
               if(ok1 .or. ok2 .or. ok3)weight=0.5
               dflux=(h%emfx(i3,j3+2,k3)+h%emfx(i3+1,j3+2,k3))*0.25*weight
-              if(.not.ok1)grid1%bnew(icell1,2)=grid1%bnew(icell1,2)-dflux
-              if(.not.ok1)grid1%bnew(icell1,3)=grid1%bnew(icell1,3)+dflux
-              if(.not.ok2)grid2%bnew(icell2,6)=grid2%bnew(icell2,6)+dflux
-              if(.not.ok2)grid2%bnew(icell2,2)=grid2%bnew(icell2,2)+dflux
-              if(.not.ok3)grid3%bnew(icell3,5)=grid3%bnew(icell3,5)+dflux
-              if(.not.ok3)grid3%bnew(icell3,6)=grid3%bnew(icell3,6)-dflux
+              if(.not.ok1)m%bnew(icell1,2,igrid1)=m%bnew(icell1,2,igrid1)-dflux
+              if(.not.ok1)m%bnew(icell1,3,igrid1)=m%bnew(icell1,3,igrid1)+dflux
+              if(.not.ok2)m%bnew(icell2,6,igrid2)=m%bnew(icell2,6,igrid2)+dflux
+              if(.not.ok2)m%bnew(icell2,2,igrid2)=m%bnew(icell2,2,igrid2)+dflux
+              if(.not.ok3)m%bnew(icell3,5,igrid3)=m%bnew(icell3,5,igrid3)+dflux
+              if(.not.ok3)m%bnew(icell3,6,igrid3)=m%bnew(icell3,6,igrid3)-dflux
            endif
 
            !--------------------------------------
@@ -1241,68 +1206,68 @@ subroutine godfine1(s,ind_grid,ilevel,h)
            !--------------------------------------
 
            ! Update coarse Bx and Bz using fine EMFy on X=0 and Z=0 grid edge
-           ok1=associated(h%childloc(i1  ,j1,k1-1)%p); grid1=>h%gridloc(i1  ,j1,k1-1)%p; icell1=h%cellloc(i1  ,j1,k1-1)
-           ok2=associated(h%childloc(i1-1,j1,k1-1)%p); grid2=>h%gridloc(i1-1,j1,k1-1)%p; icell2=h%cellloc(i1-1,j1,k1-1)
-           ok3=associated(h%childloc(i1-1,j1,k1  )%p); grid3=>h%gridloc(i1-1,j1,k1  )%p; icell3=h%cellloc(i1-1,j1,k1  )
+           ok1=(h%childloc(i1  ,j1,k1-1)>0); igrid1=h%gridloc(i1  ,j1,k1-1); icell1=h%cellloc(i1  ,j1,k1-1)
+           ok2=(h%childloc(i1-1,j1,k1-1)>0); igrid2=h%gridloc(i1-1,j1,k1-1); icell2=h%cellloc(i1-1,j1,k1-1)
+           ok3=(h%childloc(i1-1,j1,k1  )>0); igrid3=h%gridloc(i1-1,j1,k1  ); icell3=h%cellloc(i1-1,j1,k1  )
 
            if(.not.ok1 .or. .not.ok3)then
               weight=1.0
               if(ok1 .or. ok2 .or. ok3)weight=0.5
               dflux=(h%emfy(i3,j3,k3)+h%emfy(i3,j3+1,k3))*0.25*weight
-              if(.not.ok1)grid1%bnew(icell1,6)=grid1%bnew(icell1,6)-dflux
-              if(.not.ok1)grid1%bnew(icell1,1)=grid1%bnew(icell1,1)-dflux
-              if(.not.ok2)grid2%bnew(icell2,4)=grid2%bnew(icell2,4)-dflux
-              if(.not.ok2)grid2%bnew(icell2,6)=grid2%bnew(icell2,6)+dflux
-              if(.not.ok3)grid3%bnew(icell3,3)=grid3%bnew(icell3,3)+dflux
-              if(.not.ok3)grid3%bnew(icell3,4)=grid3%bnew(icell3,4)+dflux
+              if(.not.ok1)m%bnew(icell1,6,igrid1)=m%bnew(icell1,6,igrid1)-dflux
+              if(.not.ok1)m%bnew(icell1,1,igrid1)=m%bnew(icell1,1,igrid1)-dflux
+              if(.not.ok2)m%bnew(icell2,4,igrid2)=m%bnew(icell2,4,igrid2)-dflux
+              if(.not.ok2)m%bnew(icell2,6,igrid2)=m%bnew(icell2,6,igrid2)+dflux
+              if(.not.ok3)m%bnew(icell3,3,igrid3)=m%bnew(icell3,3,igrid3)+dflux
+              if(.not.ok3)m%bnew(icell3,4,igrid3)=m%bnew(icell3,4,igrid3)+dflux
            endif
 
            ! Update coarse Bx and Bz using fine EMFy on X=0 and Z=1 grid edge
-           ok1=associated(h%childloc(i1-1,j1,k1  )%p); grid1=>h%gridloc(i1-1,j1,k1  )%p; icell1=h%cellloc(i1-1,j1,k1  )
-           ok2=associated(h%childloc(i1-1,j1,k1+1)%p); grid2=>h%gridloc(i1-1,j1,k1+1)%p; icell2=h%cellloc(i1-1,j1,k1+1)
-           ok3=associated(h%childloc(i1  ,j1,k1+1)%p); grid3=>h%gridloc(i1  ,j1,k1+1)%p; icell3=h%cellloc(i1  ,j1,k1+1)
+           ok1=(h%childloc(i1-1,j1,k1  )>0); igrid1=h%gridloc(i1-1,j1,k1  ); icell1=h%cellloc(i1-1,j1,k1  )
+           ok2=(h%childloc(i1-1,j1,k1+1)>0); igrid2=h%gridloc(i1-1,j1,k1+1); icell2=h%cellloc(i1-1,j1,k1+1)
+           ok3=(h%childloc(i1  ,j1,k1+1)>0); igrid3=h%gridloc(i1  ,j1,k1+1); icell3=h%cellloc(i1  ,j1,k1+1)
            if(.not.ok1 .or. .not.ok3)then
               weight=1.0
               if(ok1 .or. ok2 .or. ok3)weight=0.5
               dflux=(h%emfy(i3,j3,k3+2)+h%emfy(i3,j3+1,k3+2))*0.25*weight
-              if(.not.ok1)grid1%bnew(icell1,4)=grid1%bnew(icell1,4)-dflux
-              if(.not.ok1)grid1%bnew(icell1,6)=grid1%bnew(icell1,6)+dflux
-              if(.not.ok2)grid2%bnew(icell2,3)=grid2%bnew(icell2,3)+dflux
-              if(.not.ok2)grid2%bnew(icell2,4)=grid2%bnew(icell2,4)+dflux
-              if(.not.ok3)grid3%bnew(icell3,1)=grid3%bnew(icell3,1)+dflux
-              if(.not.ok3)grid3%bnew(icell3,3)=grid3%bnew(icell3,3)-dflux
+              if(.not.ok1)m%bnew(icell1,4,igrid1)=m%bnew(icell1,4,igrid1)-dflux
+              if(.not.ok1)m%bnew(icell1,6,igrid1)=m%bnew(icell1,6,igrid1)+dflux
+              if(.not.ok2)m%bnew(icell2,3,igrid2)=m%bnew(icell2,3,igrid2)+dflux
+              if(.not.ok2)m%bnew(icell2,4,igrid2)=m%bnew(icell2,4,igrid2)+dflux
+              if(.not.ok3)m%bnew(icell3,1,igrid3)=m%bnew(icell3,1,igrid3)+dflux
+              if(.not.ok3)m%bnew(icell3,3,igrid3)=m%bnew(icell3,3,igrid3)-dflux
            endif
 
            ! Update coarse Bx and Bz using fine EMFy on X=1 and Z=1 grid edge
-           ok1=associated(h%childloc(i1  ,j1,k1+1)%p); grid1=>h%gridloc(i1  ,j1,k1+1)%p; icell1=h%cellloc(i1  ,j1,k1+1)
-           ok2=associated(h%childloc(i1+1,j1,k1+1)%p); grid2=>h%gridloc(i1+1,j1,k1+1)%p; icell2=h%cellloc(i1+1,j1,k1+1)
-           ok3=associated(h%childloc(i1+1,j1,k1  )%p); grid3=>h%gridloc(i1+1,j1,k1  )%p; icell3=h%cellloc(i1+1,j1,k1  )
+           ok1=(h%childloc(i1  ,j1,k1+1)>0); igrid1=h%gridloc(i1  ,j1,k1+1); icell1=h%cellloc(i1  ,j1,k1+1)
+           ok2=(h%childloc(i1+1,j1,k1+1)>0); igrid2=h%gridloc(i1+1,j1,k1+1); icell2=h%cellloc(i1+1,j1,k1+1)
+           ok3=(h%childloc(i1+1,j1,k1  )>0); igrid3=h%gridloc(i1+1,j1,k1  ); icell3=h%cellloc(i1+1,j1,k1  )
            if(.not.ok1 .or. .not.ok3)then
               weight=1.0
               if(ok1 .or. ok2 .or. ok3)weight=0.5
               dflux=(h%emfy(i3+2,j3,k3+2)+h%emfy(i3+2,j3+1,k3+2))*0.25*weight
-              if(.not.ok1)grid1%bnew(icell1,3)=grid1%bnew(icell1,3)+dflux
-              if(.not.ok1)grid1%bnew(icell1,4)=grid1%bnew(icell1,4)+dflux
-              if(.not.ok2)grid2%bnew(icell2,1)=grid2%bnew(icell2,1)+dflux
-              if(.not.ok2)grid2%bnew(icell2,3)=grid2%bnew(icell2,3)-dflux
-              if(.not.ok3)grid3%bnew(icell3,6)=grid3%bnew(icell3,6)-dflux
-              if(.not.ok3)grid3%bnew(icell3,1)=grid3%bnew(icell3,1)-dflux
+              if(.not.ok1)m%bnew(icell1,3,igrid1)=m%bnew(icell1,3,igrid1)+dflux
+              if(.not.ok1)m%bnew(icell1,4,igrid1)=m%bnew(icell1,4,igrid1)+dflux
+              if(.not.ok2)m%bnew(icell2,1,igrid2)=m%bnew(icell2,1,igrid2)+dflux
+              if(.not.ok2)m%bnew(icell2,3,igrid2)=m%bnew(icell2,3,igrid2)-dflux
+              if(.not.ok3)m%bnew(icell3,6,igrid3)=m%bnew(icell3,6,igrid3)-dflux
+              if(.not.ok3)m%bnew(icell3,1,igrid3)=m%bnew(icell3,1,igrid3)-dflux
            endif
 
            ! Update coarse Bx and Bz using fine EMFy on X=1 and Z=0 grid edge
-           ok1=associated(h%childloc(i1+1,j1,k1  )%p); grid1=>h%gridloc(i1+1,j1,k1  )%p; icell1=h%cellloc(i1+1,j1,k1  )
-           ok2=associated(h%childloc(i1+1,j1,k1-1)%p); grid2=>h%gridloc(i1+1,j1,k1-1)%p; icell2=h%cellloc(i1+1,j1,k1-1)
-           ok3=associated(h%childloc(i1  ,j1,k1-1)%p); grid3=>h%gridloc(i1  ,j1,k1-1)%p; icell3=h%cellloc(i1  ,j1,k1-1)
+           ok1=(h%childloc(i1+1,j1,k1  )>0); igrid1=h%gridloc(i1+1,j1,k1  ); icell1=h%cellloc(i1+1,j1,k1  )
+           ok2=(h%childloc(i1+1,j1,k1-1)>0); igrid2=h%gridloc(i1+1,j1,k1-1); icell2=h%cellloc(i1+1,j1,k1-1)
+           ok3=(h%childloc(i1  ,j1,k1-1)>0); igrid3=h%gridloc(i1  ,j1,k1-1); icell3=h%cellloc(i1  ,j1,k1-1)
            if(.not.ok1 .or. .not.ok3)then
               weight=1.0
               if(ok1 .or. ok2 .or. ok3)weight=0.5
               dflux=(h%emfy(i3+2,j3,k3)+h%emfy(i3+2,j3+1,k3))*0.25*weight
-              if(.not.ok1)grid1%bnew(icell1,1)=grid1%bnew(icell1,1)+dflux
-              if(.not.ok1)grid1%bnew(icell1,3)=grid1%bnew(icell1,3)-dflux
-              if(.not.ok2)grid2%bnew(icell2,6)=grid2%bnew(icell2,6)-dflux
-              if(.not.ok2)grid2%bnew(icell2,1)=grid2%bnew(icell2,1)-dflux
-              if(.not.ok3)grid3%bnew(icell3,4)=grid3%bnew(icell3,4)-dflux
-              if(.not.ok3)grid3%bnew(icell3,6)=grid3%bnew(icell3,6)+dflux
+              if(.not.ok1)m%bnew(icell1,1,igrid1)=m%bnew(icell1,1,igrid1)+dflux
+              if(.not.ok1)m%bnew(icell1,3,igrid1)=m%bnew(icell1,3,igrid1)-dflux
+              if(.not.ok2)m%bnew(icell2,6,igrid2)=m%bnew(icell2,6,igrid2)-dflux
+              if(.not.ok2)m%bnew(icell2,1,igrid2)=m%bnew(icell2,1,igrid2)-dflux
+              if(.not.ok3)m%bnew(icell3,4,igrid3)=m%bnew(icell3,4,igrid3)-dflux
+              if(.not.ok3)m%bnew(icell3,6,igrid3)=m%bnew(icell3,6,igrid3)+dflux
            endif
 #endif
         end do
@@ -1320,21 +1285,21 @@ subroutine godfine1(s,ind_grid,ilevel,h)
      do j1=j1min,j1max
         do i1=i1min,i1max     
            ! Get oct index
-           childp=>h%childloc(i1,j1,k1)%p
+           ichild=h%childloc(i1,j1,k1)
            ! Check that parent cell is not refined
-           if(associated(childp))then
-              call unlock_cache(s,childp)
+           if(ichild>0)then
+              call unlock_cache(m,ichild)
            else
               ! Get parent cell index
-              gridp=>h%gridloc(i1,j1,k1)%p
-              call unlock_cache(s,gridp)
+              igrid=h%gridloc(i1,j1,k1)
+              call unlock_cache(m,igrid)
               ! Get neighbouring parent oct index
               do inbor=1,twondim
-                 gridp=>h%nborloc(i1,j1,k1,inbor)%p
-                 call unlock_cache(s,gridp)
+                 igrid=h%nborloc(i1,j1,k1,inbor)
+                 call unlock_cache(m,igrid)
 #ifdef MHD
-                 gridp=>h%nborsonloc(i1,j1,k1,inbor)%p
-                 call unlock_cache(s,gridp)
+                 igrid=h%nborsonloc(i1,j1,k1,inbor)
+                 call unlock_cache(m,igrid)
 #endif
               end do
            endif
@@ -1351,29 +1316,33 @@ end subroutine godfine1
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine init_flush_godunov(grid,hash_key)
-  use amr_parameters, only: ndim,twotondim
+subroutine init_flush_godunov(mesh,igrid,hash_key)
+  use amr_parameters, only: ndim, twotondim
   use hydro_parameters, only: nvar
-  use amr_commons, only: oct
-  type(oct)::grid
+  use amr_commons, only: mesh_t
+  type(mesh_t)::mesh
+  integer::igrid
   integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind,ivar
 
-  grid%lev=int(hash_key(0),kind=4)
-  grid%ckey(1:ndim)=int(hash_key(1:ndim),kind=4)
+  mesh%grid(igrid)%lev=int(hash_key(0),kind=4)
+  mesh%grid(igrid)%ckey(1:ndim)=int(hash_key(1:ndim),kind=4)
+
 #ifdef HYDRO
   do ivar=1,nvar
      do ind=1,twotondim
-        grid%unew(ind,ivar)=0.0d0
+        mesh%unew(ind,ivar,igrid)=0.0d0
      enddo
   enddo
-  grid%mflux=0.0d0
-  grid%upwind_rho=0.0d0
 #endif
 
 #ifdef MHD
-  grid%bnew=0.0d0
+  do ivar=1,6
+     do ind=1,twotondim
+        mesh%bnew(ind,ivar,igrid)=0.0d0
+     end do
+  end do
 #endif
 
 end subroutine init_flush_godunov
@@ -1381,12 +1350,13 @@ end subroutine init_flush_godunov
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine pack_flush_godunov(grid,msg_size,msg_array)
+subroutine pack_flush_godunov(mesh,igrid,msg_size,msg_array)
   use amr_parameters, only: twotondim
   use hydro_parameters, only: nvar
-  use amr_commons, only: oct
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_large_realdp
-  type(oct)::grid
+  type(mesh_t)::mesh
+  integer::igrid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
 
@@ -1396,17 +1366,17 @@ subroutine pack_flush_godunov(grid,msg_size,msg_array)
 #ifdef HYDRO
   do ivar=1,nvar
      do ind=1,twotondim
-        msg%realdp_hydro(ind,ivar)=grid%unew(ind,ivar)
+        msg%realdp_hydro(ind,ivar)=mesh%unew(ind,ivar,igrid)
      end do
   end do
 #endif
 
-#ifdef HYDRO
-  msg%realdp_mflux=grid%mflux
-#endif
-
 #ifdef MHD
-  msg%realdp_mhd=grid%bnew
+  do ivar=1,6
+     do ind=1,twotondim
+        msg%realdp_mhd(ind,ivar)=mesh%bnew(ind,ivar,igrid)
+     end do
+  end do
 #endif
 
   msg_array=transfer(msg,msg_array)
@@ -1416,12 +1386,13 @@ end subroutine pack_flush_godunov
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine unpack_flush_godunov(grid,msg_size,msg_array,hash_key)
-  use amr_parameters, only: ndim,twotondim
+subroutine unpack_flush_godunov(mesh,igrid,msg_size,msg_array,hash_key)
+  use amr_parameters, only: ndim, twotondim
   use hydro_parameters, only: nvar
-  use amr_commons, only: oct
+  use amr_commons, only: mesh_t
   use cache_commons, only: msg_large_realdp
-  type(oct)::grid
+  type(mesh_t)::mesh
+  integer::igrid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
   integer(kind=8),dimension(0:ndim)::hash_key
@@ -1429,24 +1400,24 @@ subroutine unpack_flush_godunov(grid,msg_size,msg_array,hash_key)
   integer::ind,ivar
   type(msg_large_realdp)::msg
 
-  grid%lev=int(hash_key(0),kind=4)
-  grid%ckey(1:ndim)=int(hash_key(1:ndim),kind=4)
+  mesh%grid(igrid)%lev=int(hash_key(0),kind=4)
+  mesh%grid(igrid)%ckey(1:ndim)=int(hash_key(1:ndim),kind=4)
   msg=transfer(msg_array,msg)
 
 #ifdef HYDRO
   do ivar=1,nvar
      do ind=1,twotondim
-        grid%unew(ind,ivar)=grid%unew(ind,ivar)+msg%realdp_hydro(ind,ivar)
+        mesh%unew(ind,ivar,igrid)=mesh%unew(ind,ivar,igrid)+msg%realdp_hydro(ind,ivar)
      end do
   end do
 #endif
 
-#ifdef HYDRO
-  grid%mflux=grid%mflux+msg%realdp_mflux
-#endif
-
 #ifdef MHD
-  grid%bnew=grid%bnew+msg%realdp_mhd
+  do ivar=1,6
+     do ind=1,twotondim
+        mesh%bnew(ind,ivar,igrid)=mesh%bnew(ind,ivar,igrid)+msg%realdp_mhd(ind,ivar)
+     end do
+  end do
 #endif
 
 end subroutine unpack_flush_godunov
