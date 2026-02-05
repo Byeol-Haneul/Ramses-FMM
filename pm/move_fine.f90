@@ -3204,8 +3204,8 @@ subroutine trace_gas_part_trivial(s,p,ilevel,action_part)
 end subroutine trace_gas_part_trivial
 
 subroutine mc_trace_gas_part(s,p,ilevel,action_part)
-  ! Classical Monte Carlo tracer (scheme 0)
-  use amr_parameters, only: ndim, twotondim
+  ! Classical Monte Carlo tracer (scheme 0) - matches move_fine_imc.f90 logic
+  use amr_parameters, only: ndim
   use pm_parameters
   use pm_commons, only: part_t
   use ramses_commons, only: ramses_t
@@ -3218,17 +3218,19 @@ subroutine mc_trace_gas_part(s,p,ilevel,action_part)
   type(part_t)::p
   integer::ilevel
   integer::action_part
-  real(kind=8),dimension(1:ndim)::x,exit_prob
-  integer,dimension(1:ndim)::il,ir
-  integer,dimension(1:ndim,1:twotondim)::ckey
+  real(kind=8),dimension(1:ndim)::x,vel
+  integer,dimension(1:ndim)::icell_idx
   integer(kind=8),dimension(0:ndim)::hash_nbor
-  real(kind=8)::dx_loc,u_rand,rho_cell,mflux_val,pr,pl
+  real(kind=8),dimension(1:2*ndim)::prob_face
+  real(kind=8)::out_sum,scale,stay_prob,u,cum
+  integer::ipart,idim,iface,selected,icell
+  real(kind=8)::rho_cell,denom,dx_loc
   type(msg_hydro_mflux)::dummy_hydro_mflux
   type(RngStream),external::RngStream_CreateStream
   real(kind=8),external::RngStream_RandUni
   integer(kind=8)::stream_skip
   external :: RngStream_SetPackageSeed, RngStream_AdvanceState
-  integer :: ipart,idim,ind,icell,igrid,direction
+  integer :: igrid
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
   if(p%static)return
@@ -3254,105 +3256,73 @@ subroutine mc_trace_gas_part(s,p,ilevel,action_part)
   call open_cache(mdl, m, pack_size=storage_size(dummy_hydro_mflux)/32, &
        pack=pack_fetch_kick_trac, unpack=unpack_fetch_kick_trac)
 
-  ! #region agent log - Hypothesis A,B,C,D,E: Entry logging
-  if(g%myid==0 .and. action_part==action_kick_drift)then
-     open(unit=999,file='/Users/moseley/ramses-development/.cursor/debug.log',position='append',status='unknown')
-     write(999,'(A,I6,A,I8,A,I8,A)') '{"hypothesisId":"entry","location":"mc_trace_gas_part","message":"routine_entry",&
-          &"data":{"ilevel":',ilevel,',"npart":',p%tailp(ilevel)-p%headp(ilevel)+1,',"action":',action_part,'}}'
-     close(999)
-  endif
-  ! #endregion
-
   do ipart=p%headp(ilevel),p%tailp(ilevel)
      do idim=1,ndim
         x(idim)=(p%xp(ipart,idim)+m%skip(idim))/dx_loc
      end do
      call wrap_cell_coords(s,x,ilevel+1)
 
-     ! Find current cell
      do idim=1,ndim
-        il(idim) = int(x(idim))
-        ir(idim) = il(idim)
-     end do
+        icell_idx(idim)=int(x(idim))
+        if(r%periodic(idim))then
+           if(icell_idx(idim)< m%box_ckey_min(idim,ilevel+1))icell_idx(idim)=m%box_ckey_max(idim,ilevel+1)-1
+           if(icell_idx(idim)>=m%box_ckey_max(idim,ilevel+1))icell_idx(idim)=m%box_ckey_min(idim,ilevel+1)
+        endif
+     enddo
 
      hash_nbor(0)=ilevel+1
-     hash_nbor(1:ndim)=il(1:ndim)
+     hash_nbor(1:ndim)=icell_idx(1:ndim)
      call get_parent_cell(s,hash_nbor,igrid,icell,flush_cache=.false.,fetch_cache=.true.)
-
-     ! Skip particle if grid not found
-     if(igrid<=0)then
-        ! #region agent log - Hypothesis C: Grid not found
-        if(g%myid==0 .and. ipart<=p%headp(ilevel)+5)then
-           open(unit=999,file='/Users/moseley/ramses-development/.cursor/debug.log',position='append',status='unknown')
-           write(999,'(A,I8,A,I6,A,E12.5,A,E12.5,A,E12.5,A)') '{"hypothesisId":"C","location":"mc_trace_gas_part",&
-                &"message":"grid_not_found","data":{"ipart":',ipart,',"igrid":',igrid,',"x1":',x(1),',"x2":',x(2),',"x3":',x(3),'}}'
-           close(999)
-        endif
-        ! #endregion
-        p%levelp(ipart)=ilevel
-        cycle
-     endif
-
-     exit_prob(1:ndim)=0.d0
 #ifdef HYDRO
-     rho_cell = max(m%mflux(icell,1,igrid), r%smallr)
+     if(igrid<=0)cycle
 
-     ! #region agent log - Hypothesis B: Check mflux values
-     if(g%myid==0 .and. ipart<=p%headp(ilevel)+5)then
-        if(rho_cell /= rho_cell .or. abs(rho_cell) > 1.0d30)then
-           open(unit=999,file='/Users/moseley/ramses-development/.cursor/debug.log',position='append',status='unknown')
-           write(999,'(A,I8,A,I6,A,I6,A,E12.5,A)') '{"hypothesisId":"B","location":"mc_trace_gas_part",&
-                &"message":"invalid_rho","data":{"ipart":',ipart,',"igrid":',igrid,',"icell":',icell,',"rho_cell":',rho_cell,'}}'
-           close(999)
-        endif
-     endif
-     ! #endregion
+     rho_cell=max(m%mflux(icell,1,igrid),r%smallr)
+     denom=max(rho_cell,r%smallr)
+     vel(1:ndim)=m%uold(icell,2:ndim+1,igrid)/max(m%uold(icell,1,igrid),r%smallr)
 
-     ! Compute exit probabilities from mflux
+     prob_face=0.d0
      do idim=1,ndim
-        mflux_val = m%mflux(icell,1+idim,igrid)  ! left face flux
-        pl = max(-mflux_val, 0.d0) / rho_cell
-        mflux_val = m%mflux(icell,1+ndim+idim,igrid)  ! right face flux
-        pr = max(mflux_val, 0.d0) / rho_cell
-        exit_prob(idim) = pr - pl  ! Net exit probability
-
-        ! #region agent log - Hypothesis B: Check exit_prob for NaN/Inf
-        if(g%myid==0 .and. ipart<=p%headp(ilevel)+3)then
-           if(exit_prob(idim) /= exit_prob(idim) .or. abs(exit_prob(idim)) > 1.0d10)then
-              open(unit=999,file='/Users/moseley/ramses-development/.cursor/debug.log',position='append',status='unknown')
-              write(999,'(A,I8,A,I2,A,E12.5,A,E12.5,A,E12.5,A)') '{"hypothesisId":"B","location":"mc_trace_gas_part",&
-                   &"message":"invalid_exit_prob","data":{"ipart":',ipart,',"idim":',idim,',"exit_prob":',exit_prob(idim),&
-                   &',"pl":',pl,',"pr":',pr,'}}'
-              close(999)
-           endif
-        endif
-        ! #endregion
+        prob_face(2*idim-1)=max(-m%mflux(icell,1+idim,igrid),0.d0)/denom
+        prob_face(2*idim  )=max( m%mflux(icell,1+idim+ndim,igrid),0.d0)/denom
      end do
+#else
+     if(igrid<=0)cycle
+     prob_face=0.d0
+     vel=0.d0
+     denom=1.d0
 #endif
 
-     p%levelp(ipart)=ilevel
+     out_sum=0.d0
+     do iface=1,2*ndim
+        if(prob_face(iface)>0.d0)out_sum=out_sum+prob_face(iface)
+     end do
 
-     ! Sample movement direction using MC
-     do idim=1,ndim
-        u_rand = RngStream_RandUni(tracer_rng)
-        if(exit_prob(idim) > 0.d0 .and. u_rand < exit_prob(idim))then
-           p%xp(ipart,idim) = p%xp(ipart,idim) + dx_loc
-        elseif(exit_prob(idim) < 0.d0 .and. u_rand < abs(exit_prob(idim)))then
-           p%xp(ipart,idim) = p%xp(ipart,idim) - dx_loc
+     if(out_sum>1.d0)then
+        scale=1.d0/out_sum
+        prob_face=prob_face*scale
+        out_sum=1.d0
+     end if
+
+     stay_prob=max(0.d0,1.d0-out_sum)
+
+     selected=0
+     u=RngStream_RandUni(tracer_rng)
+     cum=0.d0
+     do iface=1,2*ndim
+        cum=cum+prob_face(iface)
+        if(u<cum)then
+           selected=iface
+           exit
         endif
      end do
 
-     ! #region agent log - Hypothesis A: Check particle position after movement
-     if(g%myid==0 .and. ipart<=p%headp(ilevel)+3)then
-        if(p%xp(ipart,1) /= p%xp(ipart,1) .or. abs(p%xp(ipart,1)) > 1.0d10)then
-           open(unit=999,file='/Users/moseley/ramses-development/.cursor/debug.log',position='append',status='unknown')
-           write(999,'(A,I8,A,E12.5,A,E12.5,A,E12.5,A)') '{"hypothesisId":"A","location":"mc_trace_gas_part",&
-                &"message":"invalid_pos_after_move","data":{"ipart":',ipart,',"x":',p%xp(ipart,1),&
-                &',"y":',p%xp(ipart,2),',"z":',p%xp(ipart,3),'}}'
-           close(999)
-        endif
+     p%vp(ipart,1:ndim)=vel(1:ndim)
+     p%levelp(ipart)=ilevel
+
+     if(selected>0)then
+        idim=(selected+1)/2
+        p%xp(ipart,idim)=p%xp(ipart,idim)+(-1)**selected*dx_loc
      endif
-     ! #endregion
   end do
 
   call close_cache(mdl)
@@ -3365,30 +3335,8 @@ subroutine mc_trace_gas_part(s,p,ilevel,action_part)
               if(p%xp(ipart,idim)>=r%box_size(idim))p%xp(ipart,idim)=p%xp(ipart,idim)-r%box_size(idim)
            endif
         end do
-
-        ! #region agent log - Hypothesis D: Check final position after wrap
-        if(g%myid==0 .and. ipart<=p%headp(ilevel)+3)then
-           if(p%xp(ipart,1) < 0.0d0 .or. p%xp(ipart,1) >= r%box_size(1) .or. &
-              p%xp(ipart,2) < 0.0d0 .or. p%xp(ipart,2) >= r%box_size(2) .or. &
-              p%xp(ipart,3) < 0.0d0 .or. p%xp(ipart,3) >= r%box_size(3))then
-              open(unit=999,file='/Users/moseley/ramses-development/.cursor/debug.log',position='append',status='unknown')
-              write(999,'(A,I8,A,E12.5,A,E12.5,A,E12.5,A,E12.5,A)') '{"hypothesisId":"D","location":"mc_trace_gas_part",&
-                   &"message":"pos_outside_box_after_wrap","data":{"ipart":',ipart,',"x":',p%xp(ipart,1),&
-                   &',"y":',p%xp(ipart,2),',"z":',p%xp(ipart,3),',"box_size":',r%box_size(1),'}}'
-              close(999)
-           endif
-        endif
-        ! #endregion
      end do
   end if
-
-  ! #region agent log - Hypothesis E: Exit logging
-  if(g%myid==0 .and. action_part==action_kick_drift)then
-     open(unit=999,file='/Users/moseley/ramses-development/.cursor/debug.log',position='append',status='unknown')
-     write(999,'(A)') '{"hypothesisId":"exit","location":"mc_trace_gas_part","message":"routine_exit","data":{}}'
-     close(999)
-  endif
-  ! #endregion
 
   end associate
 end subroutine mc_trace_gas_part
@@ -3542,7 +3490,7 @@ subroutine cic_trace_gas_part_ito_mc(s,p,ilevel,action_part)
 end subroutine cic_trace_gas_part_ito_mc
 
 subroutine tsc_trace_gas_part_ito_mc(s,p,ilevel,action_part)
-  ! Ito MC flux-based tracer with TSC (scheme 5)
+  ! Ito MC flux-based tracer with TSC (scheme 5) - same logic as cic_trace_gas_part_ito_mc
   use amr_parameters, only: ndim, threetondim
   use pm_parameters
   use pm_commons, only: part_t
@@ -3557,13 +3505,15 @@ subroutine tsc_trace_gas_part_ito_mc(s,p,ilevel,action_part)
   type(part_t)::p
   integer::ilevel
   integer::action_part
-  real(kind=8),dimension(1:ndim)::x,disp,xi,gamma1_vec
+  real(kind=8),dimension(1:ndim)::x,disp,xi,u_eff,kappa_num
   integer,dimension(1:ndim)::il,ic,ir
   integer,dimension(1:ndim,1:threetondim)::ckey
   integer(kind=8),dimension(0:ndim)::hash_nbor
   real(kind=8),dimension(1:threetondim)::vol
+  real(kind=8),dimension(1:ndim,1:threetondim)::u_cells,kappa_num_cells,skew_cells
+  real(kind=8),dimension(1:ndim)::skewness_eff
   real(kind=8),dimension(1:ndim,1:3)::w1d,dw1d
-  real(kind=8)::dx_loc,dt_level,rho_cell,pr,pl,var_dim,noise_amp
+  real(kind=8)::dx_loc,dt_level,rho_cell,denom,fluxL,fluxR,jr,jl,noise_amp,cfl_plus,cfl_minus,pr,pl
   type(msg_hydro_mflux)::dummy_hydro_mflux
   type(RngStream),external::RngStream_CreateStream
   real(kind=8),external::RngStream_RandUni
@@ -3576,7 +3526,6 @@ subroutine tsc_trace_gas_part_ito_mc(s,p,ilevel,action_part)
   if (p%type/=TRAC_TYPE) return
 
   dx_loc=r%boxlen/2**ilevel
-  dt_level=g%dtnew(ilevel)
 
   if(action_part==action_kick_only)then
      do ipart=p%headp(ilevel),p%tailp(ilevel)
@@ -3584,6 +3533,8 @@ subroutine tsc_trace_gas_part_ito_mc(s,p,ilevel,action_part)
      end do
      return
   endif
+
+  dt_level=g%dtnew(ilevel)
 
   if(.not. tracer_rng_ready)then
      call RngStream_SetPackageSeed(r%seed)
@@ -3605,14 +3556,15 @@ subroutine tsc_trace_gas_part_ito_mc(s,p,ilevel,action_part)
      call tsc_weights_and_derivs(x, w1d, dw1d, il, ic, ir, vol)
      do idim=1,ndim
         if(r%periodic(idim))then
-           if(il(idim)< m%box_ckey_min(idim,ilevel+1))il(idim)=il(idim)-m%box_ckey_min(idim,ilevel+1)+m%box_ckey_max(idim,ilevel+1)
-           if(ir(idim)>=m%box_ckey_max(idim,ilevel+1))ir(idim)=ir(idim)+m%box_ckey_min(idim,ilevel+1)-m%box_ckey_max(idim,ilevel+1)
+           if(il(idim)< m%box_ckey_min(idim,ilevel+1))il(idim)=m%box_ckey_max(idim,ilevel+1)-1
+           if(ir(idim)>=m%box_ckey_max(idim,ilevel+1))ir(idim)=m%box_ckey_min(idim,ilevel+1)
         endif
      end do
      ckey = tsc_index(il,ic,ir)
 
-     disp(1:ndim) = 0.d0
-     gamma1_vec(1:ndim) = 0.d0
+     u_cells=0.d0
+     kappa_num_cells=0.d0
+     skew_cells=0.d0
 
      hash_nbor(0)=ilevel+1
      do ind=1,threetondim
@@ -3621,30 +3573,52 @@ subroutine tsc_trace_gas_part_ito_mc(s,p,ilevel,action_part)
 #ifdef HYDRO
         if(igrid>0)then
            rho_cell = max(m%mflux(icell,1,igrid), r%smallr)
+           denom = rho_cell
            do idim=1,ndim
-              pl = max(-m%mflux(icell,1+idim,igrid), 0.d0) / rho_cell
-              pr = max(m%mflux(icell,1+ndim+idim,igrid), 0.d0) / rho_cell
-              disp(idim) = disp(idim) + (pr - pl) * vol(ind) * dx_loc
-              var_dim = pl + pr - (pr - pl)**2
-              if(var_dim > 0.d0)then
-                 gamma1_vec(idim) = gamma1_vec(idim) + mc_kernel_skewness(pr, pl) * vol(ind)
-              end if
+              fluxL = m%mflux(icell,1+idim,igrid)
+              fluxR = m%mflux(icell,1+idim+ndim,igrid)
+              jr = max(fluxR,0.d0)*dx_loc/dt_level
+              jl = max(-fluxL,0.d0)*dx_loc/dt_level
+              u_cells(idim,ind) = (jr-jl)/denom
+              cfl_plus = abs(jr+jl)/denom*dt_level/dx_loc
+              cfl_minus = abs(jl-jr)/denom*dt_level/dx_loc
+              kappa_num_cells(idim,ind) = 0.5d0*(cfl_plus - cfl_minus**2.d0)*dx_loc**2.d0/dt_level
+              pr = max(fluxR,0.d0)/denom
+              pl = max(-fluxL,0.d0)/denom
+              skew_cells(idim,ind) = mc_kernel_skewness(pr,pl)
            end do
         end if
 #endif
      end do
 
-     if(trim(r%tracer_kick_pdf)=='piecewise_skew_uniform')then
-        call sample_tracer_piecewise_skew_uniform(xi, gamma1_vec)
-     else
+     u_eff=0.d0
+     kappa_num=0.d0
+     skewness_eff=0.d0
+     do ind=1,threetondim
+        do idim=1,ndim
+           u_eff(idim)=u_eff(idim)+u_cells(idim,ind)*vol(ind)
+           kappa_num(idim)=kappa_num(idim)+kappa_num_cells(idim,ind)*vol(ind)
+           skewness_eff(idim)=skewness_eff(idim)+skew_cells(idim,ind)*vol(ind)
+        end do
+     end do
+
+     if(trim(r%tracer_kick_pdf)=='gaussian')then
+        call sample_tracer_gaussian(xi)
+     elseif(trim(r%tracer_kick_pdf)=='uniform')then
         call sample_tracer_uniform(xi)
-     end if
-     noise_amp = dx_loc
-     disp(1:ndim) = disp(1:ndim) + noise_amp * xi(1:ndim)
+     else
+        call sample_tracer_piecewise_skew_uniform(xi,skewness_eff)
+     endif
+
+     do idim=1,ndim
+        disp(idim)=u_eff(idim)*dt_level
+        noise_amp = sqrt(max(0.d0,2.d0*kappa_num(idim)*dt_level))
+        disp(idim)=disp(idim)+noise_amp*xi(idim)
+     end do
 
      p%levelp(ipart) = ilevel
-     p%vp(ipart,1:ndim) = disp(1:ndim) / dt_level
-     p%xp(ipart,1:ndim) = p%xp(ipart,1:ndim) + disp(1:ndim)
+     p%vp(ipart,1:ndim)=u_eff(1:ndim)
+     p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+disp(1:ndim)
   end do
 
   call close_cache(mdl)
