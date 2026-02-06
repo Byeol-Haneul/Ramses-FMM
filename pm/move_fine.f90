@@ -112,6 +112,7 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
            call cic_trace_gas_part_sgs_turb(pst%s,pst%s%trac,ilevel,action_part) ! SGS turbulent diffusion tracer with CIC
         elseif(pst%s%r%trac_interpolation_scheme==7)then
            call tsc_trace_gas_part_sgs_turb(pst%s,pst%s%trac,ilevel,action_part) ! SGS turbulent diffusion tracer with TSC
+        endif
      endif
      if(pst%s%r%dust)then
         if(pst%s%r%dust_force_interpolation_scheme==1)then
@@ -659,7 +660,7 @@ subroutine pcs_kick_drift_part(s,p,ilevel,action_part)
         xll=dble(cll(idim))+0.5D0 ! cell coordinate
         xl =dble(cl (idim))+0.5D0
         xr =dble(cr (idim))+0.5D0
-	xrr=dble(crr(idim))+0.5D0
+	     xrr=dble(crr(idim))+0.5D0
         wll(idim)=(2D0                        -abs(x(idim)-xll))**3/6D0 ! weight
         wl (idim)=(4D0-6D0*(x(idim)-xl)**2+3d0*abs(x(idim)-xl )**3)/6D0
         wr (idim)=(4D0-6D0*(x(idim)-xr)**2+3d0*abs(x(idim)-xr )**3)/6D0
@@ -1610,7 +1611,7 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
       do ind=1,twotondim
          hash_nbor(1:ndim)=ckey(1:ndim,ind)
          call get_parent_cell(s,hash_nbor,igrid,icell,flush_cache=.false.,fetch_cache=.true.)
- #ifdef HYDRO
+#ifdef HYDRO
          if(igrid>0)then
             momentum(1:ndim)=momentum(1:ndim)+m%uold(icell,2:ndim+1,igrid)*vol(ind)
             rho=rho+m%uold(icell,1,igrid)*vol(ind)
@@ -1619,7 +1620,7 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
                kappa_mid=kappa_mid+kappa_cells(ind)*vol(ind)
             end if
          end if
- #endif
+#endif
       end do
       if(rho>r%smallr)then
          u_mid(1:ndim)=momentum(1:ndim)/rho
@@ -1640,7 +1641,7 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
          elseif(r%tracer_kick_pdf=='uniform')then
             call sample_tracer_uniform(xi)
          else
-            call sample_tracer_piecewise_skew_uniform(xi,skewness_eff)
+            call sample_tracer_uniform(xi)
          endif
          noise_amp = sqrt(2.0d0*kappa_mid*dt_level)
          disp(1:ndim)=disp(1:ndim)+noise_amp*xi(1:ndim)
@@ -1778,7 +1779,7 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
       do ind=1,threetondim
          hash_nbor(1:ndim)=ckey(1:ndim,ind)
          call get_parent_cell(s,hash_nbor,igrid,icell,flush_cache=.false.,fetch_cache=.true.)
- #ifdef HYDRO
+#ifdef HYDRO
          if(igrid>0)then
             momentum(1:ndim)=momentum(1:ndim)+m%uold(icell,2:ndim+1,igrid)*vol(ind)
             rho=rho+m%uold(icell,1,igrid)*vol(ind)
@@ -1787,7 +1788,7 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
                kappa_mid=kappa_mid+kappa_cells(ind)*vol(ind)
             end if
          end if
- #endif
+#endif
       end do
       if(rho>r%smallr)then
          u_mid(1:ndim)=momentum(1:ndim)/rho
@@ -1808,9 +1809,8 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
          elseif(r%tracer_kick_pdf=='uniform')then
             call sample_tracer_uniform(xi)
          else
-            call sample_tracer_piecewise_skew_uniform(xi,skewness_eff)
+            call sample_tracer_uniform(xi)
          endif
-         call sample_tracer_gaussian(xi)
          noise_amp = sqrt(2.0d0*kappa_mid*dt_level)
          disp(1:ndim)=disp(1:ndim)+noise_amp*xi(1:ndim)
       end if
@@ -1944,21 +1944,21 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
             hash_nbor(0)=ilevel+1
             hash_nbor(1:ndim)=corner_nbor_idx(1:ndim,ind)
             call get_parent_cell(s,hash_nbor,igrid,icell,flush_cache=.false.,fetch_cache=.true.)
- #ifdef HYDRO
+#ifdef HYDRO
             if(igrid>0)then
                corner_associated=corner_associated+1
                corner_weight(ind)=max(m%uold(icell,1,igrid),r%smallr)
             else
                corner_weight(ind)=0.d0
             end if
- #else
+#else
             if(igrid>0)then
                corner_associated=corner_associated+1
                corner_weight(ind)=1.d0
             else
                corner_weight(ind)=0.d0
             end if
- #endif
+#endif
          end do
          if(corner_associated<twotondim)near_corner=.false.
          weight_sum=0.d0
@@ -2018,7 +2018,7 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
       hash_nbor(0)=ilevel+1
       hash_nbor(1:ndim)=icell_idx(1:ndim)
       call get_parent_cell(s,hash_nbor,igrid,icell,flush_cache=.false.,fetch_cache=.true.)
- #ifdef HYDRO
+#ifdef HYDRO
       if(igrid<=0)cycle
  
       rho_cell=max(m%mflux(icell,1,igrid),r%smallr)
@@ -2031,12 +2031,12 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
          prob_face(2*idim-1)=max(-m%mflux(icell,1+idim,igrid),0.d0)/denom
          prob_face(2*idim  )=max( m%mflux(icell,1+idim+ndim,igrid),0.d0)/denom
       end do
- #else
+#else
       if(igrid<=0)cycle
       prob_face=0.d0
       vel=0.d0
       denom=1.d0
- #endif
+#endif
  
       out_sum=0.d0
       do iface=1,2*ndim
@@ -2185,7 +2185,7 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
       do ind=1,twotondim
          hash_nbor(1:ndim)=ckey(1:ndim,ind)
          call get_parent_cell(s,hash_nbor,igrid,icell,flush_cache=.false.,fetch_cache=.true.)
- #ifdef HYDRO
+#ifdef HYDRO
          if(igrid>0)then
             rho_cell = max(m%mflux(icell,1,igrid), r%smallr)
             denom = rho_cell
@@ -2201,7 +2201,7 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
                skew_cells(idim,ind) = mc_kernel_skewness(pr,pl)
             end do
          end if
- #endif
+#endif
       end do
  
       u_eff=0.d0
@@ -2348,7 +2348,7 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
       do ind=1,threetondim
          hash_nbor(1:ndim)=ckey(1:ndim,ind)
          call get_parent_cell(s,hash_nbor,igrid,icell,flush_cache=.false.,fetch_cache=.true.)
- #ifdef HYDRO
+#ifdef HYDRO
          if(igrid>0)then
             rho_cell = max(m%mflux(icell,1,igrid), r%smallr)
             denom = rho_cell
@@ -2364,7 +2364,7 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
                skew_cells(idim,ind) = mc_kernel_skewness(pr,pl)
             end do
          end if
- #endif
+#endif
       end do
  
       u_eff=0.d0
