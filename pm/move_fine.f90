@@ -3255,8 +3255,8 @@ subroutine trace_gas_part_trivial(s,p,ilevel,action_part)
 end subroutine trace_gas_part_trivial
 
 subroutine mc_trace_gas_part(s,p,ilevel,action_part)
-  ! Classical Monte Carlo tracer (scheme 0) - matches move_fine_imc.f90 logic
-  use amr_parameters, only: ndim
+  ! Classic Monte Carlo tracer (scheme 0)
+  use amr_parameters, only: ndim, twotondim
   use pm_parameters
   use pm_commons, only: part_t
   use ramses_commons, only: ramses_t
@@ -3275,7 +3275,13 @@ subroutine mc_trace_gas_part(s,p,ilevel,action_part)
   real(kind=8),dimension(1:2*ndim)::prob_face
   real(kind=8)::out_sum,scale,stay_prob,u,cum
   integer::ipart,idim,iface,selected,icell
-  real(kind=8)::rho_cell,denom,dx_loc
+  real(kind=8)::rho_cell,denom,dx_loc,dist_to_face,tol_corner,dist_to_corner
+  logical::near_corner
+  integer,dimension(1:ndim)::corner_idx
+  integer,dimension(1:ndim,1:twotondim)::corner_nbor_idx
+  real(kind=8),dimension(1:twotondim)::corner_weight
+  real(kind=8)::weight_sum
+  integer::ind,bit,selected_corner,corner_associated
   type(msg_hydro_mflux)::dummy_hydro_mflux
   type(RngStream),external::RngStream_CreateStream
   real(kind=8),external::RngStream_RandUni
@@ -3290,6 +3296,7 @@ subroutine mc_trace_gas_part(s,p,ilevel,action_part)
   if (p%type/=TRAC_TYPE) return
 
   dx_loc=r%boxlen/2**ilevel
+  tol_corner=0.05d0
 
   if(action_part==action_kick_only)then
      do ipart=p%headp(ilevel),p%tailp(ilevel)
@@ -3315,6 +3322,93 @@ subroutine mc_trace_gas_part(s,p,ilevel,action_part)
      end do
      call wrap_cell_coords(s,x,ilevel+1)
 
+     near_corner=.true.
+     do idim=1,ndim
+        dist_to_corner=abs(x(idim)-dble(nint(x(idim))))
+        if(dist_to_corner>=tol_corner)near_corner=.false.
+     end do
+
+     if(near_corner)then
+        do idim=1,ndim
+           corner_idx(idim)=nint(x(idim))
+        end do
+        corner_weight=0.d0
+        corner_associated=0
+        do ind=1,twotondim
+           do idim=1,ndim
+              bit=merge(1,0,btest(ind-1,idim-1))
+              corner_nbor_idx(idim,ind)=corner_idx(idim)+bit-1
+              if(r%periodic(idim))then
+                 if(corner_nbor_idx(idim,ind)< m%box_ckey_min(idim,ilevel+1))corner_nbor_idx(idim,ind)=m%box_ckey_max(idim,ilevel+1)-1
+                 if(corner_nbor_idx(idim,ind)>=m%box_ckey_max(idim,ilevel+1))corner_nbor_idx(idim,ind)=m%box_ckey_min(idim,ilevel+1)
+              end if
+           end do
+           hash_nbor(0)=ilevel+1
+           hash_nbor(1:ndim)=corner_nbor_idx(1:ndim,ind)
+           call get_parent_cell(s,hash_nbor,igrid,icell,flush_cache=.false.,fetch_cache=.true.)
+#ifdef HYDRO
+           if(igrid>0)then
+              corner_associated=corner_associated+1
+              corner_weight(ind)=max(m%uold(icell,1,igrid),r%smallr)
+           else
+              corner_weight(ind)=0.d0
+           end if
+#else
+           if(igrid>0)then
+              corner_associated=corner_associated+1
+              corner_weight(ind)=1.d0
+           else
+              corner_weight(ind)=0.d0
+           end if
+#endif
+        end do
+        if(corner_associated<twotondim)near_corner=.false.
+        weight_sum=0.d0
+        do ind=1,twotondim
+           weight_sum=weight_sum+corner_weight(ind)
+        end do
+        if(near_corner.and.weight_sum>0.d0)then
+           u=RngStream_RandUni(tracer_rng)
+           cum=0.d0
+           selected_corner=1
+           do ind=1,twotondim
+              cum=cum+corner_weight(ind)/weight_sum
+              if(u<=cum)then
+                 selected_corner=ind
+                 exit
+              end if
+           end do
+           do idim=1,ndim
+              x(idim)=dble(corner_nbor_idx(idim,selected_corner))+0.5d0
+           end do
+           call wrap_cell_coords(s,x,ilevel+1)
+           do idim=1,ndim
+              p%xp(ipart,idim)=x(idim)*dx_loc-m%skip(idim)
+           end do
+        else
+           near_corner=.false.
+        end if
+     end if
+
+     if(.not.near_corner)then
+        do idim=1,ndim
+           dist_to_face=abs(x(idim)-dble(nint(x(idim))))
+           if(dist_to_face<tol_corner)then
+              if(RngStream_RandUni(tracer_rng)<0.5d0)then
+                 x(idim)=dble(nint(x(idim)))-0.5d0
+              else
+                 x(idim)=dble(nint(x(idim)))+0.5d0
+              endif
+           else
+              x(idim)=dble(int(x(idim)))+0.5d0
+           endif
+        end do
+        call wrap_cell_coords(s,x,ilevel+1)
+        do idim=1,ndim
+           p%xp(ipart,idim)=x(idim)*dx_loc-m%skip(idim)
+        end do
+     end if
+
      do idim=1,ndim
         icell_idx(idim)=int(x(idim))
         if(r%periodic(idim))then
@@ -3331,6 +3425,7 @@ subroutine mc_trace_gas_part(s,p,ilevel,action_part)
 
      rho_cell=max(m%mflux(icell,1,igrid),r%smallr)
      denom=max(rho_cell,r%smallr)
+     vel=0.d0
      vel(1:ndim)=m%uold(icell,2:ndim+1,igrid)/max(m%uold(icell,1,igrid),r%smallr)
 
      prob_face=0.d0
