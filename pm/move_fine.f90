@@ -871,7 +871,6 @@ subroutine pack_fetch_kick_trac(mesh,igrid,msg_size,msg_array)
   end do
   do ind=1,twotondim
      msg%realdp_mflux(ind,1:2*ndim+1)=mesh%mflux(ind,1:2*ndim+1,igrid)
-     msg%realdp_upwind_rho(ind,1:2*ndim)=mesh%upwind_rho(ind,1:2*ndim,igrid)
   end do
 #endif
 
@@ -905,7 +904,6 @@ subroutine unpack_fetch_kick_trac(mesh,igrid,msg_size,msg_array,hash_key)
   end do
   do ind=1,twotondim
      mesh%mflux(ind,1:2*ndim+1,igrid)=msg%realdp_mflux(ind,1:2*ndim+1)
-     mesh%upwind_rho(ind,1:2*ndim,igrid)=msg%realdp_upwind_rho(ind,1:2*ndim)
   end do
 #endif
 
@@ -1047,7 +1045,7 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
   dx_loc=r%boxlen/2**ilevel
   vol_loc=dx_loc**ndim
   if (p%type/=TRAC_TYPE) return
-  ! Tracer hydro cache (uold, mflux, upwind_rho)
+  ! Tracer hydro cache (uold, mflux)
   call open_cache(mdl, m, pack_size=storage_size(dummy_hydro_mflux)/32, &
        pack=pack_fetch_kick_trac, unpack=unpack_fetch_kick_trac)
   do ipart=p%headp(ilevel),p%tailp(ilevel)

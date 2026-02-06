@@ -686,7 +686,6 @@ module amr_commons
      real(dp),allocatable,dimension(:,:,:)::uold
      real(dp),allocatable,dimension(:,:,:)::unew
      real(dp),allocatable,dimension(:,:,:)::mflux      ! Time-integrated mass flux for tracers
-     real(dp),allocatable,dimension(:,:,:)::upwind_rho ! Upwind density for each face
 #endif
 #ifdef MHD
      real(dp),allocatable,dimension(:,:,:)::bold

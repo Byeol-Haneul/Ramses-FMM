@@ -100,7 +100,6 @@ subroutine upload_fine(s,ilevel)
      do ind=1,twotondim
         if(m%grid(ioct)%refined(ind))then
            m%mflux(ind,1:2*ndim+1,ioct)=0.0d0
-           m%upwind_rho(ind,1:2*ndim,ioct)=0.0d0
         endif
      end do
 #ifdef MHD
@@ -280,7 +279,6 @@ subroutine init_flush_upload(mesh,igrid,hash_key)
      end do
   end do
   mesh%mflux(:,:,igrid)=0.0d0
-  mesh%upwind_rho(:,:,igrid)=0.0d0
 #endif
 
 #ifdef MHD
@@ -316,7 +314,6 @@ subroutine pack_flush_upload(mesh,igrid,msg_size,msg_array)
      end do
   end do
   msg%realdp_mflux=mesh%mflux(:,:,igrid)
-  msg%realdp_upwind_rho=mesh%upwind_rho(:,:,igrid)
 #endif
 
 #ifdef MHD
@@ -363,7 +360,6 @@ subroutine unpack_flush_upload(mesh,igrid,msg_size,msg_array,hash_key)
   do ind=1,twotondim
      if(mesh%grid(igrid)%refined(ind))then
         mesh%mflux(ind,:,igrid)=mesh%mflux(ind,:,igrid)+msg%realdp_mflux(ind,:)
-        mesh%upwind_rho(ind,:,igrid)=mesh%upwind_rho(ind,:,igrid)+msg%realdp_upwind_rho(ind,:)
      endif
   end do
 #endif

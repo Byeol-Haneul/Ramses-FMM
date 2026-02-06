@@ -143,7 +143,6 @@ subroutine set_unew(r,g,m,ilevel)
   do i = m%head(ilevel),m%tail(ilevel)
      m%unew(:,:,i) = m%uold(:,:,i)
      m%mflux(:,:,i) = 0.0d0
-     m%upwind_rho(:,:,i) = 0.0d0
   end do
   !$OMP END PARALLEL DO
 #endif
@@ -760,23 +759,6 @@ subroutine godfine1(s,ind_grid,ilevel,h)
                        m%mflux(ind_son,1+idim,ichild)=fluxL
                        m%mflux(ind_son,1+ndim+idim,ichild)=fluxR
 
-                       ! Store upwind densities for each face (aligned to mflux indices)
-                       rhoC = h%uloc(i3,j3,k3,1)
-                       rhoL = h%uloc(i3-i0,j3-j0,k3-k0,1)
-                       rhoR = h%uloc(i3+i0,j3+j0,k3+k0,1)
-                       if(fluxL >= 0.d0)then
-                          upwindL = rhoL
-                       else
-                          upwindL = rhoC
-                       endif
-                       if(fluxR >= 0.d0)then
-                          upwindR = rhoC
-                       else
-                          upwindR = rhoR
-                       endif
-                       m%upwind_rho(ind_son,idim,ichild) = max(upwindL, r%smallr)
-                       m%upwind_rho(ind_son,idim+ndim,ichild) = max(upwindR, r%smallr)
-
                        ! Update conservative variables new state vector
                        do ivar=1,5
                           m%unew(ind_son,ivar,ichild)=m%unew(ind_son,ivar,ichild)+ &
@@ -1365,7 +1347,6 @@ subroutine init_flush_godunov(mesh,igrid,hash_key)
      enddo
   enddo
   mesh%mflux(:,:,igrid)=0.0d0
-  mesh%upwind_rho(:,:,igrid)=0.0d0
 #endif
 
 #ifdef MHD
@@ -1401,7 +1382,6 @@ subroutine pack_flush_godunov(mesh,igrid,msg_size,msg_array)
      end do
   end do
   msg%realdp_mflux=mesh%mflux(:,:,igrid)
-  msg%realdp_upwind_rho=mesh%upwind_rho(:,:,igrid)
 #endif
 
 #ifdef MHD
@@ -1444,7 +1424,6 @@ subroutine unpack_flush_godunov(mesh,igrid,msg_size,msg_array,hash_key)
      end do
   end do
   mesh%mflux(:,:,igrid)=mesh%mflux(:,:,igrid)+msg%realdp_mflux
-  mesh%upwind_rho(:,:,igrid)=mesh%upwind_rho(:,:,igrid)+msg%realdp_upwind_rho
 #endif
 
 #ifdef MHD
