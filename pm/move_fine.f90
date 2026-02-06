@@ -2103,7 +2103,7 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
  end subroutine mc_trace_gas_part
  
  subroutine cic_trace_gas_part_ito_mc(s,p,ilevel,action_part)
-   ! Ito MC flux-based tracer with CIC (scheme 4) - matches move_fine_imc.f90
+   ! Ito MC flux-based tracer with CIC (scheme 4)
    use amr_parameters, only: ndim, twotondim
    use pm_parameters
    use pm_commons, only: part_t
@@ -2125,7 +2125,7 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
    real(kind=8),dimension(1:ndim,1:twotondim)::u_cells,kappa_num_cells,skew_cells
    real(kind=8),dimension(1:ndim)::skewness_eff
    real(kind=8),dimension(1:ndim,1:2)::w1d,dw1d
-   real(kind=8)::dx_loc,dt_level,rho_cell,denom,fluxL,fluxR,jr,jl,noise_amp,cfl_plus,cfl_minus,pr,pl
+   real(kind=8)::dx_loc,dt_level,rho_cell,denom,fluxL,fluxR,noise_amp,cfl_plus,cfl_minus,pr,pl
    type(msg_hydro_mflux)::dummy_hydro_mflux
    type(RngStream),external::RngStream_CreateStream
    real(kind=8),external::RngStream_RandUni
@@ -2192,14 +2192,12 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
             do idim=1,ndim
                fluxL = m%mflux(icell,1+idim,igrid)
                fluxR = m%mflux(icell,1+idim+ndim,igrid)
-               jr = max(fluxR,0.d0)*dx_loc/dt_level
-               jl = max(-fluxL,0.d0)*dx_loc/dt_level
-               u_cells(idim,ind) = (jr-jl)/denom
-               cfl_plus = abs(jr+jl)/denom*dt_level/dx_loc
-               cfl_minus = abs(jl-jr)/denom*dt_level/dx_loc
-               kappa_num_cells(idim,ind) = 0.5d0*(cfl_plus - cfl_minus**2.d0)*dx_loc**2.d0/dt_level
                pr = max(fluxR,0.d0)/denom
                pl = max(-fluxL,0.d0)/denom
+               cfl_plus = pr+pl
+               cfl_minus = pr-pl
+               u_cells(idim,ind) = cfl_minus*dx_loc/dt_level
+               kappa_num_cells(idim,ind) = 0.5d0*(cfl_plus - cfl_minus**2.d0)*dx_loc**2.d0/dt_level
                skew_cells(idim,ind) = mc_kernel_skewness(pr,pl)
             end do
          end if
@@ -2291,7 +2289,7 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
    real(kind=8),dimension(1:ndim,1:threetondim)::u_cells,kappa_num_cells,skew_cells
    real(kind=8),dimension(1:ndim)::skewness_eff
    real(kind=8),dimension(1:ndim,1:3)::w1d,dw1d
-   real(kind=8)::dx_loc,dt_level,rho_cell,denom,fluxL,fluxR,jr,jl,noise_amp,cfl_plus,cfl_minus,pr,pl
+   real(kind=8)::dx_loc,dt_level,rho_cell,denom,fluxL,fluxR,noise_amp,cfl_plus,cfl_minus,pr,pl
    type(msg_hydro_mflux)::dummy_hydro_mflux
    type(RngStream),external::RngStream_CreateStream
    real(kind=8),external::RngStream_RandUni
@@ -2357,14 +2355,12 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
             do idim=1,ndim
                fluxL = m%mflux(icell,1+idim,igrid)
                fluxR = m%mflux(icell,1+idim+ndim,igrid)
-               jr = max(fluxR,0.d0)*dx_loc/dt_level
-               jl = max(-fluxL,0.d0)*dx_loc/dt_level
-               u_cells(idim,ind) = (jr-jl)/denom
-               cfl_plus = abs(jr+jl)/denom*dt_level/dx_loc
-               cfl_minus = abs(jl-jr)/denom*dt_level/dx_loc
-               kappa_num_cells(idim,ind) = 0.5d0*(cfl_plus - cfl_minus**2.d0)*dx_loc**2.d0/dt_level
                pr = max(fluxR,0.d0)/denom
                pl = max(-fluxL,0.d0)/denom
+               cfl_plus = pr+pl
+               cfl_minus = pr-pl
+               u_cells(idim,ind) = cfl_minus*dx_loc/dt_level
+               kappa_num_cells(idim,ind) = 0.5d0*(cfl_plus - cfl_minus**2.d0)*dx_loc**2.d0/dt_level
                skew_cells(idim,ind) = mc_kernel_skewness(pr,pl)
             end do
          end if
@@ -3598,9 +3594,6 @@ real(kind=8) function mc_kernel_skewness(pr, pl) result(gamma1)
   endif
 end function mc_kernel_skewness
 
-!#########################################################################
-! State gathering subroutines (converted from IMC pointer to vanilla integer pattern)
-!#########################################################################
 subroutine gather_cic_state(st,x_cell,level_in,dx_cell,use_sgs_in,vel_out,kappa_out)
   use amr_parameters, only: ndim, twotondim
   use ramses_commons, only: ramses_t
