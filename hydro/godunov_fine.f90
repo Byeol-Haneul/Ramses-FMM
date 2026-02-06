@@ -277,7 +277,7 @@ subroutine godfine1(s,ind_grid,ilevel,h)
   logical::okx,oky,okz,oknbor
   logical::ok1,ok2,ok3
   integer::igrid,ichild
-  real(kind=8)::fluxL,fluxR,rhoL,rhoC,rhoR,upwindL,upwindR
+  real(kind=8)::fluxL,fluxR
 
 #ifdef MHD
   jj(1:8,1)=(/4,1,4,1,4,1,4,1/)
