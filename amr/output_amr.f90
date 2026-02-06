@@ -156,8 +156,13 @@ subroutine m_dump_all(pst,write_bkp_file)
      if(r%hydro)then
         filename=TRIM(filedir)//'hydro.'
         input_array=transfer(filename,input_array)
-        if(r%verbose)write(*,*)'Writing hydro files'
-        call r_output_hydro(pst,input_array,flen/4,dummy,0)
+        ! Only write hydro data if output_hydro is true OR if this is a backup
+        if(r%output_hydro .or. write_bkp_file)then
+           if(r%verbose)write(*,*)'Writing hydro files'
+           call r_output_hydro(pst,input_array,flen/4,dummy,0)
+        else
+           if(r%verbose)write(*,*)'Skipping hydro files'
+        endif
      end if
 
      ! Output GRAV data
@@ -178,13 +183,8 @@ subroutine m_dump_all(pst,write_bkp_file)
      if(r%pic)then
         filename=TRIM(filedir) ! Note that suffix will be added later
         input_array=transfer(filename,input_array)
-        ! Only write particle data if output_part is true OR if this is a backup
-        if(r%output_part .or. write_bkp_file)then
-           if(r%verbose)write(*,*)'Writing particle files'
-           call r_output_part(pst,input_array,flen/4,dummy,0)
-        else
-           if(r%verbose)write(*,*)'Skip writing particle files'
-        endif
+        if(r%verbose)write(*,*)'Writing particle files'
+        call r_output_part(pst,input_array,flen/4,dummy,0)
      end if
 
      ! Output RT data

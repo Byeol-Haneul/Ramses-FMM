@@ -54,6 +54,7 @@ module amr_commons
      integer::nfile=1            ! Number of file used per snapshot. Use -1 for nfile=ncpu
      logical::output_part=.true. ! Output particle data in dumps
      logical::output_grav=.true. ! Output gravity data in dumps
+     logical::output_hydro=.true.! Output hydro data in dumps
      logical::output_amr=.true.  ! Output AMR data in dumps
 
      ! Mesh parameters

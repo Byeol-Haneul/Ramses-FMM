@@ -94,6 +94,7 @@ subroutine m_read_params(pst)
   integer::nfile=1               ! Number of file per snapshot. Use -1 for nfile=ncpu
   logical::output_part=.true. ! Output particle data in regular dumps (default: true)
   logical::output_grav=.true. ! Output gravity data in regular dumps (default: true)
+  logical::output_hydro=.true.! Output hydro data in regular dumps (default: true)
   logical::output_amr=.true.  ! Output AMR data in regular dumps (default: true)
 
   ! Output times
@@ -513,7 +514,7 @@ subroutine m_read_params(pst)
   namelist/output_params/foutput,aout,tout,output_mode &
        & ,tend,delta_tout,aend,delta_aout,gadget_output &
        & ,run_time_hrs,bkp_time_hrs,bkp_last_min,bkp_modulo,nfile &
-       & ,output_part,output_grav,output_amr
+       & ,output_part,output_grav,output_hydro,output_amr
   ! AMR grid basic parameters
   namelist/amr_params/levelmin,levelmax,ngridmax,ncachemax,ngridtot &
        & ,npartmax,nparttot,nexpand,boxlen
@@ -1174,6 +1175,7 @@ subroutine m_read_params(pst)
   s%r%nfile=nfile
   s%r%output_part=output_part
   s%r%output_grav=output_grav
+  s%r%output_hydro=output_hydro
   s%r%output_amr=output_amr
 
   s%r%levelmin=levelmin

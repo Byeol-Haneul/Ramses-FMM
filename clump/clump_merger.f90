@@ -2084,8 +2084,14 @@ subroutine particle_unbind(s,p)
                 &             c%phi(ipeak,1:nbin),rad,r%box_size,r%periodic)
            ! If unbound, assign to next peak in hierarchy
            if(bound.GE.0d0.or.c%clump_mass(ipeak).LE.c%mass_threshold)then
-              p%workp(i)=c%new_peak(ipeak)
-              p%pid(ipart)=c%new_peak(ipeak)
+              ! if central, unbind particles to the void
+              if(p%pid(ipart)==c%new_peak(ipeak))then
+                 p%workp(i)=0
+                 p%pid(ipart)=0
+              else
+                 p%workp(i)=c%new_peak(ipeak)
+                 p%pid(ipart)=c%new_peak(ipeak)
+              endif
            endif
         endif
      end do
