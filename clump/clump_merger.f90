@@ -2085,10 +2085,10 @@ subroutine particle_unbind(s,p)
            ! If unbound, assign to next peak in hierarchy
            if(bound.GE.0d0.or.c%clump_mass(ipeak).LE.c%mass_threshold)then
               ! if central, unbind particles to the void
-              if(p%pid(ipart)==c%new_peak(ipeak))then
+              if(global_peak_id > 0 .and. global_peak_id==c%new_peak(ipeak))then
                  p%workp(i)=0
                  p%pid(ipart)=0
-              else
+              else ! if satellite, then offer unbound particles to the next peak in the hierarchy
                  p%workp(i)=c%new_peak(ipeak)
                  p%pid(ipart)=c%new_peak(ipeak)
               endif
