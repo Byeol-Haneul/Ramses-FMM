@@ -858,9 +858,11 @@ subroutine pack_fetch_kick_trac(mesh,igrid,msg_size,msg_array)
         msg%realdp_hydro(ind,ivar)=mesh%uold(ind,ivar,igrid)
      end do
   end do
+#ifdef TRCFLX
   do ind=1,twotondim
      msg%realdp_mflux(ind,1:2*ndim+1)=mesh%mflux(ind,1:2*ndim+1,igrid)
   end do
+#endif
 #endif
 
   msg_array=transfer(msg,msg_array)
@@ -891,11 +893,12 @@ subroutine unpack_fetch_kick_trac(mesh,igrid,msg_size,msg_array,hash_key)
         mesh%uold(ind,ivar,igrid)=msg%realdp_hydro(ind,ivar)
      end do
   end do
+#ifdef TRCFLX
   do ind=1,twotondim
      mesh%mflux(ind,1:2*ndim+1,igrid)=msg%realdp_mflux(ind,1:2*ndim+1)
   end do
 #endif
-
+#endif
 end subroutine unpack_fetch_kick_trac
 !#########################################################################
 !#########################################################################
@@ -2020,7 +2023,7 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
       call get_parent_cell(s,hash_nbor,igrid,icell,flush_cache=.false.,fetch_cache=.true.)
 #ifdef HYDRO
       if(igrid<=0)cycle
- 
+#ifdef TRCFLX
       rho_cell=max(m%mflux(icell,1,igrid),r%smallr)
       denom=max(rho_cell,r%smallr)
       vel=0.d0
@@ -2031,6 +2034,7 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
          prob_face(2*idim-1)=max(-m%mflux(icell,1+idim,igrid),0.d0)/denom
          prob_face(2*idim  )=max( m%mflux(icell,1+idim+ndim,igrid),0.d0)/denom
       end do
+#endif
 #else
       if(igrid<=0)cycle
       prob_face=0.d0
@@ -2186,6 +2190,7 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
          hash_nbor(1:ndim)=ckey(1:ndim,ind)
          call get_parent_cell(s,hash_nbor,igrid,icell,flush_cache=.false.,fetch_cache=.true.)
 #ifdef HYDRO
+#ifdef TRCFLX
          if(igrid>0)then
             rho_cell = max(m%mflux(icell,1,igrid), r%smallr)
             denom = rho_cell
@@ -2201,6 +2206,7 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
                skew_cells(idim,ind) = mc_kernel_skewness(pr,pl)
             end do
          end if
+#endif
 #endif
       end do
  
@@ -2349,6 +2355,7 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
          hash_nbor(1:ndim)=ckey(1:ndim,ind)
          call get_parent_cell(s,hash_nbor,igrid,icell,flush_cache=.false.,fetch_cache=.true.)
 #ifdef HYDRO
+#ifdef TRCFLX
          if(igrid>0)then
             rho_cell = max(m%mflux(icell,1,igrid), r%smallr)
             denom = rho_cell
@@ -2364,6 +2371,7 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
                skew_cells(idim,ind) = mc_kernel_skewness(pr,pl)
             end do
          end if
+#endif
 #endif
       end do
  

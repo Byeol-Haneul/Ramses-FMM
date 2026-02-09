@@ -685,7 +685,9 @@ module amr_commons
 #ifdef HYDRO
      real(dp),allocatable,dimension(:,:,:)::uold
      real(dp),allocatable,dimension(:,:,:)::unew
+#ifdef TRCFLX
      real(dp),allocatable,dimension(:,:,:)::mflux      ! Time-integrated mass flux for tracers
+#endif
 #endif
 #ifdef MHD
      real(dp),allocatable,dimension(:,:,:)::bold
