@@ -35,7 +35,9 @@ module cache_commons
      integer(kind=4),dimension(1:twotondim)::int4
 #ifdef HYDRO
      real(kind=8),dimension(1:twotondim,1:nvar)::realdp
+#ifdef TRCFLX
      real(kind=8),dimension(1:twotondim,1:2*ndim+1)::realdp_mflux
+#endif
 #endif
 #ifdef MHD
      real(kind=8),dimension(1:twotondim,1:6)::realdp_mhd
@@ -67,12 +69,16 @@ module cache_commons
   ! Explicit mflux message types (keep mflux transfers self-contained)
   type msg_hydro_mflux
      real(kind=8),dimension(1:twotondim,1:nvar)::realdp_hydro
+#ifdef TRCFLX
      real(kind=8),dimension(1:twotondim,1:2*ndim+1)::realdp_mflux
+#endif
   end type msg_hydro_mflux
   type msg_upload_hydro_mflux_mhd
      integer(kind=4),dimension(1:twotondim)::int4
      real(kind=8),dimension(1:twotondim,1:nvar)::realdp_hydro
+#ifdef TRCFLX
      real(kind=8),dimension(1:twotondim,1:2*ndim+1)::realdp_mflux
+#endif
 #ifdef MHD
      real(kind=8),dimension(1:twotondim,1:6)::realdp_mhd
 #endif
@@ -91,7 +97,9 @@ module cache_commons
 #ifdef GRAV
      real(kind=8),dimension(1:twotondim,1:ndim+2)::realdp_poisson
 #endif
+#ifdef TRCFLX
      real(kind=8),dimension(1:twotondim,1:2*ndim+1)::realdp_mflux
+#endif
   end type msg_large_realdp
   type msg_rt_emissivity_realdp
      real(kind=8),dimension(1:twotondim,1:nrtgrp)::realdp
