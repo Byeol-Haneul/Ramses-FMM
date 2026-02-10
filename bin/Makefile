@@ -83,6 +83,9 @@ endif
 ifeq ($(TURB),1)
    DEFINES += -DTURB
 endif
+ifeq ($(TRCFLX),1)
+   DEFINES += -DTRCFLX
+endif
 ifneq ($(NENER),0)
    DEFINES += -DNENER=$(NENER)
 endif
