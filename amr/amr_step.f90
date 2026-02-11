@@ -168,6 +168,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   ! Gravity solver
   !---------------
 
+  ! replace this part. 
 #ifdef GRAV
   if(r%poisson.and.r%gravity_type<=0)then
      call m_timer(pst,'poisson','start')

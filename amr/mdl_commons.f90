@@ -34,6 +34,7 @@ module mdl_parameters
      enumerator::MDL_GATHER_NOCT_MAX
      enumerator::MDL_INIT_REFINE_BASEGRID
      enumerator::MDL_INIT_FMM
+     enumerator::MDL_BUILD_FMM
      enumerator::MDL_CLEANUP_FMM
      enumerator::MDL_FMM_DOWNWARD
      enumerator::MDL_FMM_AMR_INTERMEDIATE

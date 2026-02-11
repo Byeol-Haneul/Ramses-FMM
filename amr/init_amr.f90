@@ -48,7 +48,7 @@ recursive subroutine r_init_amr(pst)
   implicit none
   type(pst_t)::pst
 
-  integer::rID
+  integer::rID, ilevel
 
   if(pst%nLower>0)then
       rID = mdl_send_request(pst%s%mdl,MDL_INIT_AMR,pst%iUpper+1)
@@ -59,8 +59,10 @@ recursive subroutine r_init_amr(pst)
      call init_amr(pst%s%r,pst%s%g,pst%s%m,'amr')
      if(pst%s%r%poisson)then
 #ifdef FMM
-        allocate(pst%s%m_fmm)
-        call init_amr(pst%s%r,pst%s%g,pst%s%m_fmm,'fmm')
+        allocate(pst%s%m_fmm_list(pst%s%r%levelmin:pst%s%r%nlevelmax))
+        do ilevel = pst%s%r%levelmin, pst%s%r%nlevelmax
+          call init_amr(pst%s%r, pst%s%g, pst%s%m_fmm_list(ilevel), 'fmm')
+        end do
 #else
         allocate(pst%s%m_mg)
         call init_amr(pst%s%r,pst%s%g,pst%s%m_mg,'mg')

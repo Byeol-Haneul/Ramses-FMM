@@ -9,6 +9,7 @@ subroutine m_fmm_multipoles(pst,ilevel)
   use amr_parameters, only: ndim
   use ramses_commons, only: pst_t
   use amr_commons, only: multipole_t
+  use init_fmm_module, only: fmm_level_t
   implicit none
   type(pst_t)::pst
   integer::ilevel
@@ -21,9 +22,10 @@ subroutine m_fmm_multipoles(pst,ilevel)
   ! their grid Hilbert order.
   !------------------------------------------------------------------
   type(multipole_t)::multipole_tot
+  type(fmm_level_t)::fmm_levels
   integer::i,input_size
   integer,dimension(1:2)::input_array
-  associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,m_fmm=>pst%s%m_fmm,p=>pst%s%p,mdl=>pst%s%mdl)
+  associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
 
   if(.not. r%poisson)return
   if(r%verbose)write(*,'(" Entering fmm_multipoles for level ",I2)')ilevel
@@ -32,9 +34,13 @@ subroutine m_fmm_multipoles(pst,ilevel)
   ! Initialize rho to analytical and baryon density field
   !-------------------------------------------------------
 
+  fmm_levels%ilev = ilevel
+  input_size = storage_size(fmm_levels)/32
+
   ! Initialize both AMR and FMM grids. 
   do i = r%bound_levelmin, r%nlevelmax, 1
-    call r_reset_multipoles_taylor(pst, i, 1)
+    fmm_levels%flev=i
+    call r_reset_multipoles_taylor(pst, fmm_levels, input_size)
   end do
 
   ! Add multipoles from AMR grids
@@ -47,12 +53,14 @@ subroutine m_fmm_multipoles(pst,ilevel)
   do i=r%levelmin-r%level_fmm_to_amr-1,r%bound_levelmin,-1
      if(i<1) cycle
      if(r%verbose)write(*,'(" [M2M] Compute multipoles for FMM level ",I2)')i
-     call r_fmm_multipole_fmm2fmm(pst,i,1)
+     fmm_levels%flev=i
+     call r_fmm_multipole_fmm2fmm(pst,fmm_levels,input_size)
   end do
 
   do i=r%bound_levelmin,r%levelmin-r%level_fmm_to_amr
     if(r%verbose)write(*,'(" [M2M] Downward pass shifting multipoles for FMM level ",I2)')i
-    call r_fmm_multipole_shift_downward(pst,i,1)
+    fmm_levels%flev=i
+    call r_fmm_multipole_shift_downward(pst,fmm_levels,input_size)
  end do
 
   !do i=r%levelmin-r%level_fmm_to_amr,r%bound_levelmin,-1
@@ -124,7 +132,7 @@ subroutine fmm_multipole_amr2fmm(s,ilevel)
   real(kind=8), dimension(1:ndim) :: dipole
   real(kind=8), dimension(1:int(ndim*(ndim+1)/2)) :: quadrupole
 
-  associate(r=>s%r,g=>s%g,m=>s%m,m_fmm=>s%m_fmm,mdl=>s%mdl)
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
   !---------------------------------------------------
   ! Initialize constants
@@ -137,7 +145,7 @@ subroutine fmm_multipole_amr2fmm(s,ilevel)
   dx_loc = r%boxlen / 2.0D0**ilevel
   vol_loc = dx_loc**ndim
 
-  call open_cache(mdl,m_fmm,pack_size=storage_size(dummy_realdp)/32,&
+  call open_cache(mdl,s%m_fmm_list(ilevel),pack_size=storage_size(dummy_realdp)/32,&
                      pack=pack_fetch_hydro,unpack=unpack_fetch_hydro,&
                      init=init_flush_multipole, flush=pack_flush_multipole, combine=unpack_flush_multipole)
 
@@ -201,7 +209,8 @@ subroutine fmm_multipole_amr2fmm(s,ilevel)
         multipole(2+ndim:1+ndim+nq) = multipole(2+ndim:1+ndim+nq) + quadrupole
      end do  ! cell loop
 #ifdef FMM
-     m_fmm%multipole(icell,:,igrid_fmm) = m_fmm%multipole(icell,:,igrid_fmm) + multipole
+      ! need to fix so that we loop over all ilevel above
+     s%m_fmm_list(ilevel)%multipole(icell,:,igrid_fmm) = s%m_fmm_list(ilevel)%multipole(icell,:,igrid_fmm) + multipole
 #endif
   end do
   call close_cache(mdl)
@@ -211,12 +220,14 @@ end subroutine fmm_multipole_amr2fmm
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_fmm_multipole_fmm2fmm(pst,ilevel,input_size)
+recursive subroutine r_fmm_multipole_fmm2fmm(pst,fmm_levels,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
+  use init_fmm_module, only: fmm_level_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
+  type(fmm_level_t)::fmm_levels
   integer,VALUE::input_size
   integer::ilevel
 
@@ -224,10 +235,10 @@ recursive subroutine r_fmm_multipole_fmm2fmm(pst,ilevel,input_size)
 
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_MULTIPOLE_FMM2FMM,pst%iUpper+1,input_size,0,ilevel)
-     call r_fmm_multipole_fmm2fmm(pst%pLower,ilevel,input_size)
+     call r_fmm_multipole_fmm2fmm(pst%pLower,fmm_levels,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call fmm_multipole_fmm2fmm(pst%s,ilevel)
+     call fmm_multipole_fmm2fmm(pst%s,pst%s%m_fmm_list(fmm_levels%ilev),fmm_levels%flev)
   endif
 
 end subroutine r_fmm_multipole_fmm2fmm
@@ -235,7 +246,7 @@ end subroutine r_fmm_multipole_fmm2fmm
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine fmm_multipole_fmm2fmm(s,ilevel)
+subroutine fmm_multipole_fmm2fmm(s,m_fmm,flev)
   use amr_parameters, only: ndim, twotondim, multipole_size
   use amr_commons, only: mesh_t
   use ramses_commons, only: ramses_t
@@ -245,7 +256,7 @@ subroutine fmm_multipole_fmm2fmm(s,ilevel)
   use cache
   implicit none
   type(ramses_t)::s
-  integer::ilevel
+  integer::flev
   !-------------------------------------------------------------------
   ! This routine compute the monopole and dipole of the gas mass and
   ! the analytical profile (if any) within each cell.
@@ -260,16 +271,17 @@ subroutine fmm_multipole_fmm2fmm(s,ilevel)
 
   integer :: nm, nd, nq
   real(kind=8), dimension(1:multipole_size) :: multipole
+  type(mesh_t)::m_fmm
 
-  associate(r=>s%r,g=>s%g,m_fmm=>s%m_fmm,mdl=>s%mdl)
+  associate(r=>s%r,g=>s%g,mdl=>s%mdl)
   
   call open_cache(mdl,m_fmm,pack_size=storage_size(dummy_realdp)/32,&
                      pack=pack_fetch_hydro,unpack=unpack_fetch_hydro,&
                      init=init_flush_multipole, flush=pack_flush_multipole, combine=unpack_flush_multipole)
 
   ! Loop over finer level grids
-  hash_key(0)=ilevel+1
-  do ioct=m_fmm%head(ilevel+1),m_fmm%tail(ilevel+1)
+  hash_key(0)=flev+1
+  do ioct=m_fmm%head(flev+1),m_fmm%tail(flev+1)
      hash_key(1:ndim)=m_fmm%grid(ioct)%ckey(1:ndim)
      ! Get parent cell using a write-only cache
      call get_parent_cell(s,hash_key,igrid,icell,flush_cache=.true.,fetch_cache=.false.)
@@ -288,23 +300,24 @@ end subroutine fmm_multipole_fmm2fmm
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_fmm_multipole_shift_downward(pst,ilevel,input_size)
+recursive subroutine r_fmm_multipole_shift_downward(pst,fmm_levels,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
+  use init_fmm_module, only: fmm_level_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer,VALUE::input_size
   integer::ilevel
-
+  type(fmm_level_t)::fmm_levels
   integer::rID
 
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_MULTIPOLE_SHIFT_DOWNWARD,pst%iUpper+1,input_size,0,ilevel)
-     call r_fmm_multipole_shift_downward(pst%pLower,ilevel,input_size)
+     call r_fmm_multipole_shift_downward(pst%pLower,fmm_levels,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call fmm_multipole_shift_downward(pst%s,ilevel)
+     call fmm_multipole_shift_downward(pst%s,pst%s%m_fmm_list(fmm_levels%ilev),fmm_levels%flev)
   endif
 
 end subroutine r_fmm_multipole_shift_downward
@@ -312,7 +325,7 @@ end subroutine r_fmm_multipole_shift_downward
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine fmm_multipole_shift_downward(s,ilevel)
+subroutine fmm_multipole_shift_downward(s,m_fmm,flev)
   use amr_parameters, only: ndim, twotondim, multipole_size
   use amr_commons, only: mesh_t
   use ramses_commons, only: ramses_t
@@ -322,7 +335,8 @@ subroutine fmm_multipole_shift_downward(s,ilevel)
   use cache
   implicit none
   type(ramses_t)::s
-  integer::ilevel
+  type(mesh_t)::m_fmm
+  integer::flev
   integer::idim,ioct,icell, nstride
   real(kind=8)::average
   integer(kind=8),dimension(0:ndim)::hash_key
@@ -331,11 +345,11 @@ subroutine fmm_multipole_shift_downward(s,ilevel)
   integer(kind=8), dimension(ndim) :: cc_icell! cartesian coordinate
   real(kind=8), dimension(ndim) :: xx_icell ! box unit real coordinate
 
-  associate(r=>s%r,g=>s%g,m=>s%m,m_fmm=>s%m_fmm)
+  associate(r=>s%r,g=>s%g,m=>s%m)
 
-  dx_loc = r%boxlen / 2.0D0**ilevel
-  hash_key(0)=ilevel
-  do ioct=m_fmm%head(ilevel),m_fmm%tail(ilevel)
+  dx_loc = r%boxlen / 2.0D0**flev
+  hash_key(0)=flev
+  do ioct=m_fmm%head(flev),m_fmm%tail(flev)
      hash_key(1:ndim)=m_fmm%grid(ioct)%ckey(1:ndim)
      multipole = 0.0D0
      do icell = 1, twotondim
@@ -429,12 +443,14 @@ end subroutine unpack_flush_multipole
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_reset_multipoles_taylor(pst,ilevel,input_size)
+recursive subroutine r_reset_multipoles_taylor(pst,fmm_levels,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
+  use init_fmm_module, only: fmm_level_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
+  type(fmm_level_t)::fmm_levels
   integer,VALUE::input_size
   integer::ilevel
 
@@ -442,11 +458,11 @@ recursive subroutine r_reset_multipoles_taylor(pst,ilevel,input_size)
 
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_RESET_MULTIPOLES,pst%iUpper+1,input_size,0,ilevel)
-     call r_reset_multipoles_taylor(pst%pLower,ilevel,input_size)
+     call r_reset_multipoles_taylor(pst%pLower,fmm_levels,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
      if (ilevel <= pst%s%r%levelmin-pst%s%r%level_fmm_to_amr) then
-        call reset_multipoles_taylor(pst%s%r,pst%s%g,pst%s%m_fmm,ilevel)
+        call reset_multipoles_taylor(pst%s%r,pst%s%g,pst%s%m_fmm_list(fmm_levels%ilev),fmm_levels%flev)
      else 
         return
      end if
@@ -583,7 +599,7 @@ recursive subroutine r_dump_multipole(pst,ilevel,input_size)
      call r_dump_multipole(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call dump_multipole(pst%s%r,pst%s%g,pst%s%m_fmm,ilevel)
+     call dump_multipole(pst%s%r,pst%s%g,pst%s%m_fmm_list(ilevel),ilevel)
   endif
 
 end subroutine r_dump_multipole

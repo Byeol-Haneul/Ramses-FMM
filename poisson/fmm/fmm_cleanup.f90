@@ -1,23 +1,23 @@
 module cleanup_fmm_module
 #ifdef GRAV
 contains
-recursive subroutine r_cleanup_fmm(pst)
+recursive subroutine r_cleanup_fmm(pst, ilevel)
   use mdl_module
   use amr_parameters, only: twotondim
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::rID
+  integer::rID, ilevel
   
   if(pst%s%r%verbose) write(*,*)'Entering cleanup_fmm'
   
   if(pst%nLower>0) then
      rID = mdl_send_request(pst%s%mdl,MDL_CLEANUP_FMM,pst%iUpper+1)
-     call r_cleanup_fmm(pst%pLower)
+     call r_cleanup_fmm(pst%pLower, ilevel)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call m_cleanup_fmm(pst%s%m_fmm)
+     call m_cleanup_fmm(pst%s%m_fmm_list(ilevel))
   endif
 end subroutine r_cleanup_fmm
 

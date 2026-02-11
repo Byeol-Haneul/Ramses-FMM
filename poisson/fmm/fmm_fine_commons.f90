@@ -13,16 +13,18 @@ subroutine fmm(pst,ilevel,icount)
   use amr_parameters, only: twotondim, nhilbert
   use poisson_parameters, only: ngs_fine, ngs_coarse, ncycles_coarse_safe
   use ramses_commons, only: pst_t
-  use init_fmm_module, only: r_init_fmm
+  use init_fmm_module, only: r_init_fmm, r_build_fmm, double_level_t, fmm_level_t
   use fmm_multipoles!, only: m_fmm_multipoles
   use cleanup_fmm_module, only: r_cleanup_fmm
   implicit none
   type(pst_t)::pst
   integer,intent(in) :: ilevel,icount
   
-  integer :: igrid, ifine, i, ierr, allmasked, ilev
+  integer :: igrid, ifine, i, ierr, allmasked, input_size
   integer,dimension(1:4) :: output_array
-  
+  type(double_level_t)::double_level
+  type(fmm_level_t)::fmm_levels
+
   if(pst%s%r%gravity_type>0)return
   if(pst%s%m%noct_tot(ilevel)==0)return
   
@@ -31,19 +33,27 @@ subroutine fmm(pst,ilevel,icount)
   ! ---------------------------------------------------------------------
   ! Build FMM hierarchy in memory
   ! ---------------------------------------------------------------------
+  call r_init_fmm(pst, ilevel, 1)
+  if(pst%s%r%verbose) print '(A)','Multigrid init done '
 
-  if(ilevel==pst%s%r%levelmin) then
-    call r_init_fmm(pst, ilevel, 1)
-    if(pst%s%r%verbose) print '(A)','FMM init done ' 
-  endif
+  double_level%ilevel=ilevel
+  fmm_levels%ilev=ilevel
+  input_size = storage_size(double_level)/32
 
-  if(pst%s%r%verbose) print '(A)','FMM init done ' 
+  do ifine=ilevel,pst%s%r%bound_levelmin+1,-1
+     double_level%ifine=ifine
+     if(pst%s%r%verbose) print '(A,I2)','Build FMM ',ifine
+     call r_build_fmm(pst,double_level,input_size)
+  end do
+
+  if(pst%s%r%verbose) print '(A)','FMM Hierarchy done '
 
   ! ---------------------------------------------------------------------
   ! Initiate solve at fine level
   ! ---------------------------------------------------------------------
    do i = pst%s%r%bound_levelmin, pst%s%r%levelmin-pst%s%r%level_fmm_to_amr, 1
-    call r_reset_multipoles_taylor(pst, i, 1)
+    fmm_levels%flev=i
+    call r_reset_multipoles_taylor(pst, fmm_levels, input_size)
    end do
 
    !call m_timer(pst,'fmm: multipole upward','start')
@@ -51,53 +61,54 @@ subroutine fmm(pst,ilevel,icount)
 
   ! Downward pass for fmm grids. 
    !call m_timer(pst,'fmm: downward for fmm','start')
-   do ilev = pst%s%r%bound_levelmin+1, pst%s%r%levelmin-pst%s%r%level_fmm_to_amr
-     call r_fmm_downward(pst, ilev, 1)
-     if(pst%s%r%verbose) print '(A,I2)','[M2L & L2L] Downpass for FMM grids at level done', ilev
+   do i = pst%s%r%bound_levelmin+1, pst%s%r%levelmin-pst%s%r%level_fmm_to_amr
+     fmm_levels%flev=i
+     call r_fmm_downward(pst, fmm_levels, input_size)
+     if(pst%s%r%verbose) print '(A,I2)','[M2L & L2L] Downpass for FMM grids at level done', i
    end do
 
    ! Call direct force calculation
    !call m_timer(pst,'fmm: amr intermediate force','start')
-   call r_fmm_amr_intermediate(pst, pst%s%r%levelmin, 1)
-   if(pst%s%r%verbose) print '(A,I2)','AMR Intermediate Calculation done', pst%s%r%levelmin
+   call r_fmm_amr_intermediate(pst, ilevel, 1)
+   if(pst%s%r%verbose) print '(A,I2)','AMR Intermediate Calculation done', ilevel
 
    !call m_timer(pst,'fmm: direct force','start')
-   call r_fmm_amr_direct(pst, pst%s%r%levelmin, 1)
-   if(pst%s%r%verbose) print '(A,I2)','Direct Force Calculation done', pst%s%r%levelmin
+   call r_fmm_amr_direct(pst, ilevel, 1)
+   if(pst%s%r%verbose) print '(A,I2)','Direct Force Calculation done', ilevel
 
-   !do ilev = 1, pst%s%r%levelmin - pst%s%r%level_fmm_to_amr
-   !  call dump_taylor(pst%s%r, pst%s%m_fmm, ilev)
+   !do i = 1, pst%s%r%levelmin - pst%s%r%level_fmm_to_amr
+   !  call dump_taylor(pst%s%r, pst%s%m_fmm, i)
    !end do 
     
   ! ---------------------------------------------------------------------
   ! Cleanup MG levels after solve complete
   ! ---------------------------------------------------------------------
    !call m_timer(pst,'fmm: cleanup','start')
-   if(ilevel==pst%s%r%levelmin) then 
-     call r_cleanup_fmm(pst)
+   call r_cleanup_fmm(pst, i)
    if(pst%s%r%verbose) print '(A)','FMM cleanup done '
-  endif
 end subroutine fmm
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
-recursive subroutine r_fmm_downward(pst,ilevel,input_size)
+recursive subroutine r_fmm_downward(pst,fmm_levels,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
+  use init_fmm_module, only: fmm_level_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
+  type(fmm_level_t)::fmm_levels
   integer,VALUE::input_size
   integer::ilevel
   integer::rID
 
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_FMM_DOWNWARD,pst%iUpper+1,input_size,0,ilevel)
-     call r_fmm_downward(pst%pLower,ilevel,input_size)
+     call r_fmm_downward(pst%pLower,fmm_levels,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call fmm_downward(pst%s,ilevel)
+     call fmm_downward(pst%s,pst%s%m_fmm_list(fmm_levels%ilev),fmm_levels%flev)
   endif
 
 end subroutine r_fmm_downward
@@ -105,7 +116,7 @@ end subroutine r_fmm_downward
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine fmm_downward(s, ilevel)
+subroutine fmm_downward(s, m_fmm, flev)
   use amr_parameters, only: ndim, twotondim, threetondim, multipole_size, taylor_size
   use amr_commons, only: mesh_t
   use ramses_commons, only: ramses_t
@@ -116,7 +127,8 @@ subroutine fmm_downward(s, ilevel)
   implicit none
 
   type(ramses_t) :: s
-  integer :: ilevel
+  type(mesh_t) :: m_fmm
+  integer :: flev
 
   integer :: ioct, idim, pcell, icell, inbor, jcell, nstride
   integer(kind=8), dimension(ndim) :: cc_grid, cc_icell, cc_jcell, cc_jcell_periodic, offset! cartesian coordinate
@@ -144,20 +156,20 @@ subroutine fmm_downward(s, ilevel)
         0, 0, 1, 1, 0, 0, 1, 1,  &
         0, 0, 0, 0, 1, 1, 1, 1   &
       ], [twotondim, ndim] )
-  associate(r=>s%r, g=>s%g, m=>s%m, m_fmm=>s%m_fmm, mdl=>s%mdl)
+  associate(r=>s%r, g=>s%g, m=>s%m, mdl=>s%mdl)
 
-  !if(m%noct_fmm(ilevel)<1) return
+  !if(m%noct_fmm(flev)<1) return
 
   ! Open cache for multipoles
   call open_cache(mdl, m_fmm, pack_size=storage_size(dummy_realdp)/32,& 
             pack=pack_fetch_taylor,unpack=unpack_fetch_taylor,& 
             init=init_flush_taylor, flush=pack_flush_taylor, combine=unpack_flush_taylor)
 
-  hash_key(0) = ilevel
-  hash_nbor(0) = ilevel - 1
-  hash_nbor_periodic(0) = ilevel - 1
-  hash_parent(0) = ilevel - 1
-  dx_loc = r%boxlen / 2.0D0**ilevel
+  hash_key(0) = flev
+  hash_nbor(0) = flev - 1
+  hash_nbor_periodic(0) = flev - 1
+  hash_parent(0) = flev - 1
+  dx_loc = r%boxlen / 2.0D0**flev
 
   ! jcell to icell
   do inbor = 1, threetondim
@@ -188,7 +200,7 @@ subroutine fmm_downward(s, ilevel)
   end do
 
   ! Loop over octs at this level
-  do ioct = m_fmm%head(ilevel), m_fmm%tail(ilevel)
+  do ioct = m_fmm%head(flev), m_fmm%tail(flev)
      accum_taylor(:, :) = 0.0D0
      hash_key(1:ndim) = m_fmm%grid(ioct)%ckey(1:ndim)
 
@@ -223,7 +235,7 @@ subroutine fmm_downward(s, ilevel)
           do idim=1,ndim
             nstride = 2**(idim-1)
             cc_jcell_periodic(idim) = 2*hash_nbor_periodic(idim) + MOD((jcell-1)/nstride, 2)
-            if ((cc_jcell_periodic(idim)<m%box_ckey_min(idim, ilevel) .or. cc_jcell_periodic(idim)>=m%box_ckey_max(idim, ilevel))) then
+            if ((cc_jcell_periodic(idim)<m%box_ckey_min(idim, flev) .or. cc_jcell_periodic(idim)>=m%box_ckey_max(idim, flev))) then
               cycle_flag = .true.
             end if 
           end do 
@@ -296,6 +308,7 @@ subroutine fmm_amr_intermediate(s, ilevel)
   implicit none
 
   type(ramses_t) :: s
+  type(mesh_t) :: m_fmm
   integer :: ilevel
 
   integer :: ioct, idim, ind, icell, jcell, nstride, nfine, igrid, nbox, pcell
@@ -334,7 +347,9 @@ subroutine fmm_amr_intermediate(s, ilevel)
   integer, allocatable :: fmm_grid_center_offset(:,:), fmm_cell_center_offset(:,:)
   logical, allocatable :: direct_neighbor_list(:,:,:)
 
-  associate(r=>s%r, g=>s%g, m=>s%m, m_fmm=>s%m_fmm, mdl=>s%mdl)
+  associate(r=>s%r, g=>s%g, m=>s%m, mdl=>s%mdl)
+
+  m_fmm = s%m_fmm_list(ilevel)
   fourpi = 4.D0*ACOS(-1.0D0)
   if(r%cosmo) fourpi = 1.5D0*g%omega_m*g%aexp
 
@@ -528,6 +543,7 @@ subroutine fmm_amr_direct(s, ilevel)
   implicit none
 
   type(ramses_t) :: s
+  type(mesh_t) :: m_fmm
   integer :: ilevel
 
   integer :: ioct, idim, ind, icell, jcell, jcell_amr, nstride, nfine, nbox, jgrid, igrid
@@ -552,8 +568,9 @@ subroutine fmm_amr_direct(s, ilevel)
   real(kind=8), dimension(:,:,:), allocatable      :: mm_jcell_list
   real(kind=8), dimension(:,:,:,:,:), allocatable  :: inv_dist
 
-  associate(r=>s%r, g=>s%g, m=>s%m, m_fmm=>s%m_fmm, mdl=>s%mdl)
+  associate(r=>s%r, g=>s%g, m=>s%m, mdl=>s%mdl)
 
+  m_fmm = s%m_fmm_list(ilevel)
   fourpi = 4.D0*ACOS(-1.0D0)
   if (r%cosmo) fourpi = 1.5D0*g%omega_m*g%aexp
 

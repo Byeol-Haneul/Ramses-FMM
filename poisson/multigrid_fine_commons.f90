@@ -426,6 +426,7 @@ subroutine build_mg(s,m,ifinelevel)
      hash_key(1:ndim)=m%grid(igrid)%ckey(1:ndim)
 
      ! Gather twotondim neighboring father grids
+     ! I don't need this loop. only "the father grid"
      do inbor=1,twotondim
 
 #ifndef WITHOUTMPI
@@ -436,18 +437,21 @@ subroutine build_mg(s,m,ifinelevel)
         endif
         mdl%mail_counter=mdl%mail_counter+1
 #endif
-        ! Get neighboring grid
-        hash_nbor(1:ndim)=hash_key(1:ndim)+shift_oct(1:ndim,inbor)
+! Get neighboring grid
+hash_nbor(1:ndim)=hash_key(1:ndim)+shift_oct(1:ndim,inbor)
 
-        ! Periodic boundary conditions
-        do idim=1,ndim
-           if(r%periodic(idim))then
-              if(hash_nbor(idim)< m%box_ckey_min(idim,ifinelevel))hash_nbor(idim)=m%box_ckey_max(idim,ifinelevel)-1
-              if(hash_nbor(idim)>=m%box_ckey_max(idim,ifinelevel))hash_nbor(idim)=m%box_ckey_min(idim,ifinelevel)
-           endif
-        enddo
+! Periodic boundary conditions
+do idim=1,ndim
+    if(r%periodic(idim))then
+      if(hash_nbor(idim)< m%box_ckey_min(idim,ifinelevel))hash_nbor(idim)=m%box_ckey_max(idim,ifinelevel)-1
+      if(hash_nbor(idim)>=m%box_ckey_max(idim,ifinelevel))hash_nbor(idim)=m%box_ckey_min(idim,ifinelevel)
+    endif
+enddo
+
+        !only this
         hash_father(1:ndim)=hash_nbor(1:ndim)/2
 
+        ! prob not worry
         in_domain = .true.
         do idim = 1, ndim
            in_domain = in_domain .and. hash_father(idim) .ge. m_mg%box_ckey_min(idim,icoarselevel) &
