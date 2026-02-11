@@ -2640,7 +2640,7 @@ subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
 #endif
 #ifdef MHD
               do idim=1,3
-                 emag = emag + 0.125d0*(m%bold(icell2,idim,igrid)+m%bold(icell2,3+idim,igrid))**2*vol2(ind)
+                 emag = emag + 0.125d0*(m%bold(icell2,idim,igrid)+m%bold(icell2,3+idim,igrid))**2
               end do
               eint = eint - emag*vol2(ind)
 #endif
@@ -2805,7 +2805,7 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
 #endif
 #ifdef MHD
               do idim=1,3
-                 emag = emag + 0.125d0*(m%bold(icell2,idim,igrid)+m%bold(icell2,3+idim,igrid))**2*vol2(ind)
+                 emag = emag + 0.125d0*(m%bold(icell2,idim,igrid)+m%bold(icell2,3+idim,igrid))**2
               end do
 #endif
               eint = eint + (etot - ekin - erad - emag) * vol2(ind)
@@ -3030,7 +3030,7 @@ subroutine pcs_kick_drift_dust(s,p,ilevel,action_part)
 #endif
 #ifdef MHD
              do idim=1,3
-                emag = emag + 0.125d0*(m%bold(icell2,idim,igrid)+m%bold(icell2,3+idim,igrid))**2*vol2(ind)
+                emag = emag + 0.125d0*(m%bold(icell2,idim,igrid)+m%bold(icell2,3+idim,igrid))**2
              end do
              eint = eint - emag*vol2(ind)
 #endif
