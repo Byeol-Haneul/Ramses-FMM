@@ -375,6 +375,7 @@ subroutine pack_flush_multipole(mesh,igrid,msg_size,msg_array)
      end do
   end do
 #endif
+
   msg_array=transfer(msg,msg_array)
 
 end subroutine pack_flush_multipole
