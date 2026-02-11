@@ -660,7 +660,7 @@ subroutine pcs_kick_drift_part(s,p,ilevel,action_part)
         xll=dble(cll(idim))+0.5D0 ! cell coordinate
         xl =dble(cl (idim))+0.5D0
         xr =dble(cr (idim))+0.5D0
-	     xrr=dble(crr(idim))+0.5D0
+        xrr=dble(crr(idim))+0.5D0
         wll(idim)=(2D0                        -abs(x(idim)-xll))**3/6D0 ! weight
         wl (idim)=(4D0-6D0*(x(idim)-xl)**2+3d0*abs(x(idim)-xl )**3)/6D0
         wr (idim)=(4D0-6D0*(x(idim)-xr)**2+3d0*abs(x(idim)-xr )**3)/6D0
