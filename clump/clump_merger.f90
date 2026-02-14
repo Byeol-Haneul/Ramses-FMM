@@ -2074,25 +2074,27 @@ subroutine particle_unbind(s,p)
         ! Get peak id
         ipart=p%sortp(i)
         global_peak_id=p%workp(i)
-        call get_peak(s,global_peak_id,ipeak,flush_cache=.false.,fetch_cache=.true.)
-        if(c%lev_peak(ipeak)==ilevel)then
-           ! Get clump tidal radius
-           rad=c%clump_rad(ipeak)
-           ! Compute total energy
-           bound=total_energy(dble(p%xp(ipart,1:ndim)),c%peak_pos(ipeak,1:ndim), &
-                &             dble(p%vp(ipart,1:ndim)),c%peak_vel(ipeak,1:ndim), &
-                &             c%phi(ipeak,1:nbin),rad,r%box_size,r%periodic)
-           ! If unbound, assign to next peak in hierarchy
-           if(bound.GE.0d0.or.c%clump_mass(ipeak).LE.c%mass_threshold)then
-              ! if central, unbind particles to the void
-              if(global_peak_id > 0 .and. global_peak_id==c%new_peak(ipeak))then
-                 p%workp(i)=0
-                 p%pid(ipart)=0
-              else ! if satellite, then offer unbound particles to the next peak in the hierarchy
-                 p%workp(i)=c%new_peak(ipeak)
-                 p%pid(ipart)=c%new_peak(ipeak)
-              endif
-           endif
+        if(global_peak_id > 0)then !ignore orphans
+            call get_peak(s,global_peak_id,ipeak,flush_cache=.false.,fetch_cache=.true.)
+            if(c%lev_peak(ipeak)==ilevel)then
+                ! Get clump tidal radius
+                rad=c%clump_rad(ipeak)
+                ! Compute total energy
+                bound=total_energy(dble(p%xp(ipart,1:ndim)),c%peak_pos(ipeak,1:ndim), &
+                    &             dble(p%vp(ipart,1:ndim)),c%peak_vel(ipeak,1:ndim), &
+                    &             c%phi(ipeak,1:nbin),rad,r%box_size,r%periodic)
+                ! If unbound, assign to next peak in hierarchy
+                if(bound.GE.0d0.or.c%clump_mass(ipeak).LE.c%mass_threshold)then
+                    ! if central, unbind particles to the void
+                    if(global_peak_id==c%new_peak(ipeak))then
+                        p%workp(i)=0
+                        p%pid(ipart)=0
+                    else ! if satellite, then offer unbound particles to the next peak in the hierarchy
+                        p%workp(i)=c%new_peak(ipeak)
+                        p%pid(ipart)=c%new_peak(ipeak)
+                    endif
+                endif
+            endif
         endif
      end do
      call close_cache(s,m%grid_dict)
