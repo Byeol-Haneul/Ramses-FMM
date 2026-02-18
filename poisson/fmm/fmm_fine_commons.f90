@@ -9,41 +9,43 @@ contains
 !
 ! Used variables:
 #ifdef GRAV
-subroutine fmm(pst,ilevel,icount)
+subroutine fmm(pst,ilev,icount)
   use amr_parameters, only: twotondim, nhilbert
   use poisson_parameters, only: ngs_fine, ngs_coarse, ncycles_coarse_safe
   use ramses_commons, only: pst_t
-  use init_fmm_module, only: r_init_fmm, r_build_fmm, double_level_t, fmm_level_t
+  use init_fmm_module, only: r_init_fmm, r_build_fmm, double_level_t, downward_level_t, fmm_level_t
   use fmm_multipoles!, only: m_fmm_multipoles
   use cleanup_fmm_module, only: r_cleanup_fmm
   implicit none
   type(pst_t)::pst
-  integer,intent(in) :: ilevel,icount
+  integer,intent(in) :: ilev,icount
   
-  integer :: igrid, ifine, i, ierr, allmasked, input_size
+  integer :: igrid, ifine, jlev, flev, input_size
   integer,dimension(1:4) :: output_array
   type(double_level_t)::double_level
   type(fmm_level_t)::fmm_levels
+  type(downward_level_t)::downward_levels
 
   if(pst%s%r%gravity_type>0)return
-  if(pst%s%m%noct_tot(ilevel)==0)return
+  if(pst%s%m%noct_tot(ilev)==0)return
   
-  if(pst%s%r%verbose) print '(A,I2)','Entering fmm at level ',ilevel
+  if(pst%s%r%verbose) print '(A,I2)','Entering fmm at AMR level ',ilev
 
   ! ---------------------------------------------------------------------
   ! Build FMM hierarchy in memory
   ! ---------------------------------------------------------------------
-  call r_init_fmm(pst, ilevel, 1)
-  if(pst%s%r%verbose) print '(A)','Multigrid init done '
+  call r_init_fmm(pst, ilev, 1)
+  if(pst%s%r%verbose) print '(A)','FMM init done '
 
-  double_level%ilevel=ilevel
-  fmm_levels%ilev=ilevel
-  input_size = storage_size(double_level)/32
+  double_level%ilevel=ilev
+  fmm_levels%ilev=ilev
+  downward_levels%ilev=ilev
+  downward_levels%jlev=ilev
 
-  do ifine=ilevel,pst%s%r%bound_levelmin+1,-1
+  do ifine=ilev,pst%s%r%bound_levelmin+1,-1
      double_level%ifine=ifine
      if(pst%s%r%verbose) print '(A,I2)','Build FMM ',ifine
-     call r_build_fmm(pst,double_level,input_size)
+     call r_build_fmm(pst,double_level,storage_size(double_level)/32)
   end do
 
   if(pst%s%r%verbose) print '(A)','FMM Hierarchy done '
@@ -51,30 +53,43 @@ subroutine fmm(pst,ilevel,icount)
   ! ---------------------------------------------------------------------
   ! Initiate solve at fine level
   ! ---------------------------------------------------------------------
-   do i = pst%s%r%bound_levelmin, pst%s%r%levelmin-pst%s%r%level_fmm_to_amr, 1
-    fmm_levels%flev=i
-    call r_reset_multipoles_taylor(pst, fmm_levels, input_size)
+   do flev = pst%s%r%bound_levelmin, ilev-pst%s%r%level_fmm_to_amr, 1
+    fmm_levels%flev=flev
+    call r_reset_multipoles_taylor(pst, fmm_levels, storage_size(fmm_levels)/32)
    end do
 
    !call m_timer(pst,'fmm: multipole upward','start')
-   call m_fmm_multipoles(pst, ilevel) ! do upward pass !
+   call m_fmm_multipoles(pst, ilev) ! do upward pass !
 
-  ! Downward pass for fmm grids. 
+   ! Downward pass for fmm grids. 
    !call m_timer(pst,'fmm: downward for fmm','start')
-   do i = pst%s%r%bound_levelmin+1, pst%s%r%levelmin-pst%s%r%level_fmm_to_amr
-     fmm_levels%flev=i
-     call r_fmm_downward(pst, fmm_levels, input_size)
-     if(pst%s%r%verbose) print '(A,I2)','[M2L & L2L] Downpass for FMM grids at level done', i
+   input_size = storage_size(downward_levels)/32
+   do flev = pst%s%r%bound_levelmin+1, ilev-pst%s%r%level_fmm_to_amr
+     downward_levels%flev=flev
+     do jlev = pst%s%r%levelmin, pst%s%r%nlevelmax
+      downward_levels%jlev=jlev
+      call r_fmm_downward(pst, downward_levels, input_size)
+      if(pst%s%r%verbose) print *,'[M2L & L2L] Downpass for (ilev, jlev, flev): ', ilev, jlev, flev
+     end do
    end do
 
    ! Call direct force calculation
    !call m_timer(pst,'fmm: amr intermediate force','start')
-   call r_fmm_amr_intermediate(pst, ilevel, 1)
-   if(pst%s%r%verbose) print '(A,I2)','AMR Intermediate Calculation done', ilevel
+   downward_levels%flev=ilev-pst%s%r%level_fmm_to_amr
+   print *, "[L2P & M2P]"
+   do jlev = pst%s%r%levelmin, pst%s%r%nlevelmax
+      downward_levels%jlev=jlev
+      call r_fmm_amr_intermediate(pst, downward_levels, input_size)
+      if(pst%s%r%verbose) print *,'AMR Intermediate Calculation done (ilev, jlev)', ilev, jlev
+   end do
 
    !call m_timer(pst,'fmm: direct force','start')
-   call r_fmm_amr_direct(pst, ilevel, 1)
-   if(pst%s%r%verbose) print '(A,I2)','Direct Force Calculation done', ilevel
+   print *, "[DIRECT FORCE]"
+   do jlev = pst%s%r%levelmin, pst%s%r%nlevelmax
+      downward_levels%jlev=jlev
+      call r_fmm_amr_direct(pst, downward_levels, input_size)
+      if(pst%s%r%verbose) print *,'Direct Force Calculation done (ilev, jlev)', ilev, jlev
+   end do
 
    !do i = 1, pst%s%r%levelmin - pst%s%r%level_fmm_to_amr
    !  call dump_taylor(pst%s%r, pst%s%m_fmm, i)
@@ -84,31 +99,30 @@ subroutine fmm(pst,ilevel,icount)
   ! Cleanup MG levels after solve complete
   ! ---------------------------------------------------------------------
    !call m_timer(pst,'fmm: cleanup','start')
-   call r_cleanup_fmm(pst, i)
+   call r_cleanup_fmm(pst, ilev)
    if(pst%s%r%verbose) print '(A)','FMM cleanup done '
 end subroutine fmm
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
-recursive subroutine r_fmm_downward(pst,fmm_levels,input_size)
+recursive subroutine r_fmm_downward(pst,downward_levels,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
-  use init_fmm_module, only: fmm_level_t
+  use init_fmm_module, only: downward_level_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  type(fmm_level_t)::fmm_levels
+  type(downward_level_t)::downward_levels
   integer,VALUE::input_size
-  integer::ilevel
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_FMM_DOWNWARD,pst%iUpper+1,input_size,0,ilevel)
-     call r_fmm_downward(pst%pLower,fmm_levels,input_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_FMM_DOWNWARD,pst%iUpper+1,input_size,0,downward_levels)
+     call r_fmm_downward(pst%pLower,downward_levels,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call fmm_downward(pst%s,pst%s%m_fmm_list(fmm_levels%ilev),fmm_levels%flev)
+     call fmm_downward(pst%s,pst%s%m_fmm_list(downward_levels%ilev), pst%s%m_fmm_list(downward_levels%jlev), downward_levels%flev)
   endif
 
 end subroutine r_fmm_downward
@@ -116,7 +130,7 @@ end subroutine r_fmm_downward
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine fmm_downward(s, m_fmm, flev)
+subroutine fmm_downward(s, m_ifmm, m_jfmm, flev)
   use amr_parameters, only: ndim, twotondim, threetondim, multipole_size, taylor_size
   use amr_commons, only: mesh_t
   use ramses_commons, only: ramses_t
@@ -127,7 +141,7 @@ subroutine fmm_downward(s, m_fmm, flev)
   implicit none
 
   type(ramses_t) :: s
-  type(mesh_t) :: m_fmm
+  type(mesh_t) :: m_ifmm, m_jfmm
   integer :: flev
 
   integer :: ioct, idim, pcell, icell, inbor, jcell, nstride
@@ -161,7 +175,7 @@ subroutine fmm_downward(s, m_fmm, flev)
   !if(m%noct_fmm(flev)<1) return
 
   ! Open cache for multipoles
-  call open_cache(mdl, m_fmm, pack_size=storage_size(dummy_realdp)/32,& 
+  call open_cache(mdl, m_jfmm, pack_size=storage_size(dummy_realdp)/32,& 
             pack=pack_fetch_taylor,unpack=unpack_fetch_taylor,& 
             init=init_flush_taylor, flush=pack_flush_taylor, combine=unpack_flush_taylor)
 
@@ -200,16 +214,21 @@ subroutine fmm_downward(s, m_fmm, flev)
   end do
 
   ! Loop over octs at this level
-  do ioct = m_fmm%head(flev), m_fmm%tail(flev)
+  do ioct = m_ifmm%head(flev), m_ifmm%tail(flev)
      accum_taylor(:, :) = 0.0D0
-     hash_key(1:ndim) = m_fmm%grid(ioct)%ckey(1:ndim)
+     hash_key(1:ndim) = m_ifmm%grid(ioct)%ckey(1:ndim)
 
     call get_parent_cell(s, hash_key, igrid_parent, pcell, flush_cache=.false., fetch_cache=.true.)
+    
 #ifdef FMM
-    parent_taylor = m_fmm%taylor_coeff(pcell, :, igrid_parent)
+    if (igrid_parent > 0) then
+      parent_taylor = m_jfmm%taylor_coeff(pcell, :, igrid_parent)
+    else
+      parent_taylor = 0.0
+    end if
 #endif
-    hash_parent(1:ndim) = m_fmm%grid(igrid_parent)%ckey(1:ndim)
 
+    hash_parent(1:ndim) = m_jfmm%grid(igrid_parent)%ckey(1:ndim)
     ! Far Field Calculation
     do icell = 1, twotondim
       do idim =1,ndim
@@ -228,6 +247,9 @@ subroutine fmm_downward(s, m_fmm, flev)
        end do
 
        igrid_nbor = grid_nbors(inbor)
+
+       if (igrid_nbor<=0) cycle
+
        hash_nbor_periodic(1:ndim) = hash_parent(1:ndim) + offset
 
        do jcell = 1, twotondim
@@ -243,7 +265,7 @@ subroutine fmm_downward(s, m_fmm, flev)
           if (direct_neighbor_list(inbor, jcell, pcell) .or. cycle_flag) cycle
           ! Shift multipole from origin -> source center (Need to use grid position)
 #ifdef FMM
-          multipole = m_fmm%multipole(jcell,:,igrid_nbor)
+          multipole = m_jfmm%multipole(jcell,:,igrid_nbor)
 #endif
           ! Get taylor coeffs from local
           do icell=1, twotondim
@@ -259,11 +281,11 @@ subroutine fmm_downward(s, m_fmm, flev)
      end do ! over neighboring grids 3^n 
      ! Add taylor coefficients from intermediate fields
 #ifdef FMM
-     m_fmm%taylor_coeff(:,:,ioct) = m_fmm%taylor_coeff(:,:,ioct) + accum_taylor
+     m_ifmm%taylor_coeff(:,:,ioct) = m_ifmm%taylor_coeff(:,:,ioct) + accum_taylor
 #endif
      ! Unlock neighbor octs
      do inbor = 1, threetondim
-        call unlock_cache(m_fmm, grid_nbors(inbor))
+        call unlock_cache(m_jfmm, grid_nbors(inbor))
      end do
   end do
   call close_cache(mdl)
@@ -273,23 +295,23 @@ end subroutine fmm_downward
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_fmm_amr_intermediate(pst,ilevel,input_size)
+recursive subroutine r_fmm_amr_intermediate(pst,downward_levels,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
+  use init_fmm_module, only: downward_level_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer,VALUE::input_size
-  integer::ilevel
-
+  type(downward_level_t)::downward_levels
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_FMM_AMR_INTERMEDIATE,pst%iUpper+1,input_size,0,ilevel)
-     call r_fmm_amr_intermediate(pst%pLower,ilevel,input_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_FMM_AMR_INTERMEDIATE,pst%iUpper+1,input_size,0,downward_levels)
+     call r_fmm_amr_intermediate(pst%pLower,downward_levels,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call fmm_amr_intermediate(pst%s,ilevel)
+     call fmm_amr_intermediate(pst%s,downward_levels%ilev,downward_levels%jlev)
   endif
 
 end subroutine r_fmm_amr_intermediate
@@ -297,7 +319,7 @@ end subroutine r_fmm_amr_intermediate
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine fmm_amr_intermediate(s, ilevel)
+subroutine fmm_amr_intermediate(s, ilev, jlev)
   use amr_parameters, only: ndim, twotondim, threetondim, multipole_size, taylor_size
   use amr_commons, only: mesh_t
   use ramses_commons, only: ramses_t
@@ -309,7 +331,7 @@ subroutine fmm_amr_intermediate(s, ilevel)
 
   type(ramses_t) :: s
   type(mesh_t) :: m_fmm
-  integer :: ilevel
+  integer :: ilev, jlev
 
   integer :: ioct, idim, ind, icell, jcell, nstride, nfine, igrid, nbox, pcell
   real(kind=8) :: phi, phi_out, fourpi, dx_loc
@@ -349,7 +371,7 @@ subroutine fmm_amr_intermediate(s, ilevel)
 
   associate(r=>s%r, g=>s%g, m=>s%m, mdl=>s%mdl)
 
-  m_fmm = s%m_fmm_list(ilevel)
+  m_fmm = s%m_fmm_list(jlev)
   fourpi = 4.D0*ACOS(-1.0D0)
   if(r%cosmo) fourpi = 1.5D0*g%omega_m*g%aexp
 
@@ -358,13 +380,13 @@ subroutine fmm_amr_intermediate(s, ilevel)
                   pack=pack_fetch_taylor, unpack=unpack_fetch_taylor,&
                   init=init_flush_taylor, flush=pack_flush_taylor, combine=unpack_flush_taylor)
 
-  hash_key(0) = ilevel
-  hash_fmm_grid(0) = ilevel - r%level_fmm_to_amr
-  prev_hash_fmm_grid(0) = ilevel - r%level_fmm_to_amr
-  hash_fmm_cell(0) = ilevel - r%level_fmm_to_amr + 1
+  hash_key(0) = ilev
+  hash_fmm_grid(0) = ilev - r%level_fmm_to_amr
+  prev_hash_fmm_grid(0) = ilev - r%level_fmm_to_amr
+  hash_fmm_cell(0) = ilev - r%level_fmm_to_amr + 1
   prev_hash_fmm_grid(1:ndim) = -1 ! initialize
 
-  dx_loc = r%boxlen / 2.0D0**ilevel
+  dx_loc = r%boxlen / 2.0D0**ilev
   nfine = 2**r%level_fmm_to_amr
   neighbors_cached = .false.
 
@@ -425,7 +447,10 @@ subroutine fmm_amr_intermediate(s, ilevel)
   end do
 
   ! Loop over octs at this level
-  do ioct = m%head(ilevel), m%tail(ilevel)
+  do ioct = m%head(ilev), m%tail(ilev)
+
+    if (all(m%grid(ioct)%refined(1:twotondim))) cycle
+
     hash_key(1:ndim) = m%grid(ioct)%ckey(1:ndim)
     hash_fmm_grid(1:ndim) = m%grid(ioct)%ckey(1:ndim) / nfine
     hash_fmm_cell(1:ndim) = m%grid(ioct)%ckey(1:ndim) / (nfine/2)
@@ -461,7 +486,11 @@ subroutine fmm_amr_intermediate(s, ilevel)
       pcell = pcell + nstride * MOD(hash_fmm_cell(idim), 2)
     end do
 #ifdef FMM
-    parent_taylor = m_fmm%taylor_coeff(pcell, :, igrid_parent)
+    if (igrid_parent > 0) then
+      parent_taylor = m_fmm%taylor_coeff(pcell, :, igrid_parent)
+    else
+      parent_taylor = 0.0
+    end if
 #endif
     ! Far field
     do icell = 1, twotondim
@@ -471,16 +500,17 @@ subroutine fmm_amr_intermediate(s, ilevel)
       m%phi(icell, ioct) = m%phi(icell, ioct) + phi
 #endif
     end do
-
     ! Intermediate field
     do ind = 1, threetondim
       igrid_nbor = grid_nbors(ind)
+      if (igrid_nbor<=0) cycle
+
       do jcell = 1, twotondim
         cycle_flag = .false.
         cc_jcell_periodic = hash_fmm_cell(1:ndim) - cell_diff_list(ind, jcell, igrid,:)
         do idim = 1, ndim
-          if ((cc_jcell_periodic(idim) < m%box_ckey_min(idim, ilevel - r%level_fmm_to_amr + 1)) .or. &
-              (cc_jcell_periodic(idim) >= m%box_ckey_max(idim, ilevel - r%level_fmm_to_amr + 1))) then
+          if ((cc_jcell_periodic(idim) < m%box_ckey_min(idim, ilev - r%level_fmm_to_amr + 1)) .or. &
+              (cc_jcell_periodic(idim) >= m%box_ckey_max(idim, ilev - r%level_fmm_to_amr + 1))) then
             cycle_flag = .true.
           end if
         end do
@@ -508,23 +538,23 @@ end subroutine fmm_amr_intermediate
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_fmm_amr_direct(pst,ilevel,input_size)
+recursive subroutine r_fmm_amr_direct(pst,downward_levels,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
+  use init_fmm_module, only: downward_level_t
   implicit none
   type(pst_t)::pst
   integer,VALUE::input_size
-  integer::ilevel
-
+  type(downward_level_t)::downward_levels
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_FMM_AMR_DIRECT,pst%iUpper+1,input_size,0,ilevel)
-     call r_fmm_amr_direct(pst%pLower,ilevel,input_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_FMM_AMR_DIRECT,pst%iUpper+1,input_size,0,downward_levels)
+     call r_fmm_amr_direct(pst%pLower,downward_levels,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call fmm_amr_direct(pst%s,ilevel)
+     call fmm_amr_direct(pst%s,downward_levels%ilev,downward_levels%jlev)
   endif
 
 end subroutine r_fmm_amr_direct
@@ -532,7 +562,7 @@ end subroutine r_fmm_amr_direct
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine fmm_amr_direct(s, ilevel)
+subroutine fmm_amr_direct(s, ilev, jlev)
   use amr_parameters, only: ndim, twotondim, threetondim, nhilbert
   use amr_commons, only: mesh_t
   use ramses_commons, only: ramses_t
@@ -544,7 +574,7 @@ subroutine fmm_amr_direct(s, ilevel)
 
   type(ramses_t) :: s
   type(mesh_t) :: m_fmm
-  integer :: ilevel
+  integer :: ilev, jlev
 
   integer :: ioct, idim, ind, icell, jcell, jcell_amr, nstride, nfine, nbox, jgrid, igrid
   integer :: i, j, k, grid_idx, total_grids, cell_idx
@@ -570,7 +600,7 @@ subroutine fmm_amr_direct(s, ilevel)
 
   associate(r=>s%r, g=>s%g, m=>s%m, mdl=>s%mdl)
 
-  m_fmm = s%m_fmm_list(ilevel)
+  m_fmm = s%m_fmm_list(jlev)
   fourpi = 4.D0*ACOS(-1.0D0)
   if (r%cosmo) fourpi = 1.5D0*g%omega_m*g%aexp
 
@@ -579,15 +609,15 @@ subroutine fmm_amr_direct(s, ilevel)
             pack=pack_fetch_rho, unpack=unpack_fetch_rho,&
             init=init_flush_taylor, flush=pack_flush_taylor, combine=unpack_flush_taylor)
 
-  hash_key(0) = ilevel
-  hash_fmm_grid(0) = ilevel - r%level_fmm_to_amr
-  hash_prev_fmm_grid(0) = ilevel - r%level_fmm_to_amr
-  hash_fmm_cell(0) = ilevel - r%level_fmm_to_amr + 1
-  hash_direct(0) = ilevel
+  hash_key(0) = ilev
+  hash_fmm_grid(0) = ilev - r%level_fmm_to_amr
+  hash_prev_fmm_grid(0) = ilev - r%level_fmm_to_amr
+  hash_fmm_cell(0) = ilev - r%level_fmm_to_amr + 1
+  hash_direct(0) = ilev
 
   hash_prev_fmm_grid(1:ndim) = -1 ! initialize
 
-  dx_loc = r%boxlen / 2.0D0**ilevel
+  dx_loc = r%boxlen / 2.0D0**ilev
   dxn    = dx_loc**ndim
   nfine  = 2**r%level_fmm_to_amr
   nbox   = (nfine/2)**ndim
@@ -633,7 +663,10 @@ subroutine fmm_amr_direct(s, ilevel)
   end do
 
   ! Loop over octs at this level
-  do ioct = m%head(ilevel), m%tail(ilevel)
+  do ioct = m%head(ilev), m%tail(ilev)
+
+    if (all(m%grid(ioct)%refined(1:twotondim))) cycle
+
     ! set keys for this amr grid
     hash_key(1:ndim) = m%grid(ioct)%ckey(1:ndim)
     hash_fmm_grid(1:ndim) = m%grid(ioct)%ckey(1:ndim) / nfine
@@ -677,16 +710,16 @@ subroutine fmm_amr_direct(s, ilevel)
           do idim = 1, ndim
 #ifdef PERIODIC
             if (r%periodic(idim)) then
-              if (hash_direct(idim) < m%box_ckey_min(idim, ilevel)) then
-                hash_direct(idim) = m%box_ckey_max(idim, ilevel) - 1
+              if (hash_direct(idim) < m%box_ckey_min(idim, ilev)) then
+                hash_direct(idim) = m%box_ckey_max(idim, ilev) - 1
               end if
-              if (hash_direct(idim) >= m%box_ckey_max(idim, ilevel)) then
-                hash_direct(idim) = m%box_ckey_min(idim, ilevel)
+              if (hash_direct(idim) >= m%box_ckey_max(idim, ilev)) then
+                hash_direct(idim) = m%box_ckey_min(idim, ilev)
               end if
             end if
 #endif
-            if (hash_direct(idim) < m%box_ckey_min(idim, ilevel) .OR. &
-                hash_direct(idim) >= m%box_ckey_max(idim, ilevel)) then
+            if (hash_direct(idim) < m%box_ckey_min(idim, ilev) .OR. &
+                hash_direct(idim) >= m%box_ckey_max(idim, ilev)) then
               cycle_flag = .true.
             end if
           end do
@@ -725,7 +758,7 @@ subroutine fmm_amr_direct(s, ilevel)
       end do
       m%phi(icell, ioct) = m%phi(icell, ioct) + phi
     end do
-  end do ! end over all amr grids @ given ilevel
+  end do ! end over all amr grids @ given ilev
   deallocate(mm_jcell_list, inv_dist)
   
   call close_cache(mdl)
@@ -735,18 +768,18 @@ end subroutine fmm_amr_direct
 !################################################################
 !################################################################
 !################################################################
-logical function is_direct_neighbor(cc_icell, cc_jcell, ilevel)
+logical function is_direct_neighbor(cc_icell, cc_jcell, ilev)
   use amr_parameters, only: ndim
   implicit none
   integer(kind=8), intent(in) :: cc_icell(ndim), cc_jcell(ndim)
-  integer, intent(in) :: ilevel
+  integer, intent(in) :: ilev
   integer :: d, n, diff
   
   is_direct_neighbor = .true.
   do d = 1, ndim
      diff = abs(cc_icell(d) - cc_jcell(d))
-     !if (ilevel > 1) then
-      !diff = min(diff, 2**ilevel - diff)
+     !if (ilev > 1) then
+      !diff = min(diff, 2**ilev - diff)
      !end if
      if (diff > 1) then
         is_direct_neighbor = .false.
@@ -930,25 +963,25 @@ end subroutine unpack_fetch_rho
 !################################################################
 !################################################################
 !################################################################
-subroutine dump_taylor(r, m, ilevel)
+subroutine dump_taylor(r, m, ilev)
   use amr_parameters, only: ndim, twotondim
   use amr_commons, only: run_t, mesh_t
   implicit none
   type(run_t) :: r
   type(mesh_t) :: m
-  integer, intent(in) :: ilevel
+  integer, intent(in) :: ilev
 
   integer :: ioct, icell, unit_debug
   real(kind=8) :: dx_loc
   character(len=256) :: filename
 
   ! Construct filename based on level
-  write(filename, '(A,I0,A)') "./out_fmm/taylor_level", ilevel, ".out"
+  write(filename, '(A,I0,A)') "./out_fmm/taylor_level", ilev, ".out"
 
   unit_debug = 999
   open(unit_debug, file=filename, status="replace")
 #ifdef FMM
-  do ioct = m%head(ilevel), m%tail(ilevel)
+  do ioct = m%head(ilev), m%tail(ilev)
     write(unit_debug, '(3I6, 20E20.5)') m%grid(ioct)%ckey(1:ndim), m%taylor_coeff(:,:,ioct)
   end do
 #endif

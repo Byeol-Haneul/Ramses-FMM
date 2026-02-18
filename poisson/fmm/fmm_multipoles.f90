@@ -52,13 +52,13 @@ subroutine m_fmm_multipoles(pst,ilevel)
   ! Add multipoles to FMM grids. 
   do i=r%levelmin-r%level_fmm_to_amr-1,r%bound_levelmin,-1
      if(i<1) cycle
-     if(r%verbose)write(*,'(" [M2M] Compute multipoles for FMM level ",I2)')i
+     if(r%verbose)write(*,'(" [M2M] Compute multipoles for AMR level ",I2," FMM level ",I2)')ilevel, i
      fmm_levels%flev=i
      call r_fmm_multipole_fmm2fmm(pst,fmm_levels,input_size)
   end do
 
   do i=r%bound_levelmin,r%levelmin-r%level_fmm_to_amr
-    if(r%verbose)write(*,'(" [M2M] Downward pass shifting multipoles for FMM level ",I2)')i
+    if(r%verbose)write(*,'(" [M2M] Downward pass shifting multipoles for AMR level ",I2," FMM level ",I2)')ilevel,i
     fmm_levels%flev=i
     call r_fmm_multipole_shift_downward(pst,fmm_levels,input_size)
  end do
@@ -164,6 +164,9 @@ subroutine fmm_multipole_amr2fmm(s,ilevel)
      end do
      ! Get fmm grid using a write-only cache
      call get_grid(s,hash_key_fmm,igrid_fmm,flush_cache=.true.,fetch_cache=.false.)
+     
+     if (igrid_fmm == 0) cycle
+
      multipole = 0.0D0
 
     ! Loop over cells
@@ -313,7 +316,7 @@ recursive subroutine r_fmm_multipole_shift_downward(pst,fmm_levels,input_size)
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_MULTIPOLE_SHIFT_DOWNWARD,pst%iUpper+1,input_size,0,ilevel)
+     rID = mdl_send_request(pst%s%mdl,MDL_MULTIPOLE_SHIFT_DOWNWARD,pst%iUpper+1,input_size,0,fmm_levels)
      call r_fmm_multipole_shift_downward(pst%pLower,fmm_levels,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
@@ -457,7 +460,7 @@ recursive subroutine r_reset_multipoles_taylor(pst,fmm_levels,input_size)
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_RESET_MULTIPOLES,pst%iUpper+1,input_size,0,ilevel)
+     rID = mdl_send_request(pst%s%mdl,MDL_RESET_MULTIPOLES,pst%iUpper+1,input_size,0,fmm_levels)
      call r_reset_multipoles_taylor(pst%pLower,fmm_levels,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else

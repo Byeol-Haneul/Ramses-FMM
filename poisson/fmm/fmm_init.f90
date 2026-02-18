@@ -6,6 +6,10 @@ end type double_level_t
 type :: fmm_level_t
     integer::ilev,flev
 end type fmm_level_t
+
+type :: downward_level_t
+    integer::ilev,jlev,flev ! to call trees built on target(i)/source(j) level amr leaf cells
+end type downward_level_t
 contains
 !#########################################################################
 !#########################################################################
@@ -101,7 +105,7 @@ subroutine build_fmm(s, m, m_fmm, input)
   integer(kind=4),dimension(1:ndim)::cart_key
   integer(kind=8),dimension(1:nhilbert)::hk
   integer(kind=8),dimension(1:ndim)::ix
-  logical::in_rank,in_domain,check_refinement,valid
+  logical::in_rank,in_domain,check_refinement,flag_all_refined
   type(msg_small_realdp)::dummy_small_realdp
 
   associate(r=>s%r,g=>s%g,mdl=>s%mdl)
@@ -132,12 +136,12 @@ subroutine build_fmm(s, m, m_fmm, input)
 
     ! OPTIMIZATION NEEDED
     if (check_refinement) then
-      valid = .not.(any(m%grid(igrid)%refined))
+      flag_all_refined = all(m%grid(igrid)%refined)
     else
-      valid = .true.
+      flag_all_refined = .false.
     end if
 
-    if(in_domain .and. valid)then
+    if(in_domain .and. (.not. flag_all_refined))then
 
         ! Access hash table
         ifather=hash_getp(m_fmm%grid_dict,hash_father)

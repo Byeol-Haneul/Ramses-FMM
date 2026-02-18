@@ -36,7 +36,6 @@ subroutine m_force_fine(pst,ilevel,icount)
         call r_force_analytic(pst,ilevel,1)
      endif
   endif
-  call r_dump_phi(pst)
 
   if(pst%s%r%verbose)write(*,'("   Gradient phi done for level ",I2)')ilevel
 
@@ -49,6 +48,7 @@ subroutine m_force_fine(pst,ilevel,icount)
   call r_compute_rhomax(pst,ilevel,1,rhomax,2)
   pst%s%g%rho_max(ilevel)=rhomax
   if(pst%s%r%verbose)write(*,'("   Maximum density done for level ",I2)')ilevel
+  !call r_dump_phi(pst)
 
 end subroutine m_force_fine
 !#########################################################

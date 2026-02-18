@@ -12,10 +12,10 @@ pic=.true.
 poisson=.true.
 hydro=.false.
 nrestart=0
-nsubcycle=1,1,2
+nsubcycle=2,2,2
 ncontrol=1
 verbose=.true.
-nstepmax=3
+nstepmax=1
 /
 
 &OUTPUT_PARAMS
@@ -30,7 +30,7 @@ ic_scale_m=1.00
 /
 
 &AMR_PARAMS
-levelmin=8
+levelmin=6
 levelmax=8
 ngridmax=2000000
 npartmax=4000000
