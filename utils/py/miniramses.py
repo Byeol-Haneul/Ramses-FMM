@@ -888,7 +888,7 @@ class Hydro:
         self.ndim = nndim
         self.nvar = nnvar
         self.u = np.empty(shape=(nnvar,2**nndim,0))
-
+    
 def rd_hydro(nout,**kwargs):
 
     prefix = kwargs.get("prefix","hydro")
@@ -990,6 +990,90 @@ def rd_hydro(nout,**kwargs):
             iskip[ilevel] = iskip[ilevel] + ncache
 
     return hydro
+
+
+class Grav:
+    def __init__(self, ndim):
+        self.level = 0
+        self.ngrid = 0
+        self.ndim = ndim
+        self.nvar = ndim + 1
+        self.g = np.empty(shape=(ndim + 1, 2**ndim, 0))
+
+def rd_grav(nout, **kwargs):
+    prefix = kwargs.get("prefix", "grav")
+    backup = kwargs.get("backup", False)
+    path = kwargs.get("path", "./")
+
+    car1 = str(nout).zfill(5)
+    info = rd_info(nout, path=path, backup=backup)
+    ncpu = info.ncpu
+    ndim = info.ndim
+    levelmin = info.levelmin
+    nlevelmax = info.nlevelmax
+    cpulist = range(1, ncpu + 1)
+
+    nvar = ndim + 1
+    twotondim = 2**ndim
+    header_size = 16 + 4 * (nlevelmax - levelmin + 1)
+
+    print(f"Found nvar={nvar} (potential + {ndim} force components)")
+    print("Reading " + prefix + " data...")
+
+    grav = []
+    for ilevel in range(0, nlevelmax):
+        grav.append(Grav(ndim))
+        grav[ilevel].level = ilevel
+
+    numbl = np.zeros([nlevelmax, ncpu], dtype=np.int32)
+
+    for icpu in cpulist:
+        car2 = str(icpu).zfill(5)
+        if backup:
+            filename = path + "/backup_" + car1 + "/" + prefix + "." + car2
+        else:
+            filename = path + "/output_" + car1 + "/" + prefix + "." + car2
+        skip = 16
+        for ilevel in range(levelmin - 1, nlevelmax):
+            offset = skip + 4 * (ilevel + 1 - levelmin)
+            numbl[ilevel, icpu - 1] = np.fromfile(filename, dtype=np.int32, count=1, offset=offset)[0]
+            grav[ilevel].ngrid += numbl[ilevel, icpu - 1]
+
+    for ilevel in range(0, nlevelmax):
+        grav[ilevel].u = np.zeros([nvar, twotondim, grav[ilevel].ngrid], dtype=float)
+
+    iskip = np.zeros(nlevelmax, dtype=int)
+    nvartot = nvar * twotondim
+
+    for icpu in cpulist:
+        car2 = str(icpu).zfill(5)
+        if backup:
+            filename = path + "/backup_" + car1 + "/" + prefix + "." + car2
+        else:
+            filename = path + "/output_" + car1 + "/" + prefix + "." + car2
+
+        offset = header_size
+        for ilevel in range(levelmin - 1, nlevelmax):
+            ncache = numbl[ilevel, icpu - 1]
+            if backup:
+                transfer = np.fromfile(filename, dtype=np.float64, count=nvartot * ncache, offset=offset)
+            else:
+                transfer = np.fromfile(filename, dtype=np.float32, count=nvartot * ncache, offset=offset)
+
+            transfer = np.reshape(transfer, (ncache, nvar, twotondim))
+            transfer = np.transpose(transfer, (1, 2, 0))
+
+            for ivar in range(nvar):
+                for ind in range(twotondim):
+                    grav[ilevel].u[ivar, ind, iskip[ilevel]:iskip[ilevel] + ncache] = transfer[ivar, ind]
+
+            if backup:
+                offset += ncache * nvartot * 8
+            else:
+                offset += ncache * nvartot * 4
+            iskip[ilevel] += ncache
+            
+    return grav
 
 def mk_image(x,y,dx,var):
     """
@@ -1186,6 +1270,7 @@ class Cell:
         self.nvar = nnvar
         self.x = np.empty(shape=(nndim,0))
         self.u = np.empty(shape=(nnvar,0))
+        self.g = np.empty(shape=(nndim+1,0))
         self.dx = np.empty(shape=(0))
         self.level = np.empty(shape=(0),dtype=np.int8)
 
@@ -1228,6 +1313,7 @@ def rd_cell(nout,**kwargs):
 
     a = rd_amr(nout,**kwargs)
     h = rd_hydro(nout,**kwargs)
+    g = rd_grav(nout,**kwargs)
 
     nlevelmax = len(a)
     ndim = a[0].ndim
@@ -1267,7 +1353,13 @@ def rd_cell(nout,**kwargs):
                 uc = np.zeros([nvar,nc])
                 for ivar in range(0,nvar):
                     uc[ivar,:]= h[ilev].u[ivar,ind,np.where(a[ilev].refined[ind] == False)]
+                
+                gc = np.zeros([ndim+1,nc])
+                for ivar in range(0, ndim+1):
+                    gc[ivar,:]= g[ilev].u[ivar,ind,np.where(a[ilev].refined[ind] == False)]
+                    
                 c.u = np.append(c.u,uc,axis=1)
+                c.g = np.append(c.g,gc,axis=1)
                 dd = np.ones(nc)*dx
                 c.dx = np.append(c.dx,dd)
                 dd = np.ones(nc,dtype=np.int8) * ilev
@@ -1298,6 +1390,7 @@ def rd_cell(nout,**kwargs):
                 r = np.maximum.reduce([np.abs(c.x[0]-center[0]), np.abs(c.x[1]-center[1]), np.abs(c.x[2]-center[2])]) - dx
         c.ncell = np.count_nonzero(r < radius)
         c.u  = c.u[:,r < radius]
+        c.g  = c.g[:, r < radius]
         c.x  = c.x[:,r < radius]
         c.dx = c.dx[r < radius]
         c.level = c.level[r < radius]
