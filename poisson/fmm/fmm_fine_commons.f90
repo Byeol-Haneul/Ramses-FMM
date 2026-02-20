@@ -144,7 +144,6 @@ subroutine fmm_downward(s, ilev, jlev, flev)
   implicit none
 
   type(ramses_t) :: s
-  type(mesh_t) :: m_target, m_source
   integer :: ilev, jlev, flev
 
   integer :: ioct, idim, pcell, icell, inbor, jcell, nstride
@@ -173,11 +172,10 @@ subroutine fmm_downward(s, ilev, jlev, flev)
         0, 0, 1, 1, 0, 0, 1, 1,  &
         0, 0, 0, 0, 1, 1, 1, 1   &
       ], [twotondim, ndim] )
-  associate(r=>s%r, g=>s%g, m=>s%m, mdl=>s%mdl)
+  associate(r=>s%r, g=>s%g, m=>s%m, mdl=>s%mdl, m_target => s%m_fmm_list(ilev), m_source => s%m_fmm_list(jlev))
 
   !if(m%noct_fmm(flev)<1) return
-  m_target = s%m_fmm_list(ilev)
-  m_source = s%m_fmm_list(jlev)
+  
   ! Open cache for multipoles
   call open_cache(mdl, m_source, pack_size=storage_size(dummy_realdp)/32,& 
             pack=pack_fetch_taylor,unpack=unpack_fetch_taylor,& 
@@ -315,7 +313,6 @@ subroutine fmm_downward_coarse(s, ilev, jlev, flev)
   implicit none
 
   type(ramses_t) :: s
-  type(mesh_t) :: m_target, m_source
   integer :: ilev, jlev, flev
 
   integer :: ioct, idim, pcell, icell, inbor, jcell, nstride
@@ -344,11 +341,7 @@ subroutine fmm_downward_coarse(s, ilev, jlev, flev)
         0, 0, 1, 1, 0, 0, 1, 1,  &
         0, 0, 0, 0, 1, 1, 1, 1   &
       ], [twotondim, ndim] )
-  associate(r=>s%r, g=>s%g, m=>s%m, mdl=>s%mdl)
-
-  !if(m%noct_fmm(flev)<1) return
-  m_target = s%m_fmm_list(ilev)
-  m_source = s%m
+  associate(r=>s%r, g=>s%g, m=>s%m, mdl=>s%mdl, m_target => s%m_fmm_list(ilev), m_source => s%m)
   
   ! Open cache for multipoles
   call open_cache(mdl, m_source, pack_size=storage_size(dummy_realdp)/32, pack=pack_fetch_rho, unpack=unpack_fetch_rho)
@@ -361,6 +354,7 @@ subroutine fmm_downward_coarse(s, ilev, jlev, flev)
   hash_parent(0) = flev - 1
   dx_loc = r%boxlen / 2.0D0**flev
   vol = dx_loc ** ndim
+  temp_taylor = 0.0D0
 
   ! jcell to icell
   do inbor = 1, threetondim
