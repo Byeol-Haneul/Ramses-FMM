@@ -14,6 +14,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   use rho_fine_module, only: m_rho_fine
 #ifdef FMM
   use fmm_fine_commons, only: fmm
+  use cleanup_fmm_module, only: r_cleanup_fmm
 #endif
 #ifdef GRAV
   use phi_fine_cg_module, only: m_phi_fine_cg
@@ -284,7 +285,17 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
      call m_timer(pst,'update time','start')
      call m_update_time(pst,ilevel,done)
   end if
+#ifdef FMM
+    if(ilevel==r%levelmin) then
+      do ilev=ilevel,r%nlevelmax
+        call r_cleanup_fmm(pst, ilev)
+        if(pst%s%r%verbose) print *,'[FMM cleanup] LEVEL: ', ilev
+      end do
+    end if
+#endif
   if (done)return
+
+
 
   !------------------
   ! Thermal feedback

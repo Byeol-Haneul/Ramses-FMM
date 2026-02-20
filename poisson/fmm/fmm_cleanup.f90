@@ -9,9 +9,7 @@ recursive subroutine r_cleanup_fmm(pst, ilevel)
   implicit none
   type(pst_t)::pst
   integer::rID, ilevel
-  
-  if(pst%s%r%verbose) write(*,*)'Entering cleanup_fmm'
-  
+    
   if(pst%nLower>0) then
      rID = mdl_send_request(pst%s%mdl,MDL_CLEANUP_FMM,pst%iUpper+1)
      call r_cleanup_fmm(pst%pLower, ilevel)

@@ -44,21 +44,24 @@ subroutine m_fmm_multipoles(pst,ilevel)
   end do
 
   ! Add multipoles from AMR grids
+  print *, "[P2M] LEVEL: ", ilevel
   do i=r%nlevelmax,r%levelmin,-1
-      if(r%verbose)write(*,'(" [M2M] AMR to FMM AMR LEVEL", I2)')i
       call r_fmm_multipole_amr2fmm(pst, i, 1)
+      if(r%verbose) print *, "      <AMR->FMM> : ", ilevel
   end do
 
+  print *, "[M2M] LEVEL: ", ilevel
   ! Add multipoles to FMM grids. 
   do i=r%levelmin-r%level_fmm_to_amr-1,r%bound_levelmin,-1
      if(i<1) cycle
-     if(r%verbose)write(*,'(" [M2M] Compute multipoles for AMR level ",I2," FMM level ",I2)')ilevel, i
+     if(r%verbose)write(*,'("     <ACCUMULATION> TREE for AMR LEVEL: ",I2,", TREE LEVEL: ",I2)')ilevel, i
      fmm_levels%flev=i
      call r_fmm_multipole_fmm2fmm(pst,fmm_levels,input_size)
   end do
 
+  print *, "[M2M] LEVEL: ", ilevel
   do i=r%bound_levelmin,r%levelmin-r%level_fmm_to_amr
-    if(r%verbose)write(*,'(" [M2M] Downward pass shifting multipoles for AMR level ",I2," FMM level ",I2)')ilevel,i
+    if(r%verbose)write(*,'("      <SHIFTING> TREE for AMR LEVEL: ",I2,", TREE LEVEL: ",I2)')ilevel, i
     fmm_levels%flev=i
     call r_fmm_multipole_shift_downward(pst,fmm_levels,input_size)
  end do
