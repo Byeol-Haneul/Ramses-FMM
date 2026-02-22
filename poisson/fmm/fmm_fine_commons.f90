@@ -44,14 +44,6 @@ subroutine fmm(pst,ilev,icount)
 
   if(pst%s%r%verbose) print '(A)','FMM Hierarchy done '
 
-  do jlev=ilev,pst%s%r%nlevelmax 
-    fmm_levels%ilev=jlev
-    do flev = pst%s%r%bound_levelmin, jlev-pst%s%r%level_fmm_to_amr, 1
-      fmm_levels%flev=flev
-      call r_reset_multipoles_taylor(pst, fmm_levels, storage_size(fmm_levels)/32)
-    end do
-  end do
-
    !call m_timer(pst,'fmm: multipole upward','start')
   do jlev=ilev,pst%s%r%nlevelmax
     call m_fmm_multipoles(pst, jlev) ! do upward pass !
@@ -65,7 +57,7 @@ subroutine fmm(pst,ilev,icount)
    print *, "[M2L & L2L] LEVEL: ", ilev
    do flev = pst%s%r%bound_levelmin+1, ilev-pst%s%r%level_fmm_to_amr
      downward_levels%flev=flev
-     do jlev = pst%s%r%levelmin, pst%s%r%nlevelmax
+     do jlev = max(pst%s%r%levelmin, flev+pst%s%r%level_fmm_to_amr), pst%s%r%nlevelmax
       downward_levels%jlev=jlev
       call r_fmm_downward(pst, downward_levels, input_size)
       if(pst%s%r%verbose) print *,'     <Downpass> (ilev, jlev, flev): ', ilev, jlev, flev
@@ -121,7 +113,7 @@ recursive subroutine r_fmm_downward(pst,downward_levels,input_size)
      call r_fmm_downward(pst%pLower,downward_levels,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     if (downward_levels%jlev == downward_levels%flev) then
+     if (downward_levels%jlev == downward_levels%flev - 1) then
        call fmm_downward_coarse(pst%s, downward_levels%ilev, downward_levels%jlev, downward_levels%flev)
      else
        call fmm_downward(pst%s, downward_levels%ilev, downward_levels%jlev, downward_levels%flev)
@@ -147,7 +139,7 @@ subroutine fmm_downward(s, ilev, jlev, flev)
   integer :: ilev, jlev, flev
 
   integer :: ioct, idim, pcell, icell, inbor, jcell, nstride
-  integer(kind=8), dimension(ndim) :: cc_grid, cc_icell, cc_jcell, cc_jcell_periodic, offset! cartesian coordinate
+  integer(kind=8), dimension(ndim) :: cc_grid, cc_icell, cc_jcell, cc_jcell_periodic, offset, ii! cartesian coordinate
   real(kind=8), dimension(ndim) :: xx_igrid, xx_icell, xx_jcell, xx_jcell_periodic, xx_pgrid, dx, diff ! box unit real coordinate
   real(kind=8) :: dx_loc, dist, D0, D1, D2, D3
   integer(kind=8), dimension(0:ndim) :: hash_key, hash_nbor, hash_nbor_periodic, hash_parent
@@ -221,6 +213,7 @@ subroutine fmm_downward(s, ilev, jlev, flev)
   do ioct = m_target%head(flev), m_target%tail(flev)
      accum_taylor(:, :) = 0.0D0
      hash_key(1:ndim) = m_target%grid(ioct)%ckey(1:ndim)
+     hash_parent(1:ndim) = hash_key(1:ndim)/2 !!! check
 
     ! Only do L2L if source and target trees are the same.
     if (ilev == jlev) then
@@ -234,7 +227,6 @@ subroutine fmm_downward(s, ilev, jlev, flev)
       end if
 #endif
 
-      hash_parent(1:ndim) = m_source%grid(igrid_parent)%ckey(1:ndim)
       ! Far Field Calculation
       do icell = 1, twotondim
         do idim =1,ndim
@@ -242,6 +234,12 @@ subroutine fmm_downward(s, ilev, jlev, flev)
         end do 
         call shift_taylor(parent_taylor, dx, temp_taylor)
         accum_taylor(icell,:) = accum_taylor(icell,:) + temp_taylor
+      end do
+    else
+      ii(1:ndim)=hash_key(1:ndim)-2*hash_parent(1:ndim)
+      pcell=1
+      do idim=1,ndim
+        pcell=pcell+2**(idim-1)*ii(idim)
       end do
     end if
 
@@ -316,7 +314,7 @@ subroutine fmm_downward_coarse(s, ilev, jlev, flev)
   integer :: ilev, jlev, flev
 
   integer :: ioct, idim, pcell, icell, inbor, jcell, nstride
-  integer(kind=8), dimension(ndim) :: cc_grid, cc_icell, cc_jcell, cc_jcell_periodic, offset! cartesian coordinate
+  integer(kind=8), dimension(ndim) :: cc_grid, cc_icell, cc_jcell, cc_jcell_periodic, offset, ii! cartesian coordinate
   real(kind=8), dimension(ndim) :: xx_igrid, xx_icell, xx_jcell, xx_jcell_periodic, xx_pgrid, dx, diff ! box unit real coordinate
   real(kind=8) :: dx_loc, dist, D0, vol
   integer(kind=8), dimension(0:ndim) :: hash_key, hash_nbor, hash_nbor_periodic, hash_parent
@@ -385,7 +383,13 @@ subroutine fmm_downward_coarse(s, ilev, jlev, flev)
   do ioct = m_target%head(flev), m_target%tail(flev)
      accum_taylor(:, :) = 0.0D0
      hash_key(1:ndim) = m_target%grid(ioct)%ckey(1:ndim)
-    
+     hash_parent(1:ndim) = hash_key(1:ndim)/2
+     ii(1:ndim)=hash_key(1:ndim)-2*hash_parent(1:ndim)
+     pcell=1
+     do idim=1,ndim
+       pcell=pcell+2**(idim-1)*ii(idim)
+     end do
+
      ! Get neighboring parent grids (returns 3^n parent level grids)
      call get_intermediate_nbor_grid(s, hash_key, grid_nbors, flush_cache=.false., fetch_cache=.true.)
      do inbor = 1, threetondim
@@ -512,7 +516,7 @@ subroutine fmm_amr_intermediate(s, ilev, jlev)
 
   associate(r=>s%r, g=>s%g, m=>s%m, mdl=>s%mdl)
 
-  m_fmm = s%m_fmm_list(jlev)
+  m_fmm = s%m_fmm_list(jlㅡ ev)
   fourpi = 4.D0*ACOS(-1.0D0)
   if(r%cosmo) fourpi = 1.5D0*g%omega_m*g%aexp
 
@@ -707,7 +711,7 @@ recursive subroutine r_fmm_amr_direct(pst,downward_levels,input_size)
      call r_fmm_amr_direct(pst%pLower,downward_levels,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     if (downward_levels%ilev==downward_levels%jlev-1) then
+     if (downward_levels%ilev==downward_levels%jlev+1) then
      !! HERE WE DO NEAR FIELD + MID FIELD TOGETHER WITH 6^n cells
        call fmm_combined_direct(pst%s,downward_levels%ilev,downward_levels%jlev)
      else
@@ -786,6 +790,7 @@ subroutine fmm_combined_direct(s, ilev, jlev)
   hash_fmm_cell(0) = ilev - r%level_fmm_to_amr + 1
   prev_hash_fmm_grid(1:ndim) = -1 ! initialize
 
+  !!!! TODO: the distance should be doubled
   dx_loc = r%boxlen / 2.0D0**ilev
   vol = dx_loc ** ndim
   nfine = 2**r%level_fmm_to_amr
