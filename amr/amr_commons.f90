@@ -53,6 +53,10 @@ module amr_commons
      real(kind=8)::bkp_last_min=10  ! Backup file before the end of run in min
      integer::bkp_modulo=0       ! Use modulo for backup file count
      integer::nfile=1            ! Number of file used per snapshot. Use -1 for nfile=ncpu
+     logical::output_part=.true. ! Output particle data in dumps
+     logical::output_grav=.true. ! Output gravity data in dumps
+     logical::output_hydro=.true.! Output hydro data in dumps
+     logical::output_amr=.true.  ! Output AMR data in dumps
 
      ! Trajectory output parameters (per-step particle traces)
      integer::ntrajectories=0
