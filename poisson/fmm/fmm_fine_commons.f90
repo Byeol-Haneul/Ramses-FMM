@@ -80,6 +80,7 @@ subroutine fmm(pst,ilev,icount)
    print *, "[P2P] LEVEL: ", ilev
    do jlev = max(pst%s%r%levelmin, ilev-2), pst%s%r%nlevelmax
       downward_levels%jlev=jlev
+      if (ilev /= jlev) cycle
       call r_fmm_amr_direct(pst, downward_levels, input_size)
       if(pst%s%r%verbose) print *,'     <Direct Force> (ilev, jlev)', ilev, jlev
    end do
@@ -514,9 +515,8 @@ subroutine fmm_amr_intermediate(s, ilev, jlev)
   integer, allocatable :: fmm_grid_center_offset(:,:), fmm_cell_center_offset(:,:)
   logical, allocatable :: direct_neighbor_list(:,:,:)
 
-  associate(r=>s%r, g=>s%g, m=>s%m, mdl=>s%mdl)
+  associate(r=>s%r, g=>s%g, m=>s%m, mdl=>s%mdl, m_fmm=>s%m_fmm_list(jlev))
 
-  m_fmm = s%m_fmm_list(jlㅡ ev)
   fourpi = 4.D0*ACOS(-1.0D0)
   if(r%cosmo) fourpi = 1.5D0*g%omega_m*g%aexp
 
@@ -573,11 +573,11 @@ subroutine fmm_amr_intermediate(s, ilev, jlev)
   do ind = 1, threetondim
     ! calculate offsets
     do idim = 1, ndim
-      offset_list(ind, idim) = MOD((ind-1)/3**(idim-1), 3) - 1 ! offset by             How many fmm grids
+      offset_list(ind, idim) = MOD((ind-1)/3**(idim-1), 3) - 1 ! offset by how many fmm grids
     end do
     do jcell = 1, twotondim
       cc_jcell = 2 * offset_list(ind,:) + displacement_list(jcell,:) ! respect to grid left corner / fmm cell unit
-      offset = (cc_jcell+ 0.5) * nfine ! offset by             How many amr cells
+      offset = (cc_jcell+ 0.5) * nfine ! offset by how many amr cells
       do igrid=1,nbox
         cc_icell = (fmm_grid_center_offset(igrid, :) + nfine/2)/(nfine/2) ! respect to grid left corner / fmm cell unit
         cycle_flag = .true.
@@ -611,10 +611,6 @@ subroutine fmm_amr_intermediate(s, ilev, jlev)
     do idim=1,ndim
       nstride = nfine**(idim-1)
       igrid = igrid + nstride * MOD(hash_key(idim), nfine)
-    end do
-
-    do icell=1,twotondim
-      m%phi(icell,ioct) = 0.0D0
     end do
 
     ! Check if we need to fetch neighbors & parent Taylor
@@ -712,7 +708,7 @@ recursive subroutine r_fmm_amr_direct(pst,downward_levels,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
      if (downward_levels%ilev==downward_levels%jlev+1) then
-     !! HERE WE DO NEAR FIELD + MID FIELD TOGETHER WITH 6^n cells
+       !! HERE WE DO NEAR FIELD + MID FIELD TOGETHER WITH 6^n cells
        call fmm_combined_direct(pst%s,downward_levels%ilev,downward_levels%jlev)
      else
        call fmm_amr_direct(pst%s,downward_levels%ilev,downward_levels%jlev)
