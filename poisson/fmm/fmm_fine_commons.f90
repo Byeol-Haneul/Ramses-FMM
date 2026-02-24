@@ -78,7 +78,7 @@ subroutine fmm(pst,ilev,icount)
 
    !call m_timer(pst,'fmm: direct force','start')
    print *, "[P2P] LEVEL: ", ilev
-   do jlev = max(pst%s%r%levelmin, ilev-2), pst%s%r%nlevelmax
+   do jlev = max(pst%s%r%levelmin, ilev-2), min(ilev+1, pst%s%r%nlevelmax)
       downward_levels%jlev=jlev
       call r_fmm_amr_direct(pst, downward_levels, input_size)
       if(pst%s%r%verbose) print *,'     <Direct Force> (ilev, jlev)', ilev, jlev
@@ -907,11 +907,11 @@ subroutine fmm_amr_direct(s, ilev, jlev)
   type(ramses_t) :: s
   integer :: ilev, jlev
 
-  integer :: ioct, idim, ind, icell, jcell, jcell_amr, nstride, nfine, nbox, jgrid, igrid
+  integer :: ioct, idim, ind, icell, jcell, jcell_amr, nstride, nfine, nbox, jgrid, igrid, jfinecell
   integer :: i, j, k, grid_idx, total_grids, cell_idx
   real(kind=8) :: phi, dist2, fourpi, dx_loc, dxn, dist
   integer(kind=8), dimension(ndim) :: cc_icell, cc_jcell, cc_igrid, cc_jgrid, cc_fmm_cell, offset
-  real(kind=8), dimension(ndim) :: xx_icell, xx_jcell, diff
+  real(kind=8), dimension(ndim) :: xx_icell, xx_jcell, diff, fine_diff
   integer(kind=8), dimension(0:ndim) :: hash_key, hash_fmm_grid, hash_fmm_cell, &
                                         hash_direct, hash_prev_fmm_grid, prev_hash_fmm_cell
   real(kind=8), dimension(threetondim, ndim) :: offset_list
@@ -928,6 +928,8 @@ subroutine fmm_amr_direct(s, ilev, jlev)
   ! Arrays sized for all source cells: threetondim * (nfine/2)^ndim * twotondim
   real(kind=8), dimension(:,:,:), allocatable      :: mm_jcell_list
   real(kind=8), dimension(:,:,:,:,:), allocatable  :: inv_dist
+  real(kind=8), dimension(:,:,:,:,:,:), allocatable :: nearest_inv_dist
+  logical, dimension(:,:,:,:,:), allocatable       :: nearest_flags
 
   associate(r=>s%r, g=>s%g, m=>s%m, mdl=>s%mdl)
 
@@ -958,13 +960,16 @@ subroutine fmm_amr_direct(s, ilev, jlev)
   ! Allocate arrays for all possible source cells
   allocate(mm_jcell_list(threetondim, nbox, twotondim))
   allocate(inv_dist(nbox, twotondim, threetondim, nbox, twotondim))
+  allocate(nearest_flags(nbox, twotondim, threetondim, nbox, twotondim))
+  allocate(nearest_inv_dist(nbox, twotondim, threetondim, nbox, twotondim, twotondim))
 
   prev_hash_fmm_cell = -huge(0_8)
+  nearest_inv_dist = 0.0D0
 
   ! Get offset lists
   do ind = 1, threetondim
     do idim = 1, ndim
-      offset_list(ind, idim) = MOD((ind-1)/3**(idim-1), 3) - 1 ! offset by             How many fmm grids
+      offset_list(ind, idim) = MOD((ind-1)/3**(idim-1), 3) - 1 ! offset by how many fmm grids
     end do
   end do
 
@@ -984,9 +989,19 @@ subroutine fmm_amr_direct(s, ilev, jlev)
             cc_jcell = 2 * cc_jgrid + displacement_list(jcell, :)
             if (all(cc_icell(1:ndim) == cc_jcell(1:ndim))) then
               inv_dist(igrid, icell, ind, jgrid, jcell) = 1 / dx_loc !! cap it to dx_loc instead of skipping
+              nearest_flags(igrid, icell, ind, jgrid, jcell) = .false.
             else
               diff = (cc_icell - cc_jcell) * dx_loc
               inv_dist(igrid, icell, ind, jgrid, jcell) = 1.d0 / sqrt(sum(diff(:)**2))
+              if (is_direct_neighbor(cc_icell, cc_jcell, ilev+1)) then
+                nearest_flags(igrid, icell, ind, jgrid, jcell) = .true.
+                do jfinecell = 1, twotondim
+                  fine_diff = diff + (0.5 * (displacement_list(jfinecell, :) - 0.5)) * dx_loc
+                  nearest_inv_dist(igrid, icell, ind, jgrid, jcell, jfinecell) = 1.d0 / sqrt(sum(fine_diff(:)**2))
+                end do
+              else
+                nearest_flags(igrid, icell, ind, jgrid, jcell) = .false.
+              end if
             end if
           end do
         end do
@@ -1085,14 +1100,21 @@ subroutine fmm_amr_direct(s, ilev, jlev)
       do ind = 1, threetondim
         do jgrid = 1, nbox
           do jcell = 1, twotondim
-            phi = phi - mm_jcell_list(ind, jgrid, jcell) * inv_dist(igrid, icell, ind, jgrid, jcell)
+            ! f (m%grid(jgrid)%refined(jcell)) cycle  !!! do this if we want to do M2P for finer levels??
+            !if (nearest_flags(igrid, icell, ind, jgrid, jcell) .and. all(m%grid(jgrid)%refined(jcell))) then
+               !do finecell = 1, twotondim
+               !  phi = phi - mm_jfinecell_list(ind, jgrid, jcell) * nearest_inv_dist(igrid, icell, ind, jgrid, jcell, jfinecell)
+               !end do
+            !else
+              phi = phi - mm_jcell_list(ind, jgrid, jcell) * inv_dist(igrid, icell, ind, jgrid, jcell)
+            !end if
           end do 
         end do 
       end do
       m%phi(icell, ioct) = m%phi(icell, ioct) + phi
     end do
   end do ! end over all amr grids @ given ilev
-  deallocate(mm_jcell_list, inv_dist)
+  deallocate(mm_jcell_list, inv_dist, nearest_flags)
   
   call close_cache(mdl)
   end associate
