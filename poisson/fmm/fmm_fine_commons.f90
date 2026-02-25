@@ -79,7 +79,7 @@ subroutine fmm(pst,ilev,icount)
 
    !call m_timer(pst,'fmm: direct force','start')
    print *, "[P2P] LEVEL: ", ilev
-   do jlev = max(pst%s%r%levelmin, ilev-2), min(ilev+1, pst%s%r%nlevelmax)
+   do jlev = max(pst%s%r%levelmin, ilev-2), min(ilev, pst%s%r%nlevelmax) ! for now
       downward_levels%jlev=jlev
       call r_fmm_amr_direct(pst, downward_levels, input_size)
       if(pst%s%r%verbose) print *,'     <Direct Force> (ilev, jlev)', ilev, jlev
