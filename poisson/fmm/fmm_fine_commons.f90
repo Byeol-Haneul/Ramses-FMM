@@ -155,8 +155,8 @@ subroutine fmm_downward(s, ilev, jlev, flev)
   logical::cycle_flag
 
   integer(kind=8), dimension(threetondim, ndim) :: offset_list
-  real(kind=8), dimension(threetondim, twotondim, twotondim, twotondim) :: D0_list, D1_list, D2_list, D3_list
-  real(kind=8), dimension(threetondim, twotondim, twotondim, twotondim, ndim) :: intermediate_diff_list
+  real(kind=8), dimension(twotondim, twotondim, twotondim, threetondim) :: D0_list, D1_list, D2_list, D3_list
+  real(kind=8), dimension(ndim, twotondim, twotondim, twotondim, threetondim) :: intermediate_diff_list
   logical, dimension(threetondim, twotondim, twotondim) :: direct_neighbor_list
 
   integer, dimension(twotondim, ndim), parameter :: displacement_list = reshape( &
@@ -199,12 +199,12 @@ subroutine fmm_downward(s, ilev, jlev, flev)
         do icell = 1, twotondim
           cc_icell = 2 * displacement_list(pcell, :) + displacement_list(icell, :)
           diff = (cc_icell - 0.5 - 2 * cc_jcell) * dx_loc
-          intermediate_diff_list(inbor, jcell, pcell, icell, :) = diff
+          intermediate_diff_list(:, icell, pcell, jcell, inbor) = diff
           dist = sqrt(sum(diff(:)**2))
-          D0_list(inbor, jcell, pcell, icell) = 1.0D0 / dist
-          D1_list(inbor, jcell, pcell, icell) = -1.0D0 / dist**3
-          D2_list(inbor, jcell, pcell, icell) = 3.0D0 / dist**5
-          D3_list(inbor, jcell, pcell, icell) = -15.0D0 / dist**7
+          D0_list(icell, pcell, jcell, inbor) = 1.0D0 / dist
+          D1_list(icell, pcell, jcell, inbor) = -1.0D0 / dist**3
+          D2_list(icell, pcell, jcell, inbor) = 3.0D0 / dist**5
+          D3_list(icell, pcell, jcell, inbor) = -15.0D0 / dist**7
         end do
       end do
     end do
@@ -275,11 +275,11 @@ subroutine fmm_downward(s, ilev, jlev, flev)
 #endif
           ! Get taylor coeffs from local
           do icell=1, twotondim
-            dx = intermediate_diff_list(inbor, jcell, pcell, icell, :)
-            D0 = D0_list(inbor, jcell, pcell, icell)
-            D1 = D1_list(inbor, jcell, pcell, icell)
-            D2 = D2_list(inbor, jcell, pcell, icell)
-            D3 = D3_list(inbor, jcell, pcell, icell)
+            dx = intermediate_diff_list(:, icell, pcell, jcell, inbor)
+            D0 = D0_list(icell, pcell, jcell, inbor)
+            D1 = D1_list(icell, pcell, jcell, inbor)
+            D2 = D2_list(icell, pcell, jcell, inbor)
+            D3 = D3_list(icell, pcell, jcell, inbor)
             call calc_taylor_from_multipole(dx, D0, D1, D2, D3, multipole, temp_taylor)
             accum_taylor(icell, :) = accum_taylor(icell, :) + temp_taylor
           end do
@@ -330,8 +330,8 @@ subroutine fmm_downward_coarse(s, ilev, jlev, flev)
   logical::cycle_flag
 
   integer(kind=8), dimension(threetondim, ndim) :: offset_list
-  real(kind=8), dimension(threetondim, twotondim, twotondim, twotondim) :: D0_list
-  real(kind=8), dimension(threetondim, twotondim, twotondim, twotondim, ndim) :: intermediate_diff_list
+  real(kind=8), dimension(twotondim, twotondim, twotondim, threetondim) :: D0_list
+  real(kind=8), dimension(ndim, twotondim, twotondim, twotondim, threetondim) :: intermediate_diff_list
   logical, dimension(threetondim, twotondim, twotondim) :: direct_neighbor_list
 
   integer, dimension(twotondim, ndim), parameter :: displacement_list = reshape( &
@@ -372,9 +372,9 @@ subroutine fmm_downward_coarse(s, ilev, jlev, flev)
         do icell = 1, twotondim
           cc_icell = 2 * displacement_list(pcell, :) + displacement_list(icell, :)
           diff = (cc_icell - 0.5 - 2 * cc_jcell) * dx_loc
-          intermediate_diff_list(inbor, jcell, pcell, icell, :) = diff
+          intermediate_diff_list(:, icell, pcell, jcell, inbor) = diff
           dist = sqrt(sum(diff(:)**2))
-          D0_list(inbor, jcell, pcell, icell) = 1.0D0 / dist
+          D0_list(icell, pcell, jcell, inbor) = 1.0D0 / dist
         end do
       end do
     end do
@@ -418,8 +418,8 @@ subroutine fmm_downward_coarse(s, ilev, jlev, flev)
           if (direct_neighbor_list(inbor, jcell, pcell) .or. cycle_flag) cycle
           ! Get taylor coeffs from local
           do icell=1, twotondim
-            dx = intermediate_diff_list(inbor, jcell, pcell, icell, :)
-            D0 = D0_list(inbor, jcell, pcell, icell)
+            dx = intermediate_diff_list(:, icell, pcell, jcell, inbor)
+            D0 = D0_list(icell, pcell, jcell, inbor)
             temp_taylor(1) = D0 * (m_source%rho(jcell,igrid_nbor) * vol)
             accum_taylor(icell, :) = accum_taylor(icell, :) + temp_taylor
           end do
@@ -545,11 +545,11 @@ subroutine fmm_amr_intermediate(s, ilev, jlev)
   !igrid: index of oct within target fmm_grid
   !icell: index of target cell within target fmm_grid
 
-  allocate(D0_list(threetondim, twotondim, nbox, twotondim))
-  allocate(D1_list(threetondim, twotondim, nbox, twotondim))
-  allocate(D2_list(threetondim, twotondim, nbox, twotondim))
+  allocate(D0_list(twotondim, nbox, twotondim, threetondim))
+  allocate(D1_list(twotondim, nbox, twotondim, threetondim))
+  allocate(D2_list(twotondim, nbox, twotondim, threetondim))
 
-  allocate(intermediate_diff_list(threetondim, twotondim, nbox, twotondim, ndim))
+  allocate(intermediate_diff_list(ndim, twotondim, nbox, twotondim, threetondim))
   allocate(far_diff_list(nbox, twotondim, ndim))
   allocate(fmm_grid_center_offset(nbox, ndim))
   allocate(fmm_cell_center_offset(nbox, ndim))
@@ -588,11 +588,11 @@ subroutine fmm_amr_intermediate(s, ilev, jlev)
         direct_neighbor_list(ind, jcell, igrid) = cycle_flag
         do icell=1, twotondim
           diff = ((2 * fmm_grid_center_offset(igrid, :) + displacement_list(icell,:) + 0.5) + (- offset(:) + nfine)) * dx_loc
-          intermediate_diff_list(ind, jcell, igrid, icell, :) = diff
+          intermediate_diff_list(:, icell, igrid, jcell, ind) = diff
           dist = sqrt(sum(diff(:)**2))
-          D0_list(ind, jcell, igrid, icell) = 1.0D0 / dist
-          D1_list(ind, jcell, igrid, icell) = -1.0D0 / dist**3
-          D2_list(ind, jcell, igrid, icell) = 3.0D0 / dist**5
+          D0_list(icell, igrid, jcell, ind) = 1.0D0 / dist
+          D1_list(icell, igrid, jcell, ind) = -1.0D0 / dist**3
+          D2_list(icell, igrid, jcell, ind) = 3.0D0 / dist**5
         end do
       end do
     end do
@@ -672,10 +672,10 @@ subroutine fmm_amr_intermediate(s, ilev, jlev)
 #endif
         do icell=1, twotondim
           if (m%grid(ioct)%refined(icell)) cycle
-          diff  = intermediate_diff_list(ind, jcell, igrid, icell, :)
-          D0 = D0_list(ind, jcell, igrid, icell)
-          D1 = D1_list(ind, jcell, igrid, icell)
-          D2 = D2_list(ind, jcell, igrid, icell)
+          diff  = intermediate_diff_list(:, icell, igrid, jcell, ind)
+          D0 = D0_list(icell, igrid, jcell, ind)
+          D1 = D1_list(icell, igrid, jcell, ind)
+          D2 = D2_list(icell, igrid, jcell, ind)
           call calc_phi_from_multipole(diff, D0, D1, D2, multipole, phi_out)
           m%phi(icell, ioct) = m%phi(icell, ioct) + phi_out
         end do
@@ -796,9 +796,9 @@ subroutine fmm_combined_direct(s, ilev, jlev)
   !igrid: index of oct within target fmm_grid
   !icell: index of target cell within target fmm_grid
 
-  allocate(D0_list(threetondim, twotondim, nbox, twotondim))
+  allocate(D0_list(twotondim, nbox, twotondim, threetondim))
 
-  allocate(intermediate_diff_list(threetondim, twotondim, nbox, twotondim, ndim))
+  allocate(intermediate_diff_list(ndim, twotondim, nbox, twotondim, threetondim))
   allocate(fmm_grid_lcorner_offset(nbox, ndim))
   allocate(cell_diff_list(threetondim, twotondim, nbox, ndim))
 
@@ -824,9 +824,9 @@ subroutine fmm_combined_direct(s, ilev, jlev)
         cell_diff_list(ind, jcell, igrid, :) = cc_icell - cc_jcell
         do icell=1, twotondim
           diff = ((2 * fmm_grid_lcorner_offset(igrid, :) + displacement_list(icell,:) + 0.5) - offset(:)) * dx_loc
-          intermediate_diff_list(ind, jcell, igrid, icell, :) = diff
+          intermediate_diff_list(:, icell, igrid, jcell, ind) = diff
           dist = sqrt(sum(diff(:)**2))
-          D0_list(ind, jcell, igrid, icell) = 1.0D0 / dist
+          D0_list(icell, igrid, jcell, ind) = 1.0D0 / dist
         end do
       end do
     end do
@@ -880,7 +880,7 @@ subroutine fmm_combined_direct(s, ilev, jlev)
         do icell=1, twotondim
           if (m%grid(ioct)%refined(icell)) cycle
           diff  = intermediate_diff_list(ind, jcell, igrid, icell, :)
-          D0 = D0_list(ind, jcell, igrid, icell)
+          D0 = D0_list(icell, igrid, jcell, ind)
           m%phi(icell, ioct) = m%phi(icell, ioct) - D0 * m%rho(jcell,igrid_nbor) * vol
         end do
       end do

@@ -211,8 +211,10 @@ subroutine build_fmm(s, m, m_fmm, input)
 
           ! Intitialize gravity variables
           do ind=1,twotondim
+#ifdef FMM
               m_fmm%multipole(ind,1:multipole_size,ichild)=0
               m_fmm%taylor_coeff(ind,1:taylor_size,ichild)=0
+#endif
           enddo
 
         end if

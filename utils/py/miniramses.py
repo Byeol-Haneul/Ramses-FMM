@@ -1843,6 +1843,8 @@ def visu(x,y,dx,v,**kwargs):
     if( not (grid is None)):
         edgec='black'
         linew=0.5
+        
+    # don't fill the marker. 
     plt.scatter(x[ind],y[ind],c=v[ind],s=(dx[ind]*800/rescale)**2,marker="s",vmin=vmin,vmax=vmax,
                 cmap=cmap,edgecolor=edgec,linewidth=linew)
     if show_colorbar:
