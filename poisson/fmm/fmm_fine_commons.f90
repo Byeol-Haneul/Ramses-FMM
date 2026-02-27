@@ -133,10 +133,10 @@ subroutine fmm_downward(s, ilevel)
   real(kind=8), dimension(twotondim, taylor_size) :: accum_taylor
   logical::cycle_flag
 
-  integer(kind=8), dimension(threetondim, ndim) :: offset_list
-  real(kind=8), dimension(threetondim, twotondim, twotondim, twotondim) :: D0_list, D1_list, D2_list, D3_list
-  real(kind=8), dimension(threetondim, twotondim, twotondim, twotondim, ndim) :: intermediate_diff_list
-  logical, dimension(threetondim, twotondim, twotondim) :: direct_neighbor_list
+  integer(kind=8), dimension(ndim, threetondim) :: offset_list
+  real(kind=8), dimension(twotondim, twotondim, twotondim, threetondim) :: D0_list, D1_list, D2_list, D3_list
+  real(kind=8), dimension(ndim, twotondim, twotondim, twotondim, threetondim) :: intermediate_diff_list
+  logical, dimension(twotondim, twotondim, threetondim) :: direct_neighbor_list
 
   integer, dimension(twotondim, ndim), parameter :: displacement_list = reshape( &
       [ &
@@ -163,25 +163,25 @@ subroutine fmm_downward(s, ilevel)
   do inbor = 1, threetondim
     ! calculate offsets
     do idim = 1, ndim
-      offset_list(inbor, idim) = MOD((inbor-1)/3**(idim-1), 3) - 1 ! offset by how many fmm parent grids
+      offset_list(idim,inbor) = MOD((inbor-1)/3**(idim-1), 3) - 1 ! offset by how many fmm parent grids
     end do
     do jcell = 1, twotondim
-      cc_jcell = 2 * offset_list(inbor,:) + displacement_list(jcell,:) ! respect to parent grid left corner / fmm grid unit
+      cc_jcell = 2 * offset_list(:, inbor) + displacement_list(jcell,:) ! respect to parent grid left corner / fmm grid unit
       do pcell = 1,twotondim
         cycle_flag = .true.
         do idim=1, ndim
           if (abs(cc_jcell(idim) - displacement_list(pcell, idim)) > 1) cycle_flag = .false.
         end do
-        direct_neighbor_list(inbor, jcell, pcell) = cycle_flag
+        direct_neighbor_list(jcell, pcell, inbor) = cycle_flag
         do icell = 1, twotondim
           cc_icell = 2 * displacement_list(pcell, :) + displacement_list(icell, :)
           diff = (cc_icell - 0.5 - 2 * cc_jcell) * dx_loc
-          intermediate_diff_list(inbor, jcell, pcell, icell, :) = diff
+          intermediate_diff_list(:, icell, pcell, jcell, inbor) = diff
           dist = sqrt(sum(diff(:)**2))
-          D0_list(inbor, jcell, pcell, icell) = 1.0D0 / dist
-          D1_list(inbor, jcell, pcell, icell) = -1.0D0 / dist**3
-          D2_list(inbor, jcell, pcell, icell) = 3.0D0 / dist**5
-          D3_list(inbor, jcell, pcell, icell) = -15.0D0 / dist**7
+          D0_list(icell, pcell, jcell, inbor) = 1.0D0 / dist
+          D1_list(icell, pcell, jcell, inbor) = -1.0D0 / dist**3
+          D2_list(icell, pcell, jcell, inbor) = 3.0D0 / dist**5
+          D3_list(icell, pcell, jcell, inbor) = -15.0D0 / dist**7
         end do
       end do
     end do
@@ -228,18 +228,18 @@ subroutine fmm_downward(s, ilevel)
             end if 
           end do 
           ! skip direct neighbors
-          if (direct_neighbor_list(inbor, jcell, pcell) .or. cycle_flag) cycle
+          if (direct_neighbor_list(jcell, pcell, inbor) .or. cycle_flag) cycle
           ! Shift multipole from origin -> source center (Need to use grid position)
 #ifdef FMM
           multipole = m_fmm%multipole(jcell,:,igrid_nbor)
 #endif
           ! Get taylor coeffs from local
           do icell=1, twotondim
-            dx = intermediate_diff_list(inbor, jcell, pcell, icell, :)
-            D0 = D0_list(inbor, jcell, pcell, icell)
-            D1 = D1_list(inbor, jcell, pcell, icell)
-            D2 = D2_list(inbor, jcell, pcell, icell)
-            D3 = D3_list(inbor, jcell, pcell, icell)
+            dx = intermediate_diff_list(:, icell, pcell, jcell, inbor)
+            D0 = D0_list(icell, pcell, jcell, inbor)
+            D1 = D1_list(icell, pcell, jcell, inbor)
+            D2 = D2_list(icell, pcell, jcell, inbor)
+            D3 = D3_list(icell, pcell, jcell, inbor)
             call calc_taylor_from_multipole(dx, D0, D1, D2, D3, multipole, temp_taylor)
             accum_taylor(icell, :) = accum_taylor(icell, :) + temp_taylor
           end do
@@ -316,7 +316,7 @@ subroutine fmm_amr_intermediate(s, ilevel)
   logical :: cycle_flag, neighbors_cached
 
   real(kind=8) :: dist, D0, D1, D2
-  real(kind=8), dimension(threetondim, ndim) :: offset_list
+  real(kind=8), dimension(ndim, threetondim) :: offset_list
 
   integer, dimension(twotondim, ndim), parameter :: displacement_list = reshape( &
       [ &
@@ -356,27 +356,27 @@ subroutine fmm_amr_intermediate(s, ilevel)
   ! nbox is the number of cells at the target AMR level
   nbox = nfine ** ndim
 
-  allocate(D0_list(threetondim, twotondim, nbox, twotondim))
-  allocate(D1_list(threetondim, twotondim, nbox, twotondim))
-  allocate(D2_list(threetondim, twotondim, nbox, twotondim))
+  allocate(D0_list(twotondim, nbox, twotondim, threetondim))
+  allocate(D1_list(twotondim, nbox, twotondim, threetondim))
+  allocate(D2_list(twotondim, nbox, twotondim, threetondim))
 
-  allocate(intermediate_diff_list(threetondim, twotondim, nbox, twotondim, ndim))
-  allocate(far_diff_list(nbox, twotondim, ndim))
-  allocate(fmm_grid_center_offset(nbox, ndim))
-  allocate(fmm_cell_center_offset(nbox, ndim))
-  allocate(direct_neighbor_list(threetondim, twotondim, nbox)) ! we can reduce this if we really need to
-  allocate(cell_diff_list(threetondim, twotondim, nbox, ndim))
+  allocate(intermediate_diff_list(ndim, twotondim, nbox, twotondim, threetondim))
+  allocate(far_diff_list(ndim, twotondim, nbox))
+  allocate(fmm_grid_center_offset(ndim, nbox))
+  allocate(fmm_cell_center_offset(ndim, nbox))
+  allocate(direct_neighbor_list(nbox,twotondim,threetondim)) ! we can reduce this if we really need to
+  allocate(cell_diff_list(ndim, nbox, twotondim, threetondim))
 
   ! Precalculate differences
   do igrid=1, nbox
     do idim = 1,ndim
       nstride = nfine**(idim-1)
-      fmm_grid_center_offset(igrid, idim) = MOD((igrid-1)/nstride, nfine) - (nfine/2) ! offset by how many amr octs from fmm grid center
+      fmm_grid_center_offset(idim, igrid) = MOD((igrid-1)/nstride, nfine) - (nfine/2) ! offset by how many amr octs from fmm grid center
       nstride = (nfine/2)**(idim-1)
-      fmm_cell_center_offset(igrid, idim) = 2 * MOD(fmm_grid_center_offset(igrid, idim) + (nfine/2), nfine/2) - (nfine/2) ! offset by how many amr cells from fmm cell center
+      fmm_cell_center_offset(idim, igrid) = 2 * MOD(fmm_grid_center_offset(idim,igrid) + (nfine/2), nfine/2) - (nfine/2) ! offset by how many amr cells from fmm cell center
     end do 
     do icell = 1, twotondim
-      far_diff_list(igrid, icell, :) = (fmm_cell_center_offset(igrid, :) + displacement_list(icell,:) + 0.5) * dx_loc
+      far_diff_list(:, icell, igrid) = (fmm_cell_center_offset(:, igrid) + displacement_list(icell,:) + 0.5) * dx_loc
     end do
   end do 
 
@@ -384,26 +384,26 @@ subroutine fmm_amr_intermediate(s, ilevel)
   do ind = 1, threetondim
     ! calculate offsets
     do idim = 1, ndim
-      offset_list(ind, idim) = MOD((ind-1)/3**(idim-1), 3) - 1 ! offset by how many fmm grids
+      offset_list(idim, ind) = MOD((ind-1)/3**(idim-1), 3) - 1 ! offset by how many fmm grids
     end do
     do jcell = 1, twotondim
-      cc_jcell = 2 * offset_list(ind,:) + displacement_list(jcell,:) ! respect to grid left corner / fmm cell unit
+      cc_jcell = 2 * offset_list(:, ind) + displacement_list(jcell,:) ! respect to grid left corner / fmm cell unit
       offset = (cc_jcell+ 0.5) * nfine ! offset by how many amr cells
       do igrid=1,nbox
-        cc_icell = (fmm_grid_center_offset(igrid, :) + nfine/2)/(nfine/2) ! respect to grid left corner / fmm cell unit
+        cc_icell = (fmm_grid_center_offset(:, igrid) + nfine/2)/(nfine/2) ! respect to grid left corner / fmm cell unit
         cycle_flag = .true.
-        cell_diff_list(ind, jcell, igrid, :) = cc_icell - cc_jcell
+        cell_diff_list(:, igrid, jcell, ind) = cc_icell - cc_jcell
         do idim=1, ndim
           if (abs(cc_icell(idim) - cc_jcell(idim)) > 1) cycle_flag = .false.
         end do
-        direct_neighbor_list(ind, jcell, igrid) = cycle_flag
+        direct_neighbor_list(igrid, jcell, ind) = cycle_flag
         do icell=1, twotondim
-          diff = ((2 * fmm_grid_center_offset(igrid, :) + displacement_list(icell,:) + 0.5) + (- offset(:) + nfine)) * dx_loc
-          intermediate_diff_list(ind, jcell, igrid, icell, :) = diff
+          diff = ((2 * fmm_grid_center_offset(:, igrid) + displacement_list(icell,:) + 0.5) + (- offset(:) + nfine)) * dx_loc
+          intermediate_diff_list(:, icell, igrid, jcell, ind) = diff
           dist = sqrt(sum(diff(:)**2))
-          D0_list(ind, jcell, igrid, icell) = 1.0D0 / dist
-          D1_list(ind, jcell, igrid, icell) = -1.0D0 / dist**3
-          D2_list(ind, jcell, igrid, icell) = 3.0D0 / dist**5
+          D0_list(icell, igrid, jcell, ind) = 1.0D0 / dist
+          D1_list(icell, igrid, jcell, ind) = -1.0D0 / dist**3
+          D2_list(icell, igrid, jcell, ind) = 3.0D0 / dist**5
         end do
       end do
     end do
@@ -450,7 +450,7 @@ subroutine fmm_amr_intermediate(s, ilevel)
 #endif
     ! Far field
     do icell = 1, twotondim
-      diff = far_diff_list(igrid, icell, :)
+      diff = far_diff_list(:, icell, igrid)
       call calc_phi(parent_taylor, diff, phi)
 #ifdef FMM
       m%phi(icell, ioct) = m%phi(icell, ioct) + phi
@@ -462,22 +462,22 @@ subroutine fmm_amr_intermediate(s, ilevel)
       igrid_nbor = grid_nbors(ind)
       do jcell = 1, twotondim
         cycle_flag = .false.
-        cc_jcell_periodic = hash_fmm_cell(1:ndim) - cell_diff_list(ind, jcell, igrid,:)
+        cc_jcell_periodic = hash_fmm_cell(1:ndim) - cell_diff_list(:, igrid, jcell, ind)
         do idim = 1, ndim
           if ((cc_jcell_periodic(idim) < m%box_ckey_min(idim, ilevel - r%level_fmm_to_amr + 1)) .or. &
               (cc_jcell_periodic(idim) >= m%box_ckey_max(idim, ilevel - r%level_fmm_to_amr + 1))) then
             cycle_flag = .true.
           end if
         end do
-        if (cycle_flag .or. direct_neighbor_list(ind, jcell, igrid)) cycle
+        if (cycle_flag .or. direct_neighbor_list(igrid, jcell, ind)) cycle
 #ifdef FMM
         multipole = m_fmm%multipole(jcell, 1:multipole_size, igrid_nbor)
 #endif
         do icell=1, twotondim
-          diff  = intermediate_diff_list(ind, jcell, igrid, icell, :)
-          D0 = D0_list(ind, jcell, igrid, icell)
-          D1 = D1_list(ind, jcell, igrid, icell)
-          D2 = D2_list(ind, jcell, igrid, icell)
+          diff  = intermediate_diff_list(:, icell, igrid, jcell, ind)
+          D0 = D0_list(icell, igrid, jcell, ind)
+          D1 = D1_list(icell, igrid, jcell, ind)
+          D2 = D2_list(icell, igrid, jcell, ind)
           call calc_phi_from_multipole(diff, D0, D1, D2, multipole, phi_out)
           m%phi(icell, ioct) = m%phi(icell, ioct) + phi_out
         end do
@@ -537,7 +537,7 @@ subroutine fmm_amr_direct(s, ilevel)
   real(kind=8), dimension(ndim) :: xx_icell, xx_jcell, diff
   integer(kind=8), dimension(0:ndim) :: hash_key, hash_fmm_grid, hash_fmm_cell, &
                                         hash_direct, hash_prev_fmm_grid, prev_hash_fmm_cell
-  real(kind=8), dimension(threetondim, ndim) :: offset_list
+  real(kind=8), dimension(ndim,threetondim) :: offset_list
   integer :: igrid_nbor
   type(msg_small_realdp) :: dummy_realdp
   logical :: cycle_flag, initialized
@@ -577,15 +577,15 @@ subroutine fmm_amr_direct(s, ilevel)
   initialized = .false.
 
   ! Allocate arrays for all possible source cells
-  allocate(mm_jcell_list(threetondim, nbox, twotondim))
-  allocate(inv_dist(nbox, twotondim, threetondim, nbox, twotondim))
+  allocate(mm_jcell_list(twotondim, nbox, threetondim))
+  allocate(inv_dist(twotondim, nbox, threetondim, twotondim, nbox))
 
   prev_hash_fmm_cell = -huge(0_8)
 
   ! Get offset lists
   do ind = 1, threetondim
     do idim = 1, ndim
-      offset_list(ind, idim) = MOD((ind-1)/3**(idim-1), 3) - 1 ! offset by how many fmm grids
+      offset_list(idim,ind) = MOD((ind-1)/3**(idim-1), 3) - 1 ! offset by how many fmm grids
     end do
   end do
 
@@ -599,15 +599,15 @@ subroutine fmm_amr_direct(s, ilevel)
       do ind = 1, threetondim
         do jgrid = 1, nbox
           do idim = 1, ndim
-            cc_jgrid(idim) = offset_list(ind, idim) * (nfine/2) + MOD((jgrid-1)/(nfine/2)**(idim-1), nfine/2)
+            cc_jgrid(idim) = offset_list(idim,ind) * (nfine/2) + MOD((jgrid-1)/(nfine/2)**(idim-1), nfine/2)
           end do
           do jcell = 1, twotondim
             cc_jcell = 2 * cc_jgrid + displacement_list(jcell, :)
             if (all(cc_icell(1:ndim) == cc_jcell(1:ndim))) then
-              inv_dist(igrid, icell, ind, jgrid, jcell) = 1 / dx_loc !! cap it to dx_loc instead of skipping
+              inv_dist(jcell, jgrid, ind, icell, igrid) = 1 / dx_loc !! cap it to dx_loc instead of skipping
             else
               diff = (cc_icell - cc_jcell) * dx_loc
-              inv_dist(igrid, icell, ind, jgrid, jcell) = 1.d0 / sqrt(sum(diff(:)**2))
+              inv_dist(jcell, jgrid, ind, icell, igrid) = 1.d0 / sqrt(sum(diff(:)**2))
             end if
           end do
         end do
@@ -675,12 +675,12 @@ subroutine fmm_amr_direct(s, ilevel)
           end do
 
           if (cycle_flag) then
-            mm_jcell_list(ind, jgrid, :) = 0.0d0
+            mm_jcell_list(:, jgrid, ind) = 0.0d0
           else
             call get_grid(s, hash_direct, igrid_nbor, flush_cache = .false., fetch_cache = .true.)
             do jcell = 1, twotondim
 #ifdef FMM
-              mm_jcell_list(ind, jgrid, jcell) = m%rho(jcell,igrid_nbor)*dxn
+              mm_jcell_list(jcell, jgrid, ind) = m%rho(jcell,igrid_nbor)*dxn
 #endif
             end do
           end if
@@ -702,7 +702,7 @@ subroutine fmm_amr_direct(s, ilevel)
       do ind = 1, threetondim
         do jgrid = 1, nbox
           do jcell = 1, twotondim
-            phi = phi - mm_jcell_list(ind, jgrid, jcell) * inv_dist(igrid, icell, ind, jgrid, jcell)
+            phi = phi - mm_jcell_list(jcell, jgrid, ind) * inv_dist(jcell, jgrid, ind, icell, igrid)
           end do 
         end do 
       end do
