@@ -7,6 +7,7 @@ NDIM = 3
 MPI = 1
 HYDRO = 0
 GRAV = 1
+FMM = 1
 MHD = 0
 RT = 0
 RTZ = 0
