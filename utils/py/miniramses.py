@@ -1827,7 +1827,7 @@ def visu(x,y,dx,v,**kwargs):
         ind = np.argsort(sort)
     else:
         ind = np.arange(0,v.size)
-
+    
     olddpi = plt.rcParams['figure.dpi']
     plt.rcParams['figure.dpi'] = 58
     px = 1/plt.rcParams['figure.dpi'] 
@@ -1842,10 +1842,10 @@ def visu(x,y,dx,v,**kwargs):
     linew = None
     if( not (grid is None)):
         edgec='black'
-        linew=0.5
+        linew=0.2
         
     # don't fill the marker. 
-    plt.scatter(x[ind],y[ind],c=v[ind],s=(dx[ind]*800/rescale)**2,marker="s",vmin=vmin,vmax=vmax,
+    plt.scatter(x[ind],y[ind],c=v[ind],s=(dx[ind]*780/rescale)**2,marker="s",vmin=vmin,vmax=vmax,
                 cmap=cmap,edgecolor=edgec,linewidth=linew)
     if show_colorbar:
         plt.colorbar(shrink=0.8)
