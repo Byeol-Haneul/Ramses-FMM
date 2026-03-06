@@ -57,7 +57,7 @@ subroutine fmm(pst,ilev,icount)
    print *, "[M2L & L2L] LEVEL: ", ilev
    do flev = pst%s%r%bound_levelmin+1, ilev-pst%s%r%level_fmm_to_amr
      downward_levels%flev=flev
-     do jlev = max(pst%s%r%levelmin, flev+pst%s%r%level_fmm_to_amr-2), pst%s%r%nlevelmax
+     do jlev = max(pst%s%r%levelmin, flev+pst%s%r%level_fmm_to_amr-1), pst%s%r%nlevelmax
       downward_levels%jlev=jlev
       call r_fmm_downward(pst, downward_levels, input_size)
       if(pst%s%r%verbose) print *,'     <Downpass> (ilev, jlev, flev): ', ilev, jlev, flev
@@ -404,6 +404,9 @@ subroutine fmm_downward_coarse(s, ilev, jlev, flev)
        if (igrid_nbor<=0) cycle
 
        hash_nbor_periodic(1:ndim) = hash_parent(1:ndim) + offset
+
+       ! If any has a refined cell, by definition there exists an FMM grid of size of the grid we called.
+       if (any(m_source%grid(igrid_nbor)%refined(1:twotondim))) cycle
 
        do jcell = 1, twotondim
           cycle_flag = .false.
