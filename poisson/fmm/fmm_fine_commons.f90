@@ -738,7 +738,7 @@ subroutine fmm_combined_direct(s, ilev, jlev)
   type(ramses_t) :: s
   integer :: ilev, jlev
 
-  integer :: ioct, idim, ind, icell, jcell, nstride, nfine, igrid, nbox, pcell
+  integer :: ioct, idim, ind, icell, jcell, ifinecell, nstride, nfine, igrid, nbox, pcell
   real(kind=8) :: phi, phi_out, fourpi, dx_loc, vol
   integer(kind=8), dimension(ndim) :: cc_icell, cc_jcell, cc_jcell_periodic, offset
   real(kind=8), dimension(ndim) :: xx_icell, xx_jcell, xx_pgrid, xx_jcell_periodic, diff, diff2
@@ -791,47 +791,34 @@ subroutine fmm_combined_direct(s, ilev, jlev)
   prev_hash_fmm_grid(1:ndim) = -1 ! initialize
 
   dx_loc = r%boxlen / 2.0D0**ilev
-  nfine = 2
-  nbox = nfine ** ndim
-  vol = (dx_loc*nfine) ** ndim ! vol of the jlev cell, which is one level coarser. Here, size of FMM GRID of ilev == size of oct of jlev
+  vol    = (dx_loc ** ndim) * twotondim
 
   neighbors_cached = .false.
   !ind  : index of source fmm_grid within the neighboring 3^n fmm_grid
-  !jcell: index of source fmm_cell within the neighboring fmm_grid
+  !jcell: index of source cell within the neighboring fmm_grid
   !igrid: index of oct within target fmm_grid
   !icell: index of target cell within target fmm_grid
 
-  allocate(D0_list(twotondim, nbox, twotondim, threetondim))
+  allocate(D0_list(twotondim, twotondim, twotondim, threetondim))
 
-  allocate(intermediate_diff_list(ndim, twotondim, nbox, twotondim, threetondim))
-  allocate(fmm_grid_lcorner_offset(nbox, ndim))
-  allocate(cell_diff_list(threetondim, twotondim, nbox, ndim))
-
-  ! Precalculate differences
-  do igrid=1, nbox
-    do idim = 1,ndim
-      nstride = nfine**(idim-1)
-      fmm_grid_lcorner_offset(igrid, idim) = MOD((igrid-1)/nstride, nfine) ! offset by how many fmm cells from fmm grid left corner (0, 1)
-    end do 
-  end do 
+  allocate(intermediate_diff_list(ndim, twotondim, twotondim, twotondim, threetondim))
+  allocate(cell_diff_list(threetondim, twotondim, twotondim, ndim))
 
   ! jcell to icell
   do ind = 1, threetondim
-    ! calculate offsets
     do idim = 1, ndim
       offset_list(ind, idim) = MOD((ind-1)/3**(idim-1), 3) - 1 ! offset by how many fmm grids (-1, 0, 1)
     end do
     do jcell = 1, twotondim
       cc_jcell = 2 * offset_list(ind,:) + displacement_list(jcell,:) ! respect to grid left corner / fmm cell unit (-2, -1, 0, 1, 2, 3)
-      offset = (cc_jcell+ 0.5) * nfine ! offset by how many amr cells respect to grid left corner (-3, -1, 1, 3, 5, 7)
-      do igrid=1,nbox
-        cc_icell = fmm_grid_lcorner_offset(igrid, :)/(nfine/2) ! respect to grid left corner / fmm cell unit (1, 2)
-        cell_diff_list(ind, jcell, igrid, :) = cc_icell - cc_jcell
-        do icell=1, twotondim
-          diff = ((2 * fmm_grid_lcorner_offset(igrid, :) + displacement_list(icell,:) + 0.5) - offset(:)) * dx_loc
-          intermediate_diff_list(:, icell, igrid, jcell, ind) = diff
+      offset   = 2 * (cc_jcell+ 0.5) ! offset by how many amr cells respect to grid left corner (-3, -1, 1, 3, 5, 7)
+      do icell=1,twotondim
+        cell_diff_list(ind, jcell, icell, :) = displacement_list(icell,:) - offset !(-7, -6, .., 4)
+        do ifinecell=1, twotondim
+          diff = (2 * displacement_list(icell,:) + displacement_list(ifinecell,:) - offset + 0.5) * dx_loc
+          intermediate_diff_list(:, ifinecell, icell, jcell, ind) = diff
           dist = sqrt(sum(diff(:)**2))
-          D0_list(icell, igrid, jcell, ind) = 1.0D0 / dist
+          D0_list(ifinecell, icell, jcell, ind) = 1.0D0 / dist
         end do
       end do
     end do
@@ -843,13 +830,13 @@ subroutine fmm_combined_direct(s, ilev, jlev)
     if (all(m%grid(ioct)%refined(1:twotondim))) cycle
 
     hash_key(1:ndim) = m%grid(ioct)%ckey(1:ndim)
-    hash_fmm_grid(1:ndim) = m%grid(ioct)%ckey(1:ndim) / nfine
-    hash_fmm_cell(1:ndim) = m%grid(ioct)%ckey(1:ndim) / (nfine/2)
+    hash_fmm_grid(1:ndim) = m%grid(ioct)%ckey(1:ndim) / 2
+    hash_fmm_cell(1:ndim) = m%grid(ioct)%ckey(1:ndim)
 
-    igrid = 1
+    icell = 1
     do idim=1,ndim
-      nstride = nfine**(idim-1)
-      igrid = igrid + nstride * MOD(hash_key(idim), nfine)
+      nstride = 2**(idim-1)
+      icell = icell + nstride * MOD(hash_key(idim), 2)
     end do
 
     ! Check if we need to fetch neighbors & parent Taylor
@@ -873,26 +860,25 @@ subroutine fmm_combined_direct(s, ilev, jlev)
       do jcell = 1, twotondim
         if (m%grid(igrid_nbor)%refined(jcell)) cycle
         cycle_flag = .false.
-        cc_jcell_periodic = hash_fmm_cell(1:ndim) - cell_diff_list(ind, jcell, igrid,:)
+        cc_jcell_periodic = hash_fmm_cell(1:ndim) - cell_diff_list(ind, jcell, icell, :)
         do idim = 1, ndim
-          if ((cc_jcell_periodic(idim) < m%box_ckey_min(idim, ilev)) .or. &
-              (cc_jcell_periodic(idim) >= m%box_ckey_max(idim, ilev))) then
+          if ((cc_jcell_periodic(idim) < m%box_ckey_min(idim, ilev-1)) .or. &
+              (cc_jcell_periodic(idim) >= m%box_ckey_max(idim, ilev-1))) then
             cycle_flag = .true.
           end if
         end do
         if (cycle_flag) cycle
 
-        do icell=1, twotondim
-          if (m%grid(ioct)%refined(icell)) cycle
-          diff  = intermediate_diff_list(ind, jcell, igrid, icell, :)
-          D0 = D0_list(icell, igrid, jcell, ind)
-          m%phi(icell, ioct) = m%phi(icell, ioct) - D0 * m%rho(jcell,igrid_nbor) * vol
+        do ifinecell=1, twotondim
+          if (m%grid(ioct)%refined(ifinecell)) cycle
+          D0 = D0_list(ifinecell, icell, jcell, ind)
+          m%phi(ifinecell, ioct) = m%phi(ifinecell, ioct) - D0 * m%rho(jcell,igrid_nbor) * vol
         end do
       end do
     end do
   end do
 
-  deallocate(D0_list, intermediate_diff_list, cell_diff_list, fmm_grid_lcorner_offset)
+  deallocate(D0_list, intermediate_diff_list, cell_diff_list)
   call close_cache(mdl)
   end associate
 end subroutine fmm_combined_direct
@@ -1095,6 +1081,10 @@ subroutine fmm_amr_direct(s, ilev, jlev)
             cycle
           else
             call get_grid(s, hash_direct, igrid_nbor, flush_cache = .false., fetch_cache = .true.)
+            if (igrid_nbor .le. 0) then 
+              mm_jcell_list(:, jgrid, ind) = 0.0d0
+              cycle
+            end if
             do jcell = 1, twotondim
 #ifdef FMM
               mm_jcell_list(jcell, jgrid, ind) = m%rho(jcell,igrid_nbor)*dxn
@@ -1338,6 +1328,10 @@ subroutine fmm_amr_direct_taylor(s, ilev, jlev)
             cycle
           else
             call get_grid(s, hash_direct, igrid_nbor, flush_cache = .false., fetch_cache = .true.)
+            if (igrid_nbor .le. 0) then 
+              multipole_jcell_list(:, :, jgrid, ind) = 0.0d0
+              cycle
+            end if
             do jcell = 1, twotondim
 #ifdef FMM
               multipole_jcell_list(:, jcell, jgrid, ind) = m_source%multipole(jcell, :, igrid_nbor)
