@@ -710,7 +710,9 @@ recursive subroutine r_fmm_amr_direct(pst,downward_levels,input_size)
      call r_fmm_amr_direct(pst%pLower,downward_levels,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     if (downward_levels%ilev-1==downward_levels%jlev) then
+     if (downward_levels%ilev-2==downward_levels%jlev) then
+       call fmm_direct_coarsest(pst%s,downward_levels%ilev,downward_levels%jlev)
+     else if (downward_levels%ilev-1==downward_levels%jlev) then
        !! HERE WE DO NEAR FIELD + MID FIELD TOGETHER WITH 6^n cells
        call fmm_combined_direct(pst%s,downward_levels%ilev,downward_levels%jlev)
      else if (downward_levels%ilev==downward_levels%jlev) then
@@ -721,6 +723,158 @@ recursive subroutine r_fmm_amr_direct(pst,downward_levels,input_size)
   endif
 
 end subroutine r_fmm_amr_direct
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
+subroutine fmm_direct_coarsest(s, ilev, jlev)
+  use amr_parameters, only: ndim, twotondim, threetondim, multipole_size, taylor_size
+  use amr_commons, only: mesh_t
+  use ramses_commons, only: ramses_t
+  use nbors_utils
+  use cache_commons
+  use cache
+  use fmm_taylor
+  implicit none
+
+  type(ramses_t) :: s
+  integer :: ilev, jlev
+
+  integer :: ioct, idim, ind, icell, ipcell, jcell, ifinecell, nstride, nfine, igrid, nbox, pcell
+  real(kind=8) :: phi, phi_out, fourpi, dx_loc, vol
+  integer(kind=8), dimension(ndim) :: cc_icell, cc_jcell, cc_ifinecell, cc_jcell_periodic, offset
+  real(kind=8), dimension(ndim) :: xx_icell, xx_jcell, xx_pgrid, xx_jcell_periodic, diff, diff2
+  integer(kind=8), dimension(0:ndim) :: hash_key, hash_fmm_grid, hash_fmm_cell, hash_fmm_pgrid, &
+                                        hash_nbor, hash_nbor_periodic, prev_hash_fmm_grid, prev_hash_fmm_cell
+
+  integer, dimension(1:threetondim) :: grid_nbors, ind_nbors
+  integer :: igrid_nbor, igrid_parent
+  type(msg_large_realdp) :: dummy_realdp
+  real(kind=8), dimension(1:multipole_size) :: multipole, multipole_shifted
+  real(kind=8), dimension(taylor_size) :: temp_taylor, parent_taylor
+  logical :: cycle_flag, neighbors_cached
+
+  real(kind=8) :: dist, D0
+  real(kind=8), dimension(threetondim, ndim) :: offset_list
+
+  integer, dimension(twotondim, ndim), parameter :: displacement_list = reshape( &
+      [ &
+        0, 1, 0, 1, 0, 1, 0, 1,  &
+        0, 0, 1, 1, 0, 0, 1, 1,  &
+        0, 0, 0, 0, 1, 1, 1, 1   &
+      ], [twotondim, ndim] )
+
+  ! =====================================================
+  ! Runtime-allocated arrays depending on r%level_fmm_to_amr
+  ! =====================================================
+  real(kind=8), allocatable :: D0_list(:,:,:,:,:)
+  real(kind=8), allocatable :: cell_diff_list(:,:,:,:,:,:)
+
+  associate(r=>s%r, g=>s%g, m=>s%m, mdl=>s%mdl)
+
+  fourpi = 4.D0*ACOS(-1.0D0)
+  if(r%cosmo) fourpi = 1.5D0*g%omega_m*g%aexp
+
+  print *, "            How many in mesh?: ", m%noct(jlev)
+
+  ! Open cache for multipoles
+  call open_cache(mdl, m, pack_size=storage_size(dummy_realdp)/32,&
+                  pack=pack_fetch_rho, unpack=unpack_fetch_rho)
+
+  hash_key(0) = ilev
+  hash_fmm_grid(0)  = ilev - 1
+  hash_fmm_pgrid(0) = ilev - 2
+  prev_hash_fmm_grid(0) = ilev - 1
+  hash_fmm_cell(0) = ilev
+  prev_hash_fmm_grid(1:ndim) = -1 ! initialize
+
+  dx_loc = r%boxlen / 2.0D0**ilev
+  vol    = (4 * dx_loc ** ndim) * twotondim ! two-level difference
+
+  neighbors_cached = .false.
+  !ind  : index of source fmm_grid within the neighboring 3^n fmm_grid
+  !jcell: index of source cell within the neighboring fmm_grid
+  !igrid: index of oct within target fmm_grid
+  !icell: index of target cell within target fmm_grid
+
+  allocate(D0_list(twotondim, twotondim, twotondim, twotondim, threetondim))
+  allocate(cell_diff_list(ndim, twotondim, twotondim, twotondim, twotondim, threetondim))
+
+  ! jcell to icell
+  do ind = 1, threetondim
+    do idim = 1, ndim
+      offset_list(ind, idim) = MOD((ind-1)/3**(idim-1), 3) - 1 ! offset by how many fmm pgrids (-1, 0, 1)
+    end do
+    do jcell = 1, twotondim
+      cc_jcell = 2 * offset_list(ind,:) + displacement_list(jcell,:) ! respect to pgrid left corner / fmm grid unit (-2, -1, 0, 1, 2, 3)
+      cc_jcell = 4 * cc_jcell ! offset by how many amr cells respect to grid left corner (-6, -2, 2, 6, 10, 14)
+      do ipcell=1,twotondim
+        do icell=1,twotondim
+          do ifinecell=1, twotondim
+            cc_ifinecell = 2 * (2 * displacement_list(ipcell, :) + displacement_list(icell, :)) + displacement_list(ifinecell,:)
+            diff = (cc_jcell - cc_ifinecell) * dx_loc
+            cell_diff_list(:, ifinecell, icell, ipcell, jcell, ind) = diff
+            dist = sqrt(sum(diff(:)**2))
+            D0_list(ifinecell, icell, ipcell, jcell, ind) = 1.0D0 / dist
+          end do
+        end do
+      end do
+    end do
+  end do
+
+  ! Loop over octs at this level
+  do ioct = m%head(ilev), m%tail(ilev)
+
+    if (all(m%grid(ioct)%refined(1:twotondim))) cycle
+
+    hash_key(1:ndim) = m%grid(ioct)%ckey(1:ndim)
+    hash_fmm_grid(1:ndim) = m%grid(ioct)%ckey(1:ndim) / 2
+    hash_fmm_pgrid(1:ndim) = m%grid(ioct)%ckey(1:ndim) / 4
+    hash_fmm_cell(1:ndim) = m%grid(ioct)%ckey(1:ndim)
+
+    ipcell = 1
+    do idim=1,ndim
+      nstride = 2**(idim-1)
+      ipcell = ipcell + nstride * MOD(hash_fmm_grid(idim), 2)
+    end do
+
+    icell = 1
+    do idim=1,ndim
+      nstride = 2**(idim-1)
+      icell = icell + nstride * MOD(hash_fmm_cell(idim), 2)
+    end do
+
+    ! Check if we need to fetch neighbors & parent Taylor
+    if (.not. all(hash_fmm_grid == prev_hash_fmm_grid)) then
+      if (neighbors_cached) then
+        do ind = 1, threetondim
+          call unlock_cache(m, grid_nbors(ind))
+        end do
+      end if
+
+      call get_threetondim_nbor_parent_cell(s, hash_fmm_grid, grid_nbors, ind_nbors, flush_cache=.false., fetch_cache=.true.)
+      neighbors_cached = .true.
+      prev_hash_fmm_grid = hash_fmm_grid
+    end if
+
+    ! Intermediate field & Near Field
+    do ind = 1, threetondim
+      igrid_nbor = grid_nbors(ind)
+      if (igrid_nbor<=0) cycle
+      jcell = ind_nbors(ind)
+      if (m%grid(igrid_nbor)%refined(jcell)) cycle
+      do ifinecell=1, twotondim
+        if (m%grid(ioct)%refined(ifinecell)) cycle
+        D0 = D0_list(ifinecell, icell, ipcell, jcell, ind)
+        m%phi(ifinecell, ioct) = m%phi(ifinecell, ioct) - D0 * m%rho(jcell,igrid_nbor) * vol
+      end do
+    end do
+  end do
+
+  deallocate(D0_list, cell_diff_list)
+  call close_cache(mdl)
+  end associate
+end subroutine fmm_direct_coarsest
 !###########################################################
 !###########################################################
 !###########################################################
