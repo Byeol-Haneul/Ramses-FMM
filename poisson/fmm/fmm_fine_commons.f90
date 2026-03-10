@@ -57,7 +57,7 @@ subroutine fmm(pst,ilev,icount)
    print *, "[M2L & L2L] LEVEL: ", ilev
    do flev = pst%s%r%bound_levelmin+1, ilev-pst%s%r%level_fmm_to_amr
      downward_levels%flev=flev
-     do jlev = max(pst%s%r%levelmin, flev+pst%s%r%level_fmm_to_amr-1), pst%s%r%nlevelmax
+     do jlev = max(pst%s%r%levelmin, flev+pst%s%r%level_fmm_to_amr-2), pst%s%r%nlevelmax
       downward_levels%jlev=jlev
       call r_fmm_downward(pst, downward_levels, input_size)
       if(pst%s%r%verbose) print *,'     <Downpass> (ilev, jlev, flev): ', ilev, jlev, flev
