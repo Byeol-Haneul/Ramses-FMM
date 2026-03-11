@@ -1766,90 +1766,123 @@ def get_cpu_list(info,**kwargs):
 
     return cpu_list
 
-def visu(x,y,dx,v,**kwargs):
-    '''The simple visualization function visu() make a 2D scatter plot from RAMSES AMR data. 
-
-    Args:
-
-        x: the x-coordinate of the cells to show on the scatter plot.
-        y: the y-coordinate of the cells to show on the scatter plot.
-        dx: the size of the cells to show on the scatter plot.
-        v: the value to show as a color square contained in the cell.
-
-    Optional args:
-
-        vmin: minimum value for the input array v to use in the color range
-        vmax: maximum value for the input array v to use in the color range 
-        log: when set, use the log of the input array v in the color range
-        colorbar: when True, draw a colorbar (default: True)
-        log_floor: lower bound applied to |v| before log10 (default 0)
-        sort: useful only for 3D data. Plot the square symbola in the scatter plot in increasing order of array sort.
-
-    Returns:
-
-        Output a scatter plot figure of size 1000 pixels aside.
-
-    Example:
-
-        Example for a 2D or 3D RAMSES dataset using variable c from the object Cell. 
-        import miniramses as ram
-        c=ram.rd_cell(2)
-        ram.visu(c.x[0],c.x[1],c.dx,c.u[0],sort=c.u[0],log=1,vmin=-3,vmax=1)
-
-    Authors: Romain Teyssier (Princeton University, October 2022)
-    '''
-
-    xmin=np.min(x-dx/2)
-    xmax=np.max(x+dx/2)
-    ymin=np.min(y-dx/2)
-    ymax=np.max(y+dx/2)
+def visu(x, y, dx, val, level, npix=1200, cmap="magma", vmin=None, vmax=None,
+             grid=False, log=False, colorbar=True):
     
-    log = kwargs.get("log",None)
-    vmin = kwargs.get("vmin",None)
-    vmax = kwargs.get("vmax",None)
-    sort = kwargs.get("sort",None)
-    cmap = kwargs.get("cmap",'viridis')
-    grid = kwargs.get("grid",None)
-    log_floor = kwargs.get("log_floor",0)
-    show_colorbar = kwargs.get("colorbar",True)
-    
-    if( not (log is None)):
-        # Standard log scaling: log data; transform limits consistently
-        v = np.log10(np.maximum(np.abs(v), float(log_floor)))
-        if not (vmin is None):
-            vmin = np.log10(float(vmin))
-        if not (vmax is None):
-            vmax = np.log10(float(vmax))
+    from matplotlib.patches import Rectangle
+    from matplotlib.collections import LineCollection
 
-    print("min=",np.min(v)," max=",np.max(v))
+    if log:
+        val = np.log10(np.maximum(np.abs(val),1e-30))
+        if vmin is not None:
+            vmin = np.log10(vmin)
+        if vmax is not None:
+            vmax = np.log10(vmax)
 
-    if( not (sort is None)):
-        ind = np.argsort(sort)
-    else:
-        ind = np.arange(0,v.size)
-    
-    olddpi = plt.rcParams['figure.dpi']
-    plt.rcParams['figure.dpi'] = 58
-    px = 1/plt.rcParams['figure.dpi'] 
-    fig, ax = plt.subplots(figsize=(1000*px,1000*px))
-    ax.set_xlim([xmin,xmax])
-    ax.set_ylim([ymin,ymax])
-    plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1)
-    plt.scatter(x,y,s=0.0001)
-    rescale=np.maximum(xmax-xmin,ymax-ymin)        
+    xmin = np.min(x - dx/2)
+    xmax = np.max(x + dx/2)
+    ymin = np.min(y - dx/2)
+    ymax = np.max(y + dx/2)
+
+    sx = npix / (xmax-xmin)
+    sy = npix / (ymax-ymin)
+
+    img = np.full((npix,npix),np.nan)
+
+    # AMR projection: coarse -> fine overwrite
+    order = np.argsort(-dx)
+
+    for i in order:
+
+        x0 = x[i] - dx[i]/2
+        x1 = x[i] + dx[i]/2
+        y0 = y[i] - dx[i]/2
+        y1 = y[i] + dx[i]/2
+
+        ix0 = int((x0-xmin)*sx)
+        ix1 = int((x1-xmin)*sx)
+        iy0 = int((y0-ymin)*sy)
+        iy1 = int((y1-ymin)*sy)
+
+        ix0 = max(ix0,0)
+        iy0 = max(iy0,0)
+        ix1 = min(ix1,npix-1)
+        iy1 = min(iy1,npix-1)
+
+        img[iy0:iy1,ix0:ix1] = val[i]
+
+    print("image range:",np.nanmin(img),np.nanmax(img))
+
+    fig,ax = plt.subplots(figsize=(6,6),dpi=200)
+
+    im = ax.imshow(
+        img,
+        origin="lower",
+        extent=[xmin,xmax,ymin,ymax],
+        cmap=cmap,
+        vmin=vmin,
+        vmax=vmax,
+        interpolation="nearest"
+    )
+
     ax.set_aspect("equal")
-    edgec = None
-    linew = None
-    if( not (grid is None)):
-        edgec='black'
-        linew=0.2
-        
-    # don't fill the marker. 
-    plt.scatter(x[ind],y[ind],c=v[ind],s=(dx[ind]*780/rescale)**2,marker="s",vmin=vmin,vmax=vmax,
-                cmap=cmap,edgecolor=edgec,linewidth=linew)
-    if show_colorbar:
-        plt.colorbar(shrink=0.8)
-    plt.rcParams['figure.dpi'] = olddpi
+
+    # optional grid overlay
+    if grid:
+
+        pixel_size = (xmax-xmin)/npix
+
+        edges = set()
+        segments = []
+        widths = []
+
+        order = np.argsort(-dx)
+
+        lmin = np.min(level)
+        lmax = np.max(level)
+
+        for i in order:
+
+            if dx[i] > pixel_size*1.5:
+
+                x0 = x[i]-dx[i]/2
+                x1 = x[i]+dx[i]/2
+                y0 = y[i]-dx[i]/2
+                y1 = y[i]+dx[i]/2
+
+                # progressive linewidth
+                t = (level[i]-lmin)/(lmax-lmin)
+                lw = 0.2*(1-0.85*t)
+
+                cell_edges = [
+                    ((x0,y0),(x1,y0)),
+                    ((x1,y0),(x1,y1)),
+                    ((x1,y1),(x0,y1)),
+                    ((x0,y1),(x0,y0))
+                ]
+
+                for e in cell_edges:
+
+                    # normalize ordering so identical edges match
+                    key = tuple(sorted(e))
+
+                    if key not in edges:
+                        edges.add(key)
+                        segments.append(e)
+                        widths.append(lw)
+
+        lc = LineCollection(
+            segments,
+            colors=(0,0,0,0.7),
+            linewidths=widths
+        )
+
+        ax.add_collection(lc)
+
+    if colorbar:
+        plt.colorbar(im,shrink=0.8)
+
+    plt.show()
 
 def mk_movie(**kwargs):
     '''The function mk_movie() takes 2D data files containing maps and converts them into a sequence of images, 
