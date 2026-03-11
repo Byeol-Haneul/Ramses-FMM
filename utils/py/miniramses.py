@@ -1882,7 +1882,6 @@ def visu(x, y, dx, val, level, npix=1200, cmap="magma", vmin=None, vmax=None,
     if colorbar:
         plt.colorbar(im,shrink=0.8)
 
-    plt.show()
 
 def mk_movie(**kwargs):
     '''The function mk_movie() takes 2D data files containing maps and converts them into a sequence of images, 

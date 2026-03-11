@@ -256,19 +256,8 @@ subroutine fmm_downward(s, ilev, jlev, flev)
 
        if (igrid_nbor<=0) cycle
 
-       hash_nbor_periodic(1:ndim) = hash_parent(1:ndim) + offset
-
        do jcell = 1, twotondim
-          cycle_flag = .false.
-          do idim=1,ndim
-            nstride = 2**(idim-1)
-            cc_jcell_periodic(idim) = 2*hash_nbor_periodic(idim) + MOD((jcell-1)/nstride, 2)
-            if ((cc_jcell_periodic(idim)<m%box_ckey_min(idim, flev) .or. cc_jcell_periodic(idim)>=m%box_ckey_max(idim, flev))) then
-              cycle_flag = .true.
-            end if 
-          end do 
-          ! skip direct neighbors
-          if (direct_neighbor_list(inbor, jcell, pcell) .or. cycle_flag) cycle
+          if (direct_neighbor_list(inbor, jcell, pcell)) cycle
           ! Shift multipole from origin -> source center (Need to use grid position)
 #ifdef FMM
           multipole = m_source%multipole(jcell,:,igrid_nbor)
@@ -402,23 +391,12 @@ subroutine fmm_downward_coarse(s, ilev, jlev, flev)
        igrid_nbor = grid_nbors(inbor)
 
        if (igrid_nbor<=0) cycle
-
-       hash_nbor_periodic(1:ndim) = hash_parent(1:ndim) + offset
-
        ! If any has a refined cell, by definition there exists an FMM grid of size of the grid we called.
        if (any(m_source%grid(igrid_nbor)%refined(1:twotondim))) cycle
 
        do jcell = 1, twotondim
-          cycle_flag = .false.
-          do idim=1,ndim
-            nstride = 2**(idim-1)
-            cc_jcell_periodic(idim) = 2*hash_nbor_periodic(idim) + MOD((jcell-1)/nstride, 2)
-            if ((cc_jcell_periodic(idim)<m%box_ckey_min(idim, flev) .or. cc_jcell_periodic(idim)>=m%box_ckey_max(idim, flev))) then
-              cycle_flag = .true.
-            end if 
-          end do 
           ! skip direct neighbors
-          if (direct_neighbor_list(inbor, jcell, pcell) .or. cycle_flag) cycle
+          if (direct_neighbor_list(inbor, jcell, pcell)) cycle
           ! Get taylor coeffs from local
           do icell=1, twotondim
             dx = intermediate_diff_list(:, icell, pcell, jcell, inbor)
@@ -661,15 +639,7 @@ subroutine fmm_amr_intermediate(s, ilev, jlev)
       if (igrid_nbor<=0) cycle
 
       do jcell = 1, twotondim
-        cycle_flag = .false.
-        cc_jcell_periodic = hash_fmm_cell(1:ndim) - cell_diff_list(ind, jcell, igrid,:)
-        do idim = 1, ndim
-          if ((cc_jcell_periodic(idim) < m%box_ckey_min(idim, ilev - r%level_fmm_to_amr + 1)) .or. &
-              (cc_jcell_periodic(idim) >= m%box_ckey_max(idim, ilev - r%level_fmm_to_amr + 1))) then
-            cycle_flag = .true.
-          end if
-        end do
-        if (cycle_flag .or. direct_neighbor_list(ind, jcell, igrid)) cycle
+        if (direct_neighbor_list(ind, jcell, igrid)) cycle
 #ifdef FMM
         multipole = m_fmm%multipole(jcell, 1:multipole_size, igrid_nbor)
 #endif
@@ -1013,15 +983,6 @@ subroutine fmm_combined_direct(s, ilev, jlev)
 
       do jcell = 1, twotondim
         if (m%grid(igrid_nbor)%refined(jcell)) cycle
-        cycle_flag = .false.
-        cc_jcell_periodic = hash_fmm_cell(1:ndim) - cell_diff_list(ind, jcell, icell, :)
-        do idim = 1, ndim
-          if ((cc_jcell_periodic(idim) < m%box_ckey_min(idim, ilev-1)) .or. &
-              (cc_jcell_periodic(idim) >= m%box_ckey_max(idim, ilev-1))) then
-            cycle_flag = .true.
-          end if
-        end do
-        if (cycle_flag) cycle
 
         do ifinecell=1, twotondim
           if (m%grid(ioct)%refined(ifinecell)) cycle
@@ -1211,48 +1172,24 @@ subroutine fmm_amr_direct(s, ilev, jlev)
           jgrid = 1 + (k-1)*((nfine/2)**2) + (j-1)*(nfine/2) + (i-1)
           hash_direct(1) = (nfine/2) * cc_fmm_cell(1) + i - 1
 #endif
-          ! periodic boundary conditions & skipping out-of-box grids
-          cycle_flag = .false.
-          do idim = 1, ndim
-#ifdef PERIODIC
-            if (r%periodic(idim)) then
-              if (hash_direct(idim) < m%box_ckey_min(idim, ilev)) then
-                hash_direct(idim) = m%box_ckey_max(idim, ilev) - 1
-              end if
-              if (hash_direct(idim) >= m%box_ckey_max(idim, ilev)) then
-                hash_direct(idim) = m%box_ckey_min(idim, ilev)
-              end if
-            end if
-#endif
-            if (hash_direct(idim) < m%box_ckey_min(idim, ilev) .OR. &
-                hash_direct(idim) >= m%box_ckey_max(idim, ilev)) then
-              cycle_flag = .true.
-            end if
-          end do
-
-          if (cycle_flag) then
+          call get_grid(s, hash_direct, igrid_nbor, flush_cache = .false., fetch_cache = .true.)
+          if (igrid_nbor .le. 0) then 
             mm_jcell_list(:, jgrid, ind) = 0.0d0
             cycle
-          else
-            call get_grid(s, hash_direct, igrid_nbor, flush_cache = .false., fetch_cache = .true.)
-            if (igrid_nbor .le. 0) then 
-              mm_jcell_list(:, jgrid, ind) = 0.0d0
-              cycle
-            end if
-            do jcell = 1, twotondim
-#ifdef FMM
-              mm_jcell_list(jcell, jgrid, ind) = m%rho(jcell,igrid_nbor)*dxn
-              refined_flags(jcell, jgrid, ind) = all(m%grid(igrid_nbor)%refined(:)) ! should be all refined checkcheck
-              if (refined_flags(jcell, jgrid, ind)) then
-                do jfinecell=1, twotondim
-                  hash_fine(1:ndim) = 2 * hash_direct(1:ndim) + displacement_list(jfinecell, :)
-                  call get_grid(s, hash_fine, igrid_fine, flush_cache = .false., fetch_cache = .true.)
-                  mm_jfinecell_list(jfinecell, jcell, jgrid, ind) = m%rho(jfinecell,igrid_fine)*dxn/8
-                end do
-              end if
-#endif
-            end do
           end if
+          do jcell = 1, twotondim
+#ifdef FMM
+            mm_jcell_list(jcell, jgrid, ind) = m%rho(jcell,igrid_nbor)*dxn
+            refined_flags(jcell, jgrid, ind) = all(m%grid(igrid_nbor)%refined(:)) ! should be all refined checkcheck
+            if (refined_flags(jcell, jgrid, ind)) then
+              do jfinecell=1, twotondim
+                hash_fine(1:ndim) = 2 * hash_direct(1:ndim) + displacement_list(jfinecell, :)
+                call get_grid(s, hash_fine, igrid_fine, flush_cache = .false., fetch_cache = .true.)
+                mm_jfinecell_list(jfinecell, jcell, jgrid, ind) = m%rho(jfinecell,igrid_fine)*dxn/8
+              end do
+            end if
+#endif
+          end do
 #if NDIM>0
         end do
 #endif
@@ -1458,40 +1395,16 @@ subroutine fmm_amr_direct_taylor(s, ilev, jlev)
           jgrid = 1 + (k-1)*((nfine/2)**2) + (j-1)*(nfine/2) + (i-1)
           hash_direct(1) = (nfine/2) * cc_fmm_cell(1) + i - 1
 #endif
-          ! periodic boundary conditions & skipping out-of-box grids
-          cycle_flag = .false.
-          do idim = 1, ndim
-#ifdef PERIODIC
-            if (r%periodic(idim)) then
-              if (hash_direct(idim) < m%box_ckey_min(idim, ilev)) then
-                hash_direct(idim) = m%box_ckey_max(idim, ilev) - 1
-              end if
-              if (hash_direct(idim) >= m%box_ckey_max(idim, ilev)) then
-                hash_direct(idim) = m%box_ckey_min(idim, ilev)
-              end if
-            end if
-#endif
-            if (hash_direct(idim) < m%box_ckey_min(idim, ilev) .OR. &
-                hash_direct(idim) >= m%box_ckey_max(idim, ilev)) then
-              cycle_flag = .true.
-            end if
-          end do
-
-          if (cycle_flag) then
+          call get_grid(s, hash_direct, igrid_nbor, flush_cache = .false., fetch_cache = .true.)
+          if (igrid_nbor .le. 0) then 
             multipole_jcell_list(:, :, jgrid, ind) = 0.0d0
             cycle
-          else
-            call get_grid(s, hash_direct, igrid_nbor, flush_cache = .false., fetch_cache = .true.)
-            if (igrid_nbor .le. 0) then 
-              multipole_jcell_list(:, :, jgrid, ind) = 0.0d0
-              cycle
-            end if
-            do jcell = 1, twotondim
-#ifdef FMM
-              multipole_jcell_list(:, jcell, jgrid, ind) = m_source%multipole(jcell, :, igrid_nbor)
-#endif
-            end do
           end if
+          do jcell = 1, twotondim
+#ifdef FMM
+            multipole_jcell_list(:, jcell, jgrid, ind) = m_source%multipole(jcell, :, igrid_nbor)
+#endif
+          end do
 #if NDIM>0
         end do
 #endif
