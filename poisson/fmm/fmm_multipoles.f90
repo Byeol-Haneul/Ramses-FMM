@@ -118,7 +118,7 @@ subroutine fmm_multipole_amr2fmm(s,ilevel)
   integer(kind=8),dimension(0:ndim)::hash_key_amr, hash_key_fmm
   integer(kind=8),dimension(1:ndim)::ii
   logical::leaf_cell
-  type(msg_int4_small_realdp)::dummy_rho
+  type(msg_large_realdp)::dummy_realdp
 
   integer :: nm, nd, nq
   real(kind=8), dimension(1:multipole_size) :: multipole
@@ -143,8 +143,7 @@ subroutine fmm_multipole_amr2fmm(s,ilevel)
   dx_loc = r%boxlen / 2.0D0**ilevel
   vol_loc = dx_loc**ndim
 
-  call open_cache(mdl,s%m_fmm_list(ilevel),pack_size=storage_size(dummy_rho)/32,&
-                     pack=pack_fetch_rho,unpack=unpack_fetch_rho,&
+  call open_cache(mdl,s%m_fmm_list(ilevel),pack_size=storage_size(dummy_realdp)/32,&
                      init=init_flush_multipole, flush=pack_flush_multipole, combine=unpack_flush_multipole)
 
   ! Loop over levelmin grids.
@@ -163,7 +162,7 @@ subroutine fmm_multipole_amr2fmm(s,ilevel)
      ! Get fmm grid using a write-only cache
      call get_grid(s,hash_key_fmm,igrid_fmm,flush_cache=.true.,fetch_cache=.false.)
      
-     if (igrid_fmm == 0) cycle
+     if (igrid_fmm <= 0) cycle
 
      multipole = 0.0D0
 
@@ -363,17 +362,9 @@ subroutine fmm_multipole_shift_downward(s,m_fmm,flev)
       multipole = m_fmm%multipole(icell, :, ioct)
       call shift_multipole(multipole, xx_icell, multipole_shifted)
       m_fmm%multipole(icell, :, ioct) = multipole_shifted
-
-      if (flev == 3) then
-        mass = mass + m_fmm%multipole(icell, 1, ioct)
-      end if 
 #endif
     end do
   end do
-
-    if (flev == 3) then
-      print *, "TOTAL MASS: ", mass
-    end if
   end associate
 end subroutine fmm_multipole_shift_downward
 !################################################################

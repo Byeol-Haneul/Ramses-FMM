@@ -338,7 +338,6 @@ subroutine fmm_downward_coarse(s, ilev, jlev, flev)
   ! Open cache for multipoles
   call open_cache(mdl, m_source, pack_size=storage_size(dummy_rho)/32, pack=pack_fetch_rho, unpack=unpack_fetch_rho)
 
-
   hash_key(0) = flev
   hash_nbor(0) = flev - 1
   hash_nbor_periodic(0) = flev - 1
