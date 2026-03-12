@@ -255,11 +255,21 @@ subroutine fmm_downward(s, ilev, jlev, flev)
        end do
 
        igrid_nbor = grid_nbors(inbor)
+       hash_nbor_periodic(1:ndim) = hash_parent(1:ndim) + offset
 
        if (igrid_nbor<=0) cycle
 
        do jcell = 1, twotondim
-          if (direct_neighbor_list(inbor, jcell, pcell)) cycle
+          cycle_flag = .false.
+          do idim=1,ndim
+            nstride = 2**(idim-1)
+            cc_jcell_periodic(idim) = 2*hash_nbor_periodic(idim) + MOD((jcell-1)/nstride, 2)
+            if (cc_jcell_periodic(idim) < m%box_ckey_min(idim, flev) .or. &
+                cc_jcell_periodic(idim) >= m%box_ckey_max(idim, flev)) then
+              cycle_flag = .true.
+            end if
+          end do
+          if (direct_neighbor_list(inbor, jcell, pcell) .or. cycle_flag) cycle
           ! Shift multipole from origin -> source center (Need to use grid position)
 #ifdef FMM
           multipole = m_source%multipole(jcell,:,igrid_nbor)
@@ -641,7 +651,15 @@ subroutine fmm_amr_intermediate(s, ilev, jlev)
       if (igrid_nbor<=0) cycle
 
       do jcell = 1, twotondim
-        if (direct_neighbor_list(ind, jcell, igrid)) cycle
+        cycle_flag = .false.
+        cc_jcell_periodic = hash_fmm_cell(1:ndim) - cell_diff_list(ind, jcell, igrid, :)
+        do idim = 1, ndim
+          if ((cc_jcell_periodic(idim) < m%box_ckey_min(idim, ilev - r%level_fmm_to_amr + 1)) .or. &
+              (cc_jcell_periodic(idim) >= m%box_ckey_max(idim, ilev - r%level_fmm_to_amr + 1))) then
+            cycle_flag = .true.
+          end if
+        end do
+        if (direct_neighbor_list(ind, jcell, igrid) .or. cycle_flag) cycle
 #ifdef FMM
         multipole = m_fmm%multipole(jcell, 1:multipole_size, igrid_nbor)
 #endif
