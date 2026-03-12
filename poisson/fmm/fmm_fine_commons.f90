@@ -134,6 +134,7 @@ subroutine fmm_downward(s, ilev, jlev, flev)
   use cache_commons
   use cache
   use fmm_taylor
+  use fmm_multipoles, only: pack_fetch_multipole, unpack_fetch_multipole
   implicit none
 
   type(ramses_t) :: s
@@ -174,7 +175,7 @@ subroutine fmm_downward(s, ilev, jlev, flev)
             pack=pack_fetch_taylor,unpack=unpack_fetch_taylor,& 
             init=init_flush_taylor, flush=pack_flush_taylor, combine=unpack_flush_taylor)
 
-  print *, "            How many in mesh?: ", m_source%noct(flev)
+  ! (debug logging removed)
 
   hash_key(0) = flev
   hash_nbor(0) = flev - 1
@@ -334,7 +335,6 @@ subroutine fmm_downward_coarse(s, ilev, jlev, flev)
   ! Open cache for multipoles
   call open_cache(mdl, m_source, pack_size=storage_size(dummy_realdp)/32, pack=pack_fetch_rho, unpack=unpack_fetch_rho)
 
-  print *, "            How many in mesh?: ", m_source%noct(flev)
 
   hash_key(0) = flev
   hash_nbor(0) = flev - 1
@@ -501,7 +501,6 @@ subroutine fmm_amr_intermediate(s, ilev, jlev)
   fourpi = 4.D0*ACOS(-1.0D0)
   if(r%cosmo) fourpi = 1.5D0*g%omega_m*g%aexp
 
-  print *, "            How many in mesh?: ", m_fmm%noct(ilev - r%level_fmm_to_amr)
 
   ! Open cache for multipoles
   call open_cache(mdl, m_fmm, pack_size=storage_size(dummy_realdp)/32,&
@@ -745,7 +744,7 @@ subroutine fmm_direct_coarsest(s, ilev, jlev)
   fourpi = 4.D0*ACOS(-1.0D0)
   if(r%cosmo) fourpi = 1.5D0*g%omega_m*g%aexp
 
-  print *, "            How many in mesh?: ", m%noct(jlev)
+  ! (debug logging removed)
 
   ! Open cache for multipoles
   call open_cache(mdl, m, pack_size=storage_size(dummy_realdp)/32,&
@@ -785,7 +784,11 @@ subroutine fmm_direct_coarsest(s, ilev, jlev)
             diff = (cc_jcell - cc_ifinecell) * dx_loc
             cell_diff_list(:, ifinecell, icell, ipcell, jcell, ind) = diff
             dist = sqrt(sum(diff(:)**2))
-            D0_list(ifinecell, icell, ipcell, jcell, ind) = 1.0D0 / dist
+            if (dist == 0.0D0) then
+              D0_list(ifinecell, icell, ipcell, jcell, ind) = 0.0D0
+            else
+              D0_list(ifinecell, icell, ipcell, jcell, ind) = 1.0D0 / dist
+            end if
           end do
         end do
       end do
@@ -902,7 +905,6 @@ subroutine fmm_combined_direct(s, ilev, jlev)
   fourpi = 4.D0*ACOS(-1.0D0)
   if(r%cosmo) fourpi = 1.5D0*g%omega_m*g%aexp
 
-  print *, "            How many in mesh?: ", m%noct(jlev)
 
   ! Open cache for multipoles
   call open_cache(mdl, m, pack_size=storage_size(dummy_realdp)/32,&
@@ -1023,7 +1025,7 @@ subroutine fmm_amr_direct(s, ilev, jlev)
                                         hash_direct, hash_prev_fmm_grid, prev_hash_fmm_cell, hash_fine
   real(kind=8), dimension(threetondim, ndim) :: offset_list
   integer :: igrid_nbor, igrid_fine
-  type(msg_small_realdp) :: dummy_realdp
+  type(msg_large_realdp) :: dummy_realdp
   logical :: cycle_flag, initialized
   integer, dimension(twotondim, ndim), parameter :: displacement_list = reshape( &
     [ &
@@ -1046,7 +1048,6 @@ subroutine fmm_amr_direct(s, ilev, jlev)
   fourpi = 4.D0*ACOS(-1.0D0)
   if (r%cosmo) fourpi = 1.5D0*g%omega_m*g%aexp
 
-  print *, "            How many in mesh?: ", m%noct(jlev)
 
   ! Open cache for multipoles
   call open_cache(mdl, m, pack_size=storage_size(dummy_realdp)/32,&
@@ -1185,6 +1186,10 @@ subroutine fmm_amr_direct(s, ilev, jlev)
               do jfinecell=1, twotondim
                 hash_fine(1:ndim) = 2 * hash_direct(1:ndim) + displacement_list(jfinecell, :)
                 call get_grid(s, hash_fine, igrid_fine, flush_cache = .false., fetch_cache = .true.)
+                if (igrid_fine .le. 0) then
+                  mm_jfinecell_list(jfinecell, jcell, jgrid, ind) = 0.0d0
+                  cycle
+                end if
                 mm_jfinecell_list(jfinecell, jcell, jgrid, ind) = m%rho(jfinecell,igrid_fine)*dxn/8
               end do
             end if
@@ -1243,6 +1248,7 @@ subroutine fmm_amr_direct_taylor(s, ilev, jlev)
   use cache_commons
   use cache
   use fmm_taylor
+  use fmm_multipoles, only: pack_fetch_multipole, unpack_fetch_multipole
   implicit none
 
   type(ramses_t) :: s
@@ -1258,7 +1264,7 @@ subroutine fmm_amr_direct_taylor(s, ilev, jlev)
   real(kind=8), dimension(threetondim, ndim) :: offset_list
   real(kind=8), dimension(1:multipole_size) :: multipole
   integer :: igrid_nbor
-  type(msg_small_realdp) :: dummy_realdp
+  type(msg_large_realdp) :: dummy_realdp
   logical :: cycle_flag, initialized
   integer, dimension(twotondim, ndim), parameter :: displacement_list = reshape( &
     [ &
@@ -1279,10 +1285,9 @@ subroutine fmm_amr_direct_taylor(s, ilev, jlev)
   fourpi = 4.D0*ACOS(-1.0D0)
   if (r%cosmo) fourpi = 1.5D0*g%omega_m*g%aexp
 
-  print *, "            How many in mesh?: ", m%noct(jlev)
 
   ! Open cache for multipoles
-  call open_cache(mdl, m_source, pack_size=storage_size(dummy_realdp)/32, pack=pack_fetch_taylor,unpack=unpack_fetch_taylor)
+  call open_cache(mdl, m_source, pack_size=storage_size(dummy_realdp)/32, pack=pack_fetch_multipole,unpack=unpack_fetch_multipole)
 
   hash_key(0) = ilev
   hash_fmm_grid(0) = ilev - r%level_fmm_to_amr
@@ -1332,7 +1337,12 @@ subroutine fmm_amr_direct_taylor(s, ilev, jlev)
           do jcell = 1, twotondim
             cc_jcell = 2 * cc_jgrid + displacement_list(jcell, :)
             if (all(cc_icell(1:ndim) == cc_jcell(1:ndim))) then
-              nearest_flags(jcell, jgrid, ind, icell, igrid) = .false.
+              ! Skip self-interaction to avoid dist=0
+              nearest_flags(jcell, jgrid, ind, icell, igrid) = .true.
+              diff_list(:, jcell, jgrid, ind, icell, igrid) = 0.0D0
+              D0_list(jcell, jgrid, ind, icell, igrid) = 0.0D0
+              D1_list(jcell, jgrid, ind, icell, igrid) = 0.0D0
+              D2_list(jcell, jgrid, ind, icell, igrid) = 0.0D0
             else
               diff = (cc_icell - cc_jcell) * dx_loc
               diff_list(:, jcell, jgrid, ind, icell, igrid) = diff
@@ -1417,7 +1427,7 @@ subroutine fmm_amr_direct_taylor(s, ilev, jlev)
       end do
     end if
 
-    if (all(multipole_jcell_list(1, :, :, ind) == 0.0d0)) cycle
+    if (all(multipole_jcell_list(1, :, :, :) == 0.0d0)) cycle
 
     ! Compute interactions for all cells in this AMR grid
     do icell = 1, twotondim

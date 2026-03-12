@@ -285,7 +285,7 @@ subroutine fmm_multipole_fmm2fmm(s,m_fmm,flev)
   do ioct=m_fmm%head(flev+1),m_fmm%tail(flev+1)
      hash_key(1:ndim)=m_fmm%grid(ioct)%ckey(1:ndim)
      ! Get parent cell using a write-only cache
-     call get_parent_cell(s,hash_key,igrid,icell,flush_cache=.true.,fetch_cache=.true.)
+     call get_parent_cell(s,hash_key,igrid,icell,flush_cache=.true.,fetch_cache=.false.)
      if (igrid <= 0) cycle
      multipole = 0.0D0
 #ifdef FMM
@@ -293,6 +293,7 @@ subroutine fmm_multipole_fmm2fmm(s,m_fmm,flev)
        multipole = multipole + m_fmm%multipole(ind,:,ioct)
      end do
      m_fmm%multipole(icell,:,igrid) = m_fmm%multipole(icell,:,igrid) + multipole
+
 #endif
   end do
   call close_cache(mdl)
@@ -365,6 +366,7 @@ subroutine fmm_multipole_shift_downward(s,m_fmm,flev)
       multipole = m_fmm%multipole(icell, :, ioct)
       call shift_multipole(multipole, xx_icell, multipole_shifted)
       m_fmm%multipole(icell, :, ioct) = multipole_shifted
+
       if (flev == 3) then
         mass = mass + m_fmm%multipole(icell, 1, ioct)
       end if 
@@ -432,8 +434,16 @@ subroutine pack_fetch_multipole(mesh,igrid,msg_size,msg_array)
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
 
+  integer::ind
   type(msg_large_realdp)::msg
 #ifdef FMM
+  do ind=1,twotondim
+     if(mesh%grid(igrid)%refined(ind))then
+        msg%int4(ind)=1
+     else
+        msg%int4(ind)=0
+     endif
+  end do
   msg%realdp_fmm_multipole=mesh%multipole(:,:,igrid)
 #endif
   msg_array=transfer(msg,msg_array)
@@ -452,12 +462,20 @@ subroutine unpack_fetch_multipole(mesh,igrid,msg_size,msg_array,hash_key)
   integer,dimension(1:msg_size),optional::msg_array
   integer(kind=8),dimension(0:ndim)::hash_key
 
+  integer::ind
   type(msg_large_realdp)::msg
 
   mesh%grid(igrid)%lev=hash_key(0)
   mesh%grid(igrid)%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
 #ifdef FMM
+  do ind=1,twotondim
+     if(msg%int4(ind)==1)then
+        mesh%grid(igrid)%refined(ind)=.true.
+     else
+        mesh%grid(igrid)%refined(ind)=.false.
+     endif
+  end do
   mesh%multipole(:,:,igrid)=msg%realdp_fmm_multipole
 #endif
 end subroutine unpack_fetch_multipole
