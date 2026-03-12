@@ -80,9 +80,8 @@ recursive subroutine r_fmm_multipole_amr2fmm(pst,ilevel,input_size)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer,VALUE::input_size
   integer::ilevel
-
+  integer,VALUE::input_size
   integer::rID
 
   if(pst%nLower>0)then
@@ -232,12 +231,11 @@ recursive subroutine r_fmm_multipole_fmm2fmm(pst,fmm_levels,input_size)
   type(pst_t)::pst
   type(fmm_level_t)::fmm_levels
   integer,VALUE::input_size
-  integer::ilevel
 
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_MULTIPOLE_FMM2FMM,pst%iUpper+1,input_size,0,ilevel)
+     rID = mdl_send_request(pst%s%mdl,MDL_MULTIPOLE_FMM2FMM,pst%iUpper+1,input_size,0,fmm_levels)
      call r_fmm_multipole_fmm2fmm(pst%pLower,fmm_levels,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
@@ -279,7 +277,7 @@ subroutine fmm_multipole_fmm2fmm(s,m_fmm,flev)
   associate(r=>s%r,g=>s%g,mdl=>s%mdl)
   
   call open_cache(mdl,m_fmm,pack_size=storage_size(dummy_realdp)/32,&
-                     pack=pack_fetch_hydro,unpack=unpack_fetch_hydro,&
+                     pack=pack_fetch_multipole,unpack=unpack_fetch_multipole,&
                      init=init_flush_multipole, flush=pack_flush_multipole, combine=unpack_flush_multipole)
 
   ! Loop over finer level grids
@@ -287,7 +285,8 @@ subroutine fmm_multipole_fmm2fmm(s,m_fmm,flev)
   do ioct=m_fmm%head(flev+1),m_fmm%tail(flev+1)
      hash_key(1:ndim)=m_fmm%grid(ioct)%ckey(1:ndim)
      ! Get parent cell using a write-only cache
-     call get_parent_cell(s,hash_key,igrid,icell,flush_cache=.true.,fetch_cache=.false.)
+     call get_parent_cell(s,hash_key,igrid,icell,flush_cache=.true.,fetch_cache=.true.)
+     if (igrid <= 0) cycle
      multipole = 0.0D0
 #ifdef FMM
      do ind=1,twotondim
@@ -424,6 +423,48 @@ end subroutine pack_flush_multipole
 !################################################################
 !################################################################
 !################################################################
+subroutine pack_fetch_multipole(mesh,igrid,msg_size,msg_array)
+  use amr_parameters, only: ndim,twotondim,multipole_size
+  use amr_commons, only: mesh_t
+  use cache_commons, only: msg_large_realdp
+  integer::igrid
+  type(mesh_t)::mesh
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+
+  type(msg_large_realdp)::msg
+#ifdef FMM
+  msg%realdp_fmm_multipole=mesh%multipole(:,:,igrid)
+#endif
+  msg_array=transfer(msg,msg_array)
+end subroutine pack_fetch_multipole
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine unpack_fetch_multipole(mesh,igrid,msg_size,msg_array,hash_key)
+  use amr_parameters, only: ndim,twotondim,multipole_size
+  use amr_commons, only: mesh_t
+  use cache_commons, only: msg_large_realdp
+  integer::igrid
+  type(mesh_t)::mesh
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
+
+  type(msg_large_realdp)::msg
+
+  mesh%grid(igrid)%lev=hash_key(0)
+  mesh%grid(igrid)%ckey(1:ndim)=hash_key(1:ndim)
+  msg=transfer(msg_array,msg)
+#ifdef FMM
+  mesh%multipole(:,:,igrid)=msg%realdp_fmm_multipole
+#endif
+end subroutine unpack_fetch_multipole
+!################################################################
+!################################################################
+!################################################################
+!################################################################
 subroutine unpack_flush_multipole(mesh,igrid,msg_size,msg_array,hash_key)
   use amr_parameters, only: ndim,twotondim,multipole_size
   use amr_commons, only: mesh_t
@@ -472,7 +513,7 @@ recursive subroutine r_reset_multipoles_taylor(pst,fmm_levels,input_size)
      call r_reset_multipoles_taylor(pst%pLower,fmm_levels,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     if (ilevel <= pst%s%r%levelmin-pst%s%r%level_fmm_to_amr) then
+     if (fmm_levels%flev <= pst%s%r%levelmin-pst%s%r%level_fmm_to_amr) then
         call reset_multipoles_taylor(pst%s%r,pst%s%g,pst%s%m_fmm_list(fmm_levels%ilev),fmm_levels%flev)
      else 
         return

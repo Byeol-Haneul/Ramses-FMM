@@ -11,7 +11,7 @@ recursive subroutine r_cleanup_fmm(pst, ilevel)
   integer::rID, ilevel
     
   if(pst%nLower>0) then
-     rID = mdl_send_request(pst%s%mdl,MDL_CLEANUP_FMM,pst%iUpper+1)
+     rID = mdl_send_request(pst%s%mdl,MDL_CLEANUP_FMM,pst%iUpper+1,1,0,ilevel)
      call r_cleanup_fmm(pst%pLower, ilevel)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
