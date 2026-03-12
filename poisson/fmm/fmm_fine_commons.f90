@@ -150,6 +150,7 @@ subroutine fmm_downward(s, ilev, jlev, flev)
 
   integer :: igrid_nbor, igrid_parent
   type(msg_large_realdp)::dummy_realdp
+  type(msg_int4_small_realdp)::dummy_rho
   real(kind=8), dimension(1:multipole_size) :: multipole, multipole_shifted
   real(kind=8), dimension(taylor_size) :: temp_taylor, parent_taylor
   real(kind=8), dimension(twotondim, taylor_size) :: accum_taylor
@@ -314,6 +315,7 @@ subroutine fmm_downward_coarse(s, ilev, jlev, flev)
 
   integer :: igrid_nbor, igrid_parent
   type(msg_large_realdp)::dummy_realdp
+  type(msg_int4_small_realdp)::dummy_rho
   real(kind=8), dimension(1:multipole_size) :: multipole, multipole_shifted
   real(kind=8), dimension(taylor_size) :: temp_taylor, parent_taylor
   real(kind=8), dimension(twotondim, taylor_size) :: accum_taylor
@@ -333,7 +335,7 @@ subroutine fmm_downward_coarse(s, ilev, jlev, flev)
   associate(r=>s%r, g=>s%g, m=>s%m, mdl=>s%mdl, m_target => s%m_fmm_list(ilev), m_source => s%m)
   
   ! Open cache for multipoles
-  call open_cache(mdl, m_source, pack_size=storage_size(dummy_realdp)/32, pack=pack_fetch_rho, unpack=unpack_fetch_rho)
+  call open_cache(mdl, m_source, pack_size=storage_size(dummy_rho)/32, pack=pack_fetch_rho, unpack=unpack_fetch_rho)
 
 
   hash_key(0) = flev
@@ -473,6 +475,7 @@ subroutine fmm_amr_intermediate(s, ilev, jlev)
   integer, dimension(1:threetondim) :: grid_nbors
   integer :: igrid_nbor, igrid_parent
   type(msg_large_realdp) :: dummy_realdp
+  type(msg_int4_small_realdp) :: dummy_rho
   real(kind=8), dimension(1:multipole_size) :: multipole, multipole_shifted
   real(kind=8), dimension(taylor_size) :: temp_taylor, parent_taylor
   logical :: cycle_flag, neighbors_cached
@@ -719,6 +722,7 @@ subroutine fmm_direct_coarsest(s, ilev, jlev)
   integer, dimension(1:threetondim) :: grid_nbors, ind_nbors
   integer :: igrid_nbor, igrid_parent
   type(msg_large_realdp) :: dummy_realdp
+  type(msg_int4_small_realdp) :: dummy_rho
   real(kind=8), dimension(1:multipole_size) :: multipole, multipole_shifted
   real(kind=8), dimension(taylor_size) :: temp_taylor, parent_taylor
   logical :: cycle_flag, neighbors_cached
@@ -747,7 +751,7 @@ subroutine fmm_direct_coarsest(s, ilev, jlev)
   ! (debug logging removed)
 
   ! Open cache for multipoles
-  call open_cache(mdl, m, pack_size=storage_size(dummy_realdp)/32,&
+  call open_cache(mdl, m, pack_size=storage_size(dummy_rho)/32,&
                   pack=pack_fetch_rho, unpack=unpack_fetch_rho)
 
   hash_key(0) = ilev
@@ -878,6 +882,7 @@ subroutine fmm_combined_direct(s, ilev, jlev)
   integer, dimension(1:threetondim) :: grid_nbors
   integer :: igrid_nbor, igrid_parent
   type(msg_large_realdp) :: dummy_realdp
+  type(msg_int4_small_realdp) :: dummy_rho
   real(kind=8), dimension(1:multipole_size) :: multipole, multipole_shifted
   real(kind=8), dimension(taylor_size) :: temp_taylor, parent_taylor
   logical :: cycle_flag, neighbors_cached
@@ -907,7 +912,7 @@ subroutine fmm_combined_direct(s, ilev, jlev)
 
 
   ! Open cache for multipoles
-  call open_cache(mdl, m, pack_size=storage_size(dummy_realdp)/32,&
+  call open_cache(mdl, m, pack_size=storage_size(dummy_rho)/32,&
                   pack=pack_fetch_rho, unpack=unpack_fetch_rho)
 
   hash_key(0) = ilev
@@ -1026,6 +1031,7 @@ subroutine fmm_amr_direct(s, ilev, jlev)
   real(kind=8), dimension(threetondim, ndim) :: offset_list
   integer :: igrid_nbor, igrid_fine
   type(msg_large_realdp) :: dummy_realdp
+  type(msg_int4_small_realdp) :: dummy_rho
   logical :: cycle_flag, initialized
   integer, dimension(twotondim, ndim), parameter :: displacement_list = reshape( &
     [ &
@@ -1050,7 +1056,7 @@ subroutine fmm_amr_direct(s, ilev, jlev)
 
 
   ! Open cache for multipoles
-  call open_cache(mdl, m, pack_size=storage_size(dummy_realdp)/32,&
+  call open_cache(mdl, m, pack_size=storage_size(dummy_rho)/32,&
             pack=pack_fetch_rho, unpack=unpack_fetch_rho,&
             init=init_flush_taylor, flush=pack_flush_taylor, combine=unpack_flush_taylor)
 
@@ -1607,20 +1613,28 @@ end subroutine unpack_fetch_taylor
 subroutine pack_fetch_rho(mesh,igrid,msg_size,msg_array)
   use amr_parameters, only: twotondim
   use amr_commons, only: mesh_t
-  use cache_commons, only: msg_small_realdp
+  use cache_commons, only: msg_int4_small_realdp
   integer::igrid
   type(mesh_t)::mesh
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
 
   integer::ind
-  type(msg_small_realdp)::msg
+  type(msg_int4_small_realdp)::msg
 
 #ifdef GRAV
   do ind=1,twotondim
      msg%realdp(ind)=mesh%rho(ind, igrid)
   end do
 #endif
+  do ind=1,twotondim
+     msg%flg(ind)=0
+     if (mesh%grid(igrid)%refined(ind)) then
+        msg%ref(ind)=1
+     else
+        msg%ref(ind)=0
+     end if
+  end do
 
   msg_array=transfer(msg,msg_array)
 
@@ -1632,7 +1646,7 @@ end subroutine pack_fetch_rho
 subroutine unpack_fetch_rho(mesh,igrid,msg_size,msg_array,hash_key)
   use amr_parameters, only: ndim,twotondim
   use amr_commons, only: mesh_t
-  use cache_commons, only: msg_small_realdp
+  use cache_commons, only: msg_int4_small_realdp
   integer::igrid
   type(mesh_t)::mesh
   integer::msg_size
@@ -1640,7 +1654,7 @@ subroutine unpack_fetch_rho(mesh,igrid,msg_size,msg_array,hash_key)
   integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind
-  type(msg_small_realdp)::msg
+  type(msg_int4_small_realdp)::msg
 
   mesh%grid(igrid)%lev=hash_key(0)
   mesh%grid(igrid)%ckey(1:ndim)=hash_key(1:ndim)
@@ -1651,6 +1665,13 @@ subroutine unpack_fetch_rho(mesh,igrid,msg_size,msg_array,hash_key)
      mesh%rho(ind, igrid)=msg%realdp(ind)
   end do
 #endif
+  do ind=1,twotondim
+     if (msg%ref(ind) == 1) then
+        mesh%grid(igrid)%refined(ind)=.true.
+     else
+        mesh%grid(igrid)%refined(ind)=.false.
+     end if
+  end do
 
 end subroutine unpack_fetch_rho
 !################################################################
