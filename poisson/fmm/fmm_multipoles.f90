@@ -102,7 +102,6 @@ subroutine fmm_multipole_amr2fmm(s,ilevel)
   use amr_commons, only: mesh_t
   use ramses_commons, only: ramses_t
   use nbors_utils
-  use hydro_flag_module, only: pack_fetch_hydro, unpack_fetch_hydro
   use cache_commons
   use cache
   implicit none
@@ -119,7 +118,7 @@ subroutine fmm_multipole_amr2fmm(s,ilevel)
   integer(kind=8),dimension(0:ndim)::hash_key_amr, hash_key_fmm
   integer(kind=8),dimension(1:ndim)::ii
   logical::leaf_cell
-  type(msg_large_realdp)::dummy_realdp
+  type(msg_int4_small_realdp)::dummy_rho
 
   integer :: nm, nd, nq
   real(kind=8), dimension(1:multipole_size) :: multipole
@@ -144,8 +143,8 @@ subroutine fmm_multipole_amr2fmm(s,ilevel)
   dx_loc = r%boxlen / 2.0D0**ilevel
   vol_loc = dx_loc**ndim
 
-  call open_cache(mdl,s%m_fmm_list(ilevel),pack_size=storage_size(dummy_realdp)/32,&
-                     pack=pack_fetch_hydro,unpack=unpack_fetch_hydro,&
+  call open_cache(mdl,s%m_fmm_list(ilevel),pack_size=storage_size(dummy_rho)/32,&
+                     pack=pack_fetch_rho,unpack=unpack_fetch_rho,&
                      init=init_flush_multipole, flush=pack_flush_multipole, combine=unpack_flush_multipole)
 
   ! Loop over levelmin grids.
@@ -252,7 +251,6 @@ subroutine fmm_multipole_fmm2fmm(s,m_fmm,flev)
   use amr_commons, only: mesh_t
   use ramses_commons, only: ramses_t
   use nbors_utils
-  use hydro_flag_module, only: pack_fetch_hydro, unpack_fetch_hydro
   use cache_commons
   use cache
   implicit none
@@ -333,7 +331,6 @@ subroutine fmm_multipole_shift_downward(s,m_fmm,flev)
   use amr_commons, only: mesh_t
   use ramses_commons, only: ramses_t
   use nbors_utils
-  use hydro_flag_module, only: pack_fetch_hydro, unpack_fetch_hydro
   use cache_commons
   use cache
   implicit none
@@ -509,6 +506,74 @@ subroutine unpack_flush_multipole(mesh,igrid,msg_size,msg_array,hash_key)
   end do
 #endif
 end subroutine unpack_flush_multipole
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine pack_fetch_rho(mesh,igrid,msg_size,msg_array)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: mesh_t
+  use cache_commons, only: msg_int4_small_realdp
+  integer::igrid
+  type(mesh_t)::mesh
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+
+  integer::ind
+  type(msg_int4_small_realdp)::msg
+
+#ifdef GRAV
+  do ind=1,twotondim
+     msg%realdp(ind)=mesh%rho(ind, igrid)
+  end do
+#endif
+  do ind=1,twotondim
+     msg%flg(ind)=0
+     if (mesh%grid(igrid)%refined(ind)) then
+        msg%ref(ind)=1
+     else
+        msg%ref(ind)=0
+     end if
+  end do
+
+  msg_array=transfer(msg,msg_array)
+
+end subroutine pack_fetch_rho
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine unpack_fetch_rho(mesh,igrid,msg_size,msg_array,hash_key)
+  use amr_parameters, only: ndim, twotondim
+  use amr_commons, only: mesh_t
+  use cache_commons, only: msg_int4_small_realdp
+  integer::igrid
+  type(mesh_t)::mesh
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
+
+  integer::ind
+  type(msg_int4_small_realdp)::msg
+
+  mesh%grid(igrid)%lev=hash_key(0)
+  mesh%grid(igrid)%ckey(1:ndim)=hash_key(1:ndim)
+  msg=transfer(msg_array,msg)
+
+#ifdef GRAV
+  do ind=1,twotondim
+     mesh%rho(ind, igrid)=msg%realdp(ind)
+  end do
+#endif
+  do ind=1,twotondim
+     if (msg%ref(ind) == 1) then
+        mesh%grid(igrid)%refined(ind)=.true.
+     else
+        mesh%grid(igrid)%refined(ind)=.false.
+     end if
+  end do
+
+end subroutine unpack_fetch_rho
 !################################################################
 !################################################################
 !################################################################
