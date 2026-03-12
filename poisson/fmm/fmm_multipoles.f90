@@ -531,7 +531,7 @@ recursive subroutine r_reset_multipoles_taylor(pst,fmm_levels,input_size)
      call r_reset_multipoles_taylor(pst%pLower,fmm_levels,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     if (fmm_levels%flev <= pst%s%r%levelmin-pst%s%r%level_fmm_to_amr) then
+     if (fmm_levels%flev <= fmm_levels%ilev-pst%s%r%level_fmm_to_amr) then
         call reset_multipoles_taylor(pst%s%r,pst%s%g,pst%s%m_fmm_list(fmm_levels%ilev),fmm_levels%flev)
      else 
         return

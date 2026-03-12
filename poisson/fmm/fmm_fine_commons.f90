@@ -1214,16 +1214,15 @@ subroutine fmm_amr_direct(s, ilev, jlev)
       do ind = 1, threetondim
         do jgrid = 1, nbox
           do jcell = 1, twotondim
+            if (refined_flags(jcell, jgrid, ind) .and. .not. nearest_flags(jcell, jgrid, ind, icell, igrid)) cycle
             if (nearest_flags(jcell, jgrid, ind, icell, igrid) .and. refined_flags(jcell, jgrid, ind)) then
-               do jfinecell = 1, twotondim
-                 phi = phi - mm_jfinecell_list(jfinecell, jcell, jgrid, ind) * nearest_inv_dist(jfinecell, jcell, jgrid, ind, icell, igrid)
-               end do
+                do jfinecell = 1, twotondim
+                    phi = phi - mm_jfinecell_list(jfinecell, jcell, jgrid, ind) * &
+                                nearest_inv_dist(jfinecell, jcell, jgrid, ind, icell, igrid)
+                end do
             else
-              if (m%grid(jgrid)%refined(jcell)) then
-                cycle
-              else 
+                ! Unrefined or non-nearest unrefined
                 phi = phi - mm_jcell_list(jcell, jgrid, ind) * inv_dist(jcell, jgrid, ind, icell, igrid)
-              end if
             end if
           end do 
         end do 
