@@ -1066,8 +1066,7 @@ subroutine fmm_amr_direct(s, ilev, jlev)
 
   ! Open cache for multipoles
   call open_cache(mdl, m, pack_size=storage_size(dummy_rho)/32,&
-            pack=pack_fetch_rho, unpack=unpack_fetch_rho,&
-            init=init_flush_taylor, flush=pack_flush_taylor, combine=unpack_flush_taylor)
+            pack=pack_fetch_rho, unpack=unpack_fetch_rho)
 
   hash_key(0) = ilev
   hash_fmm_grid(0) = ilev - r%level_fmm_to_amr
@@ -1120,12 +1119,28 @@ subroutine fmm_amr_direct(s, ilev, jlev)
             else
               diff = (cc_icell - cc_jcell) * dx_loc
               diff_list(:, jcell, jgrid, ind, icell, igrid) = diff
+#if NDIM==3
+              inv_dist(jcell, jgrid, ind, icell, igrid) = 1.d0 / sqrt(diff(1)*diff(1) + diff(2)*diff(2) + diff(3)*diff(3))
+#elif NDIM==2
+              inv_dist(jcell, jgrid, ind, icell, igrid) = 1.d0 / sqrt(diff(1)*diff(1) + diff(2)*diff(2))
+#elif NDIM==1
+              inv_dist(jcell, jgrid, ind, icell, igrid) = 1.d0 / sqrt(diff(1)*diff(1))
+#else
               inv_dist(jcell, jgrid, ind, icell, igrid) = 1.d0 / sqrt(sum(diff(:)**2))
+#endif
               if (is_direct_neighbor(cc_icell, cc_jcell)) then
                 nearest_flags(jcell, jgrid, ind, icell, igrid) = .true.
                 do jfinecell = 1, twotondim
                   fine_diff = diff + (0.5 * (displacement_list(jfinecell, :) - 0.5)) * dx_loc
+#if NDIM==3
+                  nearest_inv_dist(jfinecell, jcell, jgrid, ind, icell, igrid) = 1.d0 / sqrt(fine_diff(1)*fine_diff(1) + fine_diff(2)*fine_diff(2) + fine_diff(3)*fine_diff(3))
+#elif NDIM==2
+                  nearest_inv_dist(jfinecell, jcell, jgrid, ind, icell, igrid) = 1.d0 / sqrt(fine_diff(1)*fine_diff(1) + fine_diff(2)*fine_diff(2))
+#elif NDIM==1
+                  nearest_inv_dist(jfinecell, jcell, jgrid, ind, icell, igrid) = 1.d0 / sqrt(fine_diff(1)*fine_diff(1))
+#else
                   nearest_inv_dist(jfinecell, jcell, jgrid, ind, icell, igrid) = 1.d0 / sqrt(sum(fine_diff(:)**2))
+#endif
                 end do
               else
                 nearest_flags(jcell, jgrid, ind, icell, igrid) = .false.
@@ -1380,7 +1395,15 @@ subroutine fmm_amr_direct_taylor(s, ilev, jlev)
             else
               diff = (cc_icell - cc_jcell) * dx_loc
               diff_list(:, jcell, jgrid, ind, icell, igrid) = diff
+#if NDIM==3
+              dist = sqrt(diff(1)*diff(1) + diff(2)*diff(2) + diff(3)*diff(3))
+#elif NDIM==2
+              dist = sqrt(diff(1)*diff(1) + diff(2)*diff(2))
+#elif NDIM==1
+              dist = sqrt(diff(1)*diff(1))
+#else
               dist = sqrt(sum(diff(:)**2))
+#endif
               D0_list(jcell, jgrid, ind, icell, igrid) = 1.0D0 / dist
               D1_list(jcell, jgrid, ind, icell, igrid) = -1.0D0 / dist**3
               D2_list(jcell, jgrid, ind, icell, igrid) = 3.0D0 / dist**5
