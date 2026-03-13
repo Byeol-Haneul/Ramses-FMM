@@ -1766,59 +1766,103 @@ def get_cpu_list(info,**kwargs):
 
     return cpu_list
 
-def visu(x, y, dx, val, level, npix=1200, cmap="magma", vmin=None, vmax=None,
-             grid=False, log=False, colorbar=True):
-    
-    from matplotlib.patches import Rectangle
+def visu(
+    x,
+    y,
+    dx,
+    val,
+    level,
+    npix=1200,
+    cmap="magma",
+    vmin=None,
+    vmax=None,
+    box=None,              # [xmin, xmax, ymin, ymax]
+    grid=False,
+    log=False,
+    colorbar=True
+):
+    import numpy as np
+    import matplotlib.pyplot as plt
     from matplotlib.collections import LineCollection
 
+    x = np.asarray(x)
+    y = np.asarray(y)
+    dx = np.asarray(dx)
+    val = np.asarray(val)
+    level = np.asarray(level)
+
     if log:
-        val = np.log10(np.maximum(np.abs(val),1e-30))
+        val = np.log10(np.maximum(np.abs(val), 1e-30))
         if vmin is not None:
             vmin = np.log10(vmin)
         if vmax is not None:
             vmax = np.log10(vmax)
 
-    xmin = np.min(x - dx/2)
-    xmax = np.max(x + dx/2)
-    ymin = np.min(y - dx/2)
-    ymax = np.max(y + dx/2)
+    # -----------------------------------
+    # plotting domain
+    # -----------------------------------
+    if box is None:
+        xmin = np.min(x - dx / 2)
+        xmax = np.max(x + dx / 2)
+        ymin = np.min(y - dx / 2)
+        ymax = np.max(y + dx / 2)
+    else:
+        xmin, xmax, ymin, ymax = box
 
-    sx = npix / (xmax-xmin)
-    sy = npix / (ymax-ymin)
+    sx = npix / (xmax - xmin)
+    sy = npix / (ymax - ymin)
 
-    img = np.full((npix,npix),np.nan)
+    img = np.full((npix, npix), np.nan)
 
+    # -----------------------------------
     # AMR projection: coarse -> fine overwrite
+    # -----------------------------------
     order = np.argsort(-dx)
 
     for i in order:
+        x0 = x[i] - dx[i] / 2
+        x1 = x[i] + dx[i] / 2
+        y0 = y[i] - dx[i] / 2
+        y1 = y[i] + dx[i] / 2
 
-        x0 = x[i] - dx[i]/2
-        x1 = x[i] + dx[i]/2
-        y0 = y[i] - dx[i]/2
-        y1 = y[i] + dx[i]/2
+        # skip cells completely outside plotting box
+        if x1 <= xmin or x0 >= xmax or y1 <= ymin or y0 >= ymax:
+            continue
 
-        ix0 = int((x0-xmin)*sx)
-        ix1 = int((x1-xmin)*sx)
-        iy0 = int((y0-ymin)*sy)
-        iy1 = int((y1-ymin)*sy)
+        # clip cell to plotting box
+        x0c = max(x0, xmin)
+        x1c = min(x1, xmax)
+        y0c = max(y0, ymin)
+        y1c = min(y1, ymax)
 
-        ix0 = max(ix0,0)
-        iy0 = max(iy0,0)
-        ix1 = min(ix1,npix-1)
-        iy1 = min(iy1,npix-1)
+        # convert to pixel indices
+        ix0 = int(np.floor((x0c - xmin) * sx))
+        ix1 = int(np.ceil((x1c - xmin) * sx))
+        iy0 = int(np.floor((y0c - ymin) * sy))
+        iy1 = int(np.ceil((y1c - ymin) * sy))
 
-        img[iy0:iy1,ix0:ix1] = val[i]
+        # clamp to valid image bounds
+        ix0 = max(ix0, 0)
+        iy0 = max(iy0, 0)
+        ix1 = min(ix1, npix)
+        iy1 = min(iy1, npix)
 
-    print("image range:",np.nanmin(img),np.nanmax(img))
+        if ix1 > ix0 and iy1 > iy0:
+            img[iy0:iy1, ix0:ix1] = val[i]
 
-    fig,ax = plt.subplots(figsize=(6,6),dpi=200)
+    print("subset value range:", np.min(val), np.max(val))
+    if np.all(np.isnan(img)):
+        print("image range: all NaN")
+    else:
+        print("image range:", np.nanmin(img), np.nanmax(img))
+    print("spatial box:", [xmin, xmax, ymin, ymax])
+
+    fig, ax = plt.subplots(figsize=(6, 6), dpi=200)
 
     im = ax.imshow(
         img,
         origin="lower",
-        extent=[xmin,xmax,ymin,ymax],
+        extent=[xmin, xmax, ymin, ymax],
         cmap=cmap,
         vmin=vmin,
         vmax=vmax,
@@ -1827,61 +1871,71 @@ def visu(x, y, dx, val, level, npix=1200, cmap="magma", vmin=None, vmax=None,
 
     ax.set_aspect("equal")
 
-    # optional grid overlay
+    # -----------------------------------
+    # optional AMR grid overlay
+    # -----------------------------------
     if grid:
-
-        pixel_size = (xmax-xmin)/npix
+        pixel_size_x = (xmax - xmin) / npix
+        pixel_size_y = (ymax - ymin) / npix
+        pixel_size = max(pixel_size_x, pixel_size_y)
 
         edges = set()
         segments = []
         widths = []
 
-        order = np.argsort(-dx)
-
         lmin = np.min(level)
         lmax = np.max(level)
 
         for i in order:
+            if dx[i] <= pixel_size * 1.5:
+                continue
 
-            if dx[i] > pixel_size*1.5:
+            x0 = x[i] - dx[i] / 2
+            x1 = x[i] + dx[i] / 2
+            y0 = y[i] - dx[i] / 2
+            y1 = y[i] + dx[i] / 2
 
-                x0 = x[i]-dx[i]/2
-                x1 = x[i]+dx[i]/2
-                y0 = y[i]-dx[i]/2
-                y1 = y[i]+dx[i]/2
+            # skip cells outside box
+            if x1 <= xmin or x0 >= xmax or y1 <= ymin or y0 >= ymax:
+                continue
 
-                # progressive linewidth
-                t = (level[i]-lmin)/(lmax-lmin)
-                lw = 0.2*(1-0.85*t)
+            x0c = max(x0, xmin)
+            x1c = min(x1, xmax)
+            y0c = max(y0, ymin)
+            y1c = min(y1, ymax)
 
-                cell_edges = [
-                    ((x0,y0),(x1,y0)),
-                    ((x1,y0),(x1,y1)),
-                    ((x1,y1),(x0,y1)),
-                    ((x0,y1),(x0,y0))
-                ]
+            #t = 0.0 if lmax == lmin else (level[i] - lmin) / (lmax - lmin)
+            #lw = 0.5 * (1 - 0.7 * t)
+            
+            lw = 0.8 * 2 ** (-0.4 * (level[i]-1))
+            lw = max(lw, 0.05)
 
-                for e in cell_edges:
+            cell_edges = [
+                ((x0c, y0c), (x1c, y0c)),
+                ((x1c, y0c), (x1c, y1c)),
+                ((x1c, y1c), (x0c, y1c)),
+                ((x0c, y1c), (x0c, y0c)),
+            ]
 
-                    # normalize ordering so identical edges match
-                    key = tuple(sorted(e))
+            for e in cell_edges:
+                key = tuple(sorted(e))
+                if key not in edges:
+                    edges.add(key)
+                    segments.append(e)
+                    widths.append(lw)
 
-                    if key not in edges:
-                        edges.add(key)
-                        segments.append(e)
-                        widths.append(lw)
-
-        lc = LineCollection(
-            segments,
-            colors=(0,0,0,0.7),
-            linewidths=widths
-        )
-
-        ax.add_collection(lc)
+        if segments:
+            lc = LineCollection(
+                segments,
+                colors=(0, 0, 0, 0.7),
+                linewidths=widths
+            )
+            ax.add_collection(lc)
 
     if colorbar:
-        plt.colorbar(im,shrink=0.8)
+        plt.colorbar(im, ax=ax, shrink=0.8)
 
+    return fig, ax, im
 
 def mk_movie(**kwargs):
     '''The function mk_movie() takes 2D data files containing maps and converts them into a sequence of images, 
