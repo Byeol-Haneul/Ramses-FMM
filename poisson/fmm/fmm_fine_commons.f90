@@ -401,12 +401,23 @@ subroutine fmm_downward_coarse(s, ilev, jlev, flev)
        end do
 
        igrid_nbor = grid_nbors(inbor)
+       hash_nbor_periodic(1:ndim) = hash_parent(1:ndim) + offset
 
        if (igrid_nbor<=0) cycle
        ! If any has a refined cell, by definition there exists an FMM grid of size of the grid we called.
        if (any(m_source%grid(igrid_nbor)%refined(1:twotondim))) cycle
 
        do jcell = 1, twotondim
+          cycle_flag = .false.
+          do idim=1,ndim
+            nstride = 2**(idim-1)
+            cc_jcell_periodic(idim) = 2*hash_nbor_periodic(idim) + MOD((jcell-1)/nstride, 2)
+            if (cc_jcell_periodic(idim) < m%box_ckey_min(idim, flev) .or. &
+                cc_jcell_periodic(idim) >= m%box_ckey_max(idim, flev)) then
+              cycle_flag = .true.
+            end if
+          end do
+          if (cycle_flag) cycle
           ! skip direct neighbors
           if (direct_neighbor_list(inbor, jcell, pcell)) cycle
           ! Get taylor coeffs from local
@@ -858,6 +869,16 @@ subroutine fmm_direct_coarsest(s, ilev, jlev)
       igrid_nbor = grid_nbors(ind)
       if (igrid_nbor<=0) cycle
       jcell = ind_nbors(ind)
+      cycle_flag = .false.
+      do idim=1,ndim
+        nstride = 2**(idim-1)
+        cc_jcell_periodic(idim) = 2*m%grid(igrid_nbor)%ckey(idim) + MOD((jcell-1)/nstride, 2)
+        if (cc_jcell_periodic(idim) < m%box_ckey_min(idim, ilev-1) .or. &
+            cc_jcell_periodic(idim) >= m%box_ckey_max(idim, ilev-1)) then
+          cycle_flag = .true.
+        end if
+      end do
+      if (cycle_flag) cycle
       if (m%grid(igrid_nbor)%refined(jcell)) cycle
       do ifinecell=1, twotondim
         if (m%grid(ioct)%refined(ifinecell)) cycle
@@ -1009,6 +1030,16 @@ subroutine fmm_combined_direct(s, ilev, jlev)
       if (igrid_nbor<=0) cycle
 
       do jcell = 1, twotondim
+        cycle_flag = .false.
+        do idim=1,ndim
+          nstride = 2**(idim-1)
+          cc_jcell_periodic(idim) = 2*m%grid(igrid_nbor)%ckey(idim) + MOD((jcell-1)/nstride, 2)
+          if (cc_jcell_periodic(idim) < m%box_ckey_min(idim, ilev) .or. &
+              cc_jcell_periodic(idim) >= m%box_ckey_max(idim, ilev)) then
+            cycle_flag = .true.
+          end if
+        end do
+        if (cycle_flag) cycle
         if (m%grid(igrid_nbor)%refined(jcell)) cycle
 
         do ifinecell=1, twotondim
@@ -1200,9 +1231,32 @@ subroutine fmm_amr_direct(s, ilev, jlev)
           jgrid = 1 + (k-1)*((nfine/2)**2) + (j-1)*(nfine/2) + (i-1)
           hash_direct(1) = (nfine/2) * cc_fmm_cell(1) + i - 1
 #endif
+          cycle_flag = .false.
+          do idim = 1, ndim
+            if (r%periodic(idim)) then
+              if (hash_direct(idim) < m%box_ckey_min(idim, ilev)) then
+                hash_direct(idim) = m%box_ckey_max(idim, ilev) - 1
+              end if
+              if (hash_direct(idim) >= m%box_ckey_max(idim, ilev)) then
+                hash_direct(idim) = m%box_ckey_min(idim, ilev)
+              end if
+            end if
+            if (hash_direct(idim) < m%box_ckey_min(idim, ilev) .or. &
+                hash_direct(idim) >= m%box_ckey_max(idim, ilev)) then
+              cycle_flag = .true.
+            end if
+          end do
+          if (cycle_flag) then
+            mm_jcell_list(:, jgrid, ind) = 0.0d0
+            mm_jfinecell_list(:, :, jgrid, ind) = 0.0d0
+            refined_flags(:, jgrid, ind) = .false.
+            cycle
+          end if
           call get_grid(s, hash_direct, igrid_nbor, flush_cache = .false., fetch_cache = .true.)
           if (igrid_nbor .le. 0) then 
             mm_jcell_list(:, jgrid, ind) = 0.0d0
+            mm_jfinecell_list(:, :, jgrid, ind) = 0.0d0
+            refined_flags(:, jgrid, ind) = .false.
             cycle
           end if
           do jcell = 1, twotondim
@@ -1431,6 +1485,25 @@ subroutine fmm_amr_direct_taylor(s, ilev, jlev)
           jgrid = 1 + (k-1)*((nfine/2)**2) + (j-1)*(nfine/2) + (i-1)
           hash_direct(1) = (nfine/2) * cc_fmm_cell(1) + i - 1
 #endif
+          cycle_flag = .false.
+          do idim = 1, ndim
+            if (r%periodic(idim)) then
+              if (hash_direct(idim) < m%box_ckey_min(idim, ilev)) then
+                hash_direct(idim) = m%box_ckey_max(idim, ilev) - 1
+              end if
+              if (hash_direct(idim) >= m%box_ckey_max(idim, ilev)) then
+                hash_direct(idim) = m%box_ckey_min(idim, ilev)
+              end if
+            end if
+            if (hash_direct(idim) < m%box_ckey_min(idim, ilev) .or. &
+                hash_direct(idim) >= m%box_ckey_max(idim, ilev)) then
+              cycle_flag = .true.
+            end if
+          end do
+          if (cycle_flag) then
+            multipole_jcell_list(:, :, jgrid, ind) = 0.0d0
+            cycle
+          end if
           call get_grid(s, hash_direct, igrid_nbor, flush_cache = .false., fetch_cache = .true.)
           if (igrid_nbor .le. 0) then 
             multipole_jcell_list(:, :, jgrid, ind) = 0.0d0
