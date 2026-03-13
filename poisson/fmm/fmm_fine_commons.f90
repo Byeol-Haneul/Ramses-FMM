@@ -842,13 +842,13 @@ subroutine fmm_direct_coarsest(s, ilev, jlev)
       igrid_nbor = grid_nbors(ind)
       if (igrid_nbor<=0) cycle
       jcell = ind_nbors(ind)
-      cycle_flag = .false.
-      do idim=1,ndim
-        nstride = 2**(idim-1)
-        cc_jcell_periodic(idim) = 2*m%grid(igrid_nbor)%ckey(idim) + MOD((jcell-1)/nstride, 2)
-        if (cc_jcell_periodic(idim) < m%box_ckey_min(idim, ilev-1) .or. &
-            cc_jcell_periodic(idim) >= m%box_ckey_max(idim, ilev-1)) then
-          cycle_flag = .true.
+        cycle_flag = .false.
+        do idim=1,ndim
+          nstride = 2**(idim-1)
+          cc_jcell_periodic(idim) = 2*m%grid(igrid_nbor)%ckey(idim) + MOD((jcell-1)/nstride, 2)
+          if (cc_jcell_periodic(idim) < m%box_ckey_min(idim, ilev-1) .or. &
+              cc_jcell_periodic(idim) >= m%box_ckey_max(idim, ilev-1)) then
+            cycle_flag = .true.
         end if
       end do
       if (cycle_flag) cycle
@@ -1043,6 +1043,7 @@ subroutine fmm_amr_direct(s, ilev, jlev)
   type(msg_int4_small_realdp) :: dummy_rho
   logical :: cycle_flag
   logical :: source_all_refined
+  logical, dimension(twotondim) :: refined_target, refined_source
   real(kind=8), dimension(twotondim) :: fine_mass_cache
   integer, dimension(twotondim, ndim), parameter :: displacement_list = reshape( &
     [ &
@@ -1138,8 +1139,8 @@ subroutine fmm_amr_direct(s, ilev, jlev)
 
   ! Loop over octs at this level
   do ioct = m%head(ilev), m%tail(ilev)
-
-    if (all(m%grid(ioct)%refined(1:twotondim))) cycle
+    refined_target(:) = m%grid(ioct)%refined(1:twotondim)
+    if (all(refined_target)) cycle
 
     ! set keys for this amr grid
     hash_key(1:ndim) = m%grid(ioct)%ckey(1:ndim)
@@ -1210,7 +1211,8 @@ subroutine fmm_amr_direct(s, ilev, jlev)
             refined_flags(:, jgrid, ind) = .false.
             cycle
           end if
-          source_all_refined = all(m%grid(igrid_nbor)%refined(:))
+          refined_source(:) = m%grid(igrid_nbor)%refined(1:twotondim)
+          source_all_refined = all(refined_source)
           if (source_all_refined) then
             do jfinecell = 1, twotondim
               hash_fine(1:ndim) = 2 * hash_direct(1:ndim) + displacement_list(jfinecell, :)
@@ -1224,13 +1226,15 @@ subroutine fmm_amr_direct(s, ilev, jlev)
           else
             fine_mass_cache(:) = 0.0d0
           end if
-          do jcell = 1, twotondim
+          mm_jcell_list(:, jgrid, ind) = m%rho(:,igrid_nbor)*dxn
+          refined_flags(:, jgrid, ind) = source_all_refined
+          if (source_all_refined) then
+            do jcell = 1, twotondim
 #ifdef FMM
-            mm_jcell_list(jcell, jgrid, ind) = m%rho(jcell,igrid_nbor)*dxn
-            refined_flags(jcell, jgrid, ind) = source_all_refined
-            if (source_all_refined) mm_jfinecell_list(:, jcell, jgrid, ind) = fine_mass_cache(:)
+              mm_jfinecell_list(:, jcell, jgrid, ind) = fine_mass_cache(:)
 #endif
-          end do
+            end do
+          end if
 #if NDIM>0
         end do
 #endif
@@ -1245,7 +1249,7 @@ subroutine fmm_amr_direct(s, ilev, jlev)
 
     ! Compute interactions for all cells in this AMR grid
     do icell = 1, twotondim
-      if (m%grid(ioct)%refined(icell)) cycle
+      if (refined_target(icell)) cycle
       phi = 0.0D0
       do ind = 1, threetondim
         do jgrid = 1, nbox
@@ -1267,7 +1271,6 @@ subroutine fmm_amr_direct(s, ilev, jlev)
     end do
   end do ! end over all amr grids @ given ilev
   deallocate(mm_jcell_list, mm_jfinecell_list, inv_dist, diff_list, nearest_flags, nearest_inv_dist, refined_flags)
-
   call close_cache(mdl)
   end associate
 end subroutine fmm_amr_direct
@@ -1300,6 +1303,7 @@ subroutine fmm_amr_direct_taylor(s, ilev, jlev)
   integer :: igrid_nbor
   type(msg_large_realdp) :: dummy_realdp
   logical :: cycle_flag
+  logical, dimension(twotondim) :: refined_target
   integer, dimension(twotondim, ndim), parameter :: displacement_list = reshape( &
     [ &
       0, 1, 0, 1, 0, 1, 0, 1,  &
@@ -1310,11 +1314,10 @@ subroutine fmm_amr_direct_taylor(s, ilev, jlev)
   ! Arrays sized for all source cells: threetondim * (nfine/2)^ndim * twotondim
   real(kind=8), dimension(:,:,:,:), allocatable    :: multipole_jcell_list
   real(kind=8), dimension(:,:,:,:,:), allocatable  :: D0_list, D1_list, D2_list
-
   real(kind=8), dimension(:,:,:,:,:,:), allocatable:: diff_list
   logical, dimension(:,:,:,:,:), allocatable       :: nearest_flags
-  logical, dimension(:,:), allocatable              :: source_grid_active
-  logical, dimension(:,:,:), allocatable            :: source_cell_active
+  logical, dimension(:,:), allocatable             :: source_grid_active
+  logical, dimension(:,:,:), allocatable           :: source_cell_active
 
   associate(r=>s%r, m=>s%m, mdl=>s%mdl, m_source => s%m_fmm_list(jlev))
 
@@ -1395,8 +1398,8 @@ subroutine fmm_amr_direct_taylor(s, ilev, jlev)
   
   ! Loop over octs at this level
   do ioct = m%head(ilev), m%tail(ilev)
-
-    if (all(m%grid(ioct)%refined(1:twotondim))) cycle
+    refined_target(:) = m%grid(ioct)%refined(1:twotondim)
+    if (all(refined_target)) cycle
 
     ! set keys for this amr grid
     hash_key(1:ndim) = m%grid(ioct)%ckey(1:ndim)
@@ -1485,7 +1488,7 @@ subroutine fmm_amr_direct_taylor(s, ilev, jlev)
 
     ! Compute interactions for all cells in this AMR grid
     do icell = 1, twotondim
-      if (m%grid(ioct)%refined(icell)) cycle
+      if (refined_target(icell)) cycle
       phi = 0.0D0
       do ind = 1, threetondim
         do jgrid = 1, nbox
@@ -1509,7 +1512,6 @@ subroutine fmm_amr_direct_taylor(s, ilev, jlev)
     end do
   end do ! end over all amr grids @ given ilev
   deallocate(multipole_jcell_list, D0_list, D1_list, D2_list, nearest_flags, diff_list, source_grid_active, source_cell_active)
-  
   call close_cache(mdl)
   end associate
 end subroutine fmm_amr_direct_taylor
