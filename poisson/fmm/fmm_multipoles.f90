@@ -6,9 +6,7 @@ contains
 !###############################################
 !###############################################
 subroutine m_fmm_multipoles(pst,ilevel)
-  use amr_parameters, only: ndim
   use ramses_commons, only: pst_t
-  use amr_commons, only: multipole_t
   use init_fmm_module, only: fmm_level_t
   implicit none
   type(pst_t)::pst
@@ -21,11 +19,9 @@ subroutine m_fmm_multipoles(pst,ilevel)
   ! refinement, and inside their level, they are sorted according to
   ! their grid Hilbert order.
   !------------------------------------------------------------------
-  type(multipole_t)::multipole_tot
   type(fmm_level_t)::fmm_levels
   integer::i,input_size
-  integer,dimension(1:2)::input_array
-  associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
+  associate(r=>pst%s%r)
 
   if(.not. r%poisson)return
   if(r%verbose)write(*,'(" Entering fmm_multipoles for level ",I2)')ilevel
@@ -113,30 +109,27 @@ subroutine fmm_multipole_amr2fmm(s,ilevel)
   ! For pure particle runs, this is not necessary and the
   ! routine is not even called.
   !-------------------------------------------------------------------
-  integer::ind,idim,ivar,ioct,icell,nstride,igrid_fmm
-  real(kind=8)::average
+  integer::ind,idim,ioct,icell,nstride,igrid_fmm
   integer(kind=8),dimension(0:ndim)::hash_key_amr, hash_key_fmm
   integer(kind=8),dimension(1:ndim)::ii
   logical::leaf_cell
   type(msg_large_realdp)::dummy_realdp
 
-  integer :: nm, nd, nq
+  integer :: nq
   real(kind=8), dimension(1:multipole_size) :: multipole
   real(kind=8), dimension(ndim) :: xx
-  real(kind=8) :: dx_loc, vol_loc, mmm, dd
+  real(kind=8) :: dx_loc, vol_loc, mmm
 
   ! Multipole arrays (static)
   real(kind=8) :: monopole
   real(kind=8), dimension(1:ndim) :: dipole
   real(kind=8), dimension(1:int(ndim*(ndim+1)/2)) :: quadrupole
 
-  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
+  associate(r=>s%r,m=>s%m,mdl=>s%mdl)
 
   !---------------------------------------------------
   ! Initialize constants
   !---------------------------------------------------
-  nm = 1
-  nd = ndim
   nq = int(ndim*(ndim+1)/2)
 
   ! Mesh spacing for this level
@@ -261,17 +254,14 @@ subroutine fmm_multipole_fmm2fmm(s,m_fmm,flev)
   ! For pure particle runs, this is not necessary and the
   ! routine is not even called.
   !-------------------------------------------------------------------
-  integer::ind,idim,ivar,ioct,icell,igrid
-  real(kind=8)::average
+  integer::ind,ioct,icell,igrid
   integer(kind=8),dimension(0:ndim)::hash_key
-  logical::leaf_cell
   type(msg_large_realdp)::dummy_realdp
 
-  integer :: nm, nd, nq
   real(kind=8), dimension(1:multipole_size) :: multipole
   type(mesh_t)::m_fmm
 
-  associate(r=>s%r,g=>s%g,mdl=>s%mdl)
+  associate(mdl=>s%mdl)
   
   call open_cache(mdl,m_fmm,pack_size=storage_size(dummy_realdp)/32,&
                      pack=pack_fetch_multipole,unpack=unpack_fetch_multipole,&
@@ -308,7 +298,6 @@ recursive subroutine r_fmm_multipole_shift_downward(pst,fmm_levels,input_size)
   implicit none
   type(pst_t)::pst
   integer,VALUE::input_size
-  integer::ilevel
   type(fmm_level_t)::fmm_levels
   integer::rID
 
@@ -337,14 +326,14 @@ subroutine fmm_multipole_shift_downward(s,m_fmm,flev)
   type(mesh_t)::m_fmm
   integer::flev
   integer::idim,ioct,icell, nstride
-  real(kind=8)::average, mass
+  real(kind=8)::mass
   integer(kind=8),dimension(0:ndim)::hash_key
   real(kind=8) :: dx_loc
   real(kind=8), dimension(1:multipole_size) :: multipole, multipole_shifted
   integer(kind=8), dimension(ndim) :: cc_icell! cartesian coordinate
   real(kind=8), dimension(ndim) :: xx_icell ! box unit real coordinate
 
-  associate(r=>s%r,g=>s%g,m=>s%m)
+  associate(r=>s%r,m=>s%m)
 
   dx_loc = r%boxlen / 2.0D0**flev
   hash_key(0)=flev
@@ -378,7 +367,6 @@ subroutine init_flush_multipole(mesh,igrid,hash_key)
   type(mesh_t)::mesh
   integer(kind=8),dimension(0:ndim)::hash_key
 
-  integer::ind,ivar
 #ifdef FMM
   mesh%grid(igrid)%lev=hash_key(0)
   mesh%grid(igrid)%ckey(1:ndim)=hash_key(1:ndim)
@@ -390,7 +378,7 @@ end subroutine init_flush_multipole
 !################################################################
 !################################################################
 subroutine pack_flush_multipole(mesh,igrid,msg_size,msg_array)
-  use amr_parameters, only: ndim,twotondim,multipole_size
+  use amr_parameters, only: twotondim,multipole_size
   use amr_commons, only: mesh_t
   use cache_commons, only: msg_large_realdp
   integer::igrid
@@ -414,7 +402,7 @@ end subroutine pack_flush_multipole
 !################################################################
 !################################################################
 subroutine pack_fetch_multipole(mesh,igrid,msg_size,msg_array)
-  use amr_parameters, only: ndim,twotondim,multipole_size
+  use amr_parameters, only: twotondim
   use amr_commons, only: mesh_t
   use cache_commons, only: msg_large_realdp
   integer::igrid
@@ -441,7 +429,7 @@ end subroutine pack_fetch_multipole
 !################################################################
 !################################################################
 subroutine unpack_fetch_multipole(mesh,igrid,msg_size,msg_array,hash_key)
-  use amr_parameters, only: ndim,twotondim,multipole_size
+  use amr_parameters, only: ndim,twotondim
   use amr_commons, only: mesh_t
   use cache_commons, only: msg_large_realdp
   integer::igrid
@@ -578,8 +566,6 @@ recursive subroutine r_reset_multipoles_taylor(pst,fmm_levels,input_size)
   type(pst_t)::pst
   type(fmm_level_t)::fmm_levels
   integer,VALUE::input_size
-  integer::ilevel
-
   integer::rID
 
   if(pst%nLower>0)then
@@ -600,14 +586,13 @@ end subroutine r_reset_multipoles_taylor
 !###########################################################
 !###########################################################
 subroutine reset_multipoles_taylor(r,g,m,ilevel)
-  use amr_parameters, only: twotondim
   use amr_commons, only: run_t,global_t,mesh_t
   implicit none
   type(run_t)   :: r
   type(global_t):: g
   type(mesh_t)  :: m
   integer       :: ilevel
-  integer :: igrid, ind
+  integer :: igrid
   integer :: first, last
   first = m%head(ilevel)
   last  = m%tail(ilevel)

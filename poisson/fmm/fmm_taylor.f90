@@ -10,7 +10,6 @@ subroutine calc_taylor_from_multipole(R, D0, D1, D2, D3, multipoles, taylor_coef
   real(kind=8), intent(out) :: taylor_coeff(:)
 
   real(kind=8) :: trM, S, RdotM1
-  integer :: i, j, k, idxC3
 #if NDIM==1
   real(kind=8) :: MR1
 #endif
@@ -342,19 +341,16 @@ end subroutine calc_phi
 !################################################################
 !################################################################
 !################################################################
-subroutine get_displacement(p, q, boxlen, r)
+subroutine get_displacement(p, q, r)
   use amr_parameters, only: ndim
   implicit none
   real(kind=8), intent(in)  :: p(ndim), q(ndim)
-  real(kind=8), intent(in)  :: boxlen
   real(kind=8), intent(out) :: r(ndim)
 
   ! Compute raw difference
   r = p - q
 
   ! Apply periodic boundary conditions (vectorized)
-  !where (r >  boxlen / 2.d0) r = r - boxlen
-  !where (r < -boxlen / 2.d0) r = r + boxlen
 end subroutine get_displacement
 #endif
 end module fmm_taylor

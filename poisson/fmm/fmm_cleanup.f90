@@ -3,7 +3,6 @@ module cleanup_fmm_module
 contains
 recursive subroutine r_cleanup_fmm(pst, ilevel)
   use mdl_module
-  use amr_parameters, only: twotondim
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
@@ -25,7 +24,6 @@ subroutine m_cleanup_fmm(m)
   implicit none
   type(mesh_t)::m
 
-  integer :: ilev
   ! Reset the MG hash table
   call reset_entire_hash(m%grid_dict,.false.)
   

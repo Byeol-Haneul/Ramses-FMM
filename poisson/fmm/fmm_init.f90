@@ -100,7 +100,7 @@ subroutine build_fmm(s, m, m_fmm, input)
   type(double_level_t),intent(in)::input
 
   type(mesh_t)::m,m_fmm
-  integer::ifinelevel,icoarselevel,igrid,inbor,idim,ichild,grid_cpu,ind,ifather,i
+  integer::ifinelevel,icoarselevel,igrid,idim,ichild,grid_cpu,ind,ifather
   integer(kind=8),dimension(0:ndim)::hash_key,hash_father
   integer(kind=4),dimension(1:ndim)::cart_key
   integer(kind=8),dimension(1:nhilbert)::hk

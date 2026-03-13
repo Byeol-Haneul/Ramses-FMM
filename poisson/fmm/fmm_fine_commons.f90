@@ -10,19 +10,15 @@ contains
 ! Used variables:
 #ifdef GRAV
 subroutine fmm(pst,ilev,icount)
-  use amr_parameters, only: twotondim, nhilbert
-  use poisson_parameters, only: ngs_fine, ngs_coarse, ncycles_coarse_safe
   use ramses_commons, only: pst_t
-  use init_fmm_module, only: r_init_fmm, r_build_fmm, double_level_t, downward_level_t, fmm_level_t
+  use init_fmm_module, only: r_init_fmm, r_build_fmm, double_level_t, downward_level_t
   use fmm_multipoles!, only: m_fmm_multipoles
   implicit none
   type(pst_t)::pst
   integer,intent(in) :: ilev,icount
   
-  integer :: igrid, ifine, jlev, flev, input_size
-  integer,dimension(1:4) :: output_array
+  integer :: ifine, jlev, flev, input_size
   type(double_level_t)::double_level
-  type(fmm_level_t)::fmm_levels
   type(downward_level_t)::downward_levels
 
   if(pst%s%r%gravity_type>0)return
@@ -141,17 +137,15 @@ subroutine fmm_downward(s, ilev, jlev, flev)
   integer :: ilev, jlev, flev
 
   integer :: ioct, idim, pcell, icell, inbor, jcell, nstride
-  integer(kind=8), dimension(ndim) :: cc_grid, cc_icell, cc_jcell, cc_jcell_periodic, offset, ii! cartesian coordinate
-  real(kind=8), dimension(ndim) :: xx_igrid, xx_icell, xx_jcell, xx_jcell_periodic, xx_pgrid, dx, diff ! box unit real coordinate
+  integer(kind=8), dimension(ndim) :: cc_icell, cc_jcell, cc_jcell_periodic, offset, ii
+  real(kind=8), dimension(ndim) :: dx, diff
   real(kind=8) :: dx_loc, dist, D0, D1, D2, D3
-  integer(kind=8), dimension(0:ndim) :: hash_key, hash_nbor, hash_nbor_periodic, hash_parent
+  integer(kind=8), dimension(0:ndim) :: hash_key, hash_nbor_periodic, hash_parent
   integer, dimension(1:threetondim) :: grid_nbors
-  integer, dimension(1:twotondim) :: ind_nbor_cells
 
   integer :: igrid_nbor, igrid_parent
   type(msg_large_realdp)::dummy_realdp
-  type(msg_int4_small_realdp)::dummy_rho
-  real(kind=8), dimension(1:multipole_size) :: multipole, multipole_shifted
+  real(kind=8), dimension(1:multipole_size) :: multipole
   real(kind=8), dimension(taylor_size) :: temp_taylor, parent_taylor
   real(kind=8), dimension(twotondim, taylor_size) :: accum_taylor
   logical::cycle_flag
@@ -167,7 +161,7 @@ subroutine fmm_downward(s, ilev, jlev, flev)
         0, 0, 1, 1, 0, 0, 1, 1,  &
         0, 0, 0, 0, 1, 1, 1, 1   &
       ], [twotondim, ndim] )
-  associate(r=>s%r, g=>s%g, m=>s%m, mdl=>s%mdl, m_target => s%m_fmm_list(ilev), m_source => s%m_fmm_list(jlev))
+  associate(r=>s%r, m=>s%m, mdl=>s%mdl, m_target => s%m_fmm_list(ilev), m_source => s%m_fmm_list(jlev))
 
   !if(m%noct_fmm(flev)<1) return
   
@@ -179,7 +173,6 @@ subroutine fmm_downward(s, ilev, jlev, flev)
   ! (debug logging removed)
 
   hash_key(0) = flev
-  hash_nbor(0) = flev - 1
   hash_nbor_periodic(0) = flev - 1
   hash_parent(0) = flev - 1
   dx_loc = r%boxlen / 2.0D0**flev
@@ -317,18 +310,15 @@ subroutine fmm_downward_coarse(s, ilev, jlev, flev)
   integer :: ilev, jlev, flev
 
   integer :: ioct, idim, pcell, icell, inbor, jcell, nstride
-  integer(kind=8), dimension(ndim) :: cc_grid, cc_icell, cc_jcell, cc_jcell_periodic, offset, ii! cartesian coordinate
-  real(kind=8), dimension(ndim) :: xx_igrid, xx_icell, xx_jcell, xx_jcell_periodic, xx_pgrid, dx, diff ! box unit real coordinate
+  integer(kind=8), dimension(ndim) :: cc_icell, cc_jcell, cc_jcell_periodic, offset, ii
+  real(kind=8), dimension(ndim) :: dx, diff
   real(kind=8) :: dx_loc, dist, D0, vol
-  integer(kind=8), dimension(0:ndim) :: hash_key, hash_nbor, hash_nbor_periodic, hash_parent
+  integer(kind=8), dimension(0:ndim) :: hash_key, hash_nbor_periodic, hash_parent
   integer, dimension(1:threetondim) :: grid_nbors
-  integer, dimension(1:twotondim) :: ind_nbor_cells
 
-  integer :: igrid_nbor, igrid_parent
-  type(msg_large_realdp)::dummy_realdp
+  integer :: igrid_nbor
   type(msg_int4_small_realdp)::dummy_rho
-  real(kind=8), dimension(1:multipole_size) :: multipole, multipole_shifted
-  real(kind=8), dimension(taylor_size) :: temp_taylor, parent_taylor
+  real(kind=8), dimension(taylor_size) :: temp_taylor
   real(kind=8), dimension(twotondim, taylor_size) :: accum_taylor
   logical::cycle_flag
 
@@ -343,13 +333,12 @@ subroutine fmm_downward_coarse(s, ilev, jlev, flev)
         0, 0, 1, 1, 0, 0, 1, 1,  &
         0, 0, 0, 0, 1, 1, 1, 1   &
       ], [twotondim, ndim] )
-  associate(r=>s%r, g=>s%g, m=>s%m, mdl=>s%mdl, m_target => s%m_fmm_list(ilev), m_source => s%m)
+  associate(r=>s%r, m=>s%m, mdl=>s%mdl, m_target => s%m_fmm_list(ilev), m_source => s%m)
   
   ! Open cache for multipoles
   call open_cache(mdl, m_source, pack_size=storage_size(dummy_rho)/32, pack=pack_fetch_rho, unpack=unpack_fetch_rho)
 
   hash_key(0) = flev
-  hash_nbor(0) = flev - 1
   hash_nbor_periodic(0) = flev - 1
   hash_parent(0) = flev - 1
   dx_loc = r%boxlen / 2.0D0**flev
@@ -480,25 +469,20 @@ subroutine fmm_amr_intermediate(s, ilev, jlev)
   implicit none
 
   type(ramses_t) :: s
-  type(mesh_t) :: m_fmm
   integer :: ilev, jlev
 
   integer :: ioct, idim, ind, icell, jcell, nstride, nfine, igrid, nbox, pcell
-  real(kind=8) :: phi, phi_out, fourpi, dx_loc
+  real(kind=8) :: phi, phi_out, dx_loc
   integer(kind=8), dimension(ndim) :: cc_icell, cc_jcell, cc_jcell_periodic, offset
-  real(kind=8), dimension(ndim) :: xx_icell, xx_jcell, xx_pgrid, xx_jcell_periodic, diff, diff2
+  real(kind=8), dimension(ndim) :: diff
   integer(kind=8), dimension(0:ndim) :: hash_key, hash_fmm_grid, hash_fmm_cell, &
-                                        hash_nbor, hash_nbor_periodic, prev_hash_fmm_grid, prev_hash_fmm_cell
-
-  real(kind=8), dimension(twotondim, ndim) :: xx_icell_list, xx_jcell_list
-  integer(kind=8), dimension(twotondim, ndim) :: cc_icell_list, cc_jcell_list
+                                        prev_hash_fmm_grid
 
   integer, dimension(1:threetondim) :: grid_nbors
   integer :: igrid_nbor, igrid_parent
   type(msg_large_realdp) :: dummy_realdp
-  type(msg_int4_small_realdp) :: dummy_rho
-  real(kind=8), dimension(1:multipole_size) :: multipole, multipole_shifted
-  real(kind=8), dimension(taylor_size) :: temp_taylor, parent_taylor
+  real(kind=8), dimension(1:multipole_size) :: multipole
+  real(kind=8), dimension(taylor_size) :: parent_taylor
   logical :: cycle_flag, neighbors_cached
 
   real(kind=8) :: dist, D0, D1, D2
@@ -520,10 +504,7 @@ subroutine fmm_amr_intermediate(s, ilev, jlev)
   integer, allocatable :: fmm_grid_center_offset(:,:), fmm_cell_center_offset(:,:)
   logical, allocatable :: direct_neighbor_list(:,:,:)
 
-  associate(r=>s%r, g=>s%g, m=>s%m, mdl=>s%mdl, m_fmm=>s%m_fmm_list(jlev))
-
-  fourpi = 4.D0*ACOS(-1.0D0)
-  if(r%cosmo) fourpi = 1.5D0*g%omega_m*g%aexp
+  associate(r=>s%r, m=>s%m, mdl=>s%mdl, m_fmm=>s%m_fmm_list(jlev))
 
 
   ! Open cache for multipoles
@@ -729,32 +710,27 @@ end subroutine r_fmm_amr_direct
 !###########################################################
 !###########################################################
 subroutine fmm_direct_coarsest(s, ilev, jlev)
-  use amr_parameters, only: ndim, twotondim, threetondim, multipole_size, taylor_size
-  use amr_commons, only: mesh_t
+  use amr_parameters, only: ndim, twotondim, threetondim
   use ramses_commons, only: ramses_t
   use nbors_utils
   use fmm_multipoles, only: pack_fetch_rho, unpack_fetch_rho
   use cache_commons
   use cache
-  use fmm_taylor
   implicit none
 
   type(ramses_t) :: s
   integer :: ilev, jlev
 
-  integer :: ioct, idim, ind, icell, ipcell, jcell, ifinecell, nstride, nfine, igrid, nbox, pcell
-  real(kind=8) :: phi, phi_out, fourpi, dx_loc, vol
-  integer(kind=8), dimension(ndim) :: cc_icell, cc_jcell, cc_ifinecell, cc_jcell_periodic, offset
-  real(kind=8), dimension(ndim) :: xx_icell, xx_jcell, xx_pgrid, xx_jcell_periodic, diff, diff2
+  integer :: ioct, idim, ind, icell, ipcell, jcell, ifinecell, nstride
+  real(kind=8) :: dx_loc, vol
+  integer(kind=8), dimension(ndim) :: cc_jcell, cc_ifinecell, cc_jcell_periodic
+  real(kind=8), dimension(ndim) :: diff
   integer(kind=8), dimension(0:ndim) :: hash_key, hash_fmm_grid, hash_fmm_cell, hash_fmm_pgrid, &
-                                        hash_nbor, hash_nbor_periodic, prev_hash_fmm_grid, prev_hash_fmm_cell
+                                        prev_hash_fmm_grid
 
   integer, dimension(1:threetondim) :: grid_nbors, ind_nbors
-  integer :: igrid_nbor, igrid_parent
-  type(msg_large_realdp) :: dummy_realdp
+  integer :: igrid_nbor
   type(msg_int4_small_realdp) :: dummy_rho
-  real(kind=8), dimension(1:multipole_size) :: multipole, multipole_shifted
-  real(kind=8), dimension(taylor_size) :: temp_taylor, parent_taylor
   logical :: cycle_flag, neighbors_cached
 
   real(kind=8) :: dist, D0
@@ -773,10 +749,7 @@ subroutine fmm_direct_coarsest(s, ilev, jlev)
   real(kind=8), allocatable :: D0_list(:,:,:,:,:)
   real(kind=8), allocatable :: cell_diff_list(:,:,:,:,:,:)
 
-  associate(r=>s%r, g=>s%g, m=>s%m, mdl=>s%mdl)
-
-  fourpi = 4.D0*ACOS(-1.0D0)
-  if(r%cosmo) fourpi = 1.5D0*g%omega_m*g%aexp
+  associate(r=>s%r, m=>s%m, mdl=>s%mdl)
 
   ! (debug logging removed)
 
@@ -897,35 +870,27 @@ end subroutine fmm_direct_coarsest
 !###########################################################
 !###########################################################
 subroutine fmm_combined_direct(s, ilev, jlev)
-  use amr_parameters, only: ndim, twotondim, threetondim, multipole_size, taylor_size
-  use amr_commons, only: mesh_t
+  use amr_parameters, only: ndim, twotondim, threetondim
   use ramses_commons, only: ramses_t
   use nbors_utils
   use fmm_multipoles, only: pack_fetch_rho, unpack_fetch_rho
   use cache_commons
   use cache
-  use fmm_taylor
   implicit none
 
   type(ramses_t) :: s
   integer :: ilev, jlev
 
-  integer :: ioct, idim, ind, icell, jcell, ifinecell, nstride, nfine, igrid, nbox, pcell
-  real(kind=8) :: phi, phi_out, fourpi, dx_loc, vol
-  integer(kind=8), dimension(ndim) :: cc_icell, cc_jcell, cc_jcell_periodic, offset
-  real(kind=8), dimension(ndim) :: xx_icell, xx_jcell, xx_pgrid, xx_jcell_periodic, diff, diff2
+  integer :: ioct, idim, ind, icell, jcell, ifinecell, nstride
+  real(kind=8) :: dx_loc, vol
+  integer(kind=8), dimension(ndim) :: cc_jcell, cc_jcell_periodic, offset
+  real(kind=8), dimension(ndim) :: diff
   integer(kind=8), dimension(0:ndim) :: hash_key, hash_fmm_grid, hash_fmm_cell, &
-                                        hash_nbor, hash_nbor_periodic, prev_hash_fmm_grid, prev_hash_fmm_cell
-
-  real(kind=8), dimension(twotondim, ndim) :: xx_icell_list, xx_jcell_list
-  integer(kind=8), dimension(twotondim, ndim) :: cc_icell_list, cc_jcell_list
+                                        prev_hash_fmm_grid
 
   integer, dimension(1:threetondim) :: grid_nbors
-  integer :: igrid_nbor, igrid_parent
-  type(msg_large_realdp) :: dummy_realdp
+  integer :: igrid_nbor
   type(msg_int4_small_realdp) :: dummy_rho
-  real(kind=8), dimension(1:multipole_size) :: multipole, multipole_shifted
-  real(kind=8), dimension(taylor_size) :: temp_taylor, parent_taylor
   logical :: cycle_flag, neighbors_cached
 
   real(kind=8) :: dist, D0
@@ -944,12 +909,7 @@ subroutine fmm_combined_direct(s, ilev, jlev)
   real(kind=8), allocatable :: D0_list(:,:,:,:)
   real(kind=8), allocatable :: intermediate_diff_list(:,:,:,:,:), cell_diff_list(:,:,:,:)
   real(kind=8), allocatable :: far_diff_list(:,:,:)
-  integer, allocatable :: fmm_grid_lcorner_offset(:,:)
-
-  associate(r=>s%r, g=>s%g, m=>s%m, mdl=>s%mdl)
-
-  fourpi = 4.D0*ACOS(-1.0D0)
-  if(r%cosmo) fourpi = 1.5D0*g%omega_m*g%aexp
+  associate(r=>s%r, m=>s%m, mdl=>s%mdl)
 
 
   ! Open cache for multipoles
@@ -1061,30 +1021,27 @@ end subroutine fmm_combined_direct
 !###########################################################
 subroutine fmm_amr_direct(s, ilev, jlev)
   use amr_parameters, only: ndim, twotondim, threetondim, nhilbert
-  use amr_commons, only: mesh_t
   use ramses_commons, only: ramses_t
   use nbors_utils
   use fmm_multipoles, only: pack_fetch_rho, unpack_fetch_rho
   use cache_commons
   use cache
-  use fmm_taylor
   implicit none
 
   type(ramses_t) :: s
   integer :: ilev, jlev
 
-  integer :: ioct, idim, ind, icell, jcell, jcell_amr, nstride, nfine, nbox, jgrid, igrid, jfinecell
-  integer :: i, j, k, grid_idx, total_grids, cell_idx
-  real(kind=8) :: phi, fourpi, dx_loc, dxn, dist
+  integer :: ioct, idim, ind, icell, jcell, nstride, nfine, nbox, jgrid, igrid, jfinecell
+  integer :: i, j, k
+  real(kind=8) :: phi, dx_loc, dxn
   integer(kind=8), dimension(ndim) :: cc_icell, cc_jcell, cc_igrid, cc_jgrid, cc_fmm_cell, offset
-  real(kind=8), dimension(ndim) :: xx_icell, xx_jcell, diff, fine_diff
+  real(kind=8), dimension(ndim) :: diff, fine_diff
   integer(kind=8), dimension(0:ndim) :: hash_key, hash_fmm_grid, hash_fmm_cell, &
-                                        hash_direct, hash_prev_fmm_grid, prev_hash_fmm_cell, hash_fine
+                                        hash_direct, prev_hash_fmm_cell, hash_fine
   real(kind=8), dimension(threetondim, ndim) :: offset_list
   integer :: igrid_nbor, igrid_fine
-  type(msg_large_realdp) :: dummy_realdp
   type(msg_int4_small_realdp) :: dummy_rho
-  logical :: cycle_flag, initialized
+  logical :: cycle_flag
   integer, dimension(twotondim, ndim), parameter :: displacement_list = reshape( &
     [ &
       0, 1, 0, 1, 0, 1, 0, 1,  &
@@ -1101,10 +1058,7 @@ subroutine fmm_amr_direct(s, ilev, jlev)
   logical, dimension(:,:,:), allocatable           :: refined_flags
   logical, dimension(:,:,:,:,:), allocatable       :: nearest_flags
 
-  associate(r=>s%r, g=>s%g, m=>s%m, mdl=>s%mdl)
-
-  fourpi = 4.D0*ACOS(-1.0D0)
-  if (r%cosmo) fourpi = 1.5D0*g%omega_m*g%aexp
+  associate(r=>s%r, m=>s%m, mdl=>s%mdl)
 
 
   ! Open cache for multipoles
@@ -1114,19 +1068,14 @@ subroutine fmm_amr_direct(s, ilev, jlev)
 
   hash_key(0) = ilev
   hash_fmm_grid(0) = ilev - r%level_fmm_to_amr
-  hash_prev_fmm_grid(0) = ilev - r%level_fmm_to_amr
   hash_fmm_cell(0) = ilev - r%level_fmm_to_amr + 1
   hash_direct(0) = ilev
   hash_fine(0) = ilev + 1
-
-  hash_prev_fmm_grid(1:ndim) = -1 ! initialize
 
   dx_loc = r%boxlen / 2.0D0**ilev
   dxn    = dx_loc**ndim
   nfine  = 2**r%level_fmm_to_amr
   nbox   = (nfine/2)**ndim
-  initialized = .false.
-
   ! Allocate arrays for all possible source cells
   allocate(mm_jcell_list(twotondim, nbox, threetondim))
   allocate(mm_jfinecell_list(twotondim, twotondim, nbox, threetondim))
@@ -1169,7 +1118,7 @@ subroutine fmm_amr_direct(s, ilev, jlev)
               diff = (cc_icell - cc_jcell) * dx_loc
               diff_list(:, jcell, jgrid, ind, icell, igrid) = diff
               inv_dist(jcell, jgrid, ind, icell, igrid) = 1.d0 / sqrt(sum(diff(:)**2))
-              if (is_direct_neighbor(cc_icell, cc_jcell, ilev+1)) then
+              if (is_direct_neighbor(cc_icell, cc_jcell)) then
                 nearest_flags(jcell, jgrid, ind, icell, igrid) = .true.
                 do jfinecell = 1, twotondim
                   fine_diff = diff + (0.5 * (displacement_list(jfinecell, :) - 0.5)) * dx_loc
@@ -1321,8 +1270,7 @@ end subroutine fmm_amr_direct
 !################################################################
 !################################################################
 subroutine fmm_amr_direct_taylor(s, ilev, jlev)
-  use amr_parameters, only: ndim, twotondim, threetondim, nhilbert, multipole_size
-  use amr_commons, only: mesh_t
+  use amr_parameters, only: ndim, twotondim, threetondim, multipole_size
   use ramses_commons, only: ramses_t
   use nbors_utils
   use cache_commons
@@ -1334,18 +1282,18 @@ subroutine fmm_amr_direct_taylor(s, ilev, jlev)
   type(ramses_t) :: s
   integer :: ilev, jlev
 
-  integer :: ioct, idim, ind, icell, jcell, jcell_amr, nstride, nfine, nbox, jgrid, igrid, jfinecell
-  integer :: i, j, k, grid_idx, total_grids, cell_idx
-  real(kind=8) :: phi, phi_out, fourpi, dx_loc, dxn, dist, D0, D1, D2
+  integer :: ioct, idim, ind, icell, jcell, nstride, nfine, nbox, jgrid, igrid
+  integer :: i, j, k
+  real(kind=8) :: phi, phi_out, dx_loc, dist, D0, D1, D2
   integer(kind=8), dimension(ndim) :: cc_icell, cc_jcell, cc_igrid, cc_jgrid, cc_fmm_cell, offset
-  real(kind=8), dimension(ndim) :: xx_icell, xx_jcell, diff, fine_diff
+  real(kind=8), dimension(ndim) :: diff
   integer(kind=8), dimension(0:ndim) :: hash_key, hash_fmm_grid, hash_fmm_cell, &
-                                        hash_direct, hash_prev_fmm_grid, prev_hash_fmm_cell, hash_fine
+                                        hash_direct, prev_hash_fmm_cell
   real(kind=8), dimension(threetondim, ndim) :: offset_list
   real(kind=8), dimension(1:multipole_size) :: multipole
   integer :: igrid_nbor
   type(msg_large_realdp) :: dummy_realdp
-  logical :: cycle_flag, initialized
+  logical :: cycle_flag
   integer, dimension(twotondim, ndim), parameter :: displacement_list = reshape( &
     [ &
       0, 1, 0, 1, 0, 1, 0, 1,  &
@@ -1360,10 +1308,7 @@ subroutine fmm_amr_direct_taylor(s, ilev, jlev)
   real(kind=8), dimension(:,:,:,:,:,:), allocatable:: diff_list
   logical, dimension(:,:,:,:,:), allocatable       :: nearest_flags
 
-  associate(r=>s%r, g=>s%g, m=>s%m, mdl=>s%mdl, m_source => s%m_fmm_list(jlev))
-
-  fourpi = 4.D0*ACOS(-1.0D0)
-  if (r%cosmo) fourpi = 1.5D0*g%omega_m*g%aexp
+  associate(r=>s%r, m=>s%m, mdl=>s%mdl, m_source => s%m_fmm_list(jlev))
 
 
   ! Open cache for multipoles
@@ -1371,18 +1316,12 @@ subroutine fmm_amr_direct_taylor(s, ilev, jlev)
 
   hash_key(0) = ilev
   hash_fmm_grid(0) = ilev - r%level_fmm_to_amr
-  hash_prev_fmm_grid(0) = ilev - r%level_fmm_to_amr
   hash_fmm_cell(0) = ilev - r%level_fmm_to_amr + 1
   hash_direct(0) = ilev 
-  hash_fine(0) = ilev + 1
-
-  hash_prev_fmm_grid(1:ndim) = -1 ! initialize
 
   dx_loc = r%boxlen / 2.0D0**ilev
-  dxn    = dx_loc**ndim
   nfine  = 2**r%level_fmm_to_amr
   nbox   = (nfine/2)**ndim
-  initialized = .false.
 
   ! Allocate arrays for all possible source cells
   allocate(multipole_jcell_list(multipole_size, twotondim, nbox, threetondim))
@@ -1430,7 +1369,7 @@ subroutine fmm_amr_direct_taylor(s, ilev, jlev)
               D0_list(jcell, jgrid, ind, icell, igrid) = 1.0D0 / dist
               D1_list(jcell, jgrid, ind, icell, igrid) = -1.0D0 / dist**3
               D2_list(jcell, jgrid, ind, icell, igrid) = 3.0D0 / dist**5
-              if (is_direct_neighbor(cc_icell, cc_jcell, ilev+1)) then
+              if (is_direct_neighbor(cc_icell, cc_jcell)) then
                 nearest_flags(jcell, jgrid, ind, icell, igrid) = .true.
               else
                 nearest_flags(jcell, jgrid, ind, icell, igrid) = .false.
@@ -1562,12 +1501,11 @@ end subroutine fmm_amr_direct_taylor
 !################################################################
 !################################################################
 !################################################################
-logical function is_direct_neighbor(cc_icell, cc_jcell, ilev)
+logical function is_direct_neighbor(cc_icell, cc_jcell)
   use amr_parameters, only: ndim
   implicit none
   integer(kind=8), intent(in) :: cc_icell(ndim), cc_jcell(ndim)
-  integer, intent(in) :: ilev
-  integer :: d, n, diff
+  integer :: d, diff
   
   is_direct_neighbor = .true.
   do d = 1, ndim
@@ -1592,7 +1530,6 @@ subroutine init_flush_taylor(mesh,igrid,hash_key)
   type(mesh_t)::mesh
   integer(kind=8),dimension(0:ndim)::hash_key
 
-  integer::ind,ivar
 #ifdef FMM  
   mesh%grid(igrid)%lev=hash_key(0)
   mesh%grid(igrid)%ckey(1:ndim)=hash_key(1:ndim)
@@ -1658,7 +1595,6 @@ end subroutine unpack_flush_taylor
 !################################################################
 subroutine pack_fetch_taylor(mesh,igrid,msg_size,msg_array)
   use amr_parameters, only: ndim,twotondim,multipole_size
-  use hydro_parameters, only: nvar
   use amr_commons, only: mesh_t
   use cache_commons, only: msg_large_realdp
   integer::igrid
@@ -1666,7 +1602,6 @@ subroutine pack_fetch_taylor(mesh,igrid,msg_size,msg_array)
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
 
-  integer::ind,ivar
   type(msg_large_realdp)::msg
 #ifdef FMM
   msg%realdp_fmm_multipole=mesh%multipole(:,:,igrid)
@@ -1680,7 +1615,6 @@ end subroutine pack_fetch_taylor
 !#####################################################################
 subroutine unpack_fetch_taylor(mesh,igrid,msg_size,msg_array,hash_key)
   use amr_parameters, only: ndim,twotondim
-  use hydro_parameters, only: nvar
   use amr_commons, only: mesh_t
   use cache_commons, only: msg_large_realdp
   integer::igrid
@@ -1689,7 +1623,6 @@ subroutine unpack_fetch_taylor(mesh,igrid,msg_size,msg_array,hash_key)
   integer,dimension(1:msg_size),optional::msg_array
   integer(kind=8),dimension(0:ndim)::hash_key
 
-  integer::ind,ivar
   type(msg_large_realdp)::msg
 
   mesh%grid(igrid)%lev=hash_key(0)
@@ -1717,7 +1650,6 @@ subroutine dump_taylor(r, m, ilev)
   integer, intent(in) :: ilev
 
   integer :: ioct, icell, unit_debug
-  real(kind=8) :: dx_loc
   character(len=256) :: filename
 
   ! Construct filename based on level
