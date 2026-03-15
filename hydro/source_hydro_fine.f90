@@ -160,7 +160,7 @@ subroutine source_hydro_fine(s,ilevel)
            m%unew(ind,5+irad,igrid)=m%unew(ind,5+irad,igrid) &
                 & -(r%gamma_rad(irad)-1.0d0)*m%uold(ind,5+irad,igrid)*divu*g%dtnew(ilevel)
         end do
-#endif     
+#endif
         ! Correct total energy if internal energy is too small
         if(r%entropy.and.r%dual_energy.GE.0)then
            d=max(dble(m%unew(ind,1,igrid)),r%smallr)

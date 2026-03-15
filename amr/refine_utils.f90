@@ -1,4 +1,8 @@
 module refine_utils
+#ifdef _CUDA
+  use gpu_runner, only: gpu_refine
+  use nvtx
+#endif
   type out_refine_fine_t
     integer::make,kill
   end type out_refine_fine_t
@@ -105,7 +109,11 @@ recursive subroutine r_refine_fine(pst,ilevel,input_size,output,output_size)
      output%make = output%make + next_output%make
      output%kill = output%kill + next_output%kill
   else
+#ifdef _CUDA
+     call gpu_refine(pst%s,ilevel)
+#else
      call refine_fine(pst%s,ilevel,output%make,output%kill)
+#endif
   endif
 
 end subroutine r_refine_fine

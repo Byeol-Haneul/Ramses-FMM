@@ -2,24 +2,24 @@ module gpu_utils
    use amr_parameters, only: dp, twotondim
    use cudafor
    implicit none
-   integer,parameter::ncentral=2 !> The number of octs in each direction of the kernel, excluding the ghost octs
 
    !> @brief
-   !> Contains a 2*ncentral+4 by 2*ncentral+4 by 2*ncentral+4 subgrid of primitive variables. Intended to act as a subgrid
-   !> where the inner 2*ncentral by 2*ncentral by 2*ncentral cells are "real" and the outer 2 cells are ghost/halo cells.
+   !> Contains a 6 by 6 by 6 subgrid of primitive variables. Intended to act as a subgrid
+   !> where the inner 2 by 2 by 2 cells are "real" and the outer 2 cells are ghost/halo cells.
    !> Can either be used on it's own or allocated in shared memory. Note that it is zero
    !> indexed to make 1D to 3D indexing easier
    type, public :: subgrid_6x6x6cell_primitive
-      real(kind=dp), dimension(0:2*ncentral+3, 0:2*ncentral+3, 0:2*ncentral+3) :: density, velocity_x, velocity_y, velocity_z, pressure
+      real(kind=dp), dimension(0:5, 0:5, 0:5) :: density, velocity_x, velocity_y, velocity_z, pressure
+      logical      , dimension(0:5, 0:5, 0:5) :: refined
    end type subgrid_6x6x6cell_primitive
 
    !> @brief
-   !> Contains a 2*ncentral+4 by 2*ncentral+4 by 2*ncentral+4 subgrid of conserved variables. Intended to act as a subgrid
-   !> where the inner 2*ncentral by 2*ncentral by 2*ncentral cells are "real" and the outer 2 cells are ghost/halo cells.
+   !> Contains a 6 by 6 by 6 subgrid of conserved variables. Intended to act as a subgrid
+   !> where the inner 2 by 2 by 2 cells are "real" and the outer 2 cells are ghost/halo cells.
    !> Can either but used on it's own or allocated in shared memory. Note that it is zero
    !> indexed to make 1D to 3D indexing easier
    type, public :: subgrid_6x6x6cell_conserved
-      real(kind=dp), dimension(0:2*ncentral+3, 0:2*ncentral+3, 0:2*ncentral+3) :: density, momentum_x, momentum_y, momentum_z, energy
+      real(kind=dp), dimension(0:5, 0:5, 0:5) :: density, momentum_x, momentum_y, momentum_z, energy
    end type subgrid_6x6x6cell_conserved
 
 contains

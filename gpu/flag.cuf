@@ -1,0 +1,204 @@
+module flag_device
+  use amr_parameters, only: dp, ndim, twotondim, nhilbert
+  use hydro_parameters, only: nvar
+  use gpu_runner, only: mesh_gpu, hash_gpu
+  use cudafor
+  implicit none
+  integer,dimension(1:8,1:6),parameter::ggg=reshape(&
+       & (/13,14,13,14,13,14,13,14,&
+       &   14,15,14,15,14,15,14,15,&
+       &   11,11,14,14,11,11,14,14,&
+       &   14,14,17,17,14,14,17,17,&
+       &   5,5,5,5,14,14,14,14,&
+       &   14,14,14,14,23,23,23,23/),(/8,6/))
+  integer,dimension(1:8,1:6),parameter::hhh=reshape(&
+       & (/2,1,4,3,6,5,8,7,&
+       &   2,1,4,3,6,5,8,7,&
+       &   3,4,1,2,7,8,5,6,&
+       &   3,4,1,2,7,8,5,6,&
+       &   5,6,7,8,1,2,3,4,&
+       &   5,6,7,8,1,2,3,4/),(/8,6/))
+contains
+  include 'hash.cuf'
+  include 'hilbert.cuf'
+  include 'scan.cuf'
+
+  ! =========================================================================
+  attributes(global) subroutine reset_flag1_kernel(mesh, head_idx, num_octs)
+    type(mesh_gpu), device :: mesh
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
+    integer :: cell_idx, oct_idx
+
+    block_idx = blockIdx%x - 1
+
+    ! Compute the oct idx
+    oct_idx = block_idx * blockDim%y + threadIdx%y - 1
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Compute the cell idx
+    cell_idx = threadIdx%x
+
+    mesh%flag1(cell_idx, oct_idx) = 0
+
+  end subroutine reset_flag1_kernel
+  ! =========================================================================~
+
+  ! =========================================================================
+  attributes(global) subroutine reset_flag2_kernel(mesh, head_idx, num_octs)
+    type(mesh_gpu), device :: mesh
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
+    integer :: cell_idx, oct_idx
+
+    block_idx = blockIdx%x - 1
+
+    ! Compute the oct idx
+    oct_idx = block_idx * blockDim%y + threadIdx%y - 1
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Compute the cell idx
+    cell_idx = threadIdx%x
+
+    mesh%flag2(cell_idx, oct_idx) = 0
+
+  end subroutine reset_flag2_kernel
+  ! =========================================================================~
+
+  ! =========================================================================
+  attributes(global) subroutine init_flag_kernel(mesh, head_idx, num_octs)
+    type(mesh_gpu), device :: mesh
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
+    integer :: tid, bid, cell_idx, oct_idx
+    integer :: ind, father_idx, i, j, k
+    logical :: ok
+
+    ! Thread and block id
+    tid = threadIdx%x - 1
+    bid = blockIdx%x - 1
+
+    ! Compute the oct idx
+    oct_idx = tid + bid * blockDim%x
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Compute the parent cell idx
+    father_idx = mesh%father(oct_idx)
+    i = mesh%grid(oct_idx)%ckey(1) - 2 * mesh%grid(father_idx)%ckey(1)
+    j = mesh%grid(oct_idx)%ckey(2) - 2 * mesh%grid(father_idx)%ckey(2)
+    k = mesh%grid(oct_idx)%ckey(3) - 2 * mesh%grid(father_idx)%ckey(3)
+    cell_idx = 1 + i + 2*j + 4*k
+
+    ! If any cell is refined or if any cell is flagged then flag parent cell
+    ok = .false.
+    do ind = 1, twotondim
+       ok = ok .or. mesh%grid(oct_idx)%refined(ind)
+       ok = ok .or. (mesh%flag1(ind, oct_idx) == 1)
+    end do
+    if (ok) mesh%flag1(cell_idx, father_idx) = 1
+
+  end subroutine init_flag_kernel
+  ! =========================================================================~
+
+  ! =========================================================================
+  attributes(global) subroutine count_neighbors(mesh, head_idx, num_octs)
+    type(mesh_gpu), device :: mesh
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
+    integer :: cell_idx, oct_idx, source_idx, icell, inbor
+
+    block_idx = blockIdx%x - 1
+
+    ! Compute the oct idx
+    oct_idx = block_idx * blockDim%y + threadIdx%y - 1
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Compute the cell idx
+    cell_idx = threadIdx%x
+
+    ! Store in flag2 the number of neighborss with flag1 = 1
+    number_nbors = 0
+    do ind = 1, twondim
+       icell = hhh(cell_idx, ind))
+       inbor = ggg(cell_idx, ind)
+       source_idx = mesh%nbor(inbor, oct_idx)
+       number_nbor = number_nbor + mesh%flag1(icell, source_idx)
+    end do
+    mesh%flag2(cell_idx, oct_idx) = number_nbors
+
+  end subroutine count_neighbors
+  ! =========================================================================~
+
+  ! =========================================================================
+  attributes(global) subroutine flag_count_kernel(mesh, head_idx, num_octs, num_nbors)
+    type(mesh_gpu), device :: mesh
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+    integer(kind=4), intent(in), value :: num_nbors
+
+    integer :: cell_idx, oct_idx
+
+    block_idx = blockIdx%x - 1
+
+    ! Compute the oct idx
+    oct_idx = block_idx * blockDim%y + threadIdx%y - 1
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Compute the cell idx
+    cell_idx = threadIdx%x
+
+    if (mesh%flag2(cell_idx, oct_idx) > num_nbors) then
+       mesh%flag1(cell_idx, oct_idx) = 1
+    endif
+
+  end subroutine flag_count_kernel
+  ! =========================================================================~
+
+  ! =========================================================================
+  attributes(global) subroutine enforce_rules(mesh, head_idx, num_octs)
+    type(mesh_gpu), device :: mesh
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
+    integer :: tid, bid, oct_idx, ind
+    logical :: ok
+
+    ! Thread and block id
+    tid = threadIdx%x - 1
+    bid = blockIdx%x - 1
+
+    ! Compute the oct idx
+    oct_idx = tid + bid * blockDim%x
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Check if one neighboring grid is missing (meaning in the cache)
+    ok = .false.
+    do ind = 1, threetondim
+       ! TODO: for multiple MPI ranks or physical boundaries
+       ! this will not work
+       ok = ok .or. (mesh%nbor(ind, oct_idx) > mesh%ngridmax)
+       ok = ok .or. (mesh%nbor(ind, oct_idx) == 0)
+    end do
+
+    ! If one missing, set flag1 to zero (no refinement allowed)
+    if (ok) then
+       do ind = 1, twotondim
+          mesh%flag1(ind, oct_idx) = 0
+       end do
+    end if
+
+  end subroutine enforce_rules
+  ! =========================================================================~
+
+end module flag_device
+

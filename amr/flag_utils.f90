@@ -3,7 +3,10 @@
 !################################################################
 !################################################################
 module flag_utils
-
+#ifdef _CUDA
+  use gpu_runner, only: gpu_init_flag, gpu_enforce_rules, gpu_user_flag
+  use nvtx
+#endif
 contains
 
 subroutine m_flag_fine(pst,ilevel,icount)
@@ -19,7 +22,7 @@ subroutine m_flag_fine(pst,ilevel,icount)
   integer::nflag_tot
 
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,mdl=>pst%s%mdl)
-  
+
   if(ilevel==r%nlevelmax)return
   if(ilevel<r%levelmin)return
   if(m%noct_tot(ilevel)==0)return
@@ -29,7 +32,7 @@ subroutine m_flag_fine(pst,ilevel,icount)
   ! Step 1: initialize refinement map to minimal refinement rules
   call r_init_flag(pst,ilevel,1,nflag_tot,1)
   if(r%verbose)write(*,*) '  ==> end step 1',nflag_tot
-  
+
   ! Step 2: make one cubic buffer around flagged cells,
   ! in order to enforce numerical rule.
   call r_smooth_fine(pst,ilevel,1,nflag_tot,1)
@@ -55,7 +58,7 @@ subroutine m_flag_fine(pst,ilevel,icount)
   end if
 
   end associate
-  
+
 end subroutine m_flag_fine
 !################################################################
 !################################################################
@@ -81,7 +84,13 @@ recursive subroutine r_init_flag(pst,ilevel,input_size,noct,output_size)
      call mdl_get_reply(pst%s%mdl,rID,output_size,next_noct)
      noct=noct+next_noct
   else
+#ifdef _CUDA
+     call nvtxStartRange("GPU Initflag", color=6)!teal
+     call gpu_init_flag(pst%s, ilevel, nflag)
+     call nvtxEndRange()
+#else
      call init_flag(pst%s,ilevel,nflag)
+#endif
      noct=nflag
   endif
 
@@ -243,7 +252,13 @@ recursive subroutine r_user_flag(pst,ilevel,input_size,noct,output_size)
      call mdl_get_reply(pst%s%mdl,rID,output_size,next_noct)
      noct=noct+next_noct
   else
+#ifdef _CUDA
+     call nvtxStartRange("GPU Userflag", color=6)!teal
+     call gpu_user_flag(pst%s, ilevel, nflag)
+     call nvtxEndRange()
+#else
      call user_flag(pst%s,ilevel,nflag)
+#endif
      noct=nflag
   endif
 
@@ -311,7 +326,13 @@ recursive subroutine r_ensure_ref_rules(pst,ilevel,input_size)
      call r_ensure_ref_rules(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
+#ifdef _CUDA
+     call nvtxStartRange("GPU Enforcerules", color=6)!teal
+     call gpu_enforce_rules(pst%s, ilevel, nflag)
+     call nvtxEndRange()
+#else
      call ensure_ref_rules(pst%s,ilevel)
+#endif
   endif
 
 end subroutine r_ensure_ref_rules
@@ -362,7 +383,7 @@ subroutine ensure_ref_rules(s,ilevel)
 
   hash_nbor(0)=ilevel
   do igrid=m%head(ilevel),m%tail(ilevel)
-     
+
      ok=.true.
 
      ! Loop over 3x3x3 neighboring father cells
@@ -407,7 +428,7 @@ subroutine ensure_ref_rules(s,ilevel)
   call close_cache(mdl)
 
   end associate
-  
+
 end subroutine ensure_ref_rules
 !############################################################
 !############################################################

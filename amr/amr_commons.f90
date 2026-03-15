@@ -655,6 +655,7 @@ module amr_commons
      integer(kind=8),allocatable,dimension(:)::noct_tot  ! Total number of octs across cpus
 
      integer(kind=4),allocatable,dimension(:)::ckey_max        ! Max. Cartesian key per level
+     integer(kind=8),allocatable,dimension(:)::key_off         ! Key offset for GPU nly
      integer(kind=8),allocatable,dimension(:,:)::hkey_max      ! Max. Hilbert key per level
      integer(kind=4),allocatable,dimension(:,:)::box_ckey_min  ! Min. Cartesian key per level for the box
      integer(kind=4),allocatable,dimension(:,:)::box_ckey_max  ! Max. Cartesian key per level for the box

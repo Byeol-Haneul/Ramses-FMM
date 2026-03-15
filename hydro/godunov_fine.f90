@@ -1,6 +1,6 @@
 module godunov_fine_module
 #ifdef _CUDA
-  use gpu_runner, only: gpu_integrator, gpu_set_unew, gpu_set_uold
+  use gpu_runner, only: gpu_godunov, gpu_set_unew, gpu_set_uold
   use nvtx
 #endif
 contains
@@ -25,8 +25,8 @@ recursive subroutine r_godunov_fine(pst,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
 #ifdef _CUDA
-     call nvtxStartRange("GPU integrator", color=6)!teal
-     call gpu_integrator(pst%s, ilevel)
+     call nvtxStartRange("GPU Godunov", color=6)!teal
+     call gpu_godunov(pst%s, ilevel)
      call nvtxEndRange()
 #else
      call godunov_fine(pst%s, ilevel)

@@ -44,7 +44,13 @@ recursive subroutine r_upload_fine(pst,ilevel,input_size)
      call r_upload_fine(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
+#ifdef _CUDA
+     call nvtxStartRange("GPU Upload", color=6)!teal
+     call gpu_upload(pst%s, ilevel+1)
+     call nvtxEndRange()
+#else
      call upload_fine(pst%s,ilevel)
+#endif
   endif
 
 end subroutine r_upload_fine
