@@ -14,7 +14,8 @@ module ramses_commons
      type(global_t)::g
      type(mesh_t),pointer::m => null()
      type(mesh_t),pointer::m_mg => null()
-     type(mesh_t),allocatable :: m_fmm_list(:)
+     type(mesh_t),pointer :: m_fmm_list(:) => null()
+     type(mesh_t),pointer::m_fmm_merged => null()
      type(part_t)::p
      type(part_t)::star
      type(part_t)::sink

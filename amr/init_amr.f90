@@ -63,6 +63,8 @@ recursive subroutine r_init_amr(pst)
         do ilevel = pst%s%r%levelmin, pst%s%r%nlevelmax
           call init_amr(pst%s%r, pst%s%g, pst%s%m_fmm_list(ilevel), 'fmm')
         end do
+        allocate(pst%s%m_fmm_merged)
+        call init_amr(pst%s%r, pst%s%g, pst%s%m_fmm_merged, 'fmm')
 #else
         allocate(pst%s%m_mg)
         call init_amr(pst%s%r,pst%s%g,pst%s%m_mg,'mg')

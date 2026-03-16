@@ -11,13 +11,15 @@ contains
 #ifdef GRAV
 subroutine fmm(pst,ilev,icount)
   use ramses_commons, only: pst_t
-  use init_fmm_module, only: r_init_fmm, r_build_fmm, double_level_t, downward_level_t
-  use fmm_multipoles!, only: m_fmm_multipoles
+  use init_fmm_module, only: r_init_fmm, r_build_fmm, double_level_t, downward_level_t, &
+       & FMM_BUILD_STANDARD, FMM_BUILD_MERGED, FMM_TREE_SOURCE_STANDARD, FMM_TREE_SOURCE_MERGED
+  use fmm_multipoles, only: m_fmm_multipoles, merge_multipoles
   implicit none
   type(pst_t)::pst
   integer,intent(in) :: ilev,icount
   
-  integer :: ifine, jlev, flev, input_size
+  integer :: ifine, jlev, flev, input_size, jlev_max_amr_direct
+  logical :: use_merged
   type(double_level_t)::double_level
   type(downward_level_t)::downward_levels
 
@@ -31,11 +33,16 @@ subroutine fmm(pst,ilev,icount)
       if(pst%s%r%verbose) print '(A,I2)','[Build FMM] ', jlev
       call r_init_fmm(pst, jlev, 1)
       double_level%ilevel=jlev
+      double_level%mode=FMM_BUILD_STANDARD
       do ifine=jlev,pst%s%r%bound_levelmin+1,-1
         double_level%ifine=ifine
         call r_build_fmm(pst,double_level,storage_size(double_level)/32)
       end do
     end do
+    double_level%ilevel=ilev
+    double_level%ifine=ilev
+    double_level%mode=FMM_BUILD_MERGED
+    call r_build_fmm(pst,double_level,storage_size(double_level)/32)
   end if
 
   if(pst%s%r%verbose) print '(A)','FMM Hierarchy done '
@@ -44,6 +51,8 @@ subroutine fmm(pst,ilev,icount)
   do jlev=ilev,pst%s%r%nlevelmax
     call m_fmm_multipoles(pst, jlev) ! do upward pass !
   end do
+  call merge_multipoles(pst)
+  use_merged = associated(pst%s%m_fmm_merged) .and. (pst%s%m_fmm_merged%noct_used > 0)
 
    ! Downward pass for fmm grids. 
    !call m_timer(pst,'fmm: downward for fmm','start')
@@ -51,14 +60,29 @@ subroutine fmm(pst,ilev,icount)
    downward_levels%ilev=ilev
    
    if(pst%s%r%verbose) print *, "[M2L & L2L] LEVEL: ", ilev
-   do flev = pst%s%r%bound_levelmin+1, ilev-pst%s%r%level_fmm_to_amr
-     downward_levels%flev=flev
-     do jlev = max(pst%s%r%levelmin, flev+pst%s%r%level_fmm_to_amr-2), pst%s%r%nlevelmax
-      downward_levels%jlev=jlev
-      call r_fmm_downward(pst, downward_levels, input_size)
-      if(pst%s%r%verbose) print *,'     <Downpass> (ilev, jlev, flev): ', ilev, jlev, flev
-     end do
-   end do
+   if (use_merged) then
+      downward_levels%mode = FMM_TREE_SOURCE_MERGED
+      do flev = pst%s%r%bound_levelmin+1, ilev-pst%s%r%level_fmm_to_amr
+         downward_levels%flev=flev
+         if (flev-1 >= pst%s%r%levelmin) then
+            downward_levels%jlev=flev-1
+            call r_fmm_downward(pst, downward_levels, input_size)
+         end if
+         downward_levels%jlev=ilev
+         call r_fmm_downward(pst, downward_levels, input_size)
+         if(pst%s%r%verbose) print *,'     <Downpass merged> (ilev, flev): ', ilev, flev
+      end do
+   else
+      downward_levels%mode = FMM_TREE_SOURCE_STANDARD
+      do flev = pst%s%r%bound_levelmin+1, ilev-pst%s%r%level_fmm_to_amr
+         downward_levels%flev=flev
+         do jlev = max(pst%s%r%levelmin, flev+pst%s%r%level_fmm_to_amr-2), pst%s%r%nlevelmax
+            downward_levels%jlev=jlev
+            call r_fmm_downward(pst, downward_levels, input_size)
+            if(pst%s%r%verbose) print *,'     <Downpass> (ilev, jlev, flev): ', ilev, jlev, flev
+         end do
+      end do
+   end if
 
    ! Call direct force calculation
    !call m_timer(pst,'fmm: amr intermediate force','start')
@@ -67,19 +91,45 @@ subroutine fmm(pst,ilev,icount)
    !! L2P and M2P from ilev - 1 is done through combined_direct force. 
    !! ilev-2 should also be done via a similar function as combined_direct force 2. 
    if(pst%s%r%verbose) print *, "[L2P & M2P] LEVEL: ", ilev
-   do jlev = max(pst%s%r%levelmin, ilev), pst%s%r%nlevelmax
-      downward_levels%jlev=jlev
+   if (use_merged) then
+      downward_levels%jlev=ilev
+      downward_levels%mode=FMM_TREE_SOURCE_MERGED
       call r_fmm_amr_intermediate(pst, downward_levels, input_size)
-      if(pst%s%r%verbose) print *,'     <AMR Intermediate> (ilev, jlev)', ilev, jlev
-   end do
+      if(pst%s%r%verbose) print *,'     <AMR Intermediate merged> (ilev)', ilev
+   else
+      downward_levels%mode=FMM_TREE_SOURCE_STANDARD
+      do jlev = max(pst%s%r%levelmin, ilev), pst%s%r%nlevelmax
+         downward_levels%jlev=jlev
+         call r_fmm_amr_intermediate(pst, downward_levels, input_size)
+         if(pst%s%r%verbose) print *,'     <AMR Intermediate> (ilev, jlev)', ilev, jlev
+      end do
+   end if
 
    !call m_timer(pst,'fmm: direct force','start')
    if(pst%s%r%verbose) print *, "[P2P] LEVEL: ", ilev
-   do jlev = max(pst%s%r%levelmin, ilev-2), pst%s%r%nlevelmax 
+   downward_levels%mode=FMM_TREE_SOURCE_STANDARD
+   jlev_max_amr_direct = min(pst%s%r%nlevelmax, ilev)
+   do jlev = max(pst%s%r%levelmin, ilev-2), jlev_max_amr_direct
       downward_levels%jlev=jlev
       call r_fmm_amr_direct(pst, downward_levels, input_size)
-      if(pst%s%r%verbose) print *,'     <Direct Force> (ilev, jlev)', ilev, jlev
+      if(pst%s%r%verbose) print *,'     <Direct Force AMR> (ilev, jlev)', ilev, jlev
    end do
+
+   if (use_merged) then
+      if (ilev+1 <= pst%s%r%nlevelmax) then
+         downward_levels%jlev=ilev+1
+         downward_levels%mode=FMM_TREE_SOURCE_MERGED
+         call r_fmm_amr_direct(pst, downward_levels, input_size)
+         if(pst%s%r%verbose) print *,'     <Direct Force merged taylor> (ilev)', ilev
+      end if
+   else
+      downward_levels%mode=FMM_TREE_SOURCE_STANDARD
+      do jlev = max(pst%s%r%levelmin, ilev+1), pst%s%r%nlevelmax
+         downward_levels%jlev=jlev
+         call r_fmm_amr_direct(pst, downward_levels, input_size)
+         if(pst%s%r%verbose) print *,'     <Direct Force> (ilev, jlev)', ilev, jlev
+      end do
+   end if
 
    !do i = 1, pst%s%r%levelmin - pst%s%r%level_fmm_to_amr
    !  call dump_taylor(pst%s%r, pst%s%m_fmm, i)
@@ -97,7 +147,7 @@ end subroutine fmm
 recursive subroutine r_fmm_downward(pst,downward_levels,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
-  use init_fmm_module, only: downward_level_t
+  use init_fmm_module, only: downward_level_t, FMM_TREE_SOURCE_MERGED
   use mdl_parameters
   implicit none
   type(pst_t)::pst
@@ -111,9 +161,11 @@ recursive subroutine r_fmm_downward(pst,downward_levels,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
      if (downward_levels%jlev == downward_levels%flev - 1) then
-       call fmm_downward_coarse(pst%s, downward_levels%ilev, downward_levels%jlev, downward_levels%flev)
+       call fmm_downward_coarse(pst%s, downward_levels%ilev, downward_levels%jlev, downward_levels%flev, &
+            use_merged=(downward_levels%mode == FMM_TREE_SOURCE_MERGED))
      else
-       call fmm_downward(pst%s, downward_levels%ilev, downward_levels%jlev, downward_levels%flev)
+       call fmm_downward(pst%s, downward_levels%ilev, downward_levels%jlev, downward_levels%flev, &
+            use_merged=(downward_levels%mode == FMM_TREE_SOURCE_MERGED))
      end if
   endif
 
@@ -122,7 +174,7 @@ end subroutine r_fmm_downward
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine fmm_downward(s, ilev, jlev, flev)
+subroutine fmm_downward(s, ilev, jlev, flev, use_merged)
   use amr_parameters, only: ndim, twotondim, threetondim, multipole_size, taylor_size
   use amr_commons, only: mesh_t
   use ramses_commons, only: ramses_t
@@ -135,6 +187,7 @@ subroutine fmm_downward(s, ilev, jlev, flev)
 
   type(ramses_t) :: s
   integer :: ilev, jlev, flev
+  logical, optional, intent(in) :: use_merged
 
   integer :: ioct, idim, pcell, icell, inbor, jcell, nstride
   integer(kind=8), dimension(ndim) :: cc_icell, cc_jcell, cc_jcell_periodic, offset, ii
@@ -149,6 +202,8 @@ subroutine fmm_downward(s, ilev, jlev, flev)
   real(kind=8), dimension(taylor_size) :: temp_taylor, parent_taylor
   real(kind=8), dimension(twotondim, taylor_size) :: accum_taylor
   logical::cycle_flag
+  logical :: use_merged_local
+  type(mesh_t), pointer :: m_target, m_source
 
   integer(kind=8), dimension(ndim, threetondim) :: offset_list
   real(kind=8), dimension(twotondim, twotondim, twotondim, threetondim) :: D0_list, D1_list, D2_list, D3_list
@@ -161,7 +216,16 @@ subroutine fmm_downward(s, ilev, jlev, flev)
         0, 0, 1, 1, 0, 0, 1, 1,  &
         0, 0, 0, 0, 1, 1, 1, 1   &
       ], [twotondim, ndim] )
-  associate(r=>s%r, m=>s%m, mdl=>s%mdl, m_target => s%m_fmm_list(ilev), m_source => s%m_fmm_list(jlev))
+  use_merged_local = .false.
+  if (present(use_merged)) use_merged_local = use_merged
+  if (use_merged_local .and. associated(s%m_fmm_merged)) then
+    m_target => s%m_fmm_merged
+    m_source => s%m_fmm_merged
+  else
+    m_target => s%m_fmm_list(ilev)
+    m_source => s%m_fmm_list(jlev)
+  end if
+  associate(r=>s%r, m=>s%m, mdl=>s%mdl)
 
   !if(m%noct_fmm(flev)<1) return
   
@@ -295,7 +359,7 @@ end subroutine fmm_downward
 !################################################################
 !################################################################
 !################################################################
-subroutine fmm_downward_coarse(s, ilev, jlev, flev)
+subroutine fmm_downward_coarse(s, ilev, jlev, flev, use_merged)
   use amr_parameters, only: ndim, twotondim, threetondim, multipole_size, taylor_size
   use amr_commons, only: mesh_t
   use ramses_commons, only: ramses_t
@@ -308,6 +372,7 @@ subroutine fmm_downward_coarse(s, ilev, jlev, flev)
 
   type(ramses_t) :: s
   integer :: ilev, jlev, flev
+  logical, optional, intent(in) :: use_merged
 
   integer :: ioct, idim, pcell, icell, inbor, jcell, nstride
   integer(kind=8), dimension(ndim) :: cc_icell, cc_jcell, cc_jcell_periodic, offset, ii
@@ -321,6 +386,8 @@ subroutine fmm_downward_coarse(s, ilev, jlev, flev)
   real(kind=8), dimension(taylor_size) :: temp_taylor
   real(kind=8), dimension(twotondim, taylor_size) :: accum_taylor
   logical::cycle_flag
+  logical :: use_merged_local
+  type(mesh_t), pointer :: m_target, m_source
 
   integer(kind=8), dimension(ndim, threetondim) :: offset_list
   real(kind=8), dimension(twotondim, twotondim, twotondim, threetondim) :: D0_list
@@ -333,7 +400,15 @@ subroutine fmm_downward_coarse(s, ilev, jlev, flev)
         0, 0, 1, 1, 0, 0, 1, 1,  &
         0, 0, 0, 0, 1, 1, 1, 1   &
       ], [twotondim, ndim] )
-  associate(r=>s%r, m=>s%m, mdl=>s%mdl, m_target => s%m_fmm_list(ilev), m_source => s%m)
+  use_merged_local = .false.
+  if (present(use_merged)) use_merged_local = use_merged
+  if (use_merged_local .and. associated(s%m_fmm_merged)) then
+    m_target => s%m_fmm_merged
+  else
+    m_target => s%m_fmm_list(ilev)
+  end if
+  m_source => s%m
+  associate(r=>s%r, m=>s%m, mdl=>s%mdl)
   
   ! Open cache for multipoles
   call open_cache(mdl, m_source, pack_size=storage_size(dummy_rho)/32, pack=pack_fetch_rho, unpack=unpack_fetch_rho)
@@ -437,7 +512,7 @@ end subroutine fmm_downward_coarse
 recursive subroutine r_fmm_amr_intermediate(pst,downward_levels,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
-  use init_fmm_module, only: downward_level_t
+  use init_fmm_module, only: downward_level_t, FMM_TREE_SOURCE_MERGED
   use mdl_parameters
   implicit none
   type(pst_t)::pst
@@ -450,7 +525,8 @@ recursive subroutine r_fmm_amr_intermediate(pst,downward_levels,input_size)
      call r_fmm_amr_intermediate(pst%pLower,downward_levels,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call fmm_amr_intermediate(pst%s,downward_levels%ilev,downward_levels%jlev)
+     call fmm_amr_intermediate(pst%s,downward_levels%ilev,downward_levels%jlev, &
+          use_merged=(downward_levels%mode == FMM_TREE_SOURCE_MERGED))
   endif
 
 end subroutine r_fmm_amr_intermediate
@@ -458,7 +534,7 @@ end subroutine r_fmm_amr_intermediate
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine fmm_amr_intermediate(s, ilev, jlev)
+subroutine fmm_amr_intermediate(s, ilev, jlev, use_merged)
   use amr_parameters, only: ndim, twotondim, threetondim, multipole_size, taylor_size
   use amr_commons, only: mesh_t
   use ramses_commons, only: ramses_t
@@ -470,6 +546,7 @@ subroutine fmm_amr_intermediate(s, ilev, jlev)
 
   type(ramses_t) :: s
   integer :: ilev, jlev
+  logical, optional, intent(in) :: use_merged
 
   integer :: ioct, idim, ind, icell, jcell, nstride, nfine, igrid, nbox, pcell
   real(kind=8) :: phi, phi_out, dx_loc
@@ -487,6 +564,8 @@ subroutine fmm_amr_intermediate(s, ilev, jlev)
 
   real(kind=8) :: dist, D0, D1, D2
   integer(kind=8), dimension(ndim, threetondim) :: offset_list
+  logical :: use_merged_local
+  type(mesh_t), pointer :: m_fmm
 
   integer, dimension(twotondim, ndim), parameter :: displacement_list = reshape( &
       [ &
@@ -504,7 +583,15 @@ subroutine fmm_amr_intermediate(s, ilev, jlev)
   integer, allocatable :: fmm_grid_center_offset(:,:), fmm_cell_center_offset(:,:)
   logical, allocatable :: direct_neighbor_list(:,:,:)
 
-  associate(r=>s%r, m=>s%m, mdl=>s%mdl, m_fmm=>s%m_fmm_list(jlev))
+  use_merged_local = .false.
+  if (present(use_merged)) use_merged_local = use_merged
+  if (use_merged_local .and. associated(s%m_fmm_merged)) then
+    m_fmm => s%m_fmm_merged
+  else
+    m_fmm => s%m_fmm_list(jlev)
+  end if
+
+  associate(r=>s%r, m=>s%m, mdl=>s%mdl)
 
 
   ! Open cache for multipoles
@@ -680,7 +767,7 @@ recursive subroutine r_fmm_amr_direct(pst,downward_levels,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
-  use init_fmm_module, only: downward_level_t
+  use init_fmm_module, only: downward_level_t, FMM_TREE_SOURCE_MERGED
   implicit none
   type(pst_t)::pst
   integer,VALUE::input_size
@@ -700,7 +787,8 @@ recursive subroutine r_fmm_amr_direct(pst,downward_levels,input_size)
      else if (downward_levels%ilev==downward_levels%jlev) then
        call fmm_amr_direct(pst%s,downward_levels%ilev,downward_levels%jlev)
      else
-       call fmm_amr_direct_taylor(pst%s,downward_levels%ilev,downward_levels%jlev) ! important to exclude nearest neighbors.
+       call fmm_amr_direct_taylor(pst%s,downward_levels%ilev,downward_levels%jlev, &
+            use_merged=(downward_levels%mode == FMM_TREE_SOURCE_MERGED)) ! important to exclude nearest neighbors.
      end if
   endif
 
@@ -1287,8 +1375,9 @@ end subroutine fmm_amr_direct
 !################################################################
 !################################################################
 !################################################################
-subroutine fmm_amr_direct_taylor(s, ilev, jlev)
+subroutine fmm_amr_direct_taylor(s, ilev, jlev, use_merged)
   use amr_parameters, only: ndim, twotondim, threetondim, multipole_size
+  use amr_commons, only: mesh_t
   use ramses_commons, only: ramses_t
   use nbors_utils
   use cache_commons
@@ -1299,6 +1388,7 @@ subroutine fmm_amr_direct_taylor(s, ilev, jlev)
 
   type(ramses_t) :: s
   integer :: ilev, jlev
+  logical, optional, intent(in) :: use_merged
 
   integer :: ioct, idim, ind, icell, jcell, nstride, nfine, nbox, jgrid, igrid, iact, nact, ngrid, jcell_act
   integer :: i, j, k
@@ -1329,8 +1419,18 @@ subroutine fmm_amr_direct_taylor(s, ilev, jlev)
   integer, dimension(:,:,:), allocatable           :: source_active_idx
   integer, dimension(:), allocatable               :: active_grid_count
   integer, dimension(:,:), allocatable             :: active_grid_idx
+  logical :: use_merged_local
+  type(mesh_t), pointer :: m_source
 
-  associate(r=>s%r, m=>s%m, mdl=>s%mdl, m_source => s%m_fmm_list(jlev))
+  use_merged_local = .false.
+  if (present(use_merged)) use_merged_local = use_merged
+  if (use_merged_local .and. associated(s%m_fmm_merged)) then
+    m_source => s%m_fmm_merged
+  else
+    m_source => s%m_fmm_list(jlev)
+  end if
+
+  associate(r=>s%r, m=>s%m, mdl=>s%mdl)
 
 
   ! Open cache for multipoles
