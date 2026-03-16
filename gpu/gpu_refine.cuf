@@ -477,7 +477,6 @@ contains
   ! =========================================================================
   attributes(global) subroutine sort_gather_grid(mesh, head_idx, num_octs)
     type(mesh_gpu), device :: mesh
-    use amr_parameters, only: ndim, twotondim
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
     
