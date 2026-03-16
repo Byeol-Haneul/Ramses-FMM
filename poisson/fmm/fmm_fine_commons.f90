@@ -50,7 +50,7 @@ subroutine fmm(pst,ilev,icount)
    input_size = storage_size(downward_levels)/32
    downward_levels%ilev=ilev
    
-   print *, "[M2L & L2L] LEVEL: ", ilev
+   if(pst%s%r%verbose) print *, "[M2L & L2L] LEVEL: ", ilev
    do flev = pst%s%r%bound_levelmin+1, ilev-pst%s%r%level_fmm_to_amr
      downward_levels%flev=flev
      do jlev = max(pst%s%r%levelmin, flev+pst%s%r%level_fmm_to_amr-2), pst%s%r%nlevelmax
@@ -66,7 +66,7 @@ subroutine fmm(pst,ilev,icount)
 
    !! L2P and M2P from ilev - 1 is done through combined_direct force. 
    !! ilev-2 should also be done via a similar function as combined_direct force 2. 
-   print *, "[L2P & M2P] LEVEL: ", ilev
+   if(pst%s%r%verbose) print *, "[L2P & M2P] LEVEL: ", ilev
    do jlev = max(pst%s%r%levelmin, ilev), pst%s%r%nlevelmax
       downward_levels%jlev=jlev
       call r_fmm_amr_intermediate(pst, downward_levels, input_size)
@@ -74,7 +74,7 @@ subroutine fmm(pst,ilev,icount)
    end do
 
    !call m_timer(pst,'fmm: direct force','start')
-   print *, "[P2P] LEVEL: ", ilev
+   if(pst%s%r%verbose) print *, "[P2P] LEVEL: ", ilev
    do jlev = max(pst%s%r%levelmin, ilev-2), pst%s%r%nlevelmax 
       downward_levels%jlev=jlev
       call r_fmm_amr_direct(pst, downward_levels, input_size)

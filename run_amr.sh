@@ -28,11 +28,8 @@ timestamp() { date +"%Y%m%d_%H%M%S"; }
 # ============================
 # Benchmark settings
 # ============================
-NP_LIST=(4 8 16 32 64)
+NP_LIST=(1 2 4 8 16 32 64)
 NML_FILE="namelist/benchmark/lvl9_13.nml"
-while true; do
-    sleep 1
-done
 
 # ============================
 # OUTER LOOP
@@ -51,19 +48,19 @@ for rep in {1..5}; do
         srun -n "$NP" ./ramses_fmm_amr "$NML_FILE"
 
         if [ -f time_fmm.txt ]; then
-            mv time_fmm.txt "${OUTDIR}/strong_fmm_amr_lvl9_14_P${NP}_${RUNSTAMP}.txt"
+            mv time_fmm.txt "${OUTDIR}/strong_fmm_amr_lvl9_13_P${NP}_${RUNSTAMP}.txt"
         else
             echo "Warning: time_fmm.txt not found for FMM-AMR, NP=$NP"
         fi
 
-        #echo "--- Strong scaling: MPI ranks $NP | MG ---"
-        #srun -n "$NP" ./ramses_mg "$NML_FILE"
+        echo "--- Strong scaling: MPI ranks $NP | MG ---"
+        srun -n "$NP" ./ramses_mg "$NML_FILE"
 
-        #if [ -f time_mg.txt ]; then
-        #    mv time_mg.txt "${OUTDIR}/strong_mg_lvl9_14_P${NP}_${RUNSTAMP}.txt"
-        #else
-        #    echo "Warning: time_mg.txt not found for MG, NP=$NP"
-        #fi
+        if [ -f time_mg.txt ]; then
+            mv time_mg.txt "${OUTDIR}/strong_mg_lvl9_13_P${NP}_${RUNSTAMP}.txt"
+        else
+            echo "Warning: time_mg.txt not found for MG, NP=$NP"
+        fi
     done
 
     echo "===== RUN $rep COMPLETE ====="

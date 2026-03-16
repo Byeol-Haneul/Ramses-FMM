@@ -228,7 +228,7 @@ subroutine build_fmm(s, m, m_fmm, input)
   m_fmm%noct(icoarselevel)=m_fmm%tail(icoarselevel)-m_fmm%head(icoarselevel)+1
   m_fmm%noct_used=m_fmm%tail(icoarselevel)
 
-  print *, "      <LEV>: ", icoarselevel, "| created: ", m_fmm%noct(icoarselevel)
+  if(r%verbose) print *, "      <LEV>: ", icoarselevel, "| created: ", m_fmm%noct(icoarselevel)
 
   call close_cache(mdl)
   end associate
