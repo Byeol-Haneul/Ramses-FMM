@@ -3,6 +3,8 @@ integer, parameter :: FMM_BUILD_STANDARD = 0
 integer, parameter :: FMM_BUILD_MERGED = 1
 integer, parameter :: FMM_MULTIPOLE_STANDARD = 0
 integer, parameter :: FMM_MULTIPOLE_MERGED = 1
+integer, parameter :: FMM_TREE_SOURCE_STANDARD = 0
+integer, parameter :: FMM_TREE_SOURCE_MERGED = 1
 
 type :: double_level_t
     integer::ilevel,ifine
@@ -16,6 +18,7 @@ end type fmm_level_t
 
 type :: downward_level_t
     integer::ilev,jlev,flev ! to call trees built on target(i)/source(j) level amr leaf cells
+    integer::mode = FMM_TREE_SOURCE_STANDARD
 end type downward_level_t
 contains
 !#########################################################################
@@ -275,9 +278,7 @@ subroutine build_fmm_merged(s)
   m_merged%noct_tot=0
   m_merged%noct_used=0
 
-  do flev=1,r%nlevelmax+1
-     call m_merged%domain(flev)%copy(s%m_fmm_list(r%nlevelmax)%domain(flev))
-  end do
+  call init_fmm(r,s%m,m_merged,r%nlevelmax)
 
   do flev=r%bound_levelmin,r%nlevelmax
      first_ifree = m_merged%ifree
