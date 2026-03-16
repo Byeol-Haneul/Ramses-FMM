@@ -223,8 +223,6 @@ subroutine build_fmm(s, m, m_fmm, input)
   end do
   ! End loop over grids
 
-  call close_cache(mdl)
-
   ! Multigrid oct statistics
   m_fmm%tail(icoarselevel)=m_fmm%ifree-1
   m_fmm%noct(icoarselevel)=m_fmm%tail(icoarselevel)-m_fmm%head(icoarselevel)+1
@@ -232,6 +230,7 @@ subroutine build_fmm(s, m, m_fmm, input)
 
   print *, "      <LEV>: ", icoarselevel, "| created: ", m_fmm%noct(icoarselevel)
 
+  call close_cache(mdl)
   end associate
 
 end subroutine build_fmm
@@ -279,17 +278,12 @@ subroutine unpack_flush_build_fmm(mesh,igrid,msg_size,msg_array,hash_key)
      mesh%grid(igrid)%refined(ind)=.true.
   end do
 
-#ifdef GRAV
-  do idim=1,ndim
-     do ind=1,twotondim
-        mesh%f(ind,idim,igrid)=0.0d0
-     end do
-  end do
   do ind=1,twotondim
-     mesh%phi(ind,igrid)=0.0d0
-  end do
+#ifdef FMM
+     mesh%multipole(ind,:,igrid)=0
+     mesh%taylor_coeff(ind,:,igrid)=0
 #endif
-
+  end do
 end subroutine unpack_flush_build_fmm
 #endif
 !################################################################
