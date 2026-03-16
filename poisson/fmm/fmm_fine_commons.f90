@@ -47,7 +47,6 @@ subroutine fmm(pst,ilev,icount)
 
   if(pst%s%r%verbose) print '(A)','FMM Hierarchy done '
 
-   !call m_timer(pst,'fmm: multipole upward','start')
   do jlev=ilev,pst%s%r%nlevelmax
     call m_fmm_multipoles(pst, jlev) ! do upward pass !
   end do
@@ -55,7 +54,6 @@ subroutine fmm(pst,ilev,icount)
   use_merged = associated(pst%s%m_fmm_merged) .and. (pst%s%m_fmm_merged%noct_used > 0)
 
    ! Downward pass for fmm grids. 
-   !call m_timer(pst,'fmm: downward for fmm','start')
    input_size = storage_size(downward_levels)/32
    downward_levels%ilev=ilev
    
@@ -85,7 +83,6 @@ subroutine fmm(pst,ilev,icount)
    end if
 
    ! Call direct force calculation
-   !call m_timer(pst,'fmm: amr intermediate force','start')
    downward_levels%flev=ilev-pst%s%r%level_fmm_to_amr
 
    !! L2P and M2P from ilev - 1 is done through combined_direct force. 
@@ -105,7 +102,6 @@ subroutine fmm(pst,ilev,icount)
       end do
    end if
 
-   !call m_timer(pst,'fmm: direct force','start')
    if(pst%s%r%verbose) print *, "[P2P] LEVEL: ", ilev
    downward_levels%mode=FMM_TREE_SOURCE_STANDARD
    jlev_max_amr_direct = min(pst%s%r%nlevelmax, ilev)
@@ -138,7 +134,6 @@ subroutine fmm(pst,ilev,icount)
   ! ---------------------------------------------------------------------
   ! Cleanup MG levels after solve complete
   ! ---------------------------------------------------------------------
-   !call m_timer(pst,'fmm: cleanup','start')
 end subroutine fmm
 !###########################################################
 !###########################################################
@@ -178,6 +173,7 @@ subroutine fmm_downward(s, ilev, jlev, flev, use_merged)
   use amr_parameters, only: ndim, twotondim, threetondim, multipole_size, taylor_size
   use amr_commons, only: mesh_t
   use ramses_commons, only: ramses_t
+  use hash, only: hash_getp
   use nbors_utils
   use cache_commons
   use cache
@@ -197,13 +193,14 @@ subroutine fmm_downward(s, ilev, jlev, flev, use_merged)
   integer, dimension(1:threetondim) :: grid_nbors
 
   integer :: igrid_nbor, igrid_parent
+  integer :: ioct_write
   type(msg_large_realdp)::dummy_realdp
   real(kind=8), dimension(1:multipole_size) :: multipole
   real(kind=8), dimension(taylor_size) :: temp_taylor, parent_taylor
   real(kind=8), dimension(twotondim, taylor_size) :: accum_taylor
   logical::cycle_flag
-  logical :: use_merged_local
-  type(mesh_t), pointer :: m_target, m_source
+  logical :: use_merged_local, write_to_source
+  type(mesh_t), pointer :: m_target, m_source, m_write
 
   integer(kind=8), dimension(ndim, threetondim) :: offset_list
   real(kind=8), dimension(twotondim, twotondim, twotondim, threetondim) :: D0_list, D1_list, D2_list, D3_list
@@ -218,8 +215,9 @@ subroutine fmm_downward(s, ilev, jlev, flev, use_merged)
       ], [twotondim, ndim] )
   use_merged_local = .false.
   if (present(use_merged)) use_merged_local = use_merged
-  if (use_merged_local .and. associated(s%m_fmm_merged)) then
-    m_target => s%m_fmm_merged
+  write_to_source = use_merged_local .and. associated(s%m_fmm_merged)
+  if (write_to_source) then
+    m_target => s%m_fmm_list(ilev)
     m_source => s%m_fmm_merged
   else
     m_target => s%m_fmm_list(ilev)
@@ -342,15 +340,20 @@ subroutine fmm_downward(s, ilev, jlev, flev, use_merged)
             accum_taylor(icell, :) = accum_taylor(icell, :) + temp_taylor
           end do
        end do ! over neighboring grid's cells 2^n
-     end do ! over neighboring grids 3^n 
-     ! Add taylor coefficients from intermediate fields
+	     end do ! over neighboring grids 3^n 
+	     ! Add taylor coefficients from intermediate fields
 #ifdef FMM
-     m_target%taylor_coeff(:,:,ioct) = m_target%taylor_coeff(:,:,ioct) + accum_taylor
+	     if (write_to_source) then
+	        ioct_write = hash_getp(m_source%grid_dict, hash_key)
+	        if (ioct_write > 0) m_source%taylor_coeff(:,:,ioct_write) = m_source%taylor_coeff(:,:,ioct_write) + accum_taylor
+	     else
+	        m_target%taylor_coeff(:,:,ioct) = m_target%taylor_coeff(:,:,ioct) + accum_taylor
+	     end if
 #endif
-     ! Unlock neighbor octs
-     do inbor = 1, threetondim
-        call unlock_cache(m_source, grid_nbors(inbor))
-     end do
+	     ! Unlock neighbor octs
+	     do inbor = 1, threetondim
+	        call unlock_cache(m_source, grid_nbors(inbor))
+	     end do
   end do
   call close_cache(mdl)
   end associate
@@ -363,6 +366,7 @@ subroutine fmm_downward_coarse(s, ilev, jlev, flev, use_merged)
   use amr_parameters, only: ndim, twotondim, threetondim, multipole_size, taylor_size
   use amr_commons, only: mesh_t
   use ramses_commons, only: ramses_t
+  use hash, only: hash_getp
   use nbors_utils
   use fmm_multipoles, only: pack_fetch_rho, unpack_fetch_rho
   use cache_commons
@@ -381,13 +385,13 @@ subroutine fmm_downward_coarse(s, ilev, jlev, flev, use_merged)
   integer(kind=8), dimension(0:ndim) :: hash_key, hash_nbor_periodic, hash_parent
   integer, dimension(1:threetondim) :: grid_nbors
 
-  integer :: igrid_nbor
+  integer :: igrid_nbor, ioct_write
   type(msg_int4_small_realdp)::dummy_rho
   real(kind=8), dimension(taylor_size) :: temp_taylor
   real(kind=8), dimension(twotondim, taylor_size) :: accum_taylor
   logical::cycle_flag
-  logical :: use_merged_local
-  type(mesh_t), pointer :: m_target, m_source
+  logical :: use_merged_local, write_to_source
+  type(mesh_t), pointer :: m_target, m_source, m_write
 
   integer(kind=8), dimension(ndim, threetondim) :: offset_list
   real(kind=8), dimension(twotondim, twotondim, twotondim, threetondim) :: D0_list
@@ -402,12 +406,14 @@ subroutine fmm_downward_coarse(s, ilev, jlev, flev, use_merged)
       ], [twotondim, ndim] )
   use_merged_local = .false.
   if (present(use_merged)) use_merged_local = use_merged
-  if (use_merged_local .and. associated(s%m_fmm_merged)) then
-    m_target => s%m_fmm_merged
-  else
-    m_target => s%m_fmm_list(ilev)
-  end if
+  write_to_source = use_merged_local .and. associated(s%m_fmm_merged)
+  m_target => s%m_fmm_list(ilev)
   m_source => s%m
+  if (write_to_source) then
+    m_write => s%m_fmm_merged
+  else
+    m_write => m_target
+  end if
   associate(r=>s%r, m=>s%m, mdl=>s%mdl)
   
   ! Open cache for multipoles
@@ -492,15 +498,20 @@ subroutine fmm_downward_coarse(s, ilev, jlev, flev, use_merged)
             accum_taylor(icell, :) = accum_taylor(icell, :) + temp_taylor
           end do
        end do ! over neighboring grid's cells 2^n
-     end do ! over neighboring grids 3^n 
-     ! Add taylor coefficients from intermediate fields
+	     end do ! over neighboring grids 3^n 
+	     ! Add taylor coefficients from intermediate fields
 #ifdef FMM
-     m_target%taylor_coeff(:,:,ioct) = m_target%taylor_coeff(:,:,ioct) + accum_taylor
+	     if (write_to_source) then
+	        ioct_write = hash_getp(m_write%grid_dict, hash_key)
+	        if (ioct_write > 0) m_write%taylor_coeff(:,:,ioct_write) = m_write%taylor_coeff(:,:,ioct_write) + accum_taylor
+	     else
+	        m_target%taylor_coeff(:,:,ioct) = m_target%taylor_coeff(:,:,ioct) + accum_taylor
+	     end if
 #endif
-     ! Unlock neighbor octs
-     do inbor = 1, threetondim
-        call unlock_cache(m_source, grid_nbors(inbor))
-     end do
+	     ! Unlock neighbor octs
+	     do inbor = 1, threetondim
+	        call unlock_cache(m_source, grid_nbors(inbor))
+	     end do
   end do
   call close_cache(mdl)
   end associate

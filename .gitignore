@@ -37,3 +37,6 @@ logs/
 ramses_*
 *.err
 *.out
+
+# Ignore contents of any dot-prefixed directory (e.g. .bitwise_*/)
+.*/**
