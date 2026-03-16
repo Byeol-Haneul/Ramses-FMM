@@ -1,5 +1,5 @@
 module flag_device
-  use amr_parameters, only: dp, ndim, twotondim, nhilbert
+  use amr_parameters, only: dp, ndim, twondim, twotondim, threetondim, nhilbert
   use hydro_parameters, only: nvar
   use gpu_runner, only: mesh_gpu, hash_gpu
   use cudafor
@@ -29,7 +29,7 @@ contains
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
 
-    integer :: cell_idx, oct_idx
+    integer :: cell_idx, oct_idx, block_idx
 
     block_idx = blockIdx%x - 1
 
@@ -52,7 +52,7 @@ contains
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
 
-    integer :: cell_idx, oct_idx
+    integer :: cell_idx, oct_idx, block_idx
 
     block_idx = blockIdx%x - 1
 
@@ -112,7 +112,8 @@ contains
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
 
-    integer :: cell_idx, oct_idx, source_idx, icell, inbor
+    integer :: cell_idx, oct_idx, block_idx, source_idx, icell, inbor
+    integer :: number_nbors, ind
 
     block_idx = blockIdx%x - 1
 
@@ -127,10 +128,12 @@ contains
     ! Store in flag2 the number of neighborss with flag1 = 1
     number_nbors = 0
     do ind = 1, twondim
-       icell = hhh(cell_idx, ind))
+       icell = hhh(cell_idx, ind)
        inbor = ggg(cell_idx, ind)
        source_idx = mesh%nbor(inbor, oct_idx)
-       number_nbor = number_nbor + mesh%flag1(icell, source_idx)
+       if (source_idx > 0) then
+          number_nbors = number_nbors + mesh%flag1(icell, source_idx)
+       endif
     end do
     mesh%flag2(cell_idx, oct_idx) = number_nbors
 
@@ -144,7 +147,7 @@ contains
     integer(kind=4), intent(in), value :: num_octs
     integer(kind=4), intent(in), value :: num_nbors
 
-    integer :: cell_idx, oct_idx
+    integer :: cell_idx, oct_idx, block_idx
 
     block_idx = blockIdx%x - 1
 
@@ -181,16 +184,14 @@ contains
     if (oct_idx >= num_octs) return
     oct_idx = head_idx + oct_idx
 
-    ! Check if one neighboring grid is missing (meaning in the cache)
+    ! Check if one neighboring grid is missing or in the cache
     ok = .false.
     do ind = 1, threetondim
-       ! TODO: for multiple MPI ranks or physical boundaries
-       ! this will not work
-       ok = ok .or. (mesh%nbor(ind, oct_idx) > mesh%ngridmax)
        ok = ok .or. (mesh%nbor(ind, oct_idx) == 0)
+       ok = ok .or. (mesh%nbor(ind, oct_idx) > mesh%ngridmax)
     end do
 
-    ! If one missing, set flag1 to zero (no refinement allowed)
+    ! If one grid id missing, set flag1 to zero (no refinement allowed)
     if (ok) then
        do ind = 1, twotondim
           mesh%flag1(ind, oct_idx) = 0

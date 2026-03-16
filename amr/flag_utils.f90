@@ -327,8 +327,8 @@ recursive subroutine r_ensure_ref_rules(pst,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
 #ifdef _CUDA
-     call nvtxStartRange("GPU Enforcerules", color=6)!teal
-     call gpu_enforce_rules(pst%s, ilevel, nflag)
+     call nvtxStartRange("GPU enforce rules", color=6)!teal
+     call gpu_enforce_rules(pst%s, ilevel)
      call nvtxEndRange()
 #else
      call ensure_ref_rules(pst%s,ilevel)

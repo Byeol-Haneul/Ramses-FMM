@@ -153,8 +153,8 @@ contains
 
     head_idx = mesh_device%head(ilevel)
     num_octs = mesh_device%noct(ilevel)
-    threadsX_per_block=8
-    threadsY_per_block=4
+    threadsX_per_block = 8
+    threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
     call nvtxStartRange("GPU Set_uold", color=0)!green
     call set_uold_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(mesh_device, head_idx, num_octs)
@@ -182,8 +182,8 @@ contains
 
     head_idx = mesh_device%head(ilevel)
     num_octs = mesh_device%noct(ilevel)
-    threadsX_per_block=8
-    threadsY_per_block=4
+    threadsX_per_block = 8
+    threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
     call nvtxStartRange("GPU Set_unew", color=0)!green
     call set_unew_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(mesh_device, head_idx, num_octs)
@@ -589,8 +589,8 @@ contains
 
     head_idx = mesh_device%head(ilevel)
     num_octs = mesh_device%noct(ilevel)
-    threadsX_per_block=8
-    threadsY_per_block=4
+    threadsX_per_block = 8
+    threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
     if(num_octs > 0)then
        call reset_flag1_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(mesh_device, head_idx, num_octs)
@@ -659,31 +659,17 @@ contains
 
     head_idx = mesh_device%head(ilevel)
     num_octs = mesh_device%noct(ilevel)
+    threadsX_per_block = 8
+    threadsY_per_block = 16
+    num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
 
-    ! Loop over steps
-    do idim = 1, ndim
-
-       threadsX_per_block=8
-       threadsY_per_block=4
-       num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
-       if(num_octs > 0)then
+    if(num_octs > 0)then
+       do idim = 1, ndim ! Loop over steps
           call reset_flag2_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(mesh_device, head_idx, num_octs)
-       endif
-
-       num_threads = 128
-       num_blocks = (num_oct + num_threads - 1) / num_threads
-       if(num_octs > 0)then
-          call count_neighbors<<<num_blocks, num_threads>>>(mesh_device, head_idx, num_oct)
-       endif
-
-       threadsX_per_block=8
-       threadsY_per_block=4
-       num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
-       if(num_octs > 0)then
+          call count_neighbors<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(mesh_device, head_idx, num_oct)
           call flag_count_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(mesh_device, head_idx, num_octs, n_nbor(idim))
-       endif
-
-    end do
+       end do
+    endif
 
   end subroutine gpu_smooth_flag
 
