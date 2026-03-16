@@ -807,7 +807,7 @@ contains
     integer, value :: thread_idx
     real(kind=dp), value :: dtdx
 
-    integer :: i, j, k 
+    integer :: i, j, k, info
     integer :: oct_idx, cell_idx, source_idx, father_idx
     type(conserved_t) :: flux
 
@@ -844,11 +844,11 @@ contains
           j = mesh%grid(source_idx)%ckey(2) - 2 * mesh%grid(father_idx)%ckey(2)
           k = mesh%grid(source_idx)%ckey(3) - 2 * mesh%grid(father_idx)%ckey(3)
           cell_idx = 1 + i + 2*j + 4*k
-          call atomicadd(mesh%unew(cell_idx, 1, father_idx), flux%density)
-          call atomicadd(mesh%unew(cell_idx, 2, father_idx), flux%momentum_x)
-          call atomicadd(mesh%unew(cell_idx, 3, father_idx), flux%momentum_y)
-          call atomicadd(mesh%unew(cell_idx, 4, father_idx), flux%momentum_z)
-          call atomicadd(mesh%unew(cell_idx, 5, father_idx), flux%energy)
+          info = atomicadd(mesh%unew(cell_idx, 1, father_idx), flux%density)
+          info = atomicadd(mesh%unew(cell_idx, 2, father_idx), flux%momentum_x)
+          info = atomicadd(mesh%unew(cell_idx, 3, father_idx), flux%momentum_y)
+          info = atomicadd(mesh%unew(cell_idx, 4, father_idx), flux%momentum_z)
+          info = atomicadd(mesh%unew(cell_idx, 5, father_idx), flux%energy)
        endif
 
     endif
@@ -879,11 +879,11 @@ contains
           j = mesh%grid(source_idx)%ckey(2) - 2 * mesh%grid(father_idx)%ckey(2)
           k = mesh%grid(source_idx)%ckey(3) - 2 * mesh%grid(father_idx)%ckey(3)
           cell_idx = 1 + i + 2*j + 4*k
-          call atomicadd(mesh%unew(cell_idx, 1, father_idx), flux%density)
-          call atomicadd(mesh%unew(cell_idx, 2, father_idx), flux%momentum_x)
-          call atomicadd(mesh%unew(cell_idx, 3, father_idx), flux%momentum_y)
-          call atomicadd(mesh%unew(cell_idx, 4, father_idx), flux%momentum_z)
-          call atomicadd(mesh%unew(cell_idx, 5, father_idx), flux%energy)
+          info = atomicadd(mesh%unew(cell_idx, 1, father_idx), flux%density)
+          info = atomicadd(mesh%unew(cell_idx, 2, father_idx), flux%momentum_x)
+          info = atomicadd(mesh%unew(cell_idx, 3, father_idx), flux%momentum_y)
+          info = atomicadd(mesh%unew(cell_idx, 4, father_idx), flux%momentum_z)
+          info = atomicadd(mesh%unew(cell_idx, 5, father_idx), flux%energy)
        endif
 
     endif
@@ -918,11 +918,11 @@ contains
           j = mesh%grid(source_idx)%ckey(2) - 2 * mesh%grid(father_idx)%ckey(2)
           k = mesh%grid(source_idx)%ckey(3) - 2 * mesh%grid(father_idx)%ckey(3)
           cell_idx = 1 + i + 2*j + 4*k
-          call atomicadd(mesh%unew(cell_idx, 1, father_idx), flux%density)
-          call atomicadd(mesh%unew(cell_idx, 2, father_idx), flux%momentum_x)
-          call atomicadd(mesh%unew(cell_idx, 3, father_idx), flux%momentum_y)
-          call atomicadd(mesh%unew(cell_idx, 4, father_idx), flux%momentum_z)
-          call atomicadd(mesh%unew(cell_idx, 5, father_idx), flux%energy)
+          info = atomicadd(mesh%unew(cell_idx, 1, father_idx), flux%density)
+          info = atomicadd(mesh%unew(cell_idx, 2, father_idx), flux%momentum_x)
+          info = atomicadd(mesh%unew(cell_idx, 3, father_idx), flux%momentum_y)
+          info = atomicadd(mesh%unew(cell_idx, 4, father_idx), flux%momentum_z)
+          info = atomicadd(mesh%unew(cell_idx, 5, father_idx), flux%energy)
        endif
 
     endif
@@ -953,11 +953,11 @@ contains
           j = mesh%grid(source_idx)%ckey(2) - 2 * mesh%grid(father_idx)%ckey(2)
           k = mesh%grid(source_idx)%ckey(3) - 2 * mesh%grid(father_idx)%ckey(3)
           cell_idx = 1 + i + 2*j + 4*k
-          call atomicadd(mesh%unew(cell_idx, 1, father_idx), flux%density)
-          call atomicadd(mesh%unew(cell_idx, 2, father_idx), flux%momentum_x)
-          call atomicadd(mesh%unew(cell_idx, 3, father_idx), flux%momentum_y)
-          call atomicadd(mesh%unew(cell_idx, 4, father_idx), flux%momentum_z)
-          call atomicadd(mesh%unew(cell_idx, 5, father_idx), flux%energy)
+          info = atomicadd(mesh%unew(cell_idx, 1, father_idx), flux%density)
+          info = atomicadd(mesh%unew(cell_idx, 2, father_idx), flux%momentum_x)
+          info = atomicadd(mesh%unew(cell_idx, 3, father_idx), flux%momentum_y)
+          info = atomicadd(mesh%unew(cell_idx, 4, father_idx), flux%momentum_z)
+          info = atomicadd(mesh%unew(cell_idx, 5, father_idx), flux%energy)
        endif
 
     endif
@@ -992,11 +992,11 @@ contains
           j = mesh%grid(source_idx)%ckey(2) - 2 * mesh%grid(father_idx)%ckey(2)
           k = mesh%grid(source_idx)%ckey(3) - 2 * mesh%grid(father_idx)%ckey(3)
           cell_idx = 1 + i + 2*j + 4*k
-          call atomicadd(mesh%unew(cell_idx, 1, father_idx), flux%density)
-          call atomicadd(mesh%unew(cell_idx, 2, father_idx), flux%momentum_x)
-          call atomicadd(mesh%unew(cell_idx, 3, father_idx), flux%momentum_y)
-          call atomicadd(mesh%unew(cell_idx, 4, father_idx), flux%momentum_z)
-          call atomicadd(mesh%unew(cell_idx, 5, father_idx), flux%energy)
+          info = atomicadd(mesh%unew(cell_idx, 1, father_idx), flux%density)
+          info = atomicadd(mesh%unew(cell_idx, 2, father_idx), flux%momentum_x)
+          info = atomicadd(mesh%unew(cell_idx, 3, father_idx), flux%momentum_y)
+          info = atomicadd(mesh%unew(cell_idx, 4, father_idx), flux%momentum_z)
+          info = atomicadd(mesh%unew(cell_idx, 5, father_idx), flux%energy)
        endif
 
     endif
@@ -1027,11 +1027,11 @@ contains
           j = mesh%grid(source_idx)%ckey(2) - 2 * mesh%grid(father_idx)%ckey(2)
           k = mesh%grid(source_idx)%ckey(3) - 2 * mesh%grid(father_idx)%ckey(3)
           cell_idx = 1 + i + 2*j + 4*k
-          call atomicadd(mesh%unew(cell_idx, 1, father_idx), flux%density)
-          call atomicadd(mesh%unew(cell_idx, 2, father_idx), flux%momentum_x)
-          call atomicadd(mesh%unew(cell_idx, 3, father_idx), flux%momentum_y)
-          call atomicadd(mesh%unew(cell_idx, 4, father_idx), flux%momentum_z)
-          call atomicadd(mesh%unew(cell_idx, 5, father_idx), flux%energy)
+          info = atomicadd(mesh%unew(cell_idx, 1, father_idx), flux%density)
+          info = atomicadd(mesh%unew(cell_idx, 2, father_idx), flux%momentum_x)
+          info = atomicadd(mesh%unew(cell_idx, 3, father_idx), flux%momentum_y)
+          info = atomicadd(mesh%unew(cell_idx, 4, father_idx), flux%momentum_z)
+          info = atomicadd(mesh%unew(cell_idx, 5, father_idx), flux%energy)
        endif
 
     end if
