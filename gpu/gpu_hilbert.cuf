@@ -8,7 +8,7 @@ attributes(device) function hilbert_key(ix, level) result(hkey)
   use hilbert, only: left_shift, right_shift, next_digits_diagram, next_state_diagram
   implicit none
   integer,                            intent(in) :: level
-  integer(kind=8), dimension(1:ndim), intent(in) :: ix
+  integer(kind=4), dimension(1:ndim), intent(in) :: ix
   integer(kind=8) :: hkey
 
   ! Compute 3-integer hilbert keys from the cartesian keys ix
