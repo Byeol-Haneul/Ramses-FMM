@@ -1173,6 +1173,7 @@ contains
     type(primitive_t) :: err_x, err_y, err_z
     integer :: work_idx, cell_idx, oct_idx
     integer :: i, j, k, work_size
+    logical :: ok
 
     ! Compute the size of the section of the subgrid to operate on
     work_size = subgrid_size - 4
