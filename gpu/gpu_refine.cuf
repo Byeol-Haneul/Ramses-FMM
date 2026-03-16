@@ -17,7 +17,7 @@ contains
     integer, value :: oct_idx, cell_idx
 
     integer(kind=4) :: i, j, k, ind, child_idx, ilevel
-    integer(kind=4), dimension(1:3) :: ckey
+    integer(kind=4), dimension(1:ndim) :: ckey
     integer(kind=8) :: hkey
 
     ! Compute cell coordinates
@@ -50,7 +50,7 @@ contains
     mesh%flag2(1:twotondim,child_idx) = 0
 
     ! Compute new oct Hilbert key
-    hkey = hilbert_key(ckey(1:ndim), ilevel - 1)
+    hkey = hilbert_key(ckey, ilevel - 1)
     mesh%grid(child_idx)%hkey(1) = hkey
 
     ! Straight injection for hydro variables
@@ -105,7 +105,7 @@ contains
     integer :: ilevel, i, j, k
     logical :: flagged, refined
 
-    integer(kind=8), dimension(1:3) :: ckey
+    integer(kind=8), dimension(1:ndim) :: ckey
 
     ! Compute thread and block idx
     thread_idx = threadIdx%x - 1
@@ -540,7 +540,7 @@ contains
     end do
 
     ! Compute Hilbert key
-    mesh%grid(oct_idx)%hkey(1) = hilbert_key(mesh%grid(oct_idx)%ckey(1:ndim), mesh%grid(oct_idx)%lev-1)
+    mesh%grid(oct_idx)%hkey(1) = hilbert_key(mesh%grid(oct_idx)%ckey, mesh%grid(oct_idx)%lev-1)
 
   end subroutine sort_scatter_grid
   ! =========================================================================
@@ -692,7 +692,7 @@ contains
     integer(kind=8) :: key, offset, ix, iy, iz, nx
     integer :: thread_idx, block_idx, oct_idx, nbor_idx
     integer :: ilevel, i, j, k, ind, idim
-    integer(kind=4), dimension(1:3) ::ckey
+    integer(kind=4), dimension(1:ndim) ::ckey
 
     ! Compute thread and block idx
     thread_idx = threadIdx%x - 1
@@ -881,7 +881,7 @@ contains
     mesh%flag2(1:twotondim, cache_idx) = 0
 
     ! Compute new oct Hilbert key
-    hkey = hilbert_key(mesh%grid(cache_idx)%ckey(1:ndim), mesh%grid(cache_idx)%lev - 1)
+    hkey = hilbert_key(mesh%grid(cache_idx)%ckey, mesh%grid(cache_idx)%lev - 1)
     mesh%grid(cache_idx)%hkey(1) = hkey
 
     ! Compute parent oct hash table key

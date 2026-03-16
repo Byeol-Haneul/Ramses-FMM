@@ -93,6 +93,7 @@ attributes(device) subroutine hash_update(hash, key, val)
   implicit none
   type(hash_gpu) :: hash
   integer(kind=8) :: key
+  integer(kind=4) :: val
 
   integer(kind=8) :: ibucket
 
