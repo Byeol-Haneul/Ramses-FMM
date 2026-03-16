@@ -19,9 +19,9 @@ module flag_device
        &   5,6,7,8,1,2,3,4,&
        &   5,6,7,8,1,2,3,4/),(/8,6/))
 contains
-  include 'hash.cuf'
-  include 'hilbert.cuf'
-  include 'scan.cuf'
+  include 'gpu_hash.cuf'
+  include 'gpu_hilbert.cuf'
+  include 'gpu_scan.cuf'
 
   ! =========================================================================
   attributes(global) subroutine reset_flag1_kernel(mesh, head_idx, num_octs)
@@ -159,7 +159,7 @@ contains
     ! Compute the cell idx
     cell_idx = threadIdx%x
 
-    if (mesh%flag2(cell_idx, oct_idx) > num_nbors) then
+    if (mesh%flag2(cell_idx, oct_idx) >= num_nbors) then
        mesh%flag1(cell_idx, oct_idx) = 1
     endif
 

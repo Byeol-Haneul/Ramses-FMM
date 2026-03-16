@@ -42,7 +42,7 @@ module hydro_device
 
 contains
 
-  include 'reduce.cuf'
+  include 'gpu_reduce.cuf'
 
   ! ==========================================================================
   !> @brief

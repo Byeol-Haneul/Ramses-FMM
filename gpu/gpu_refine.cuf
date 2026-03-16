@@ -6,9 +6,9 @@ module refine_device
   implicit none
 
 contains
-  include 'hash.cuf'
-  include 'hilbert.cuf'
-  include 'scan.cuf'
+  include 'gpu_hash.cuf'
+  include 'gpu_hilbert.cuf'
+  include 'gpu_scan.cuf'
 
   ! =========================================================================
   attributes(device) subroutine make_new_oct(mesh, oct_idx, cell_idx)

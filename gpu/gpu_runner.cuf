@@ -83,7 +83,7 @@ module gpu_runner
 
 contains
 
-  include 'scan.cuf'
+  include 'gpu_scan.cuf'
 
   !> @brief
   !> Compute the new time step on a GPU
