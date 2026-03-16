@@ -7,52 +7,6 @@ module gpu_runner
   implicit none
   integer, dimension(1:3), parameter::n_nbor = (/1,2,2/)
 
-  type hash_gpu
-     integer(kind=4) :: size, used
-     integer(kind=8), allocatable, dimension(:) :: key
-     integer(kind=4), allocatable, dimension(:) :: val
-  end type hash_gpu
-
-  type mesh_gpu
-
-     integer(kind=4) :: ngridmax, ncachemax
-
-     logical, dimension(1:3) :: periodic
-     integer(kind=4), allocatable, dimension(:) :: ckey_max
-     integer(kind=8), allocatable, dimension(:) :: key_off
-     integer(kind=4), allocatable, dimension(:,:) :: box_ckey_min
-     integer(kind=4), allocatable, dimension(:,:) :: box_ckey_max
-     integer(kind=4), allocatable, dimension(:,:,:) :: bound_ckey_min
-     integer(kind=4), allocatable, dimension(:,:,:) :: bound_ckey_max
-
-     integer(kind=4), allocatable, dimension(:) :: head
-     integer(kind=4), allocatable, dimension(:) :: tail
-     integer(kind=4), allocatable, dimension(:) :: noct
-     integer(kind=4) :: ifree
-
-     integer(kind=4), allocatable, dimension(:) :: head_cache
-     integer(kind=4), allocatable, dimension(:) :: tail_cache
-     integer(kind=4), allocatable, dimension(:) :: noct_cache
-     integer(kind=4) :: ifree_cache
-
-     type(oct), allocatable, dimension(:) :: grid
-
-     integer(kind=4), allocatable, dimension(:) :: father
-     integer(kind=4), allocatable, dimension(:,:) :: nbor
-
-     integer(kind=4), allocatable, dimension(:,:) :: flag1, flag2
-     real(kind=dp), allocatable, dimension(:,:,:) :: uold, unew
-
-     integer(kind=4), allocatable, dimension(:) :: swap_local
-     integer(kind=4), allocatable, dimension(:) :: swap_global
-     integer(kind=4), allocatable, dimension(:) :: prefix_sum
-     integer(kind=4), allocatable, dimension(:) :: partial_sums_0
-     integer(kind=4), allocatable, dimension(:) :: partial_sums_1
-
-     type(hash_gpu) :: hash
-
-  end type mesh_gpu
-
   !> Object to hold the grid and the hash table on the device
   type(mesh_gpu), device :: mesh_device
 
