@@ -1103,13 +1103,13 @@ contains
   ! =========================================================================
 
   ! =========================================================================
-  attributes(device) subroutine hydro_gradient(local_subgrid, gradients_x, gradients_y, gradients_z, gamma, subgrid_size, thread_idx)
+  attributes(device) subroutine hydro_gradient(local_subgrid, gradients_x, gradients_y, gradients_z, thread_idx, subgrid_size, floor_d, floor_p)
     type(subgrid_6x6x6cell_primitive), intent(in)    :: local_subgrid
     type(subgrid_3x2x2cell_primitive), intent(inout) :: gradients_x
     type(subgrid_2x3x2cell_primitive), intent(inout) :: gradients_y
     type(subgrid_2x2x3cell_primitive), intent(inout) :: gradients_z
-    real(kind=dp), value :: gamma
     integer, value :: subgrid_size, thread_idx
+    real(kind=dp), value :: floor_d, floor_p
 
     integer :: work_idx, interface_array_size, i, j, k
 
@@ -1162,13 +1162,13 @@ contains
   ! =========================================================================
 
   ! =========================================================================
-  attributes(device) subroutine hydro_flag_3d(mesh, gradients_x, gradients_y, gradients_z, thread_idx, head_idx, subgrid_size)
+  attributes(device) subroutine hydro_flag_3d(mesh, gradients_x, gradients_y, gradients_z, head_idx, block_idx, thread_idx, subgrid_size, err_grad_d, err_grad_p)
     type(mesh_gpu), device :: mesh
     type(subgrid_3x2x2cell_primitive), intent(in) :: gradients_x
     type(subgrid_2x3x2cell_primitive), intent(in) :: gradients_y
     type(subgrid_2x2x3cell_primitive), intent(in) :: gradients_z
-    integer, value :: thread_idx, head_idx
-    integer, value :: subgrid_size
+    integer, value :: thread_idx, head_idx, block_idx, subgrid_size
+    real(kind=dp), value :: err_grad_d, err_grad_p
 
     type(primitive_t) :: err_x, err_y, err_z
     integer :: work_idx, cell_idx, oct_idx
