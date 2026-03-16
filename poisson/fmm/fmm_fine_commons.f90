@@ -11,8 +11,9 @@ contains
 #ifdef GRAV
 subroutine fmm(pst,ilev,icount)
   use ramses_commons, only: pst_t
-  use init_fmm_module, only: r_init_fmm, r_build_fmm, double_level_t, downward_level_t
-  use fmm_multipoles!, only: m_fmm_multipoles
+  use init_fmm_module, only: r_init_fmm, r_build_fmm, double_level_t, downward_level_t, &
+       & FMM_BUILD_STANDARD, FMM_BUILD_MERGED
+  use fmm_multipoles, only: m_fmm_multipoles, merge_multipoles
   implicit none
   type(pst_t)::pst
   integer,intent(in) :: ilev,icount
@@ -31,11 +32,16 @@ subroutine fmm(pst,ilev,icount)
       if(pst%s%r%verbose) print '(A,I2)','[Build FMM] ', jlev
       call r_init_fmm(pst, jlev, 1)
       double_level%ilevel=jlev
+      double_level%mode=FMM_BUILD_STANDARD
       do ifine=jlev,pst%s%r%bound_levelmin+1,-1
         double_level%ifine=ifine
         call r_build_fmm(pst,double_level,storage_size(double_level)/32)
       end do
     end do
+    double_level%ilevel=ilev
+    double_level%ifine=ilev
+    double_level%mode=FMM_BUILD_MERGED
+    call r_build_fmm(pst,double_level,storage_size(double_level)/32)
   end if
 
   if(pst%s%r%verbose) print '(A)','FMM Hierarchy done '
@@ -44,6 +50,7 @@ subroutine fmm(pst,ilev,icount)
   do jlev=ilev,pst%s%r%nlevelmax
     call m_fmm_multipoles(pst, jlev) ! do upward pass !
   end do
+  if (ilev==pst%s%r%levelmin) call merge_multipoles(pst)
 
    ! Downward pass for fmm grids. 
    !call m_timer(pst,'fmm: downward for fmm','start')

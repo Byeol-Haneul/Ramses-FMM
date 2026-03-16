@@ -15,6 +15,9 @@ recursive subroutine r_cleanup_fmm(pst, ilevel)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
      call m_cleanup_fmm(pst%s%m_fmm_list(ilevel))
+     if (ilevel==pst%s%r%levelmin) then
+        if (associated(pst%s%m_fmm_merged)) call m_cleanup_fmm(pst%s%m_fmm_merged)
+     end if
   endif
 end subroutine r_cleanup_fmm
 

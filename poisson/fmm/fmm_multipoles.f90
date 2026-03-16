@@ -7,7 +7,7 @@ contains
 !###############################################
 subroutine m_fmm_multipoles(pst,ilevel)
   use ramses_commons, only: pst_t
-  use init_fmm_module, only: fmm_level_t
+  use init_fmm_module, only: fmm_level_t, FMM_MULTIPOLE_STANDARD
   implicit none
   type(pst_t)::pst
   integer::ilevel
@@ -31,6 +31,7 @@ subroutine m_fmm_multipoles(pst,ilevel)
   !-------------------------------------------------------
 
   fmm_levels%ilev = ilevel
+  fmm_levels%mode = FMM_MULTIPOLE_STANDARD
   input_size = storage_size(fmm_levels)/32
 
   ! Initialize both AMR and FMM grids. 
@@ -66,6 +67,29 @@ subroutine m_fmm_multipoles(pst,ilevel)
   end associate
 
 end subroutine m_fmm_multipoles
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine merge_multipoles(pst)
+  use ramses_commons, only: pst_t
+  use init_fmm_module, only: fmm_level_t, FMM_MULTIPOLE_MERGED
+  implicit none
+  type(pst_t)::pst
+  type(fmm_level_t)::fmm_levels
+  integer::input_size
+
+  associate(r=>pst%s%r)
+  if(.not. r%poisson)return
+  if(r%verbose) print *, "[MERGE MULTIPOLES] Building merged multipoles"
+
+  fmm_levels%ilev = r%levelmin
+  fmm_levels%flev = r%bound_levelmin
+  fmm_levels%mode = FMM_MULTIPOLE_MERGED
+  input_size = storage_size(fmm_levels)/32
+  call r_fmm_multipole_fmm2fmm(pst,fmm_levels,input_size)
+  end associate
+end subroutine merge_multipoles
 !################################################################
 !################################################################
 !################################################################
@@ -216,7 +240,7 @@ end subroutine fmm_multipole_amr2fmm
 recursive subroutine r_fmm_multipole_fmm2fmm(pst,fmm_levels,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
-  use init_fmm_module, only: fmm_level_t
+  use init_fmm_module, only: fmm_level_t, FMM_MULTIPOLE_MERGED
   use mdl_parameters
   implicit none
   type(pst_t)::pst
@@ -230,7 +254,11 @@ recursive subroutine r_fmm_multipole_fmm2fmm(pst,fmm_levels,input_size)
      call r_fmm_multipole_fmm2fmm(pst%pLower,fmm_levels,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call fmm_multipole_fmm2fmm(pst%s,pst%s%m_fmm_list(fmm_levels%ilev),fmm_levels%flev)
+     if (fmm_levels%mode == FMM_MULTIPOLE_MERGED) then
+        call fmm_merge_multipoles_all(pst%s)
+     else
+        call fmm_multipole_fmm2fmm(pst%s,pst%s%m_fmm_list(fmm_levels%ilev),fmm_levels%flev)
+     end if
   endif
 
 end subroutine r_fmm_multipole_fmm2fmm
@@ -286,6 +314,56 @@ subroutine fmm_multipole_fmm2fmm(s,m_fmm,flev)
   call close_cache(mdl)
   end associate
 end subroutine fmm_multipole_fmm2fmm
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine fmm_merge_multipoles_all(s)
+  use amr_parameters, only: ndim, twotondim, multipole_size, taylor_size
+  use amr_commons, only: mesh_t
+  use ramses_commons, only: ramses_t
+  use hash
+  implicit none
+
+  type(ramses_t)::s
+  type(mesh_t), pointer :: m_merged
+  integer::ilevel, flev, ioct, igrid_merged
+  integer(kind=8),dimension(0:ndim)::hash_key
+
+  associate(r=>s%r)
+  if (.not. associated(s%m_fmm_merged)) return
+
+  m_merged => s%m_fmm_merged
+
+  do flev=r%bound_levelmin,r%nlevelmax
+     if (m_merged%tail(flev) < m_merged%head(flev)) cycle
+     do ioct=m_merged%head(flev),m_merged%tail(flev)
+#ifdef FMM
+        m_merged%multipole(1:twotondim,1:multipole_size,ioct)=0.0D0
+        m_merged%taylor_coeff(1:twotondim,1:taylor_size,ioct)=0.0D0
+#endif
+     end do
+  end do
+
+  do ilevel=r%levelmin,r%nlevelmax
+     do flev=r%bound_levelmin,ilevel-r%level_fmm_to_amr
+        if (s%m_fmm_list(ilevel)%tail(flev) < s%m_fmm_list(ilevel)%head(flev)) cycle
+        hash_key(0)=flev
+
+        do ioct=s%m_fmm_list(ilevel)%head(flev),s%m_fmm_list(ilevel)%tail(flev)
+           hash_key(1:ndim)=s%m_fmm_list(ilevel)%grid(ioct)%ckey(1:ndim)
+           igrid_merged=hash_getp(m_merged%grid_dict,hash_key)
+           if(igrid_merged<=0) cycle
+#ifdef FMM
+           m_merged%multipole(:,:,igrid_merged)=m_merged%multipole(:,:,igrid_merged)+s%m_fmm_list(ilevel)%multipole(:,:,ioct)
+#endif
+        end do
+     end do
+  end do
+
+  if(r%verbose) print *, "      <MERGED MULTIPOLES> accumulation done"
+  end associate
+end subroutine fmm_merge_multipoles_all
 !################################################################
 !################################################################
 !################################################################
