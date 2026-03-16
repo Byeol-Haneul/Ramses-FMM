@@ -1,7 +1,7 @@
 module refine_device
   use amr_parameters, only: dp, ndim, twotondim, nhilbert
   use hydro_parameters, only: nvar
-  use gpu_runner, only: mesh_gpu, hash_gpu
+  use gpu_utils, only: mesh_gpu, hash_gpu
   use cudafor
   implicit none
 
