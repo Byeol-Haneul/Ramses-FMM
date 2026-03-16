@@ -1,8 +1,7 @@
 module hydro_device
   use amr_parameters, only: dp, twotondim
   use hydro_parameters, only: nvar
-  use gpu_utils, only: subgrid_6x6x6cell_conserved, subgrid_6x6x6cell_primitive
-  use gpu_runner, only: mesh_gpu
+  use gpu_utils, only: subgrid_6x6x6cell_conserved, subgrid_6x6x6cell_primitive, mesh_gpu
   use cudafor
   implicit none
 
