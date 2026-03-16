@@ -29,7 +29,7 @@ end function fnv1a
 !> Insert new key/value pair in hash table
 !>
 attributes(device) subroutine hash_set(hash, key, val)
-  use gpu_runner, only: hash_gpu
+  use gpu_utils, only: hash_gpu
   implicit none
   type(hash_gpu) :: hash
   integer(kind=8) :: key
@@ -58,7 +58,7 @@ end subroutine hash_set
 !> Free existing key in hash table
 !>
 attributes(device) subroutine hash_free(hash, key)
-  use gpu_runner, only: hash_gpu
+  use gpu_utils, only: hash_gpu
   implicit none
   type(hash_gpu) :: hash
   integer(kind=8) :: key
@@ -89,7 +89,7 @@ end subroutine hash_free
 !> Update val of existing key in hash table
 !>
 attributes(device) subroutine hash_update(hash, key, val)
-  use gpu_runner, only: hash_gpu
+  use gpu_utils, only: hash_gpu
   implicit none
   type(hash_gpu) :: hash
   integer(kind=8) :: key
@@ -119,7 +119,7 @@ end subroutine hash_update
 !> Get value from key in hash table
 !>
 attributes(device) function hash_get(hash, key)
-  use gpu_runner, only: hash_gpu
+  use gpu_utils, only: hash_gpu
   implicit none
   type(hash_gpu) :: hash
   integer(kind=8) :: key
