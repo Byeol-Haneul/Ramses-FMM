@@ -10,6 +10,7 @@ subroutine adaptive_loop(pst)
   use init_xion_module, only: m_init_xion
   use input_part_module, only: m_input_part
   use init_refine_basegrid_module, only: m_init_refine_basegrid
+  use init_refine_adaptive_module, only: m_init_refine_adaptive
   use init_refine_restart_module, only: m_init_refine_restart
   use init_refine_ramses_module, only: m_init_refine_ramses
   use turb_init_module, only: r_init_turb
