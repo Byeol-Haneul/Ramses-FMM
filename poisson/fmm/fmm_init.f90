@@ -84,7 +84,7 @@ recursive subroutine r_build_fmm(pst,input,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
       if (input%mode == FMM_BUILD_MERGED) then
-          call build_fmm_merged(pst%s)
+          call build_fmm_merged(pst%s,input%ilevel)
       else if(input%ifine==input%ilevel)then
           call build_fmm(pst%s,pst%s%m,pst%s%m_fmm_list(input%ilevel), input)
       else
@@ -247,7 +247,7 @@ subroutine build_fmm(s, m, m_fmm, input)
 
 end subroutine build_fmm
 
-subroutine build_fmm_merged(s)
+subroutine build_fmm_merged(s,active_levelmin)
   use mdl_module
   use amr_parameters, only: nhilbert, ndim, twotondim, multipole_size, taylor_size
   use ramses_commons, only: ramses_t
@@ -257,6 +257,7 @@ subroutine build_fmm_merged(s)
   implicit none
 
   type(ramses_t)::s
+  integer, intent(in) :: active_levelmin
   type(mesh_t), pointer :: m_merged
   integer::flev, jlev, ioct, idim, ind, igrid_new, first_ifree, igrid
   integer(kind=8),dimension(0:ndim)::hash_key
@@ -284,7 +285,7 @@ subroutine build_fmm_merged(s)
      first_ifree = m_merged%ifree
      hash_key(0) = flev
 
-     do jlev=max(r%levelmin, flev+1),r%nlevelmax
+     do jlev=max(active_levelmin, flev+1),r%nlevelmax
         if (s%m_fmm_list(jlev)%tail(flev) < s%m_fmm_list(jlev)%head(flev)) cycle
 
         do ioct=s%m_fmm_list(jlev)%head(flev),s%m_fmm_list(jlev)%tail(flev)

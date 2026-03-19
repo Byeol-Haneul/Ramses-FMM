@@ -14,6 +14,7 @@ subroutine fmm(pst,ilev,icount)
   use init_fmm_module, only: r_init_fmm, r_build_fmm, double_level_t, downward_level_t, &
        & FMM_BUILD_STANDARD, FMM_BUILD_MERGED, FMM_TREE_SOURCE_STANDARD, FMM_TREE_SOURCE_MERGED
   use fmm_multipoles, only: m_fmm_multipoles, merge_multipoles
+  use cleanup_fmm_module, only: r_cleanup_fmm
   implicit none
   type(pst_t)::pst
   integer,intent(in) :: ilev,icount
@@ -28,59 +29,52 @@ subroutine fmm(pst,ilev,icount)
   
   if(pst%s%r%verbose) print '(A,I2)','Entering fmm at AMR level ',ilev
 
-  if (ilev==pst%s%r%levelmin) then
-    do jlev=ilev,pst%s%r%nlevelmax
-      if(pst%s%r%verbose) print '(A,I2)','[Build FMM] ', jlev
-      call r_init_fmm(pst, jlev, 1)
-      double_level%ilevel=jlev
-      double_level%mode=FMM_BUILD_STANDARD
-      do ifine=jlev,pst%s%r%bound_levelmin+1,-1
-        double_level%ifine=ifine
-        call r_build_fmm(pst,double_level,storage_size(double_level)/32)
-      end do
+  do jlev=ilev,pst%s%r%nlevelmax
+    if(pst%s%r%verbose) print '(A,I2)','[Build FMM] ', jlev
+    call r_cleanup_fmm(pst, jlev)
+    call r_init_fmm(pst, jlev, 1)
+    double_level%ilevel=jlev
+    double_level%mode=FMM_BUILD_STANDARD
+    do ifine=jlev,pst%s%r%bound_levelmin+1,-1
+      double_level%ifine=ifine
+      call r_build_fmm(pst,double_level,storage_size(double_level)/32)
     end do
-    double_level%ilevel=ilev
-    double_level%ifine=ilev
-    double_level%mode=FMM_BUILD_MERGED
-    call r_build_fmm(pst,double_level,storage_size(double_level)/32)
-  end if
+  end do
+  double_level%ilevel=ilev+1
+  double_level%ifine=ilev
+  double_level%mode=FMM_BUILD_MERGED
+  call r_build_fmm(pst,double_level,storage_size(double_level)/32)
 
   if(pst%s%r%verbose) print '(A)','FMM Hierarchy done '
 
   do jlev=ilev,pst%s%r%nlevelmax
     call m_fmm_multipoles(pst, jlev) ! do upward pass !
   end do
-  call merge_multipoles(pst)
-  use_merged = associated(pst%s%m_fmm_merged) .and. (pst%s%m_fmm_merged%noct_used > 0)
+  call merge_multipoles(pst,ilev+1)
+  use_merged = associated(pst%s%m_fmm_merged) .and. (pst%s%m_fmm_merged%noct_used > 0) .and. &
+       &       (ilev < pst%s%r%nlevelmax)
 
    ! Downward pass for fmm grids. 
    input_size = storage_size(downward_levels)/32
    downward_levels%ilev=ilev
    
    if(pst%s%r%verbose) print *, "[M2L & L2L] LEVEL: ", ilev
-   if (use_merged) then
-      downward_levels%mode = FMM_TREE_SOURCE_MERGED
-      do flev = pst%s%r%bound_levelmin+1, ilev-pst%s%r%level_fmm_to_amr
-         downward_levels%flev=flev
-         if (flev-1 >= pst%s%r%levelmin) then
-            downward_levels%jlev=flev-1
-            call r_fmm_downward(pst, downward_levels, input_size)
-         end if
-         downward_levels%jlev=ilev
+   downward_levels%mode = FMM_TREE_SOURCE_STANDARD
+   do flev = pst%s%r%bound_levelmin+1, ilev-pst%s%r%level_fmm_to_amr
+      downward_levels%flev=flev
+      do jlev = max(pst%s%r%levelmin, flev+pst%s%r%level_fmm_to_amr-2), min(ilev, pst%s%r%nlevelmax)
+         downward_levels%jlev=jlev
+         call r_fmm_downward(pst, downward_levels, input_size)
+         if(pst%s%r%verbose) print *,'     <Downpass> (ilev, jlev, flev): ', ilev, jlev, flev
+      end do
+      if (use_merged) then
+         downward_levels%jlev=ilev+1
+         downward_levels%mode = FMM_TREE_SOURCE_MERGED
          call r_fmm_downward(pst, downward_levels, input_size)
          if(pst%s%r%verbose) print *,'     <Downpass merged> (ilev, flev): ', ilev, flev
-      end do
-   else
-      downward_levels%mode = FMM_TREE_SOURCE_STANDARD
-      do flev = pst%s%r%bound_levelmin+1, ilev-pst%s%r%level_fmm_to_amr
-         downward_levels%flev=flev
-         do jlev = max(pst%s%r%levelmin, flev+pst%s%r%level_fmm_to_amr-2), pst%s%r%nlevelmax
-            downward_levels%jlev=jlev
-            call r_fmm_downward(pst, downward_levels, input_size)
-            if(pst%s%r%verbose) print *,'     <Downpass> (ilev, jlev, flev): ', ilev, jlev, flev
-         end do
-      end do
-   end if
+         downward_levels%mode = FMM_TREE_SOURCE_STANDARD
+      end if
+   end do
 
    ! Call direct force calculation
    downward_levels%flev=ilev-pst%s%r%level_fmm_to_amr
@@ -88,15 +82,19 @@ subroutine fmm(pst,ilev,icount)
    !! L2P and M2P from ilev - 1 is done through combined_direct force. 
    !! ilev-2 should also be done via a similar function as combined_direct force 2. 
    if(pst%s%r%verbose) print *, "[L2P & M2P] LEVEL: ", ilev
+   downward_levels%mode=FMM_TREE_SOURCE_STANDARD
+   downward_levels%jlev=ilev
+   call r_fmm_amr_intermediate(pst, downward_levels, input_size)
+   if(pst%s%r%verbose) print *,'     <AMR Intermediate> (ilev, jlev)', ilev, ilev
    if (use_merged) then
-      downward_levels%jlev=ilev
+      downward_levels%jlev=ilev+1
       downward_levels%mode=FMM_TREE_SOURCE_MERGED
       call r_fmm_amr_intermediate(pst, downward_levels, input_size)
       if(pst%s%r%verbose) print *,'     <AMR Intermediate merged> (ilev)', ilev
    else
-      downward_levels%mode=FMM_TREE_SOURCE_STANDARD
-      do jlev = max(pst%s%r%levelmin, ilev), pst%s%r%nlevelmax
+      do jlev = max(pst%s%r%levelmin, ilev+1), pst%s%r%nlevelmax
          downward_levels%jlev=jlev
+         downward_levels%mode=FMM_TREE_SOURCE_STANDARD
          call r_fmm_amr_intermediate(pst, downward_levels, input_size)
          if(pst%s%r%verbose) print *,'     <AMR Intermediate> (ilev, jlev)', ilev, jlev
       end do
@@ -173,7 +171,6 @@ subroutine fmm_downward(s, ilev, jlev, flev, use_merged)
   use amr_parameters, only: ndim, twotondim, threetondim, multipole_size, taylor_size
   use amr_commons, only: mesh_t
   use ramses_commons, only: ramses_t
-  use hash, only: hash_getp
   use nbors_utils
   use cache_commons
   use cache
@@ -193,14 +190,13 @@ subroutine fmm_downward(s, ilev, jlev, flev, use_merged)
   integer, dimension(1:threetondim) :: grid_nbors
 
   integer :: igrid_nbor, igrid_parent
-  integer :: ioct_write
   type(msg_large_realdp)::dummy_realdp
   real(kind=8), dimension(1:multipole_size) :: multipole
   real(kind=8), dimension(taylor_size) :: temp_taylor, parent_taylor
   real(kind=8), dimension(twotondim, taylor_size) :: accum_taylor
   logical::cycle_flag
-  logical :: use_merged_local, write_to_source
-  type(mesh_t), pointer :: m_target, m_source, m_write
+  logical :: use_merged_local
+  type(mesh_t), pointer :: m_target, m_source
 
   integer(kind=8), dimension(ndim, threetondim) :: offset_list
   real(kind=8), dimension(twotondim, twotondim, twotondim, threetondim) :: D0_list, D1_list, D2_list, D3_list
@@ -215,12 +211,10 @@ subroutine fmm_downward(s, ilev, jlev, flev, use_merged)
       ], [twotondim, ndim] )
   use_merged_local = .false.
   if (present(use_merged)) use_merged_local = use_merged
-  write_to_source = use_merged_local .and. associated(s%m_fmm_merged)
-  if (write_to_source) then
-    m_target => s%m_fmm_list(ilev)
+  m_target => s%m_fmm_list(ilev)
+  if (use_merged_local .and. associated(s%m_fmm_merged)) then
     m_source => s%m_fmm_merged
   else
-    m_target => s%m_fmm_list(ilev)
     m_source => s%m_fmm_list(jlev)
   end if
   associate(r=>s%r, m=>s%m, mdl=>s%mdl)
@@ -343,12 +337,7 @@ subroutine fmm_downward(s, ilev, jlev, flev, use_merged)
 	     end do ! over neighboring grids 3^n 
 	     ! Add taylor coefficients from intermediate fields
 #ifdef FMM
-	     if (write_to_source) then
-	        ioct_write = hash_getp(m_source%grid_dict, hash_key)
-	        if (ioct_write > 0) m_source%taylor_coeff(:,:,ioct_write) = m_source%taylor_coeff(:,:,ioct_write) + accum_taylor
-	     else
-	        m_target%taylor_coeff(:,:,ioct) = m_target%taylor_coeff(:,:,ioct) + accum_taylor
-	     end if
+		     m_target%taylor_coeff(:,:,ioct) = m_target%taylor_coeff(:,:,ioct) + accum_taylor
 #endif
 	     ! Unlock neighbor octs
 	     do inbor = 1, threetondim
@@ -366,7 +355,6 @@ subroutine fmm_downward_coarse(s, ilev, jlev, flev, use_merged)
   use amr_parameters, only: ndim, twotondim, threetondim, multipole_size, taylor_size
   use amr_commons, only: mesh_t
   use ramses_commons, only: ramses_t
-  use hash, only: hash_getp
   use nbors_utils
   use fmm_multipoles, only: pack_fetch_rho, unpack_fetch_rho
   use cache_commons
@@ -385,13 +373,13 @@ subroutine fmm_downward_coarse(s, ilev, jlev, flev, use_merged)
   integer(kind=8), dimension(0:ndim) :: hash_key, hash_nbor_periodic, hash_parent
   integer, dimension(1:threetondim) :: grid_nbors
 
-  integer :: igrid_nbor, ioct_write
+  integer :: igrid_nbor
   type(msg_int4_small_realdp)::dummy_rho
   real(kind=8), dimension(taylor_size) :: temp_taylor
   real(kind=8), dimension(twotondim, taylor_size) :: accum_taylor
   logical::cycle_flag
-  logical :: use_merged_local, write_to_source
-  type(mesh_t), pointer :: m_target, m_source, m_write
+  logical :: use_merged_local
+  type(mesh_t), pointer :: m_target, m_source
 
   integer(kind=8), dimension(ndim, threetondim) :: offset_list
   real(kind=8), dimension(twotondim, twotondim, twotondim, threetondim) :: D0_list
@@ -406,14 +394,8 @@ subroutine fmm_downward_coarse(s, ilev, jlev, flev, use_merged)
       ], [twotondim, ndim] )
   use_merged_local = .false.
   if (present(use_merged)) use_merged_local = use_merged
-  write_to_source = use_merged_local .and. associated(s%m_fmm_merged)
   m_target => s%m_fmm_list(ilev)
   m_source => s%m
-  if (write_to_source) then
-    m_write => s%m_fmm_merged
-  else
-    m_write => m_target
-  end if
   associate(r=>s%r, m=>s%m, mdl=>s%mdl)
   
   ! Open cache for multipoles
@@ -501,12 +483,7 @@ subroutine fmm_downward_coarse(s, ilev, jlev, flev, use_merged)
 	     end do ! over neighboring grids 3^n 
 	     ! Add taylor coefficients from intermediate fields
 #ifdef FMM
-	     if (write_to_source) then
-	        ioct_write = hash_getp(m_write%grid_dict, hash_key)
-	        if (ioct_write > 0) m_write%taylor_coeff(:,:,ioct_write) = m_write%taylor_coeff(:,:,ioct_write) + accum_taylor
-	     else
-	        m_target%taylor_coeff(:,:,ioct) = m_target%taylor_coeff(:,:,ioct) + accum_taylor
-	     end if
+		     m_target%taylor_coeff(:,:,ioct) = m_target%taylor_coeff(:,:,ioct) + accum_taylor
 #endif
 	     ! Unlock neighbor octs
 	     do inbor = 1, threetondim
