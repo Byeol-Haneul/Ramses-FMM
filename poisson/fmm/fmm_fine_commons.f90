@@ -108,7 +108,6 @@ subroutine fmm(pst,ilev,icount)
       call r_fmm_amr_direct(pst, downward_levels, input_size)
       if(pst%s%r%verbose) print *,'     <Direct Force AMR> (ilev, jlev)', ilev, jlev
    end do
-
    if (use_merged) then
       if (ilev+1 <= pst%s%r%nlevelmax) then
          downward_levels%jlev=ilev+1
@@ -182,11 +181,11 @@ subroutine fmm_downward(s, ilev, jlev, flev, use_merged)
   integer :: ilev, jlev, flev
   logical, optional, intent(in) :: use_merged
 
-  integer :: ioct, idim, pcell, icell, inbor, jcell, nstride
+  integer :: ioct, idim, pcell, icell, inbor, jcell, nstride, iact
   integer(kind=8), dimension(ndim) :: cc_icell, cc_jcell, cc_jcell_periodic, offset, ii
   real(kind=8), dimension(ndim) :: dx, diff
   real(kind=8) :: dx_loc, dist, D0, D1, D2, D3
-  integer(kind=8), dimension(0:ndim) :: hash_key, hash_nbor_periodic, hash_parent
+  integer(kind=8), dimension(0:ndim) :: hash_key, hash_nbor_periodic, hash_parent, prev_hash_parent
   integer, dimension(1:threetondim) :: grid_nbors
 
   integer :: igrid_nbor, igrid_parent
@@ -194,14 +193,17 @@ subroutine fmm_downward(s, ilev, jlev, flev, use_merged)
   real(kind=8), dimension(1:multipole_size) :: multipole
   real(kind=8), dimension(taylor_size) :: temp_taylor, parent_taylor
   real(kind=8), dimension(twotondim, taylor_size) :: accum_taylor
-  logical::cycle_flag
+  logical::cycle_flag, neighbors_cached
   logical :: use_merged_local
   type(mesh_t), pointer :: m_target, m_source
 
   integer(kind=8), dimension(ndim, threetondim) :: offset_list
   real(kind=8), dimension(twotondim, twotondim, twotondim, threetondim) :: D0_list, D1_list, D2_list, D3_list
   real(kind=8), dimension(ndim, twotondim, twotondim, twotondim, threetondim) :: intermediate_diff_list
+  real(kind=8), dimension(multipole_size, twotondim, threetondim) :: multipole_jcell_list
   logical, dimension(threetondim, twotondim, twotondim) :: direct_neighbor_list
+  integer, dimension(threetondim) :: source_active_count
+  integer, dimension(twotondim, threetondim) :: source_active_idx
 
   integer, dimension(twotondim, ndim), parameter :: displacement_list = reshape( &
       [ &
@@ -231,7 +233,10 @@ subroutine fmm_downward(s, ilev, jlev, flev, use_merged)
   hash_key(0) = flev
   hash_nbor_periodic(0) = flev - 1
   hash_parent(0) = flev - 1
+  prev_hash_parent(0) = flev - 1
+  prev_hash_parent(1:ndim) = -1
   dx_loc = r%boxlen / 2.0D0**flev
+  neighbors_cached = .false.
 
   ! jcell to icell
   do inbor = 1, threetondim
@@ -295,8 +300,33 @@ subroutine fmm_downward(s, ilev, jlev, flev, use_merged)
       end do
     end if
 
-     ! Get neighboring parent grids (returns 3^n parent level grids)
-     call get_intermediate_nbor_grid(s, hash_key, grid_nbors, flush_cache=.false., fetch_cache=.true.)
+     if (.not. all(hash_parent == prev_hash_parent)) then
+       if (neighbors_cached) then
+         do inbor = 1, threetondim
+           if (grid_nbors(inbor) > 0) call unlock_cache(m_source, grid_nbors(inbor))
+         end do
+       end if
+
+       ! Get neighboring parent grids (returns 3^n parent level grids)
+       call get_intermediate_nbor_grid(s, hash_key, grid_nbors, flush_cache=.false., fetch_cache=.true.)
+       source_active_count(:) = 0
+       do inbor = 1, threetondim
+         igrid_nbor = grid_nbors(inbor)
+         if (igrid_nbor <= 0) cycle
+         do jcell = 1, twotondim
+#ifdef FMM
+           multipole_jcell_list(:, jcell, inbor) = m_source%multipole(jcell,:,igrid_nbor)
+           if (any(multipole_jcell_list(:, jcell, inbor) /= 0.0d0)) then
+             source_active_count(inbor) = source_active_count(inbor) + 1
+             source_active_idx(source_active_count(inbor), inbor) = jcell
+           end if
+#endif
+         end do
+       end do
+       neighbors_cached = .true.
+       prev_hash_parent = hash_parent
+     end if
+
      do inbor = 1, threetondim
        ! Get offset for neighboring parent grids (can reach off bounds)
        do idim=1,ndim
@@ -308,7 +338,8 @@ subroutine fmm_downward(s, ilev, jlev, flev, use_merged)
 
        if (igrid_nbor<=0) cycle
 
-       do jcell = 1, twotondim
+       do iact = 1, source_active_count(inbor)
+          jcell = source_active_idx(iact, inbor)
           cycle_flag = .false.
           do idim=1,ndim
             nstride = 2**(idim-1)
@@ -321,7 +352,7 @@ subroutine fmm_downward(s, ilev, jlev, flev, use_merged)
           if (direct_neighbor_list(inbor, jcell, pcell) .or. cycle_flag) cycle
           ! Shift multipole from origin -> source center (Need to use grid position)
 #ifdef FMM
-          multipole = m_source%multipole(jcell,:,igrid_nbor)
+          multipole = multipole_jcell_list(:, jcell, inbor)
 #endif
           ! Get taylor coeffs from local
           do icell=1, twotondim
@@ -339,11 +370,12 @@ subroutine fmm_downward(s, ilev, jlev, flev, use_merged)
 #ifdef FMM
 		     m_target%taylor_coeff(:,:,ioct) = m_target%taylor_coeff(:,:,ioct) + accum_taylor
 #endif
-	     ! Unlock neighbor octs
-	     do inbor = 1, threetondim
-	        call unlock_cache(m_source, grid_nbors(inbor))
-	     end do
   end do
+  if (neighbors_cached) then
+    do inbor = 1, threetondim
+      if (grid_nbors(inbor) > 0) call unlock_cache(m_source, grid_nbors(inbor))
+    end do
+  end if
   call close_cache(mdl)
   end associate
 end subroutine fmm_downward
@@ -536,7 +568,7 @@ subroutine fmm_amr_intermediate(s, ilev, jlev, use_merged)
   integer :: ilev, jlev
   logical, optional, intent(in) :: use_merged
 
-  integer :: ioct, idim, ind, icell, jcell, nstride, nfine, igrid, nbox, pcell
+  integer :: ioct, idim, ind, icell, jcell, nstride, nfine, igrid, nbox, pcell, iact
   real(kind=8) :: phi, phi_out, dx_loc
   integer(kind=8), dimension(ndim) :: cc_icell, cc_jcell, cc_jcell_periodic, offset
   real(kind=8), dimension(ndim) :: diff
@@ -568,7 +600,9 @@ subroutine fmm_amr_intermediate(s, ilev, jlev, use_merged)
   real(kind=8), allocatable :: D0_list(:,:,:,:), D1_list(:,:,:,:), D2_list(:,:,:,:)
   real(kind=8), allocatable :: intermediate_diff_list(:,:,:,:,:), cell_diff_list(:,:,:,:)
   real(kind=8), allocatable :: far_diff_list(:,:,:)
+  real(kind=8), allocatable :: multipole_jcell_list(:,:,:)
   integer, allocatable :: fmm_grid_center_offset(:,:), fmm_cell_center_offset(:,:)
+  integer, allocatable :: source_active_count(:), source_active_idx(:,:)
   logical, allocatable :: direct_neighbor_list(:,:,:)
 
   use_merged_local = .false.
@@ -611,8 +645,11 @@ subroutine fmm_amr_intermediate(s, ilev, jlev, use_merged)
 
   allocate(intermediate_diff_list(ndim, twotondim, nbox, twotondim, threetondim))
   allocate(far_diff_list(ndim, twotondim, nbox))
+  allocate(multipole_jcell_list(multipole_size, twotondim, threetondim))
   allocate(fmm_grid_center_offset(ndim, nbox))
   allocate(fmm_cell_center_offset(ndim, nbox))
+  allocate(source_active_count(threetondim))
+  allocate(source_active_idx(twotondim, threetondim))
   allocate(direct_neighbor_list(twotondim, nbox, threetondim))
   allocate(cell_diff_list(ndim, twotondim, nbox, threetondim))
 
@@ -684,6 +721,20 @@ subroutine fmm_amr_intermediate(s, ilev, jlev, use_merged)
       if(ilev == jlev) call get_grid(s, hash_fmm_grid, igrid_parent, flush_cache=.false., fetch_cache=.true.)
 
       call get_intermediate_nbor_grid(s, hash_fmm_cell, grid_nbors, flush_cache=.false., fetch_cache=.true.)
+      source_active_count(:) = 0
+      do ind = 1, threetondim
+        igrid_nbor = grid_nbors(ind)
+        if (igrid_nbor <= 0) cycle
+        do jcell = 1, twotondim
+#ifdef FMM
+          multipole_jcell_list(:, jcell, ind) = m_fmm%multipole(jcell, 1:multipole_size, igrid_nbor)
+          if (any(multipole_jcell_list(:, jcell, ind) /= 0.0d0)) then
+            source_active_count(ind) = source_active_count(ind) + 1
+            source_active_idx(source_active_count(ind), ind) = jcell
+          end if
+#endif
+        end do
+      end do
       neighbors_cached = .true.
       prev_hash_fmm_grid = hash_fmm_grid
     end if
@@ -717,7 +768,8 @@ subroutine fmm_amr_intermediate(s, ilev, jlev, use_merged)
       igrid_nbor = grid_nbors(ind)
       if (igrid_nbor<=0) cycle
 
-      do jcell = 1, twotondim
+      do iact = 1, source_active_count(ind)
+        jcell = source_active_idx(iact, ind)
         cycle_flag = .false.
         cc_jcell_periodic = hash_fmm_cell(1:ndim) - cell_diff_list(:, jcell, igrid, ind)
         do idim = 1, ndim
@@ -728,7 +780,7 @@ subroutine fmm_amr_intermediate(s, ilev, jlev, use_merged)
         end do
         if (direct_neighbor_list(jcell, igrid, ind) .or. cycle_flag) cycle
 #ifdef FMM
-        multipole = m_fmm%multipole(jcell, 1:multipole_size, igrid_nbor)
+        multipole = multipole_jcell_list(:, jcell, ind)
 #endif
         do icell=1, twotondim
           if (m%grid(ioct)%refined(icell)) cycle
@@ -743,7 +795,9 @@ subroutine fmm_amr_intermediate(s, ilev, jlev, use_merged)
     end do
   end do
 
-  deallocate(D0_list, D1_list, D2_list, intermediate_diff_list, far_diff_list, direct_neighbor_list, cell_diff_list, fmm_grid_center_offset, fmm_cell_center_offset)
+  deallocate(D0_list, D1_list, D2_list, intermediate_diff_list, far_diff_list, multipole_jcell_list, &
+       &     direct_neighbor_list, cell_diff_list, fmm_grid_center_offset, fmm_cell_center_offset, &
+       &     source_active_count, source_active_idx)
   call close_cache(mdl)
   end associate
 end subroutine fmm_amr_intermediate
@@ -1595,6 +1649,7 @@ subroutine fmm_amr_direct_taylor(s, ilev, jlev, use_merged)
         end do
 #endif
       end do
+
     end if
 
     if (sum(active_grid_count) == 0) cycle
