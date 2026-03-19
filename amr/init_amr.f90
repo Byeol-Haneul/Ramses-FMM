@@ -90,7 +90,7 @@ subroutine init_amr(r,g,m,type)
   character(len=*)::type
   ! Local variables
 #ifdef _CUDA
-  integer::err_code, my_integer
+  integer::err_code, my_integer, hash_size
   real(dp)::my_double
 #endif
   integer::idim,ilevel,icpu,igrid,ibound,ilevelmin
@@ -123,26 +123,23 @@ subroutine init_amr(r,g,m,type)
   ! Allocate the device arrays
 #ifdef _CUDA
   if(type=='amr')then
-     mesh_device%ngridmax = m%ngridmax
-     mesh_device%ncachemax = m%ncachemax
-     allocate(mesh_device%grid(1:m%ngridmax+m%ncachemax))
-     allocate(mesh_device%flag1(1:twotondim,1:m%ngridmax+m%ncachemax))
-     allocate(mesh_device%flag2(1:twotondim,1:m%ngridmax+m%ncachemax))
-     allocate(mesh_device%father(1:m%ngridmax+m%ncachemax))
-     allocate(mesh_device%nbor(1:threetondim,1:m%ngridmax))
+     allocate(grid(1:m%ngridmax+m%ncachemax))
+     allocate(flag1(1:twotondim,1:m%ngridmax+m%ncachemax))
+     allocate(flag2(1:twotondim,1:m%ngridmax+m%ncachemax))
+     allocate(father(1:m%ngridmax+m%ncachemax))
+     allocate(nbor(1:threetondim,1:m%ngridmax))
      ! Allocate hash table space
-     mesh_device%hash%size=2*(m%ngridmax+m%ncachemax)
-     mesh_device%hash%used=0
-     allocate(mesh_device%hash%key(1:mesh_device%hash%size))
-     allocate(mesh_device%hash%val(1:mesh_device%hash%size))
-     mesh_device%hash%key=0
-     mesh_device%hash%val=0
+     hash_size=2*(m%ngridmax + m%ncachemax)
+     allocate(hash_key(1:hash_size))
+     allocate(hash_val(1:hash_size))
+     hash_key=0
+     hash_val=0
      ! Work buffers for GPU scan/sort/refine
-     allocate(mesh_device%prefix_sum(1:m%ngridmax+m%ncachemax))
-     allocate(mesh_device%swap_local(1:m%ngridmax+m%ncachemax))
-     allocate(mesh_device%swap_global(1:m%ngridmax+m%ncachemax))
-     allocate(mesh_device%partial_sums_0(1:max(1,(m%ngridmax+m%ncachemax)/256)))
-     allocate(mesh_device%partial_sums_1(1:max(1,(m%ngridmax+m%ncachemax)/65536)))
+     allocate(swap_local(1:m%ngridmax+m%ncachemax))
+     allocate(swap_global(1:m%ngridmax+m%ncachemax))
+     allocate(prefix_sum(1:m%ngridmax+m%ncachemax))
+     allocate(partial_sums_0(1:max(1,(m%ngridmax+m%ncachemax)/256)))
+     allocate(partial_sums_1(1:max(1,(m%ngridmax+m%ncachemax)/65536)))
   endif
 #endif
 
@@ -176,8 +173,8 @@ subroutine init_amr(r,g,m,type)
   ! Allocate the device arrays
 #ifdef _CUDA
   if(type=='amr')then
-     allocate(mesh_device%uold(1:twotondim,1:nvar,1:m%ngridmax+m%ncachemax))
-     allocate(mesh_device%unew(1:twotondim,1:nvar,1:m%ngridmax+m%ncachemax))
+     allocate(uold(1:twotondim,1:nvar,1:m%ngridmax+m%ncachemax))
+     allocate(unew(1:twotondim,1:nvar,1:m%ngridmax+m%ncachemax))
   endif
 #endif
 
@@ -440,12 +437,9 @@ subroutine init_amr(r,g,m,type)
 
 #ifdef _CUDA
   if(type=='amr')then
-     allocate(mesh_device%head(1:r%nlevelmax))
-     allocate(mesh_device%tail(1:r%nlevelmax))
-     allocate(mesh_device%noct(1:r%nlevelmax))
-     allocate(mesh_device%head_cache(1:r%nlevelmax))
-     allocate(mesh_device%tail_cache(1:r%nlevelmax))
-     allocate(mesh_device%noct_cache(1:r%nlevelmax))
+     allocate(m%head_cache(1:r%nlevelmax))
+     allocate(m%tail_cache(1:r%nlevelmax))
+     allocate(m%noct_cache(1:r%nlevelmax))
   endif
   ! Compute Cartesian key offset for GPU hash table
   allocate(m%key_off(1:r%nlevelmax+1))
@@ -454,18 +448,20 @@ subroutine init_amr(r,g,m,type)
      m%key_off(ilevel)=m%key_off(ilevel-1)+m%hkey_max(1,ilevel-1)
   end do
   ! Allocate and transfer bounding box to device
-  mesh_device%ckey_max=m%ckey_max
-  mesh_device%key_off=m%key_off
-  mesh_device%periodic=r%periodic
-  allocate(mesh_device%box_ckey_min(1:3,1:r%nlevelmax+1))
-  allocate(mesh_device%box_ckey_max(1:3,1:r%nlevelmax+1))
-  mesh_device%box_ckey_min=m%box_ckey_min
-  mesh_device%box_ckey_max=m%box_ckey_max
+  allocate(ckey_max(1:r%nlevelmax+1))
+  allocate(key_off(1:r%nlevelmax+1))
+  allocate(box_ckey_min(1:3,1:r%nlevelmax+1))
+  allocate(box_ckey_max(1:3,1:r%nlevelmax+1))
+  ckey_max=m%ckey_max
+  key_off=m%key_off
+  periodic=r%periodic
+  box_ckey_min=m%box_ckey_min
+  box_ckey_max=m%box_ckey_max
   if(r%nbound>0)then
-     allocate(mesh_device%bound_ckey_min(1:3,1:r%nbound,1:r%nlevelmax+1))
-     allocate(mesh_device%bound_ckey_max(1:3,1:r%nbound,1:r%nlevelmax+1))
-     mesh_device%bound_ckey_min=m%bound_ckey_min
-     mesh_device%bound_ckey_max=m%bound_ckey_max
+     allocate(bound_ckey_min(1:3,1:r%nbound,1:r%nlevelmax+1))
+     allocate(bound_ckey_max(1:3,1:r%nbound,1:r%nlevelmax+1))
+     bound_ckey_min=m%bound_ckey_min
+     bound_ckey_max=m%bound_ckey_max
   endif
 #endif
 

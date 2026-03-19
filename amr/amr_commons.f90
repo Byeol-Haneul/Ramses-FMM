@@ -650,6 +650,12 @@ module amr_commons
      integer(kind=4),allocatable,dimension(:)::noct      ! Number of octs for each level
      integer::ifree                                      ! Index of first oct in free memory
 
+     ! Cache related arrays
+     integer(kind=4),allocatable,dimension(:)::head_cache
+     integer(kind=4),allocatable,dimension(:)::tail_cache
+     integer(kind=4),allocatable,dimension(:)::noct_cache
+     integer::ifree_cache
+
      integer(kind=4),allocatable,dimension(:)::noct_min  ! Min. number of octs across cpus
      integer(kind=4),allocatable,dimension(:)::noct_max  ! Max. number of octs across cpus
      integer(kind=8),allocatable,dimension(:)::noct_tot  ! Total number of octs across cpus
@@ -675,6 +681,7 @@ module amr_commons
 
      ! Grid hash table
      type(hash_table)::grid_dict
+     integer(kind=4)::hash_used
 
      ! Grid variables
      integer,allocatable,dimension(:,:)::flag1

@@ -27,12 +27,13 @@ end subroutine warp_scan
 !> @param[in] partial_sums : The total sum within each block
 !> @param[in] size: the size of the active range of array data
 !> @param[in] offset : The starting offset of the active range
-attributes(global) subroutine block_scan(data, offset, size, partial_sums)
+attributes(global) subroutine block_scan(data, offset, size, partial_sums, total_sum)
   implicit none
-  integer, device :: data(:)
-  integer, device, optional :: partial_sums(:)
-  integer, value :: size
-  integer, value :: offset
+  integer(kind=4), device :: data(*)
+  integer(kind=4), device, optional :: partial_sums(*)
+  integer(kind=4), device, optional :: total_sum
+  integer(kind=4), value :: size
+  integer(kind=4), value :: offset
 
   integer, shared :: sums(32)
   integer :: scan, wscan
@@ -81,6 +82,11 @@ attributes(global) subroutine block_scan(data, offset, size, partial_sums)
      if (tid == blockDim%x) partial_sums(bid) = scan
   end if
 
+  ! Optionally write the total inclusive sum
+  if (present(total_sum)) then
+     if (gid == size) total_sum = scan
+  end if
+
 end subroutine block_scan
 ! =========================================================================
 
@@ -92,15 +98,16 @@ end subroutine block_scan
 !> @param[in] cum_sums : The cumulative sum of each block
 !> @param[in] size: the size of the active range of array data
 !> @param[in] offset : The starting offset of the active range
-attributes(global) subroutine uniform_add(data, offset, size, partial_sums)
+attributes(global) subroutine uniform_add(data, offset, size, partial_sums, total_sum)
   implicit none
-  integer, device :: data(:)
-  integer, device :: partial_sums(:) ! Cumulative sum of each block
-  integer, value  :: size            ! number of elements to update in the tail
-  integer, value  :: offset          ! element offset to the start of the tail
+  integer(kind=4), device :: data(*)
+  integer(kind=4), device :: partial_sums(*) ! Cumulative sum of each block
+  integer(kind=4), device, optional :: total_sum       ! total sum across all elements
+  integer(kind=4), value  :: size            ! number of elements to update in the tail
+  integer(kind=4), value  :: offset          ! element offset to the start of the tail
 
-  integer, shared :: buf
-  integer :: tid, bid, gid
+  integer(kind=4), shared :: buf
+  integer(kind=4) :: tid, bid, gid
 
   tid = threadIdx%x
   bid = blockIdx%x
@@ -114,6 +121,11 @@ attributes(global) subroutine uniform_add(data, offset, size, partial_sums)
 
   ! Final prefix sum
   if (gid <= size) data(gid + offset - 1) = data(gid + offset - 1) + buf
+
+  ! Total prefix sum
+  if (present(total_sum)) then
+     if (gid == size) total_sum = data(gid + offset - 1)
+  endif
 
 end subroutine uniform_add
 ! =========================================================================

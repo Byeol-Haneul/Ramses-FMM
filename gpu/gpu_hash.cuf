@@ -28,26 +28,27 @@ end function fnv1a
 !> @brief
 !> Insert new key/value pair in hash table
 !>
-attributes(device) subroutine hash_set(hash, key, val)
-  use gpu_utils, only: hash_gpu
+attributes(device) subroutine hash_set(hash_key, hash_val, hash_size, key, val)
   implicit none
-  type(hash_gpu) :: hash
+  integer(kind=8) :: hash_key(*)
+  integer(kind=4) :: hash_val(*)
+  integer(kind=4) :: hash_size
   integer(kind=8) :: key
   integer(kind=4) :: val
 
   integer(kind=8) :: ibucket, prev
 
   ! Compute bucket idx from hash function
-  ibucket = MOD(fnv1a(key), hash%size) + 1
+  ibucket = MOD(fnv1a(key), hash_size) + 1
 
   ! Insert value using linear probing
   do
-     prev = atomiccas(hash%key(ibucket), 0, key)
+     prev = atomiccas(hash_key(ibucket), 0, key)
      if((prev == 0) .or. (prev == key))then
-        hash%val(ibucket) = val
+        hash_val(ibucket) = val
         return
      endif
-     ibucket = MOD(ibucket, hash%size) + 1 
+     ibucket = MOD(ibucket, hash_size) + 1 
   end do
 
 end subroutine hash_set
@@ -57,28 +58,29 @@ end subroutine hash_set
 !> @brief
 !> Free existing key in hash table
 !>
-attributes(device) subroutine hash_free(hash, key)
-  use gpu_utils, only: hash_gpu
+attributes(device) subroutine hash_free(hash_key, hash_val, hash_size, key)
   implicit none
-  type(hash_gpu) :: hash
+  integer(kind=8) :: hash_key(*)
+  integer(kind=4) :: hash_val(*)
+  integer(kind=4) :: hash_size
   integer(kind=8) :: key
 
   integer(kind=8) :: ibucket
 
   ! Compute bucket idx from hash function
-  ibucket = MOD(fnv1a(key), hash%size) + 1
+  ibucket = MOD(fnv1a(key), hash_size) + 1
 
   ! Delete value using linear probing
   ! Note that key is left in the hash table
   do
-     if(hash%key(ibucket) == key)then
-        hash%val(ibucket) = 0
+     if(hash_key(ibucket) == key)then
+        hash_val(ibucket) = 0
         return
      endif
-     if(hash%key(ibucket) == 0)then
+     if(hash_key(ibucket) == 0)then
         return
      endif
-     ibucket = MOD(ibucket, hash%size) + 1
+     ibucket = MOD(ibucket, hash_size) + 1
   end do
 
 end subroutine hash_free
@@ -88,28 +90,29 @@ end subroutine hash_free
 !> @brief
 !> Update val of existing key in hash table
 !>
-attributes(device) subroutine hash_update(hash, key, val)
-  use gpu_utils, only: hash_gpu
+attributes(device) subroutine hash_update(hash_key, hash_val, hash_size, key, val)
   implicit none
-  type(hash_gpu) :: hash
+  integer(kind=8) :: hash_key(*)
+  integer(kind=4) :: hash_val(*)
+  integer(kind=4) :: hash_size
   integer(kind=8) :: key
   integer(kind=4) :: val
 
   integer(kind=8) :: ibucket
 
   ! Compute bucket idx from hash function
-  ibucket = MOD(fnv1a(key), hash%size) + 1
+  ibucket = MOD(fnv1a(key), hash_size) + 1
 
   ! Update value using linear probing
   do
-     if(hash%key(ibucket) == key)then
-        hash%val(ibucket) = val
+     if(hash_key(ibucket) == key)then
+        hash_val(ibucket) = val
         return
      endif
-     if(hash%key(ibucket) == 0)then
+     if(hash_key(ibucket) == 0)then
         return
      endif
-     ibucket = MOD(ibucket, hash%size) + 1
+     ibucket = MOD(ibucket, hash_size) + 1
   end do
 
 end subroutine hash_update
@@ -119,29 +122,30 @@ end subroutine hash_update
 !> @brief
 !> Get value from key in hash table
 !>
-attributes(device) function hash_get(hash, key)
-  use gpu_utils, only: hash_gpu
+attributes(device) function hash_get(hash_key, hash_val, hash_size, key)
   implicit none
-  type(hash_gpu) :: hash
+  integer(kind=8) :: hash_key(*)
+  integer(kind=4) :: hash_val(*)
+  integer(kind=4) :: hash_size
   integer(kind=8) :: key
   integer(kind=4) :: hash_get
 
   integer(kind=8) :: ibucket
 
   ! Compute bucket idx from hash function
-  ibucket = MOD(fnv1a(key), hash%size) + 1
+  ibucket = MOD(fnv1a(key), hash_size) + 1
 
   ! Read value using linear probing
   do
-     if(hash%key(ibucket) == key)then
-        hash_get = hash%val(ibucket)
+     if(hash_key(ibucket) == key)then
+        hash_get = hash_val(ibucket)
         return
      endif
-     if(hash%key(ibucket) == 0)then
+     if(hash_key(ibucket) == 0)then
         hash_get = 0
         return
      endif
-     ibucket = MOD(ibucket, hash%size) + 1
+     ibucket = MOD(ibucket, hash_size) + 1
   end do
 
 end function hash_get

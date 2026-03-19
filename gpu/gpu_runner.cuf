@@ -7,8 +7,38 @@ module gpu_runner
   implicit none
   integer, dimension(1:3), parameter::n_nbor = (/1,2,2/)
 
-  !> Object to hold the grid and the hash table on the device
-  type(mesh_gpu), device :: mesh_device
+  !> Various parameters on the device
+  logical, device, dimension(1:3) :: periodic   
+  integer(kind=4), device, allocatable, dimension(:) :: ckey_max
+  integer(kind=8), device, allocatable, dimension(:) :: key_off
+  integer(kind=4), device, allocatable, dimension(:,:) :: box_ckey_min
+  integer(kind=4), device, allocatable, dimension(:,:) :: box_ckey_max
+  integer(kind=4), device, allocatable, dimension(:,:,:) :: bound_ckey_min
+  integer(kind=4), device, allocatable, dimension(:,:,:) :: bound_ckey_max
+
+  ! Pointer to free main memory on the device
+  integer(kind=4), device :: ifree
+
+  !> Arrays to hold the grid on the device
+  type(oct), device, allocatable, dimension(:) :: grid
+
+  integer(kind=4), device, allocatable, dimension(:) :: father
+  integer(kind=4), device, allocatable, dimension(:,:) :: nbor
+
+  real(kind=dp), device, allocatable, dimension(:,:,:) :: uold, unew
+  integer(kind=4), device, allocatable, dimension(:,:) :: flag1, flag2
+
+  integer(kind=4), device, allocatable, dimension(:) :: swap_local
+  integer(kind=4), device, allocatable, dimension(:) :: swap_global
+
+  !> Arrays to hold the hash table on the device
+  integer(kind=8), device, allocatable, dimension(:) :: hash_key
+  integer(kind=4), device, allocatable, dimension(:) :: hash_val
+
+  !> Object to hold the prefix sum data vector and workspace
+  integer(kind=4), device, allocatable, dimension(:) :: prefix_sum
+  integer(kind=4), device, allocatable, dimension(:) :: partial_sums_0
+  integer(kind=4), device, allocatable, dimension(:) :: partial_sums_1
 
   !> The Fortran array of hydro variables of ghost and halo octs on the host and the C_PTR to it
   real(kind=dp), pointer, dimension(:) :: uold_send_host, uold_recv_host
@@ -51,7 +81,7 @@ contains
     use hydro_device, only: cmpdt_kernel
     use ramses_commons, only: ramses_t
     type(ramses_t), intent(inout) :: sim
-    integer, intent(in) :: ilevel
+    integer(kind=4), intent(in) :: ilevel
     real(kind=8), intent(inout) :: mass, ekin, eint, emag, dt
 
     integer(kind=4) :: head_idx, num_octs
@@ -70,12 +100,12 @@ contains
     eint_d = 0d0
     emag_d = 0d0
 
-    head_idx = mesh_device%head(ilevel)
-    num_octs = mesh_device%noct(ilevel)
+    head_idx = sim%m%head(ilevel)
+    num_octs = sim%m%noct(ilevel)
     num_threads = 1024
     num_blocks = (num_octs * twotondim + num_threads - 1 ) / num_threads
     call nvtxStartRange("GPU cmpdt", color=0)!green
-    call cmpdt_kernel<<<num_blocks, num_threads>>>(mesh_device, head_idx, num_octs, mass_d, ekin_d, eint_d, emag_d, dt_d, dx, gamma)
+    call cmpdt_kernel<<<num_blocks, num_threads>>>(uold, head_idx, num_octs, mass_d, ekin_d, eint_d, emag_d, dt_d, dx, gamma)
     call GPU_Error_Check(__FILE__, __LINE__)
     call nvtxEndRange()
 
@@ -105,13 +135,13 @@ contains
     integer(kind=4) :: head_idx, num_octs
     integer :: err_code, threadsX_per_block, threadsY_per_block, num_blocks
 
-    head_idx = mesh_device%head(ilevel)
-    num_octs = mesh_device%noct(ilevel)
+    head_idx = sim%m%head(ilevel)
+    num_octs = sim%m%noct(ilevel)
     threadsX_per_block = 8
     threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
     call nvtxStartRange("GPU Set_uold", color=0)!green
-    call set_uold_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(mesh_device, head_idx, num_octs)
+    call set_uold_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(uold, unew, head_idx, num_octs)
     call GPU_Error_Check(__FILE__, __LINE__)
     call nvtxEndRange()
 
@@ -134,13 +164,13 @@ contains
     integer(kind=4) :: head_idx, num_octs
     integer :: err_code, threadsX_per_block, threadsY_per_block, num_blocks
 
-    head_idx = mesh_device%head(ilevel)
-    num_octs = mesh_device%noct(ilevel)
+    head_idx = sim%m%head(ilevel)
+    num_octs = sim%m%noct(ilevel)
     threadsX_per_block = 8
     threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
     call nvtxStartRange("GPU Set_unew", color=0)!green
-    call set_unew_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(mesh_device, head_idx, num_octs)
+    call set_unew_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(uold, unew, head_idx, num_octs)
     call GPU_Error_Check(__FILE__, __LINE__)
     call nvtxEndRange()
 
@@ -163,20 +193,22 @@ contains
     integer, intent(in)::ilevel
     !
     integer(kind=4) :: head_idx, num_octs
-    integer :: err_code, threads_per_block, num_blocks, subgrid_size
+    integer :: err_code, threads_per_block, num_blocks, subgrid_size, ngridmax
     real(dp) :: dt, dx, gamma
 
-    head_idx = mesh_device%head(ilevel)
-    num_octs = mesh_device%noct(ilevel)
+    head_idx = sim%m%head(ilevel)
+    num_octs = sim%m%noct(ilevel)
     dt = sim%g%dtnew(ilevel)
     dx = sim%r%boxlen/2**ilevel
     gamma = sim%r%gamma
     num_blocks = num_octs
     threads_per_block = 128
     subgrid_size = 6
+    ngridmax = sim%m%ngridmax
 
     call nvtxStartRange("GPU Godunov", color=0)!green
-    call hydro_integrator_kernel<<<num_blocks, threads_per_block>>>(mesh_device, head_idx, num_octs, subgrid_size, gamma, dt/dx)
+    call hydro_integrator_kernel<<<num_blocks, threads_per_block>>>(grid, uold, unew, father, nbor, &
+         & head_idx, num_octs, subgrid_size, ngridmax, gamma, dt/dx)
     call GPU_Error_Check(__FILE__, __LINE__)
     call nvtxEndRange()
 
@@ -201,13 +233,13 @@ contains
     integer(kind=4) :: head_idx, num_octs
     integer :: err_code, threads_per_block, num_blocks
 
-    head_idx = mesh_device%head(ilevel)
-    num_octs = mesh_device%noct(ilevel)
+    head_idx = sim%m%head(ilevel)
+    num_octs = sim%m%noct(ilevel)
     num_blocks = num_octs
     threads_per_block = 128
 
     call nvtxStartRange("GPU Godunov", color=0)!green
-    call upload_kernel<<<num_blocks, threads_per_block>>>(mesh_device, head_idx, num_octs)
+    call upload_kernel<<<num_blocks, threads_per_block>>>(grid, father, uold, head_idx, num_octs)
     call GPU_Error_Check(__FILE__, __LINE__)
     call nvtxEndRange()
 
@@ -232,95 +264,96 @@ contains
     integer, intent(in)::ilevel
     !
     integer(kind=4) :: head_idx, num_octs, num_threads
+    integer(kind=4) :: head_cache
     integer(kind=4) :: num_blocks, threadsX_per_block, threadsY_per_block
-    integer(kind=4) :: ifree, new_ifree, old_ifree, new_head, new_tail, new_noct
-    integer(kind=4) :: ilev, ind, ibit, ibucket, skip_bit, noct_level, num_ones
-    integer(kind=4) :: used, size
-    real(kind=8)    :: filling
+    integer(kind=4) :: new_ifree, old_ifree, new_head, new_tail, new_noct
+    integer(kind=4) :: ilev, ind, ibit, ibucket, skip_bit, noct_level
+    integer(kind=4) :: hash_size
+
+    integer(kind=4), device :: ifree
+
+    hash_size = 2*(sim%m%ngridmax + sim%m%ncachemax)
 
     ! Wipe clean cache memory hash entries for all higher levels
-    head_cache = mesh_device%head_cache(ilevel + 1)
-    old_ifree = mesh_device%ifree_cache
+    head_cache = sim%m%head_cache(ilevel + 1)
+    old_ifree = sim%m%ifree_cache
     num_octs = old_ifree - head_cache
     head_idx = head_cache + sim%r%ngridmax
     num_threads = 128
     num_blocks = (num_octs + num_threads - 1) / num_threads
     if (num_octs > 0) then
-       call free_hash_kernel<<<num_blocks, num_threads>>>(mesh_device, head_idx, num_octs)
+       call free_hash_kernel<<<num_blocks, num_threads>>>(grid, hash_key, hash_val, hash_size, ckey_max, key_off, head_idx, num_octs)
     endif
+    sim%m%ifree_cache = head_cache
 
     ! Remove old octs by setting lev to zero and free the hash table 
-    head_idx = mesh_device%head(ilevel+1)
-    old_ifree = mesh_device%ifree
+    head_idx = sim%m%head(ilevel+1)
+    old_ifree = sim%m%ifree
     num_octs = old_ifree - head_idx
     num_threads = 128
     num_blocks = (num_octs + num_threads - 1) / num_threads
     if (num_octs > 0) then
-       call derefine_kernel<<<num_blocks, num_threads>>>(mesh_device, head_idx, num_octs)
+       call derefine_kernel<<<num_blocks, num_threads>>>(grid, flag1, hash_key, hash_val, hash_size, ckey_max, key_off, head_idx, num_octs)
     endif
 
+    ! Copy host free memory pointer to device variable
+    ifree = sim%m%ifree
+
     ! Create new octs and put them at the end
-    head_idx = mesh_device%head(ilevel)
-    old_ifree = mesh_device%ifree
+    head_idx = sim%m%head(ilevel)
+    old_ifree = sim%m%ifree
     num_octs = old_ifree - head_idx
     threadsX_per_block = 8
     threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
     if (num_octs > 0) then
-       call refine_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(mesh_device, head_idx, num_octs)
+       call refine_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(grid, flag1, uold, ifree, head_idx, num_octs)
     endif
-    new_ifree = mesh_device%ifree
+
+    ! Copy back to host new free memory pointer ifree
+    sim%m%ifree = ifree
+    new_ifree = sim%m%ifree
 
     ! Check we have enough memory
     if (new_ifree > sim%r%ngridmax) then
        write(*,*)'No more main memory, increase ngridmax'
     endif
 
-    ! If hash is full, wipe it clean and rehash mesh
-    used = mesh_device%hash%used
-    size = mesh_device%hash%size
-    used = used + new_ifree - old_ifree
-    filling = dble(used) / dble(size)
-    if (filling > 0.6) then
-       write(*,*)'Removing hash tombstones...'
-       call gpu_reset_hash(sim)
-    else
-       ! Insert new octs in hash table
-       head_idx = old_ifree
-       num_octs = new_ifree - old_ifree
-       num_threads = 128
-       num_blocks = (num_octs + num_threads - 1) / num_threads
-       if (num_octs > 0) then
-          call insert_hash_kernel<<<num_blocks, num_threads>>>(mesh_device, head_idx, num_octs)
-       end if
+    ! Insert new octs in hash table
+    head_idx = old_ifree
+    num_octs = new_ifree - old_ifree
+    num_threads = 128
+    num_blocks = (num_octs + num_threads - 1) / num_threads
+    if (num_octs > 0) then
+       call insert_hash_kernel<<<num_blocks, num_threads>>>(grid, hash_key, hash_val, hash_size, ckey_max, key_off, head_idx, num_octs)
     end if
-
+    
     ! Sort remaining octs per level and per Hilbert key
 
     ! Compute kernel size and offset
-    head_idx = mesh_device%head(ilevel + 1)
+    head_idx = sim%m%head(ilevel + 1)
     num_octs = new_ifree - head_idx
     num_threads = 128
     num_blocks = (num_octs + num_threads - 1) / num_threads
 
     ! Init global swap table
     if (num_octs > 0) then
-       call init_global_swap_table_kernel<<<num_blocks, num_threads>>>(mesh_device, head_idx, num_octs)
+       call init_global_swap_table_kernel<<<num_blocks, num_threads>>>(swap_global, head_idx, num_octs)
     endif
 
     ! Sort octs per levels
 
     ! Compute new head
-    new_head = mesh_device%tail(ilevel)
+    new_head = sim%m%tail(ilevel)
     new_head = new_head + 1
 
     do ilev = ilevel + 1, sim%r%nlevelmax
 
        ! Transfer new head
-       mesh_device%head(ilev) = new_head
+       sim%m%head(ilev) = new_head
 
        ! Compute kernel size and offset
-       head_idx = mesh_device%head(ilev)
+       head_idx = sim%m%head(ilev)
        num_octs = new_ifree - head_idx
        num_threads = 128
        num_blocks = (num_octs + num_threads - 1) / num_threads
@@ -330,44 +363,40 @@ contains
        if (num_octs > 0) then
 
           ! Init prefix sum
-          call init_prefix_sum_level<<<num_blocks, num_threads>>>(mesh_device, head_idx, num_octs, ilev)
+          call init_prefix_sum_level<<<num_blocks, num_threads>>>(grid, swap_global, prefix_sum, head_idx, num_octs, ilev)
 
           ! Compute prefix sum
-          call gpu_scan(mesh_device, head_idx, num_octs)
+          call gpu_scan(head_idx, num_octs, new_noct)
 
           ! Compute new noct
-          num_ones = mesh_device%prefix_sum(head_idx + num_octs - 1)
-          new_noct = num_octs - num_ones
+          new_noct = num_octs - new_noct
 
           ! Compute local swap table
-          call compute_local_swap_table<<<num_blocks, num_threads>>>(mesh_device, head_idx, num_octs)
+          call compute_local_swap_table<<<num_blocks, num_threads>>>(swap_local, swap_global, prefix_sum, head_idx, num_octs)
 
           ! Update global swap table
-          call update_global_swap_table<<<num_blocks, num_threads>>>(mesh_device, head_idx, num_octs)
+          call update_global_swap_table<<<num_blocks, num_threads>>>(swap_global, swap_local, head_idx, num_octs)
 
        endif
 
        ! Compute new tail and next head
        new_tail = new_head + new_noct - 1
        new_head = new_tail + 1
-       mesh_device%noct(ilev) = new_noct
-       mesh_device%tail(ilev) = new_tail
-
-       ! Transfer head, tail and noct to host
-       sim%m%head(ilev) = mesh_device%head(ilev)
-       sim%m%tail(ilev) = mesh_device%head(ilev)
-       sim%m%noct(ilev) = mesh_device%head(ilev)
+       sim%m%noct(ilev) = new_noct
+       sim%m%tail(ilev) = new_tail
 
     end do
 
     ! New pointer to free memory
-    mesh_device%ifree = new_head
     sim%m%ifree = new_head
+
+    ! Copy back to device
+    ifree = sim%m%ifree
 
     ! Sort Hilbert key within each level
     do ilev = ilevel + 1, sim%r%nlevelmax
 
-       noct_level = mesh_device%noct(ilev)
+       noct_level = sim%m%noct(ilev)
 
        if (noct_level > 0) then
 
@@ -377,7 +406,7 @@ contains
              skip_bit = ndim*(ilev-ibit)
 
              ! Compute kernel size and offset
-             new_head = mesh_device%head(ilev)
+             new_head = sim%m%head(ilev)
              new_noct = noct_level
 
              ! loop over buckets
@@ -392,20 +421,19 @@ contains
                 if (num_octs > 0) then
 
                    ! Init prefix sum
-                   call init_prefix_sum_bit<<<num_blocks, num_threads>>>(mesh_device, head_idx, num_octs, &
-                        &               skip_bit, ibucket - 1)
+                   call init_prefix_sum_bit<<<num_blocks, num_threads>>>(grid, swap_global, prefix_sum, &
+                        & head_idx, num_octs, skip_bit, ibucket - 1)
 
                    ! Compute prefix sum
-                   call gpu_scan(mesh_device, head_idx, num_octs)
+                   call gpu_scan(head_idx, num_octs, new_noct)
 
                    ! Compute local swap table
-                   call compute_local_swap_table<<<num_blocks, num_threads>>>(mesh_device, head_idx, num_octs)
+                   call compute_local_swap_table<<<num_blocks, num_threads>>>(swap_local, swap_global, prefix_sum, head_idx, num_octs)
 
                    ! Update global swap table
-                   call update_global_swap_table<<<num_blocks, num_threads>>>(mesh_device, head_idx, num_octs)
+                   call update_global_swap_table<<<num_blocks, num_threads>>>(swap_global, swap_local, head_idx, num_octs)
 
                    ! Compute new head and noct
-                   new_noct = mesh_device%prefix_sum(new_head + new_noct - 1)
                    new_head = head_idx + num_octs - new_noct
 
                 endif
@@ -416,71 +444,67 @@ contains
     end do
 
     ! Compute kernel size and offset
-    head_idx = mesh_device%head(ilevel + 1)
-    new_ifree = mesh_device%ifree
+    head_idx = sim%m%head(ilevel + 1)
+    new_ifree = sim%m%ifree
     num_octs = new_ifree - head_idx
     num_threads = 128
     num_blocks = (num_octs + num_threads - 1) / num_threads
 
     ! Out-of-place sort of grid, flag1 and uold using swap table
     if (num_octs > 0) then
-       call sort_gather_grid<<<num_blocks, num_threads>>>(mesh_device, head_idx, num_octs)
-       call sort_scatter_grid<<<num_blocks, num_threads>>>(mesh_device, head_idx, num_octs)
-       call sort_gather_flag<<<num_blocks, num_threads>>>(mesh_device, head_idx, num_octs)
-       call sort_scatter_flag<<<num_blocks, num_threads>>>(mesh_device, head_idx, num_octs)
-       call sort_gather_hydro<<<num_blocks, num_threads>>>(mesh_device, head_idx, num_octs)
-       call sort_scatter_hydro<<<num_blocks, num_threads>>>(mesh_device, head_idx, num_octs)
+       call sort_gather_grid<<<num_blocks, num_threads>>>(flag2, grid, swap_global, head_idx, num_octs)
+       call sort_scatter_grid<<<num_blocks, num_threads>>>(grid, flag2, head_idx, num_octs)
+       call sort_gather_flag<<<num_blocks, num_threads>>>(flag2, flag1, swap_global, head_idx, num_octs)
+       call sort_scatter_flag<<<num_blocks, num_threads>>>(flag1, flag2, head_idx, num_octs)
+       call sort_gather_hydro<<<num_blocks, num_threads>>>(unew, uold, swap_global, head_idx, num_octs)
+       call sort_scatter_hydro<<<num_blocks, num_threads>>>(uold, unew, head_idx, num_octs)
     endif
 
     ! Update hash table
     if (num_octs > 0) then
-       call update_hash_kernel<<<num_blocks, num_threads>>>(mesh_device, head_idx, num_octs)
+       call update_hash_kernel<<<num_blocks, num_threads>>>(grid, hash_key, hash_val, hash_size, ckey_max, key_off, head_idx, num_octs)
     end if
 
     ! Update father index array (they should always exist without MPI)
     if (num_octs > 0) then
-       call update_father_array<<<num_blocks, num_threads>>>(mesh_device, head_idx, num_octs)
+       call update_father_array<<<num_blocks, num_threads>>>(grid, father, ckey_max, key_off, hash_key, hash_val, hash_size, head_idx, num_octs)
     endif
 
     ! Update nbor index array level by level
     ! If nbor is absent, make a ghost oct in the cache and insert in hash table
 
     ! Compute new cache head
-    new_head = mesh_device%tail_cache(ilevel)
+    new_head = sim%m%tail_cache(ilevel)
     new_head = new_head + 1
 
     do ilev = ilevel + 1, sim%r%nlevelmax
 
-       noct_level = mesh_device%noct(ilev)
-       mesh_device%head_cache(ilev) = new_head
+       noct_level = sim%m%noct(ilev)
+       sim%m%head_cache(ilev) = new_head
 
        new_noct = 0
 
        if (noct_level > 0) then
 
           ! Compute kernel size and offset
-          head_idx = mesh_device%head(ilev)
-          num_noct = noct_level
+          head_idx = sim%m%head(ilev)
+          num_octs = noct_level
 
           ! Loop over 27 neighbors
           do ind = 1, threetondim
 
              ! Get nbor index from hash table
-             call update_nbor_array<<<num_blocks, num_threads>>>(mesh_device, head_idx, num_octs, ind)
+             call update_nbor_array<<<num_blocks, num_threads>>>(nbor, grid, ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, hash_key, hash_val, hash_size, head_idx, num_octs, ind)
 
              ! Init prefix sum (count non existing nbor index)
-             call init_prefix_sum_nbor<<<num_blocks, num_threads>>>(mesh_device, head_idx, num_octs, ind)
+             call init_prefix_sum_nbor<<<num_blocks, num_threads>>>(nbor, prefix_sum, head_idx, num_octs, ind)
 
              ! Compute prefix sum
-             call gpu_scan(mesh_device, head_idx, num_octs)
-
-             ! Compute number of new ghost octs
-             new_noct = mesh_device%prefix_sum(head_idx + num_octs - 1)
+             call gpu_scan(head_idx, num_octs, new_noct)
 
              ! Transfer head index of first free cache oct from device
-             ifree_cache = mesh_device%ifree_cache
-             head_cache = sim%r%ngridmax + ifree_cache
-             new_ifree = ifree_cache + new_noct
+             head_cache = sim%r%ngridmax + sim%m%ifree_cache
+             new_ifree = sim%m%ifree_cache + new_noct
 
              if (new_noct > 0) then
 
@@ -491,23 +515,24 @@ contains
                 endif
 
                 ! Compute cache swap table
-                call compute_cache_swap_table<<<num_blocks, num_threads>>>(mesh_device, head_idx, num_octs)
+                call compute_cache_swap_table<<<num_blocks, num_threads>>>(swap_local, prefix_sum, head_idx, num_octs)
 
                 ! Compute kernel size and offset
                 num_threads = 128
                 num_blocks = (new_noct + num_threads - 1) / num_threads
 
                 ! Make new ghost octs in cache
-                call make_cache_octs<<<num_blocks, num_threads>>>(mesh_device, head_cache, new_noct, ind)
+                call make_cache_octs<<<num_blocks, num_threads>>>(grid, flag1, uold, swap_local, father, nbor, &
+                     & ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, &
+                     & hash_key, hash_val, hash_size, head_cache, new_noct, ind)
 
                 ! Insert new octs in hash table
-                call insert_hash_kernel<<<num_blocks, num_threads>>>(mesh_device, head_cache, new_noct)
+                call insert_hash_kernel<<<num_blocks, num_threads>>>(grid, hash_key, hash_val, hash_size, ckey_max, key_off, head_cache, new_noct)
 
              end if
 
-             ! Store new first free cache oct back on device
-             ifree_cache = new_ifree
-             mesh_device%ifree_cache = ifree_cache
+             ! Store new first free cache oct 
+             sim%m%ifree_cache = new_ifree
 
           end do
           ! End loop over 27 nbors
@@ -517,8 +542,8 @@ contains
        ! Compute new cache tail and next cache head
        new_tail = new_head + new_noct - 1
        new_head = new_tail + 1
-       mesh_device%noct_cache(ilev) = new_noct
-       mesh_device%tail_cache(ilev) = new_tail
+       sim%m%noct_cache(ilev) = new_noct
+       sim%m%tail_cache(ilev) = new_tail
 
     end do
     ! End loop over levels
@@ -533,7 +558,7 @@ contains
   !>
   subroutine gpu_init_flag(sim, ilevel)
     use nvtx
-    use hydro_device, only: set_uold_kernel
+    use flag_device, only: reset_flag1_kernel, init_flag_kernel
     use ramses_commons, only: ramses_t
     type(ramses_t), intent(inout)::sim
     integer, intent(in)::ilevel
@@ -541,21 +566,21 @@ contains
     integer(kind=4) :: head_idx, num_octs
     integer :: threadsX_per_block, threadsY_per_block, num_threads, num_blocks
 
-    head_idx = mesh_device%head(ilevel)
-    num_octs = mesh_device%noct(ilevel)
+    head_idx = sim%m%head(ilevel)
+    num_octs = sim%m%noct(ilevel)
     threadsX_per_block = 8
     threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
     if(num_octs > 0)then
-       call reset_flag1_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(mesh_device, head_idx, num_octs)
+       call reset_flag1_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(flag1, head_idx, num_octs)
     endif
 
-    head_idx = mesh_device%head(ilevel+1)
-    num_octs = mesh_device%noct(ilevel+1)
+    head_idx = sim%m%head(ilevel+1)
+    num_octs = sim%m%noct(ilevel+1)
     num_threads = 128
-    num_blocks = (num_oct + num_threads - 1) / num_threads
+    num_blocks = (num_octs + num_threads - 1) / num_threads
     if(num_octs > 0)then
-       call init_flag_kernel<<<num_blocks, num_threads>>>(mesh_device, head_idx, num_oct)
+       call init_flag_kernel<<<num_blocks, num_threads>>>(flag1, grid, father, head_idx, num_octs)
     endif
 
   end subroutine gpu_init_flag
@@ -568,7 +593,7 @@ contains
   !>
   subroutine gpu_user_flag(sim, ilevel)
     use nvtx
-    use hydro_device, only: set_uold_kernel
+    use hydro_device, only: hydro_flag_kernel
     use ramses_commons, only: ramses_t
     type(ramses_t), intent(inout)::sim
     integer, intent(in)::ilevel
@@ -584,12 +609,12 @@ contains
     floor_d = sim%r%floor_d
     floor_p = sim%r%floor_p
 
-    head_idx = mesh_device%head(ilevel)
-    num_octs = mesh_device%noct(ilevel)
+    head_idx = sim%m%head(ilevel)
+    num_octs = sim%m%noct(ilevel)
     num_threads = 128
-    num_blocks = (num_oct + num_threads - 1) / num_threads
-    if(num_octs > 0)then
-       call hydro_flag_kernel<<<num_blocks, num_threads>>>(mesh_device, head_idx, num_oct, subgrid_size, &
+    num_blocks = (num_octs + num_threads - 1) / num_threads
+    if (num_octs > 0) then
+       call hydro_flag_kernel<<<num_blocks, num_threads>>>(flag1, grid, nbor, uold, head_idx, num_octs, subgrid_size, &
             & gamma, err_grad_d, err_grad_p, floor_d, floor_p)
     endif
 
@@ -603,25 +628,24 @@ contains
   !>
   subroutine gpu_smooth_flag(sim, ilevel)
     use nvtx
-    use hydro_device, only: set_uold_kernel
+    use flag_device, only: count_neighbors, flag_count_kernel
     use ramses_commons, only: ramses_t
     type(ramses_t), intent(inout)::sim
     integer, intent(in)::ilevel
 
     integer(kind=4) :: head_idx, num_octs
-    integer :: threadsX_per_block, threadsY_per_block, num_threads, num_blocks
+    integer :: threadsX_per_block, threadsY_per_block, num_threads, num_blocks, idim
 
-    head_idx = mesh_device%head(ilevel)
-    num_octs = mesh_device%noct(ilevel)
+    head_idx = sim%m%head(ilevel)
+    num_octs = sim%m%noct(ilevel)
     threadsX_per_block = 8
     threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
 
     if(num_octs > 0)then
        do idim = 1, ndim ! Loop over steps
-          call reset_flag2_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(mesh_device, head_idx, num_octs)
-          call count_neighbors<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(mesh_device, head_idx, num_oct)
-          call flag_count_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(mesh_device, head_idx, num_octs, n_nbor(idim))
+          call count_neighbors<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(flag2, flag1, nbor, head_idx, num_octs)
+          call flag_count_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(flag1, flag2, head_idx, num_octs, n_nbor(idim))
        end do
     endif
 
@@ -635,21 +659,22 @@ contains
   !>
   subroutine gpu_enforce_rules(sim, ilevel)
     use nvtx
-    use hydro_device, only: set_uold_kernel
+    use flag_device, only: enforce_rules
     use ramses_commons, only: ramses_t
     type(ramses_t), intent(inout)::sim
     integer, intent(in)::ilevel
 
     integer(kind=4) :: head_idx, num_octs
-    integer :: num_threads, num_blocks
+    integer :: num_threads, num_blocks, ngridmax
 
-    head_idx = mesh_device%head(ilevel)
-    num_octs = mesh_device%noct(ilevel)
+    head_idx = sim%m%head(ilevel)
+    num_octs = sim%m%noct(ilevel)
+    ngridmax = sim%r%ngridmax
 
     num_threads = 128
-    num_blocks = (num_oct + num_threads - 1) / num_threads
+    num_blocks = (num_octs + num_threads - 1) / num_threads
     if(num_octs > 0)then
-       call enforce_rules<<<num_blocks, num_threads>>>(mesh_device, head_idx, num_oct)
+       call enforce_rules<<<num_blocks, num_threads>>>(flag1, nbor, head_idx, num_octs, ngridmax)
     endif
 
   end subroutine gpu_enforce_rules
@@ -660,15 +685,17 @@ contains
   !> @detail
   !> Perform a prefix scum only starting from index head_idx and over num_octs elements.
   !>
-  subroutine gpu_scan(mesh, head_idx, num_octs)
-    type(mesh_gpu), device :: mesh
-    integer(kind=4), value :: head_idx
-    integer(kind=4), value :: num_octs
+  subroutine gpu_scan(head_idx, num_octs, total_sum)
+    integer(kind=4) :: head_idx
+    integer(kind=4) :: num_octs
+    integer(kind=4) :: total_sum
     !
     integer(kind=4) :: block_size, grid_size_0, grid_size_1, grid_size_2
-    integer(kind=4) :: offset, size, num_ones
+    integer(kind=4) :: offset, size
     integer(kind=4) :: num_max_0, num_max_1, num_max_2
 
+    integer(kind=4), device :: total_sum_d
+    
     block_size = 256
     num_max_0 = block_size**2
     num_max_1 = block_size**3
@@ -678,30 +705,30 @@ contains
 
        ! Works only for arrray size smaller or equal than 256^2=65536
        grid_size_0 = (num_octs + block_size - 1) / block_size
-       call block_scan<<<grid_size_0, block_size>>>(mesh%prefix_sum, head_idx, num_octs, mesh%partial_sums_0)
+       call block_scan<<<grid_size_0, block_size>>>(prefix_sum, head_idx, num_octs, partial_sums_0, total_sum_d)
        if (grid_size_0 > 1) then
-          call block_scan<<<1, grid_size_0>>>(mesh%partial_sums_0, 1, grid_size_0)
+          call block_scan<<<1, grid_size_0>>>(partial_sums_0, 1, grid_size_0)
           offset = head_idx + block_size
           size = num_octs - block_size
-          call uniform_add<<<grid_size_0 - 1, block_size>>>(mesh%prefix_sum, offset, size, mesh%partial_sums_0)
+          call uniform_add<<<grid_size_0 - 1, block_size>>>(prefix_sum, offset, size, partial_sums_0, total_sum_d)
        end if
 
     else if(num_octs <= num_max_1)then
 
        ! Works only for arrray size smaller or equal than 256^3=16777216
        grid_size_0 = (num_octs + block_size - 1) / block_size
-       call block_scan<<<grid_size_0, block_size>>>(mesh%prefix_sum, head_idx, num_octs, mesh%partial_sums_0)
+       call block_scan<<<grid_size_0, block_size>>>(prefix_sum, head_idx, num_octs, partial_sums_0)
        grid_size_1 = (grid_size_0 + block_size - 1) / block_size
-       call block_scan<<<grid_size_1, block_size>>>(mesh%partial_sums_0, 1, grid_size_1, mesh%partial_sums_1)
+       call block_scan<<<grid_size_1, block_size>>>(partial_sums_0, 1, grid_size_1, partial_sums_1)
        if (grid_size_1 > 1) then
-          call block_scan<<<1, grid_size_1>>>(mesh%partial_sums_1, 1, grid_size_1)
+          call block_scan<<<1, grid_size_1>>>(partial_sums_1, 1, grid_size_1)
           offset = 1 + block_size
           size = grid_size_0 - block_size
-          call uniform_add<<<grid_size_1 - 1, block_size>>>(mesh%partial_sums_0, offset, size, mesh%partial_sums_1)
+          call uniform_add<<<grid_size_1 - 1, block_size>>>(partial_sums_0, offset, size, partial_sums_1)
        end if
        offset = head_idx + block_size
        size = num_octs - block_size
-       call uniform_add<<<grid_size_0 - 1, block_size>>>(mesh%prefix_sum, offset, size, mesh%partial_sums_0)
+       call uniform_add<<<grid_size_0 - 1, block_size>>>(prefix_sum, offset, size, partial_sums_0, total_sum_d)
 
     else if(num_octs <= num_max_2)then
 
@@ -714,7 +741,8 @@ contains
        stop
 
     endif
-
+    total_sum = total_sum_d
+    
   end subroutine gpu_scan
 
   !> @brief
@@ -733,19 +761,17 @@ contains
     !
     integer(kind=4) :: head_idx, num_octs
     integer :: num_blocks, threads_per_block
-    integer :: size, used
+    integer :: hash_size
+
+    hash_size = 2*(sim%r%ngridmax + sim%r%ncachemax)
 
     ! Allocate hash tables for the first time
-    if(allocated(mesh_device%hash%key))deallocate(mesh_device%hash%key)
-    if(allocated(mesh_device%hash%val))deallocate(mesh_device%hash%val)
-    size = 2*(sim%r%ngridmax+sim%r%ncachemax)
-    used = sim%m%ifree - 1 + sim%m%ifree_cache - 1
-    mesh_device%hash%size = size
-    mesh_device%hash%used = used
-    allocate(mesh_device%hash%key(1:size))
-    allocate(mesh_device%hash%val(1:size))
-    mesh_device%hash%key = 0
-    mesh_device%hash%val = 0
+    if(allocated(hash_key))deallocate(hash_key)
+    if(allocated(hash_val))deallocate(hash_val)
+    allocate(hash_key(1:hash_size))
+    allocate(hash_val(1:hash_size))
+    hash_key = 0
+    hash_val = 0
 
     ! Insert entire grid in the device hash table
     head_idx = 1
@@ -753,16 +779,16 @@ contains
     if (num_octs > 0) then
        threads_per_block = 128
        num_blocks = (num_octs + threads_per_block - 1) / threads_per_block
-       call insert_hash_kernel<<<num_blocks, threads_per_block>>>(mesh_device, head_idx, num_octs)
+       call insert_hash_kernel<<<num_blocks, threads_per_block>>>(grid, hash_key, hash_val, hash_size, ckey_max, key_off, head_idx, num_octs)
     endif
 
     ! Insert entire cache in the device hash table
-    head_idx = sum%r%ngridmax + 1
+    head_idx = sim%r%ngridmax + 1
     num_octs = sim%m%ifree_cache - 1
     if (num_octs > 0) then
        threads_per_block = 128
        num_blocks = (num_octs + threads_per_block - 1) / threads_per_block
-       call insert_hash_kernel<<<num_blocks, threads_per_block>>>(mesh_device, head_idx, num_octs)
+       call insert_hash_kernel<<<num_blocks, threads_per_block>>>(grid, hash_key, hash_val, hash_size, ckey_max, key_off, head_idx, num_octs)
     endif
 
   end subroutine gpu_reset_hash

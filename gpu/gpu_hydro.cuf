@@ -1,7 +1,8 @@
 module hydro_device
-  use amr_parameters, only: dp, twotondim
+  use amr_parameters, only: dp, ndim, twotondim, threetondim
   use hydro_parameters, only: nvar
-  use gpu_utils, only: subgrid_6x6x6cell_conserved, subgrid_6x6x6cell_primitive, mesh_gpu
+  use oct_commons, only: oct
+  use gpu_utils, only: subgrid_6x6x6cell_conserved, subgrid_6x6x6cell_primitive
   use cudafor
   implicit none
 
@@ -252,10 +253,13 @@ contains
   !> @param[in] gamma : The adiabatic index
   !> @param[out] local_subgrid : The local subgrid in shared memory to write the primitive variables to
   !>
-  attributes(device) subroutine subgrid_conserved_2_primitive(mesh, head_idx, block_idx, thread_idx, subgrid_size, gamma, local_subgrid)
-    type(mesh_gpu), device :: mesh
+  attributes(device) subroutine subgrid_conserved_2_primitive(grid, uold, nbor, &
+       & head_idx, block_idx, thread_idx, subgrid_size, gamma, local_subgrid)
+    type(oct), device :: grid(*)
+    integer(kind=4), device :: nbor(1:threetondim,*)
+    real(kind=dp), device :: uold(1:twotondim,1:nvar,*)
     integer(kind=4), value :: head_idx
-    integer, value :: block_idx, thread_idx, subgrid_size
+    integer(kind=4), value :: block_idx, thread_idx, subgrid_size
     real(kind=dp), value :: gamma
     type(subgrid_6x6x6cell_primitive), intent(inout) :: local_subgrid
 
@@ -272,7 +276,7 @@ contains
 
        ! Get neighbour index
        ind_nbor = work_idx/8 + 1
-       source_idx = mesh%nbor(ind_nbor, oct_idx)
+       source_idx = nbor(ind_nbor, oct_idx)
 
        ! Now that we have the index to the oct we need to figure out which cell within it to load 
        cell_idx = mod(work_idx, 8) + 1
@@ -284,11 +288,11 @@ contains
        k = k + 2*k_subgrid_idx
 
        ! Load the cell
-       conserved%density    = mesh%uold(cell_idx, 1, source_idx)
-       conserved%momentum_x = mesh%uold(cell_idx, 2, source_idx)
-       conserved%momentum_y = mesh%uold(cell_idx, 3, source_idx)
-       conserved%momentum_z = mesh%uold(cell_idx, 4, source_idx)
-       conserved%energy     = mesh%uold(cell_idx, 5, source_idx)
+       conserved%density    = uold(cell_idx, 1, source_idx)
+       conserved%momentum_x = uold(cell_idx, 2, source_idx)
+       conserved%momentum_y = uold(cell_idx, 3, source_idx)
+       conserved%momentum_z = uold(cell_idx, 4, source_idx)
+       conserved%energy     = uold(cell_idx, 5, source_idx)
 
        ! Convert to primitive variables
        primitive = conserved_2_primitive(conserved, gamma)
@@ -301,7 +305,7 @@ contains
        local_subgrid%pressure  (i, j, k) = primitive%pressure
 
        ! Store refinement map
-       local_subgrid%refined   (i, j, k) = mesh%grid(source_idx)%refined(cell_idx)
+       local_subgrid%refined   (i, j, k) = grid(source_idx)%refined(cell_idx)
 
     end do
 
@@ -326,7 +330,8 @@ contains
   !> @param[in] right_interfaces_y : The right side interfaces normal to y
   !> @param[in] right_interfaces_z : The right side interfaces normal to z
   !>
-  attributes(device) subroutine trace_3d(local_subgrid, thread_idx, subgrid_size, gamma, dtdx,left_interfaces_x, right_interfaces_x,left_interfaces_y, right_interfaces_y, left_interfaces_z, right_interfaces_z)
+  attributes(device) subroutine trace_3d(local_subgrid, thread_idx, subgrid_size, gamma, dtdx, &
+       & left_interfaces_x, right_interfaces_x,left_interfaces_y, right_interfaces_y, left_interfaces_z, right_interfaces_z)
     type(subgrid_6x6x6cell_primitive), intent(inout) :: local_subgrid ! The subgrid that this block is working on in shared memory
     integer, value :: thread_idx
     integer, value :: subgrid_size
@@ -569,7 +574,8 @@ contains
   !> @param[in] subgrid_size : The size of the subgrid in cells on each edge
   !> @param[in] thread_idx : The index of this thread
   !>
-  attributes(device) subroutine riemann_driver(left_interfaces_x, right_interfaces_x,left_interfaces_y, right_interfaces_y, left_interfaces_z, right_interfaces_z, gamma, subgrid_size, thread_idx)
+  attributes(device) subroutine riemann_driver(left_interfaces_x, right_interfaces_x, &
+       & left_interfaces_y, right_interfaces_y, left_interfaces_z, right_interfaces_z, gamma, subgrid_size, thread_idx)
     type(subgrid_3x2x2cell_primitive), intent(inout) :: left_interfaces_x, right_interfaces_x
     type(subgrid_2x3x2cell_primitive), intent(inout) :: left_interfaces_y, right_interfaces_y
     type(subgrid_2x2x3cell_primitive), intent(inout) :: left_interfaces_z, right_interfaces_z
@@ -729,8 +735,9 @@ contains
   ! =========================================================================
 
   ! =========================================================================
-  attributes(device) subroutine  conservative_update(mesh, fluxes_x, fluxes_y, fluxes_z, head_idx, block_idx, thread_idx, subgrid_size, dtdx)
-    type(mesh_gpu), device :: mesh
+  attributes(device) subroutine  conservative_update(unew, fluxes_x, fluxes_y, fluxes_z, &
+       & head_idx, block_idx, thread_idx, subgrid_size, dtdx)
+    real(kind=dp), device :: unew(1:twotondim,1:nvar,*)
     type(subgrid_3x2x2cell_primitive), intent(in) :: fluxes_x
     type(subgrid_2x3x2cell_primitive), intent(in) :: fluxes_y
     type(subgrid_2x2x3cell_primitive), intent(in) :: fluxes_z
@@ -785,11 +792,11 @@ contains
        update_term%energy     = (fluxes_z%pressure  (i, j, k) - fluxes_z%pressure  (i, j, k+1)) * dtdx + update_term%energy
 
        ! Conservative update. Note that in this code dt/dx = dt/dy = dt/dz in all cases
-       mesh%unew(cell_idx, 1, oct_idx) = mesh%unew(cell_idx, 1, oct_idx) + update_term%density
-       mesh%unew(cell_idx, 2, oct_idx) = mesh%unew(cell_idx, 2, oct_idx) + update_term%momentum_x
-       mesh%unew(cell_idx, 3, oct_idx) = mesh%unew(cell_idx, 3, oct_idx) + update_term%momentum_y
-       mesh%unew(cell_idx, 4, oct_idx) = mesh%unew(cell_idx, 4, oct_idx) + update_term%momentum_z
-       mesh%unew(cell_idx, 5, oct_idx) = mesh%unew(cell_idx, 5, oct_idx) + update_term%energy
+       unew(cell_idx, 1, oct_idx) = unew(cell_idx, 1, oct_idx) + update_term%density
+       unew(cell_idx, 2, oct_idx) = unew(cell_idx, 2, oct_idx) + update_term%momentum_x
+       unew(cell_idx, 3, oct_idx) = unew(cell_idx, 3, oct_idx) + update_term%momentum_y
+       unew(cell_idx, 4, oct_idx) = unew(cell_idx, 4, oct_idx) + update_term%momentum_z
+       unew(cell_idx, 5, oct_idx) = unew(cell_idx, 5, oct_idx) + update_term%energy
 
     end do
 
@@ -797,14 +804,19 @@ contains
   ! =========================================================================
 
   ! =========================================================================
-  attributes(device) subroutine  coarse_cell_update(mesh, fluxes_x, fluxes_y, fluxes_z, head_idx, block_idx, thread_idx, dtdx)
-    type(mesh_gpu), device :: mesh
+  attributes(device) subroutine  coarse_cell_update(grid, unew, father, nbor, fluxes_x, fluxes_y, fluxes_z, &
+       & head_idx, block_idx, thread_idx, ngridmax, dtdx)
+    type(oct), device :: grid(*)
+    integer, device :: father(*)
+    integer, device :: nbor(1:threetondim,*)
+    real(kind=dp), device :: unew(1:twotondim,1:nvar,*)
     type(subgrid_3x2x2cell_primitive), intent(in) :: fluxes_x
     type(subgrid_2x3x2cell_primitive), intent(in) :: fluxes_y
     type(subgrid_2x2x3cell_primitive), intent(in) :: fluxes_z
     integer, value :: head_idx
     integer, value :: block_idx
     integer, value :: thread_idx
+    integer, value :: ngridmax
     real(kind=dp), value :: dtdx
 
     integer :: i, j, k, info
@@ -837,18 +849,18 @@ contains
        end do
     
        ! Update left coarse X cell if necessary
-       source_idx = mesh%nbor(13, oct_idx)
-       if (source_idx > mesh%ngridmax) then
-          father_idx = mesh%father(source_idx)
-          i = mesh%grid(source_idx)%ckey(1) - 2 * mesh%grid(father_idx)%ckey(1)
-          j = mesh%grid(source_idx)%ckey(2) - 2 * mesh%grid(father_idx)%ckey(2)
-          k = mesh%grid(source_idx)%ckey(3) - 2 * mesh%grid(father_idx)%ckey(3)
+       source_idx = nbor(13, oct_idx)
+       if (source_idx > ngridmax) then
+          father_idx = father(source_idx)
+          i = grid(source_idx)%ckey(1) - 2 * grid(father_idx)%ckey(1)
+          j = grid(source_idx)%ckey(2) - 2 * grid(father_idx)%ckey(2)
+          k = grid(source_idx)%ckey(3) - 2 * grid(father_idx)%ckey(3)
           cell_idx = 1 + i + 2*j + 4*k
-          info = atomicadd(mesh%unew(cell_idx, 1, father_idx), flux%density)
-          info = atomicadd(mesh%unew(cell_idx, 2, father_idx), flux%momentum_x)
-          info = atomicadd(mesh%unew(cell_idx, 3, father_idx), flux%momentum_y)
-          info = atomicadd(mesh%unew(cell_idx, 4, father_idx), flux%momentum_z)
-          info = atomicadd(mesh%unew(cell_idx, 5, father_idx), flux%energy)
+          info = atomicadd(unew(cell_idx, 1, father_idx), flux%density)
+          info = atomicadd(unew(cell_idx, 2, father_idx), flux%momentum_x)
+          info = atomicadd(unew(cell_idx, 3, father_idx), flux%momentum_y)
+          info = atomicadd(unew(cell_idx, 4, father_idx), flux%momentum_z)
+          info = atomicadd(unew(cell_idx, 5, father_idx), flux%energy)
        endif
 
     endif
@@ -872,18 +884,18 @@ contains
        end do
 
        ! Update right coarse X cell if necessary
-       source_idx = mesh%nbor(15, oct_idx)
-       if (source_idx > mesh%ngridmax) then
-          father_idx = mesh%father(source_idx)
-          i = mesh%grid(source_idx)%ckey(1) - 2 * mesh%grid(father_idx)%ckey(1)
-          j = mesh%grid(source_idx)%ckey(2) - 2 * mesh%grid(father_idx)%ckey(2)
-          k = mesh%grid(source_idx)%ckey(3) - 2 * mesh%grid(father_idx)%ckey(3)
+       source_idx = nbor(15, oct_idx)
+       if (source_idx > ngridmax) then
+          father_idx = father(source_idx)
+          i = grid(source_idx)%ckey(1) - 2 * grid(father_idx)%ckey(1)
+          j = grid(source_idx)%ckey(2) - 2 * grid(father_idx)%ckey(2)
+          k = grid(source_idx)%ckey(3) - 2 * grid(father_idx)%ckey(3)
           cell_idx = 1 + i + 2*j + 4*k
-          info = atomicadd(mesh%unew(cell_idx, 1, father_idx), flux%density)
-          info = atomicadd(mesh%unew(cell_idx, 2, father_idx), flux%momentum_x)
-          info = atomicadd(mesh%unew(cell_idx, 3, father_idx), flux%momentum_y)
-          info = atomicadd(mesh%unew(cell_idx, 4, father_idx), flux%momentum_z)
-          info = atomicadd(mesh%unew(cell_idx, 5, father_idx), flux%energy)
+          info = atomicadd(unew(cell_idx, 1, father_idx), flux%density)
+          info = atomicadd(unew(cell_idx, 2, father_idx), flux%momentum_x)
+          info = atomicadd(unew(cell_idx, 3, father_idx), flux%momentum_y)
+          info = atomicadd(unew(cell_idx, 4, father_idx), flux%momentum_z)
+          info = atomicadd(unew(cell_idx, 5, father_idx), flux%energy)
        endif
 
     endif
@@ -911,18 +923,18 @@ contains
        end do
     
        ! Update left coarse Y cell if necessary
-       source_idx = mesh%nbor(11, oct_idx)
-       if (source_idx > mesh%ngridmax) then
-          father_idx = mesh%father(source_idx)
-          i = mesh%grid(source_idx)%ckey(1) - 2 * mesh%grid(father_idx)%ckey(1)
-          j = mesh%grid(source_idx)%ckey(2) - 2 * mesh%grid(father_idx)%ckey(2)
-          k = mesh%grid(source_idx)%ckey(3) - 2 * mesh%grid(father_idx)%ckey(3)
+       source_idx = nbor(11, oct_idx)
+       if (source_idx > ngridmax) then
+          father_idx = father(source_idx)
+          i = grid(source_idx)%ckey(1) - 2 * grid(father_idx)%ckey(1)
+          j = grid(source_idx)%ckey(2) - 2 * grid(father_idx)%ckey(2)
+          k = grid(source_idx)%ckey(3) - 2 * grid(father_idx)%ckey(3)
           cell_idx = 1 + i + 2*j + 4*k
-          info = atomicadd(mesh%unew(cell_idx, 1, father_idx), flux%density)
-          info = atomicadd(mesh%unew(cell_idx, 2, father_idx), flux%momentum_x)
-          info = atomicadd(mesh%unew(cell_idx, 3, father_idx), flux%momentum_y)
-          info = atomicadd(mesh%unew(cell_idx, 4, father_idx), flux%momentum_z)
-          info = atomicadd(mesh%unew(cell_idx, 5, father_idx), flux%energy)
+          info = atomicadd(unew(cell_idx, 1, father_idx), flux%density)
+          info = atomicadd(unew(cell_idx, 2, father_idx), flux%momentum_x)
+          info = atomicadd(unew(cell_idx, 3, father_idx), flux%momentum_y)
+          info = atomicadd(unew(cell_idx, 4, father_idx), flux%momentum_z)
+          info = atomicadd(unew(cell_idx, 5, father_idx), flux%energy)
        endif
 
     endif
@@ -946,18 +958,18 @@ contains
        end do
 
        ! Update right coarse Y cell if necessary
-       source_idx = mesh%nbor(17, oct_idx)
-       if (source_idx > mesh%ngridmax) then
-          father_idx = mesh%father(source_idx)
-          i = mesh%grid(source_idx)%ckey(1) - 2 * mesh%grid(father_idx)%ckey(1)
-          j = mesh%grid(source_idx)%ckey(2) - 2 * mesh%grid(father_idx)%ckey(2)
-          k = mesh%grid(source_idx)%ckey(3) - 2 * mesh%grid(father_idx)%ckey(3)
+       source_idx = nbor(17, oct_idx)
+       if (source_idx > ngridmax) then
+          father_idx = father(source_idx)
+          i = grid(source_idx)%ckey(1) - 2 * grid(father_idx)%ckey(1)
+          j = grid(source_idx)%ckey(2) - 2 * grid(father_idx)%ckey(2)
+          k = grid(source_idx)%ckey(3) - 2 * grid(father_idx)%ckey(3)
           cell_idx = 1 + i + 2*j + 4*k
-          info = atomicadd(mesh%unew(cell_idx, 1, father_idx), flux%density)
-          info = atomicadd(mesh%unew(cell_idx, 2, father_idx), flux%momentum_x)
-          info = atomicadd(mesh%unew(cell_idx, 3, father_idx), flux%momentum_y)
-          info = atomicadd(mesh%unew(cell_idx, 4, father_idx), flux%momentum_z)
-          info = atomicadd(mesh%unew(cell_idx, 5, father_idx), flux%energy)
+          info = atomicadd(unew(cell_idx, 1, father_idx), flux%density)
+          info = atomicadd(unew(cell_idx, 2, father_idx), flux%momentum_x)
+          info = atomicadd(unew(cell_idx, 3, father_idx), flux%momentum_y)
+          info = atomicadd(unew(cell_idx, 4, father_idx), flux%momentum_z)
+          info = atomicadd(unew(cell_idx, 5, father_idx), flux%energy)
        endif
 
     endif
@@ -985,18 +997,18 @@ contains
        end do
     
        ! Update left coarse Z cell if necessary
-       source_idx = mesh%nbor(5, oct_idx)
-       if (source_idx > mesh%ngridmax) then
-          father_idx = mesh%father(source_idx)
-          i = mesh%grid(source_idx)%ckey(1) - 2 * mesh%grid(father_idx)%ckey(1)
-          j = mesh%grid(source_idx)%ckey(2) - 2 * mesh%grid(father_idx)%ckey(2)
-          k = mesh%grid(source_idx)%ckey(3) - 2 * mesh%grid(father_idx)%ckey(3)
+       source_idx = nbor(5, oct_idx)
+       if (source_idx > ngridmax) then
+          father_idx = father(source_idx)
+          i = grid(source_idx)%ckey(1) - 2 * grid(father_idx)%ckey(1)
+          j = grid(source_idx)%ckey(2) - 2 * grid(father_idx)%ckey(2)
+          k = grid(source_idx)%ckey(3) - 2 * grid(father_idx)%ckey(3)
           cell_idx = 1 + i + 2*j + 4*k
-          info = atomicadd(mesh%unew(cell_idx, 1, father_idx), flux%density)
-          info = atomicadd(mesh%unew(cell_idx, 2, father_idx), flux%momentum_x)
-          info = atomicadd(mesh%unew(cell_idx, 3, father_idx), flux%momentum_y)
-          info = atomicadd(mesh%unew(cell_idx, 4, father_idx), flux%momentum_z)
-          info = atomicadd(mesh%unew(cell_idx, 5, father_idx), flux%energy)
+          info = atomicadd(unew(cell_idx, 1, father_idx), flux%density)
+          info = atomicadd(unew(cell_idx, 2, father_idx), flux%momentum_x)
+          info = atomicadd(unew(cell_idx, 3, father_idx), flux%momentum_y)
+          info = atomicadd(unew(cell_idx, 4, father_idx), flux%momentum_z)
+          info = atomicadd(unew(cell_idx, 5, father_idx), flux%energy)
        endif
 
     endif
@@ -1020,18 +1032,18 @@ contains
        end do
 
        ! Update right coarse Z cell if necessary
-       source_idx = mesh%nbor(23, oct_idx)
-       if (source_idx > mesh%ngridmax) then
-          father_idx = mesh%father(source_idx)
-          i = mesh%grid(source_idx)%ckey(1) - 2 * mesh%grid(father_idx)%ckey(1)
-          j = mesh%grid(source_idx)%ckey(2) - 2 * mesh%grid(father_idx)%ckey(2)
-          k = mesh%grid(source_idx)%ckey(3) - 2 * mesh%grid(father_idx)%ckey(3)
+       source_idx = nbor(23, oct_idx)
+       if (source_idx > ngridmax) then
+          father_idx = father(source_idx)
+          i = grid(source_idx)%ckey(1) - 2 * grid(father_idx)%ckey(1)
+          j = grid(source_idx)%ckey(2) - 2 * grid(father_idx)%ckey(2)
+          k = grid(source_idx)%ckey(3) - 2 * grid(father_idx)%ckey(3)
           cell_idx = 1 + i + 2*j + 4*k
-          info = atomicadd(mesh%unew(cell_idx, 1, father_idx), flux%density)
-          info = atomicadd(mesh%unew(cell_idx, 2, father_idx), flux%momentum_x)
-          info = atomicadd(mesh%unew(cell_idx, 3, father_idx), flux%momentum_y)
-          info = atomicadd(mesh%unew(cell_idx, 4, father_idx), flux%momentum_z)
-          info = atomicadd(mesh%unew(cell_idx, 5, father_idx), flux%energy)
+          info = atomicadd(unew(cell_idx, 1, father_idx), flux%density)
+          info = atomicadd(unew(cell_idx, 2, father_idx), flux%momentum_x)
+          info = atomicadd(unew(cell_idx, 3, father_idx), flux%momentum_y)
+          info = atomicadd(unew(cell_idx, 4, father_idx), flux%momentum_z)
+          info = atomicadd(unew(cell_idx, 5, father_idx), flux%energy)
        endif
 
     end if
@@ -1040,11 +1052,17 @@ contains
   ! =========================================================================
 
   ! =========================================================================
-  attributes(global) subroutine hydro_integrator_kernel(mesh, head_idx, num_octs, subgrid_size, gamma, dtdx)
-    type(mesh_gpu), device :: mesh
+  attributes(global) subroutine hydro_integrator_kernel(grid, uold, unew, father, nbor, &
+       & head_idx, num_octs, subgrid_size, ngridmax, gamma, dtdx)
+    type(oct), device :: grid(*)
+    integer, device :: father(*)
+    integer, device :: nbor(1:threetondim,*)
+    real(kind=dp), device :: uold(1:twotondim,1:nvar,*)
+    real(kind=dp), device :: unew(1:twotondim,1:nvar,*)
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
     integer, intent(in), value :: subgrid_size
+    integer, intent(in), value :: ngridmax
     real(kind=dp), intent(in), value :: gamma
     real(kind=dp), intent(in), value :: dtdx
 
@@ -1065,7 +1083,7 @@ contains
     ! =======================================================================
     ! Convert from conserved to primitive variables
     ! =======================================================================
-    call subgrid_conserved_2_primitive(mesh, head_idx, block_idx, thread_idx, subgrid_size, gamma, local_subgrid)
+    call subgrid_conserved_2_primitive(grid, uold, nbor, head_idx, block_idx, thread_idx, subgrid_size, gamma, local_subgrid)
 
     ! =======================================================================
     ! Perform tracing step and compute the interface states
@@ -1092,12 +1110,13 @@ contains
     ! =======================================================================
     ! Update the conserved variables at current level.
     ! =======================================================================
-    call conservative_update(mesh, left_interfaces_x, left_interfaces_y, left_interfaces_z, head_idx, block_idx, thread_idx, subgrid_size, dtdx)
+    call conservative_update(unew, left_interfaces_x, left_interfaces_y, left_interfaces_z, head_idx, block_idx, thread_idx, subgrid_size, dtdx)
 
     ! =======================================================================
     ! Update the conserved variables at coarser level.
     ! =======================================================================
-    call coarse_cell_update(mesh, left_interfaces_x, left_interfaces_y, left_interfaces_z, head_idx, block_idx, thread_idx, dtdx)
+    call coarse_cell_update(grid, unew, father, nbor, left_interfaces_x, left_interfaces_y, left_interfaces_z, &
+         & head_idx, block_idx, thread_idx, ngridmax, dtdx)
 
   end subroutine hydro_integrator_kernel
   ! =========================================================================
@@ -1162,8 +1181,9 @@ contains
   ! =========================================================================
 
   ! =========================================================================
-  attributes(device) subroutine hydro_flag_3d(mesh, gradients_x, gradients_y, gradients_z, head_idx, block_idx, thread_idx, subgrid_size, err_grad_d, err_grad_p)
-    type(mesh_gpu), device :: mesh
+  attributes(device) subroutine hydro_flag_3d(flag1, gradients_x, gradients_y, gradients_z, &
+       & head_idx, block_idx, thread_idx, subgrid_size, err_grad_d, err_grad_p)
+    integer(kind=4), device :: flag1(1:twotondim,*)
     type(subgrid_3x2x2cell_primitive), intent(in) :: gradients_x
     type(subgrid_2x3x2cell_primitive), intent(in) :: gradients_y
     type(subgrid_2x2x3cell_primitive), intent(in) :: gradients_z
@@ -1204,7 +1224,7 @@ contains
        ok = ok .or. (err_y%pressure > err_grad_p)
        ok = ok .or. (err_z%pressure > err_grad_p)
 
-       if (ok) mesh%flag1(cell_idx, oct_idx) = 1
+       if (ok) flag1(cell_idx, oct_idx) = 1
 
     end do
 
@@ -1212,8 +1232,12 @@ contains
   ! =========================================================================
 
   ! =========================================================================
-  attributes(global) subroutine hydro_flag_kernel(mesh, head_idx, num_octs, subgrid_size, gamma, err_grad_d, err_grad_p, floor_d, floor_p)
-    type(mesh_gpu), device :: mesh
+  attributes(global) subroutine hydro_flag_kernel(flag1, grid, nbor, uold, &
+       & head_idx, num_octs, subgrid_size, gamma, err_grad_d, err_grad_p, floor_d, floor_p)
+    type(oct), device :: grid(*)
+    real(kind=dp), device :: uold(1:twotondim,1:nvar,*)
+    integer(kind=4), device :: nbor(1:threetondim,*)
+    integer(kind=4), device :: flag1(1:twotondim,*)
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
     integer, intent(in), value :: subgrid_size
@@ -1236,7 +1260,7 @@ contains
     ! =======================================================================
     ! Convert from conserved to primitive variables
     ! =======================================================================
-    call subgrid_conserved_2_primitive(mesh, head_idx, block_idx, thread_idx, subgrid_size, gamma, local_subgrid)
+    call subgrid_conserved_2_primitive(grid, uold, nbor, head_idx, block_idx, thread_idx, subgrid_size, gamma, local_subgrid)
 
     ! =======================================================================
     ! Compute hydro variables gradient at cell interfaces
@@ -1246,14 +1270,16 @@ contains
     ! =======================================================================
     ! Set flag1 to 1 if refinement criteria are fullfilled
     ! =======================================================================
-    call hydro_flag_3d(mesh, gradients_x, gradients_y, gradients_z, head_idx, block_idx, thread_idx, subgrid_size, err_grad_d, err_grad_p)
+    call hydro_flag_3d(flag1, gradients_x, gradients_y, gradients_z, head_idx, block_idx, thread_idx, subgrid_size, err_grad_d, err_grad_p)
 
   end subroutine hydro_flag_kernel
   ! =========================================================================
 
   ! =========================================================================
-  attributes(global) subroutine upload_kernel(mesh, head_idx, num_octs)
-    type(mesh_gpu), device :: mesh
+  attributes(global) subroutine upload_kernel(grid, father, uold, head_idx, num_octs)
+    type(oct), device :: grid(*)
+    real(kind=dp), device :: uold(1:twotondim,1:nvar,*)
+    integer(kind=4), device :: father(*)
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
 
@@ -1270,34 +1296,35 @@ contains
     oct_idx = head_idx + oct_idx
 
     ! Compute the parent cell idx
-    father_idx = mesh%father(oct_idx)
-    i = mesh%grid(oct_idx)%ckey(1) - 2 * mesh%grid(father_idx)%ckey(1)
-    j = mesh%grid(oct_idx)%ckey(2) - 2 * mesh%grid(father_idx)%ckey(2)
-    k = mesh%grid(oct_idx)%ckey(3) - 2 * mesh%grid(father_idx)%ckey(3)
+    father_idx = father(oct_idx)
+    i = grid(oct_idx)%ckey(1) - 2 * grid(father_idx)%ckey(1)
+    j = grid(oct_idx)%ckey(2) - 2 * grid(father_idx)%ckey(2)
+    k = grid(oct_idx)%ckey(3) - 2 * grid(father_idx)%ckey(3)
     cell_idx = 1 + i + 2*j + 4*k
 
     ! Reset conservative variables
-    mesh%uold(cell_idx, 1, father_idx) = 0_dp
-    mesh%uold(cell_idx, 2, father_idx) = 0_dp
-    mesh%uold(cell_idx, 3, father_idx) = 0_dp
-    mesh%uold(cell_idx, 4, father_idx) = 0_dp
-    mesh%uold(cell_idx, 5, father_idx) = 0_dp
+    uold(cell_idx, 1, father_idx) = 0_dp
+    uold(cell_idx, 2, father_idx) = 0_dp
+    uold(cell_idx, 3, father_idx) = 0_dp
+    uold(cell_idx, 4, father_idx) = 0_dp
+    uold(cell_idx, 5, father_idx) = 0_dp
 
     ! Average children variables
     do ind = 1, twotondim
-       mesh%uold(cell_idx, 1, father_idx) = mesh%uold(cell_idx, 1, father_idx) + mesh%uold(ind, 1, oct_idx) / dble(twotondim)
-       mesh%uold(cell_idx, 2, father_idx) = mesh%uold(cell_idx, 2, father_idx) + mesh%uold(ind, 2, oct_idx) / dble(twotondim)
-       mesh%uold(cell_idx, 3, father_idx) = mesh%uold(cell_idx, 3, father_idx) + mesh%uold(ind, 3, oct_idx) / dble(twotondim)
-       mesh%uold(cell_idx, 4, father_idx) = mesh%uold(cell_idx, 4, father_idx) + mesh%uold(ind, 4, oct_idx) / dble(twotondim)
-       mesh%uold(cell_idx, 5, father_idx) = mesh%uold(cell_idx, 5, father_idx) + mesh%uold(ind, 5, oct_idx) / dble(twotondim)
+       uold(cell_idx, 1, father_idx) = uold(cell_idx, 1, father_idx) + uold(ind, 1, oct_idx) / dble(twotondim)
+       uold(cell_idx, 2, father_idx) = uold(cell_idx, 2, father_idx) + uold(ind, 2, oct_idx) / dble(twotondim)
+       uold(cell_idx, 3, father_idx) = uold(cell_idx, 3, father_idx) + uold(ind, 3, oct_idx) / dble(twotondim)
+       uold(cell_idx, 4, father_idx) = uold(cell_idx, 4, father_idx) + uold(ind, 4, oct_idx) / dble(twotondim)
+       uold(cell_idx, 5, father_idx) = uold(cell_idx, 5, father_idx) + uold(ind, 5, oct_idx) / dble(twotondim)
     end do
 
   end subroutine upload_kernel
   ! =========================================================================
 
   ! =========================================================================
-  attributes(global) subroutine set_uold_kernel(mesh, head_idx, num_octs)
-    type(mesh_gpu), device :: mesh
+  attributes(global) subroutine set_uold_kernel(uold, unew, head_idx, num_octs)
+    real(kind=dp), device :: uold(1:twotondim,1:nvar,*)
+    real(kind=dp), device :: unew(1:twotondim,1:nvar,*)
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
 
@@ -1315,18 +1342,19 @@ contains
     ! Compute the cell idx
     cell_idx = threadIdx%x
 
-    mesh%uold(cell_idx, 1, oct_idx) = mesh%unew(cell_idx, 1, oct_idx)
-    mesh%uold(cell_idx, 2, oct_idx) = mesh%unew(cell_idx, 2, oct_idx)
-    mesh%uold(cell_idx, 3, oct_idx) = mesh%unew(cell_idx, 3, oct_idx)
-    mesh%uold(cell_idx, 4, oct_idx) = mesh%unew(cell_idx, 4, oct_idx)
-    mesh%uold(cell_idx, 5, oct_idx) = mesh%unew(cell_idx, 5, oct_idx)
+    uold(cell_idx, 1, oct_idx) = unew(cell_idx, 1, oct_idx)
+    uold(cell_idx, 2, oct_idx) = unew(cell_idx, 2, oct_idx)
+    uold(cell_idx, 3, oct_idx) = unew(cell_idx, 3, oct_idx)
+    uold(cell_idx, 4, oct_idx) = unew(cell_idx, 4, oct_idx)
+    uold(cell_idx, 5, oct_idx) = unew(cell_idx, 5, oct_idx)
 
   end subroutine set_uold_kernel
   ! =========================================================================
 
   ! =========================================================================
-  attributes(global) subroutine set_unew_kernel(mesh, head_idx, num_octs)
-    type(mesh_gpu), device :: mesh
+  attributes(global) subroutine set_unew_kernel(uold, unew, head_idx, num_octs)
+    real(kind=dp), device :: uold(1:twotondim,1:nvar,*)
+    real(kind=dp), device :: unew(1:twotondim,1:nvar,*)
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
 
@@ -1344,18 +1372,18 @@ contains
     ! Compute the cell idx
     cell_idx = threadIdx%x
 
-    mesh%unew(cell_idx, 1, oct_idx) = mesh%uold(cell_idx, 1, oct_idx)
-    mesh%unew(cell_idx, 2, oct_idx) = mesh%uold(cell_idx, 2, oct_idx)
-    mesh%unew(cell_idx, 3, oct_idx) = mesh%uold(cell_idx, 3, oct_idx)
-    mesh%unew(cell_idx, 4, oct_idx) = mesh%uold(cell_idx, 4, oct_idx)
-    mesh%unew(cell_idx, 5, oct_idx) = mesh%uold(cell_idx, 5, oct_idx)
+    unew(cell_idx, 1, oct_idx) = uold(cell_idx, 1, oct_idx)
+    unew(cell_idx, 2, oct_idx) = uold(cell_idx, 2, oct_idx)
+    unew(cell_idx, 3, oct_idx) = uold(cell_idx, 3, oct_idx)
+    unew(cell_idx, 4, oct_idx) = uold(cell_idx, 4, oct_idx)
+    unew(cell_idx, 5, oct_idx) = uold(cell_idx, 5, oct_idx)
 
   end subroutine set_unew_kernel
   ! =========================================================================
 
   ! =========================================================================
-  attributes(global) subroutine cmpdt_kernel(mesh, head_idx, num_octs, mass, ekin, eint, emag, dt, dx, gamma)
-    type(mesh_gpu), device :: mesh
+  attributes(global) subroutine cmpdt_kernel(uold, head_idx, num_octs, mass, ekin, eint, emag, dt, dx, gamma)
+    real(kind=dp), device :: uold(1:twotondim,1:nvar,*)
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
     real(kind=8), device, intent(inout) :: mass, ekin, eint, emag, dt
@@ -1383,11 +1411,11 @@ contains
     cell_idx = mod(tid, twotondim) + 1
 
     ! Load the cell
-    conserved%density    = mesh%uold(cell_idx, 1, oct_idx)
-    conserved%momentum_x = mesh%uold(cell_idx, 2, oct_idx)
-    conserved%momentum_y = mesh%uold(cell_idx, 3, oct_idx)
-    conserved%momentum_z = mesh%uold(cell_idx, 4, oct_idx)
-    conserved%energy     = mesh%uold(cell_idx, 5, oct_idx)
+    conserved%density    = uold(cell_idx, 1, oct_idx)
+    conserved%momentum_x = uold(cell_idx, 2, oct_idx)
+    conserved%momentum_y = uold(cell_idx, 3, oct_idx)
+    conserved%momentum_z = uold(cell_idx, 4, oct_idx)
+    conserved%energy     = uold(cell_idx, 5, oct_idx)
 
     ! Convert to primitive variables
     primitive = conserved_2_primitive(conserved, gamma)
@@ -1421,10 +1449,10 @@ contains
   ! =========================================================================
 
   ! =========================================================================
-  attributes(global) subroutine gather_send_buffer(mesh, uold_send, idx_send, num_send)
-    type(mesh_gpu), device :: mesh
-    real(dp), device, dimension(1:40*num_send) :: uold_send
-    integer, device, dimension(1:num_send) :: idx_send
+  attributes(global) subroutine gather_send_buffer(uold, uold_send, idx_send, num_send)
+    real(kind=dp), device :: uold(1:twotondim,1:nvar,*)
+    real(kind=dp), device :: uold_send(*)
+    integer(kind=4), device :: idx_send(*)
     integer(kind=4), intent(in), value :: num_send
 
     integer :: buffer_idx ! The index of the sending buffer
@@ -1449,17 +1477,17 @@ contains
     ! Compute the buffer position
     do ivar = 1, nvar
        pos_idx = cell_idx + twotondim*(ivar-1) + twotondim*nvar*(buffer_idx-1)
-       uold_send(pos_idx) = mesh%uold(cell_idx, ivar, oct_idx)
+       uold_send(pos_idx) = uold(cell_idx, ivar, oct_idx)
     end do
 
   end subroutine gather_send_buffer
   ! =========================================================================
 
   ! =========================================================================
-  attributes(global) subroutine scatter_recv_buffer(mesh, uold_recv, idx_recv, num_recv)
-    type(mesh_gpu), device :: mesh
-    real(kind=dp), device, dimension(*) :: uold_recv
-    integer, device, dimension(*) :: idx_recv
+  attributes(global) subroutine scatter_recv_buffer(uold, uold_recv, idx_recv, num_recv)
+    real(kind=dp), device :: uold(1:twotondim,1:nvar,*)
+    real(kind=dp), device :: uold_recv(*)
+    integer(kind=4), device :: idx_recv(*)
     integer(kind=4), intent(in), value :: num_recv
 
     integer :: buffer_idx ! The index of the receiving buffer
@@ -1484,7 +1512,7 @@ contains
     ! Compute the buffer position
     do ivar = 1, nvar
        pos_idx = cell_idx + twotondim*(ivar-1) + twotondim*nvar*(buffer_idx-1)
-       mesh%uold(cell_idx, ivar, oct_idx) = uold_recv(pos_idx)
+       uold(cell_idx, ivar, oct_idx) = uold_recv(pos_idx)
     end do
 
   end subroutine scatter_recv_buffer

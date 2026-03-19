@@ -1,7 +1,7 @@
 module flag_device
   use amr_parameters, only: dp, ndim, twondim, twotondim, threetondim, nhilbert
   use hydro_parameters, only: nvar
-  use gpu_utils, only: mesh_gpu, hash_gpu
+  use oct_commons, only: oct
   use cudafor
   implicit none
   integer,dimension(1:8,1:6),parameter::ggg=reshape(&
@@ -24,8 +24,8 @@ contains
   include 'gpu_scan.cuf'
 
   ! =========================================================================
-  attributes(global) subroutine reset_flag1_kernel(mesh, head_idx, num_octs)
-    type(mesh_gpu), device :: mesh
+  attributes(global) subroutine reset_flag1_kernel(flag1, head_idx, num_octs)
+    integer(kind=4), device :: flag1(1:twotondim,*)
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
 
@@ -41,14 +41,14 @@ contains
     ! Compute the cell idx
     cell_idx = threadIdx%x
 
-    mesh%flag1(cell_idx, oct_idx) = 0
+    flag1(cell_idx, oct_idx) = 0
 
   end subroutine reset_flag1_kernel
   ! =========================================================================~
 
   ! =========================================================================
-  attributes(global) subroutine reset_flag2_kernel(mesh, head_idx, num_octs)
-    type(mesh_gpu), device :: mesh
+  attributes(global) subroutine reset_flag2_kernel(flag2, head_idx, num_octs)
+    integer(kind=4), device :: flag2(1:twotondim,*)
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
 
@@ -64,14 +64,16 @@ contains
     ! Compute the cell idx
     cell_idx = threadIdx%x
 
-    mesh%flag2(cell_idx, oct_idx) = 0
+    flag2(cell_idx, oct_idx) = 0
 
   end subroutine reset_flag2_kernel
   ! =========================================================================~
 
   ! =========================================================================
-  attributes(global) subroutine init_flag_kernel(mesh, head_idx, num_octs)
-    type(mesh_gpu), device :: mesh
+  attributes(global) subroutine init_flag_kernel(flag1, grid, father, head_idx, num_octs)
+    type(oct), device :: grid(*)
+    integer(kind=4), device :: father(*)
+    integer(kind=4), device :: flag1(1:twotondim,*)
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
 
@@ -89,26 +91,28 @@ contains
     oct_idx = head_idx + oct_idx
 
     ! Compute the parent cell idx
-    father_idx = mesh%father(oct_idx)
-    i = mesh%grid(oct_idx)%ckey(1) - 2 * mesh%grid(father_idx)%ckey(1)
-    j = mesh%grid(oct_idx)%ckey(2) - 2 * mesh%grid(father_idx)%ckey(2)
-    k = mesh%grid(oct_idx)%ckey(3) - 2 * mesh%grid(father_idx)%ckey(3)
+    father_idx = father(oct_idx)
+    i = grid(oct_idx)%ckey(1) - 2 * grid(father_idx)%ckey(1)
+    j = grid(oct_idx)%ckey(2) - 2 * grid(father_idx)%ckey(2)
+    k = grid(oct_idx)%ckey(3) - 2 * grid(father_idx)%ckey(3)
     cell_idx = 1 + i + 2*j + 4*k
 
     ! If any cell is refined or if any cell is flagged then flag parent cell
     ok = .false.
     do ind = 1, twotondim
-       ok = ok .or. mesh%grid(oct_idx)%refined(ind)
-       ok = ok .or. (mesh%flag1(ind, oct_idx) == 1)
+       ok = ok .or. grid(oct_idx)%refined(ind)
+       ok = ok .or. (flag1(ind, oct_idx) == 1)
     end do
-    if (ok) mesh%flag1(cell_idx, father_idx) = 1
+    if (ok) flag1(cell_idx, father_idx) = 1
 
   end subroutine init_flag_kernel
   ! =========================================================================~
 
   ! =========================================================================
-  attributes(global) subroutine count_neighbors(mesh, head_idx, num_octs)
-    type(mesh_gpu), device :: mesh
+  attributes(global) subroutine count_neighbors(flag2, flag1, nbor, head_idx, num_octs)
+    integer(kind=4), device :: flag1(1:twotondim,*)
+    integer(kind=4), device :: flag2(1:twotondim,*)
+    integer(kind=4), device :: nbor(1:threetondim,*)
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
 
@@ -125,24 +129,25 @@ contains
     ! Compute the cell idx
     cell_idx = threadIdx%x
 
-    ! Store in flag2 the number of neighborss with flag1 = 1
+    ! Store in flag2 the number of neighbors with flag1 = 1
     number_nbors = 0
     do ind = 1, twondim
        icell = hhh(cell_idx, ind)
        inbor = ggg(cell_idx, ind)
-       source_idx = mesh%nbor(inbor, oct_idx)
+       source_idx = nbor(inbor, oct_idx)
        if (source_idx > 0) then
-          number_nbors = number_nbors + mesh%flag1(icell, source_idx)
+          number_nbors = number_nbors + flag1(icell, source_idx)
        endif
     end do
-    mesh%flag2(cell_idx, oct_idx) = number_nbors
+    flag2(cell_idx, oct_idx) = number_nbors
 
   end subroutine count_neighbors
   ! =========================================================================~
 
   ! =========================================================================
-  attributes(global) subroutine flag_count_kernel(mesh, head_idx, num_octs, num_nbors)
-    type(mesh_gpu), device :: mesh
+  attributes(global) subroutine flag_count_kernel(flag1, flag2, head_idx, num_octs, num_nbors)
+    integer(kind=4), device :: flag1(1:twotondim,*)
+    integer(kind=4), device :: flag2(1:twotondim,*)
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
     integer(kind=4), intent(in), value :: num_nbors
@@ -159,18 +164,20 @@ contains
     ! Compute the cell idx
     cell_idx = threadIdx%x
 
-    if (mesh%flag2(cell_idx, oct_idx) >= num_nbors) then
-       mesh%flag1(cell_idx, oct_idx) = 1
+    if (flag2(cell_idx, oct_idx) >= num_nbors) then
+       flag1(cell_idx, oct_idx) = 1
     endif
 
   end subroutine flag_count_kernel
   ! =========================================================================~
 
   ! =========================================================================
-  attributes(global) subroutine enforce_rules(mesh, head_idx, num_octs)
-    type(mesh_gpu), device :: mesh
+  attributes(global) subroutine enforce_rules(flag1, nbor, head_idx, num_octs, ngridmax)
+    integer(kind=4), device :: flag1(1:twotondim,*)
+    integer(kind=4), device :: nbor(1:threetondim,*)
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
+    integer(kind=4), intent(in), value :: ngridmax
 
     integer :: tid, bid, oct_idx, ind
     logical :: ok
@@ -187,14 +194,14 @@ contains
     ! Check if one neighboring grid is missing or in the cache
     ok = .false.
     do ind = 1, threetondim
-       ok = ok .or. (mesh%nbor(ind, oct_idx) == 0)
-       ok = ok .or. (mesh%nbor(ind, oct_idx) > mesh%ngridmax)
+       ok = ok .or. (nbor(ind, oct_idx) == 0)
+       ok = ok .or. (nbor(ind, oct_idx) > ngridmax)
     end do
 
     ! If one grid id missing, set flag1 to zero (no refinement allowed)
     if (ok) then
        do ind = 1, twotondim
-          mesh%flag1(ind, oct_idx) = 0
+          flag1(ind, oct_idx) = 0
        end do
     end if
 

@@ -86,7 +86,7 @@ recursive subroutine r_init_flag(pst,ilevel,input_size,noct,output_size)
   else
 #ifdef _CUDA
      call nvtxStartRange("GPU Initflag", color=6)!teal
-     call gpu_init_flag(pst%s, ilevel, nflag)
+     call gpu_init_flag(pst%s, ilevel)
      call nvtxEndRange()
 #else
      call init_flag(pst%s,ilevel,nflag)
@@ -254,7 +254,7 @@ recursive subroutine r_user_flag(pst,ilevel,input_size,noct,output_size)
   else
 #ifdef _CUDA
      call nvtxStartRange("GPU Userflag", color=6)!teal
-     call gpu_user_flag(pst%s, ilevel, nflag)
+     call gpu_user_flag(pst%s, ilevel)
      call nvtxEndRange()
 #else
      call user_flag(pst%s,ilevel,nflag)
