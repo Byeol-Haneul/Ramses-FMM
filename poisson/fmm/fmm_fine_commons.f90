@@ -508,8 +508,7 @@ subroutine fmm_downward_coarse(s, ilev, jlev, flev, use_merged)
           do icell=1, twotondim
             dx = intermediate_diff_list(:, icell, pcell, jcell, inbor)
             D0 = D0_list(icell, pcell, jcell, inbor)
-            temp_taylor(1) = D0 * (m_source%rho(jcell,igrid_nbor) * vol)
-            accum_taylor(icell, :) = accum_taylor(icell, :) + temp_taylor
+            accum_taylor(icell, 1) = accum_taylor(icell, 1) + D0 * (m_source%rho(jcell,igrid_nbor) * vol)
           end do
        end do ! over neighboring grid's cells 2^n
 	     end do ! over neighboring grids 3^n 
