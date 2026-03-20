@@ -253,6 +253,7 @@ end subroutine r_user_flag
 !###############################################################
 !###############################################################
 subroutine user_flag(s,ilevel,nflag)
+  use amr_parameters, only: ndim, twotondim
   use ramses_commons, only: ramses_t
   use hydro_flag_module, only: hydro_flag
   use rt_flag_module, only: rt_flag
@@ -288,9 +289,92 @@ subroutine user_flag(s,ilevel,nflag)
   ! Refinement rules around sink particles
   if(s%r%sink.and.s%r%sink_refine)call sink_flag(s,s%sink,ilevel)
 
+  ! If a geometry mask is specified, only keep flagged cells inside it.
+  if(s%r%r_refine(ilevel) > -1.0d0)call geometry_refine(s,ilevel)
+
   nflag=s%g%nflag
 
 end subroutine user_flag
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine geometry_refine(s,ilevel)
+  use amr_parameters, only: ndim, twotondim
+  use ramses_commons, only: ramses_t
+  implicit none
+
+  type(ramses_t)::s
+  integer::ilevel
+
+  integer::igrid,ind,idim,nstride
+  real(kind=8)::dx_loc
+  real(kind=8)::er,xr,yr,zr,rr,aa,bb,half_box
+  real(kind=8)::xn,yn,zn,rad
+  real(kind=8),dimension(1:ndim)::xx
+  logical::inside
+
+  associate(r=>s%r,g=>s%g,m=>s%m)
+
+  if(r%r_refine(ilevel) <= -1.0d0)return
+
+  dx_loc=r%boxlen/2**ilevel
+  er=r%exp_refine(ilevel)
+  xr=r%x_refine(ilevel)
+  yr=r%y_refine(ilevel)
+  zr=r%z_refine(ilevel)
+  rr=r%r_refine(ilevel)
+  aa=r%a_refine(ilevel)
+  bb=r%b_refine(ilevel)
+  half_box=0.5d0*r%boxlen
+
+  g%nflag=0
+  do igrid=m%head(ilevel),m%tail(ilevel)
+     do ind=1,twotondim
+        if(m%flag1(ind,igrid)==0)cycle
+
+        do idim=1,ndim
+           nstride=2**(idim-1)
+           xx(idim)=(2.0d0*dble(m%grid(igrid)%ckey(idim)) + dble(mod((ind-1)/nstride,2)) + 0.5d0) &
+                &   * dx_loc - m%skip(idim)
+        end do
+
+        xn=abs(xx(1)-xr)
+        if(r%cosmo .and. xn>half_box)xn=r%boxlen-xn
+        xn=2.0d0*xn/rr
+
+        yn=0.0d0
+#if NDIM > 1
+        yn=abs(xx(2)-yr)
+        if(r%cosmo .and. yn>half_box)yn=r%boxlen-yn
+        yn=2.0d0*yn/(aa*rr)
+#endif
+
+        zn=0.0d0
+#if NDIM > 2
+        zn=abs(xx(3)-zr)
+        if(r%cosmo .and. zn>half_box)zn=r%boxlen-zn
+        zn=2.0d0*zn/(bb*rr)
+#endif
+
+        if(er<10.0d0)then
+           rad=(xn**er+yn**er+zn**er)**(1.0d0/er)
+        else
+           rad=max(xn,max(yn,zn))
+        endif
+
+        inside=(rad<1.0d0)
+        if(.not. inside)then
+           m%flag1(ind,igrid)=0
+        else
+           g%nflag=g%nflag+1
+        endif
+     end do
+  end do
+
+  end associate
+
+end subroutine geometry_refine
 !################################################################
 !################################################################
 !################################################################
