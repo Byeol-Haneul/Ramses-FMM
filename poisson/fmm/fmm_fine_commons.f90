@@ -1453,14 +1453,15 @@ subroutine fmm_amr_direct_taylor(s, ilev, jlev, use_merged)
     ], [twotondim, ndim] )
 
   ! Arrays sized for all source cells: threetondim * (nfine/2)^ndim * twotondim
-  real(kind=8), dimension(:,:,:,:), allocatable    :: multipole_jcell_list
-  real(kind=8), dimension(:,:,:,:,:), allocatable  :: D0_list, D1_list, D2_list
-  real(kind=8), dimension(:,:,:,:,:,:), allocatable:: diff_list
-  logical, dimension(:,:,:,:,:), allocatable       :: nearest_flags
-  integer, dimension(:,:), allocatable             :: source_active_count
-  integer, dimension(:,:,:), allocatable           :: source_active_idx
-  integer, dimension(:), allocatable               :: active_grid_count
-  integer, dimension(:,:), allocatable             :: active_grid_idx
+  real(kind=8), dimension(:,:,:,:), allocatable, save    :: multipole_jcell_list
+  real(kind=8), dimension(:,:,:,:,:), allocatable, save  :: D0_list, D1_list, D2_list
+  real(kind=8), dimension(:,:,:,:,:,:), allocatable, save:: diff_list
+  logical, dimension(:,:,:,:,:), allocatable, save       :: nearest_flags
+  integer, dimension(:,:), allocatable, save             :: source_active_count
+  integer, dimension(:,:,:), allocatable, save           :: source_active_idx
+  integer, dimension(:), allocatable, save               :: active_grid_count
+  integer, dimension(:,:), allocatable, save             :: active_grid_idx
+  integer, save :: workspace_nbox = -1, workspace_ilev = -1
   logical :: use_merged_local
   type(mesh_t), pointer :: m_source
 
@@ -1487,77 +1488,89 @@ subroutine fmm_amr_direct_taylor(s, ilev, jlev, use_merged)
   nfine  = 2**r%level_fmm_to_amr
   nbox   = (nfine/2)**ndim
 
+  if (allocated(multipole_jcell_list) .and. workspace_nbox /= nbox) then
+    deallocate(multipole_jcell_list, D0_list, D1_list, D2_list, nearest_flags, diff_list, source_active_count, &
+               source_active_idx, active_grid_count, active_grid_idx)
+  end if
+
   ! Allocate arrays for all possible source cells
-  allocate(multipole_jcell_list(multipole_size, twotondim, nbox, threetondim))
-  allocate(D0_list(twotondim, nbox, threetondim, twotondim, nbox))
-  allocate(D1_list(twotondim, nbox, threetondim, twotondim, nbox))
-  allocate(D2_list(twotondim, nbox, threetondim, twotondim, nbox))
-  allocate(diff_list(ndim, twotondim, nbox, threetondim, twotondim, nbox))
-  allocate(nearest_flags(twotondim, nbox, threetondim, twotondim, nbox))
-  allocate(source_active_count(nbox, threetondim))
-  allocate(source_active_idx(twotondim, nbox, threetondim))
-  allocate(active_grid_count(threetondim))
-  allocate(active_grid_idx(nbox, threetondim))
+  if (.not. allocated(multipole_jcell_list)) then
+    allocate(multipole_jcell_list(multipole_size, twotondim, nbox, threetondim))
+    allocate(D0_list(twotondim, nbox, threetondim, twotondim, nbox))
+    allocate(D1_list(twotondim, nbox, threetondim, twotondim, nbox))
+    allocate(D2_list(twotondim, nbox, threetondim, twotondim, nbox))
+    allocate(diff_list(ndim, twotondim, nbox, threetondim, twotondim, nbox))
+    allocate(nearest_flags(twotondim, nbox, threetondim, twotondim, nbox))
+    allocate(source_active_count(nbox, threetondim))
+    allocate(source_active_idx(twotondim, nbox, threetondim))
+    allocate(active_grid_count(threetondim))
+    allocate(active_grid_idx(nbox, threetondim))
+    workspace_nbox = nbox
+    workspace_ilev = -1
+  end if
 
   prev_hash_fmm_cell = -huge(0_8)
-  diff_list = 0.0D0
   source_active_count = 0
   active_grid_count = 0
 
-  ! Get offset lists
-  do ind = 1, threetondim
-    do idim = 1, ndim
-      offset_list(idim, ind) = MOD((ind-1)/3**(idim-1), 3) - 1 ! offset by how many fmm grids
+  if (workspace_ilev /= ilev) then
+    diff_list = 0.0D0
+    ! Get offset lists
+    do ind = 1, threetondim
+      do idim = 1, ndim
+        offset_list(idim, ind) = MOD((ind-1)/3**(idim-1), 3) - 1 ! offset by how many fmm grids
+      end do
     end do
-  end do
 
-  ! target cell
-  do igrid = 1, nbox
-    do idim = 1, ndim
-      cc_igrid(idim) = MOD((igrid-1)/(nfine/2)**(idim-1), nfine/2)
-    end do
-    do icell = 1, twotondim
-      cc_icell = 2 * cc_igrid + displacement_list(icell, :)
-      do ind = 1, threetondim
-        do jgrid = 1, nbox
-          do idim = 1, ndim
-            cc_jgrid(idim) = offset_list(idim, ind) * (nfine/2) + MOD((jgrid-1)/(nfine/2)**(idim-1), nfine/2)
-          end do
-          do jcell = 1, twotondim
-            cc_jcell = 2 * cc_jgrid + displacement_list(jcell, :)
-            if (all(cc_icell(1:ndim) == cc_jcell(1:ndim))) then
-              ! Skip self-interaction to avoid dist=0
-              nearest_flags(jcell, jgrid, ind, icell, igrid) = .true.
-              diff_list(:, jcell, jgrid, ind, icell, igrid) = 0.0D0
-              D0_list(jcell, jgrid, ind, icell, igrid) = 0.0D0
-              D1_list(jcell, jgrid, ind, icell, igrid) = 0.0D0
-              D2_list(jcell, jgrid, ind, icell, igrid) = 0.0D0
-            else
-              diff = (cc_icell - cc_jcell) * dx_loc
-              diff_list(:, jcell, jgrid, ind, icell, igrid) = diff
-#if NDIM==3
-              dist = sqrt(diff(1)*diff(1) + diff(2)*diff(2) + diff(3)*diff(3))
-#elif NDIM==2
-              dist = sqrt(diff(1)*diff(1) + diff(2)*diff(2))
-#elif NDIM==1
-              dist = sqrt(diff(1)*diff(1))
-#else
-              dist = sqrt(sum(diff(:)**2))
-#endif
-              D0_list(jcell, jgrid, ind, icell, igrid) = 1.0D0 / dist
-              D1_list(jcell, jgrid, ind, icell, igrid) = -1.0D0 / dist**3
-              D2_list(jcell, jgrid, ind, icell, igrid) = 3.0D0 / dist**5
-              if (is_direct_neighbor(cc_icell, cc_jcell)) then
+    ! target cell
+    do igrid = 1, nbox
+      do idim = 1, ndim
+        cc_igrid(idim) = MOD((igrid-1)/(nfine/2)**(idim-1), nfine/2)
+      end do
+      do icell = 1, twotondim
+        cc_icell = 2 * cc_igrid + displacement_list(icell, :)
+        do ind = 1, threetondim
+          do jgrid = 1, nbox
+            do idim = 1, ndim
+              cc_jgrid(idim) = offset_list(idim, ind) * (nfine/2) + MOD((jgrid-1)/(nfine/2)**(idim-1), nfine/2)
+            end do
+            do jcell = 1, twotondim
+              cc_jcell = 2 * cc_jgrid + displacement_list(jcell, :)
+              if (all(cc_icell(1:ndim) == cc_jcell(1:ndim))) then
+                ! Skip self-interaction to avoid dist=0
                 nearest_flags(jcell, jgrid, ind, icell, igrid) = .true.
+                diff_list(:, jcell, jgrid, ind, icell, igrid) = 0.0D0
+                D0_list(jcell, jgrid, ind, icell, igrid) = 0.0D0
+                D1_list(jcell, jgrid, ind, icell, igrid) = 0.0D0
+                D2_list(jcell, jgrid, ind, icell, igrid) = 0.0D0
               else
-                nearest_flags(jcell, jgrid, ind, icell, igrid) = .false.
+                diff = (cc_icell - cc_jcell) * dx_loc
+                diff_list(:, jcell, jgrid, ind, icell, igrid) = diff
+#if NDIM==3
+                dist = sqrt(diff(1)*diff(1) + diff(2)*diff(2) + diff(3)*diff(3))
+#elif NDIM==2
+                dist = sqrt(diff(1)*diff(1) + diff(2)*diff(2))
+#elif NDIM==1
+                dist = sqrt(diff(1)*diff(1))
+#else
+                dist = sqrt(sum(diff(:)**2))
+#endif
+                D0_list(jcell, jgrid, ind, icell, igrid) = 1.0D0 / dist
+                D1_list(jcell, jgrid, ind, icell, igrid) = -1.0D0 / dist**3
+                D2_list(jcell, jgrid, ind, icell, igrid) = 3.0D0 / dist**5
+                if (is_direct_neighbor(cc_icell, cc_jcell)) then
+                  nearest_flags(jcell, jgrid, ind, icell, igrid) = .true.
+                else
+                  nearest_flags(jcell, jgrid, ind, icell, igrid) = .false.
+                end if
               end if
-            end if
+            end do
           end do
         end do
       end do
     end do
-  end do
+    workspace_ilev = ilev
+  end if
   
   ! Loop over octs at this level
   do ioct = m%head(ilev), m%tail(ilev)
@@ -1679,8 +1692,6 @@ subroutine fmm_amr_direct_taylor(s, ilev, jlev, use_merged)
       m%phi(icell, ioct) = m%phi(icell, ioct) + phi
     end do
   end do ! end over all amr grids @ given ilev
-  deallocate(multipole_jcell_list, D0_list, D1_list, D2_list, nearest_flags, diff_list, source_active_count, &
-             source_active_idx, active_grid_count, active_grid_idx)
   call close_cache(mdl)
   end associate
 end subroutine fmm_amr_direct_taylor
