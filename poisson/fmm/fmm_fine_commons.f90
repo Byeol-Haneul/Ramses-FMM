@@ -1036,9 +1036,9 @@ subroutine fmm_combined_direct(s, ilev, jlev)
   ! =====================================================
   ! Runtime-allocated arrays depending on r%level_fmm_to_amr
   ! =====================================================
-  real(kind=8), allocatable :: D0_list(:,:,:,:)
-  real(kind=8), allocatable :: intermediate_diff_list(:,:,:,:,:), cell_diff_list(:,:,:,:)
-  real(kind=8), allocatable :: far_diff_list(:,:,:)
+  real(kind=8), allocatable, save :: D0_list(:,:,:,:)
+  real(kind=8), allocatable, save :: intermediate_diff_list(:,:,:,:,:), cell_diff_list(:,:,:,:)
+  real(kind=8), allocatable, save :: far_diff_list(:,:,:)
   associate(r=>s%r, m=>s%m, mdl=>s%mdl)
 
 
@@ -1061,10 +1061,11 @@ subroutine fmm_combined_direct(s, ilev, jlev)
   !igrid: index of oct within target fmm_grid
   !icell: index of target cell within target fmm_grid
 
-  allocate(D0_list(twotondim, twotondim, twotondim, threetondim))
-
-  allocate(intermediate_diff_list(ndim, twotondim, twotondim, twotondim, threetondim))
-  allocate(cell_diff_list(threetondim, twotondim, twotondim, ndim))
+  if (.not. allocated(D0_list)) then
+    allocate(D0_list(twotondim, twotondim, twotondim, threetondim))
+    allocate(intermediate_diff_list(ndim, twotondim, twotondim, twotondim, threetondim))
+    allocate(cell_diff_list(threetondim, twotondim, twotondim, ndim))
+  end if
 
   ! jcell to icell
   do ind = 1, threetondim
@@ -1141,7 +1142,6 @@ subroutine fmm_combined_direct(s, ilev, jlev)
     end do
   end do
 
-  deallocate(D0_list, intermediate_diff_list, cell_diff_list)
   call close_cache(mdl)
   end associate
 end subroutine fmm_combined_direct
@@ -1461,7 +1461,8 @@ subroutine fmm_amr_direct_taylor(s, ilev, jlev, use_merged)
   integer, dimension(:,:,:), allocatable, save           :: source_active_idx
   integer, dimension(:), allocatable, save               :: active_grid_count
   integer, dimension(:,:), allocatable, save             :: active_grid_idx
-  integer, save :: workspace_nbox = -1, workspace_ilev = -1
+  integer, save :: workspace_nbox = -1
+  logical :: rebuild_stencil
   logical :: use_merged_local
   type(mesh_t), pointer :: m_source
 
@@ -1494,6 +1495,7 @@ subroutine fmm_amr_direct_taylor(s, ilev, jlev, use_merged)
   end if
 
   ! Allocate arrays for all possible source cells
+  rebuild_stencil = .false.
   if (.not. allocated(multipole_jcell_list)) then
     allocate(multipole_jcell_list(multipole_size, twotondim, nbox, threetondim))
     allocate(D0_list(twotondim, nbox, threetondim, twotondim, nbox))
@@ -1506,14 +1508,14 @@ subroutine fmm_amr_direct_taylor(s, ilev, jlev, use_merged)
     allocate(active_grid_count(threetondim))
     allocate(active_grid_idx(nbox, threetondim))
     workspace_nbox = nbox
-    workspace_ilev = -1
+    rebuild_stencil = .true.
   end if
 
   prev_hash_fmm_cell = -huge(0_8)
   source_active_count = 0
   active_grid_count = 0
 
-  if (workspace_ilev /= ilev) then
+  if (rebuild_stencil) then
     diff_list = 0.0D0
     ! Get offset lists
     do ind = 1, threetondim
@@ -1544,7 +1546,7 @@ subroutine fmm_amr_direct_taylor(s, ilev, jlev, use_merged)
                 D1_list(jcell, jgrid, ind, icell, igrid) = 0.0D0
                 D2_list(jcell, jgrid, ind, icell, igrid) = 0.0D0
               else
-                diff = (cc_icell - cc_jcell) * dx_loc
+                diff = real(cc_icell - cc_jcell, kind=8)
                 diff_list(:, jcell, jgrid, ind, icell, igrid) = diff
 #if NDIM==3
                 dist = sqrt(diff(1)*diff(1) + diff(2)*diff(2) + diff(3)*diff(3))
@@ -1569,7 +1571,6 @@ subroutine fmm_amr_direct_taylor(s, ilev, jlev, use_merged)
         end do
       end do
     end do
-    workspace_ilev = ilev
   end if
   
   ! Loop over octs at this level
@@ -1680,10 +1681,10 @@ subroutine fmm_amr_direct_taylor(s, ilev, jlev, use_merged)
             jcell_act = source_active_idx(jcell, jgrid, ind)
             if (nearest_flags(jcell_act, jgrid, ind, icell, igrid)) cycle
             multipole = multipole_jcell_list(:, jcell_act, jgrid, ind)
-            diff = diff_list(:, jcell_act, jgrid, ind, icell, igrid)
-            D0 = D0_list(jcell_act, jgrid, ind, icell, igrid)
-            D1 = D1_list(jcell_act, jgrid, ind, icell, igrid)
-            D2 = D2_list(jcell_act, jgrid, ind, icell, igrid)
+            diff = diff_list(:, jcell_act, jgrid, ind, icell, igrid) * dx_loc
+            D0 = D0_list(jcell_act, jgrid, ind, icell, igrid) / dx_loc
+            D1 = D1_list(jcell_act, jgrid, ind, icell, igrid) / dx_loc**3
+            D2 = D2_list(jcell_act, jgrid, ind, icell, igrid) / dx_loc**5
             call calc_phi_from_multipole(diff, D0, D1, D2, multipole, phi_out)
             phi = phi + phi_out
           end do
