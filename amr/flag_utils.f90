@@ -253,7 +253,7 @@ end subroutine r_user_flag
 !###############################################################
 !###############################################################
 subroutine user_flag(s,ilevel,nflag)
-  use amr_parameters, only: ndim, twotondim
+  use amr_parameters, only: twotondim
   use ramses_commons, only: ramses_t
   use hydro_flag_module, only: hydro_flag
   use rt_flag_module, only: rt_flag
@@ -265,6 +265,8 @@ subroutine user_flag(s,ilevel,nflag)
   ! some user-defined physical criteria at the level ilevel. 
   ! -------------------------------------------------------------------
   integer::level_lock
+  integer::igrid,ind,ngrid,igrid0
+  integer,allocatable,dimension(:,:)::flag_base
 
   ! Unlock levels progressively
   if(s%r%cosmo.and.s%r%aexp_lock_refine>0d0)then
@@ -276,6 +278,16 @@ subroutine user_flag(s,ilevel,nflag)
         endif
      endif
   endif
+
+  ngrid=s%m%tail(ilevel)-s%m%head(ilevel)+1
+  igrid0=s%m%head(ilevel)
+  allocate(flag_base(1:twotondim,1:max(ngrid,1)))
+
+  ! Preserve mandatory refinement flags from steps 1-2.
+  do igrid=s%m%head(ilevel),s%m%tail(ilevel)
+     flag_base(1:twotondim,igrid-igrid0+1)=s%m%flag1(1:twotondim,igrid)
+     s%m%flag1(1:twotondim,igrid)=0
+  end do
 
   ! Refinement rules for the gravity solver
   if(s%r%poisson)call poisson_flag(s,ilevel)
@@ -291,6 +303,22 @@ subroutine user_flag(s,ilevel,nflag)
 
   ! If a geometry mask is specified, only keep flagged cells inside it.
   if(s%r%r_refine(ilevel) > -1.0d0)call geometry_refine(s,ilevel)
+
+  ! Merge mandatory flags back in. user_flag is only allowed to add
+  ! refinement beyond the minimal refinement map built in steps 1-2.
+  s%g%nflag=0
+  do igrid=s%m%head(ilevel),s%m%tail(ilevel)
+     do ind=1,twotondim
+        if(flag_base(ind,igrid-igrid0+1)==1 .or. s%m%flag1(ind,igrid)==1)then
+           s%m%flag1(ind,igrid)=1
+           s%g%nflag=s%g%nflag+1
+        else
+           s%m%flag1(ind,igrid)=0
+        endif
+     end do
+  end do
+
+  deallocate(flag_base)
 
   nflag=s%g%nflag
 
@@ -312,7 +340,7 @@ subroutine geometry_refine(s,ilevel)
   real(kind=8)::er,xr,yr,zr,rr,aa,bb,half_box
   real(kind=8)::xn,yn,zn,rad
   real(kind=8),dimension(1:ndim)::xx
-  logical::inside
+  logical::inside,force_region
 
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -327,11 +355,13 @@ subroutine geometry_refine(s,ilevel)
   aa=r%a_refine(ilevel)
   bb=r%b_refine(ilevel)
   half_box=0.5d0*r%boxlen
+  force_region=(r%m_refine(ilevel)==0.0d0)
 
-  g%nflag=0
   do igrid=m%head(ilevel),m%tail(ilevel)
      do ind=1,twotondim
-        if(m%flag1(ind,igrid)==0)cycle
+        if(.not. force_region)then
+           if(m%flag1(ind,igrid)==0)cycle
+        endif
 
         do idim=1,ndim
            nstride=2**(idim-1)
@@ -367,7 +397,7 @@ subroutine geometry_refine(s,ilevel)
         if(.not. inside)then
            m%flag1(ind,igrid)=0
         else
-           g%nflag=g%nflag+1
+           m%flag1(ind,igrid)=1
         endif
      end do
   end do
