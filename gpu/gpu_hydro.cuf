@@ -256,8 +256,8 @@ contains
   attributes(device) subroutine subgrid_conserved_2_primitive(grid, uold, nbor, &
        & head_idx, block_idx, thread_idx, subgrid_size, gamma, local_subgrid)
     type(oct), device :: grid(*)
-    integer(kind=4), device :: nbor(1:threetondim,*)
     real(kind=dp), device :: uold(1:twotondim,1:nvar,*)
+    integer(kind=4), device :: nbor(1:threetondim,*)
     integer(kind=4), value :: head_idx
     integer(kind=4), value :: block_idx, thread_idx, subgrid_size
     real(kind=dp), value :: gamma
@@ -282,7 +282,7 @@ contains
        cell_idx = mod(work_idx, 8) + 1
 
        ! Lastly, we need to figure out where in the subgrid the cell we will load goes
-       call index_1Dto3D(cell_idx-1, 2, 2, i, j, k)
+       call index_1Dto3D(cell_idx - 1, 2, 2, i, j, k)
        i = i + 2*i_subgrid_idx
        j = j + 2*j_subgrid_idx
        k = k + 2*k_subgrid_idx
@@ -676,7 +676,7 @@ contains
   ! =========================================================================
 
   ! =========================================================================
-  attributes(device) subroutine  zero_fine_fluxes(local_subgrid, fluxes_x, fluxes_y, fluxes_z, thread_idx, subgrid_size)
+  attributes(device) subroutine zero_fine_fluxes(local_subgrid, fluxes_x, fluxes_y, fluxes_z, thread_idx, subgrid_size)
     type(subgrid_6x6x6cell_primitive), intent(in)    :: local_subgrid
     type(subgrid_3x2x2cell_primitive), intent(inout) :: fluxes_x
     type(subgrid_2x3x2cell_primitive), intent(inout) :: fluxes_y
@@ -763,7 +763,7 @@ contains
        cell_idx = mod(work_idx, 8) + 1
 
        ! Compute the flux indices
-       call index_1Dto3D(cell_idx-1, 2, 2, i, j, k)
+       call index_1Dto3D(cell_idx - 1, 2, 2, i, j, k)
 
        ! Gather the fluxes, computing the update term as we go. Note that the flux 
        ! variables names are the primitive names but the actual variables are the 
@@ -1053,7 +1053,7 @@ contains
 
   ! =========================================================================
   attributes(global) subroutine hydro_integrator_kernel(grid, uold, unew, father, nbor, &
-       & head_idx, num_octs, subgrid_size, ngridmax, gamma, dtdx)
+       & head_idx, num_octs, subgrid_size, ngridmax, ilevel, levelmin, levelmax, gamma, dtdx)
     type(oct), device :: grid(*)
     integer, device :: father(*)
     integer, device :: nbor(1:threetondim,*)
@@ -1063,6 +1063,7 @@ contains
     integer(kind=4), intent(in), value :: num_octs
     integer, intent(in), value :: subgrid_size
     integer, intent(in), value :: ngridmax
+    integer, intent(in), value :: ilevel, levelmin, levelmax
     real(kind=dp), intent(in), value :: gamma
     real(kind=dp), intent(in), value :: dtdx
 
@@ -1105,7 +1106,9 @@ contains
     ! =======================================================================
     ! Zero fluxes at boundaries with finer levels.
     ! =======================================================================
-    call zero_fine_fluxes(local_subgrid, left_interfaces_x, left_interfaces_y, left_interfaces_z, thread_idx, subgrid_size)
+    if (ilevel < levelmax) then
+       call zero_fine_fluxes(local_subgrid, left_interfaces_x, left_interfaces_y, left_interfaces_z, thread_idx, subgrid_size)
+    endif
 
     ! =======================================================================
     ! Update the conserved variables at current level.
@@ -1115,8 +1118,10 @@ contains
     ! =======================================================================
     ! Update the conserved variables at coarser level.
     ! =======================================================================
-    call coarse_cell_update(grid, unew, father, nbor, left_interfaces_x, left_interfaces_y, left_interfaces_z, &
-         & head_idx, block_idx, thread_idx, ngridmax, dtdx)
+    if (ilevel > levelmin) then
+       call coarse_cell_update(grid, unew, father, nbor, left_interfaces_x, left_interfaces_y, left_interfaces_z, &
+            & head_idx, block_idx, thread_idx, ngridmax, dtdx)
+    endif
 
   end subroutine hydro_integrator_kernel
   ! =========================================================================

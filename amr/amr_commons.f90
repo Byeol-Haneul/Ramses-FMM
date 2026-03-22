@@ -681,6 +681,7 @@ module amr_commons
 
      ! Grid hash table
      type(hash_table)::grid_dict
+     integer(kind=4)::hash_size
      integer(kind=4)::hash_used
 
      ! Grid variables

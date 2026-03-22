@@ -89,10 +89,6 @@ subroutine init_amr(r,g,m,type)
   type(mesh_t)::m
   character(len=*)::type
   ! Local variables
-#ifdef _CUDA
-  integer::err_code, my_integer, hash_size
-  real(dp)::my_double
-#endif
   integer::idim,ilevel,icpu,igrid,ibound,ilevelmin
   integer(kind=8)::max_key
   real(kind=8)::dx
@@ -129,9 +125,9 @@ subroutine init_amr(r,g,m,type)
      allocate(father(1:m%ngridmax+m%ncachemax))
      allocate(nbor(1:threetondim,1:m%ngridmax))
      ! Allocate hash table space
-     hash_size=2*(m%ngridmax + m%ncachemax)
-     allocate(hash_key(1:hash_size))
-     allocate(hash_val(1:hash_size))
+     m%hash_size=2*(m%ngridmax + m%ncachemax)
+     allocate(hash_key(1:m%hash_size))
+     allocate(hash_val(1:m%hash_size))
      hash_key=0
      hash_val=0
      ! Work buffers for GPU scan/sort/refine
@@ -497,10 +493,6 @@ subroutine init_params(mdl,r,g)
   use hash
   use hilbert
   use output_amr_module, only: input_params
-#ifdef _CUDA
-  use cudafor
-  use gpu_runner
-#endif
   implicit none
   type(mdl_t)::mdl
   type(run_t)::r

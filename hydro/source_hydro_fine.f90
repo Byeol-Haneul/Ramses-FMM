@@ -18,11 +18,11 @@ recursive subroutine r_source_hydro_fine(pst,ilevel,input_size)
   logical::ok
 
   ! Check if hydro source terms are required
-  ok = pst%s%r%entropy .and.  pst%s%r%dual_energy .GE. 0
+  ok = pst%s%r%entropy .and. pst%s%r%dual_energy .GE. 0
   ok = ok .or. nener>0
   ok = ok .or. pst%s%r%sgs_turb
-  if(.not. ok)return
-  
+  if (.not. ok) return
+
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_SOURCE_HYDRO_FINE,pst%iUpper+1,input_size,0,ilevel)
      call r_source_hydro_fine(pst%pLower,ilevel,input_size)

@@ -301,6 +301,7 @@ subroutine init_refine_basegrid(s,ilevel)
      endif
 #endif
   end do
+  m%ifree=m%noct_used+1
 
   !-----------
   ! Super-octs
