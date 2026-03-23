@@ -1,0 +1,65 @@
+This namelist sets up a wider equal-mass binary test with levelmin=5 and levelmax=6.
+
+&RUN_PARAMS
+cosmo=.false.
+pic=.true.
+poisson=.true.
+hydro=.false.
+nrestart=0
+nsubcycle=1,1,1,1,1
+ncontrol=1
+verbose=.false.
+/
+
+&OUTPUT_PARAMS
+delta_tout=0.2
+tend=8.0
+nfile=1
+bkp_time_hrs=1
+bkp_modulo=8
+/
+
+&INIT_PARAMS
+filetype='ascii'
+initfile(1)='namelist/fmm_tests/equal_mass_binary_amr_sep03_l6'
+ic_scale_m=1.00
+/
+
+&AMR_PARAMS
+levelmin=5
+levelmax=6
+ngridmax=160000
+npartmax=1000
+nexpand=1,
+/
+
+&BOUNDARY_PARAMS
+bound_levelmin = 3
+box_size = 1.0
+box_xmin = 1
+box_ymin = 1
+box_zmin = 1
+box_xmax = -1
+box_ymax = -1
+box_zmax = -1
+nbound = 6
+periodic = .false., .false., .false.
+bound_dir   = 1, 1, 2, 2, 3, 3
+bound_shift = 1, -1, 1, -1, 1, -1
+bound_type  = 1, 1, 1, 1, 1, 1
+bound_xmin =  0, -1,  0,  0,  0,  0
+bound_xmax =  1,  0,  0,  0,  0,  0
+bound_ymin =  1,  1,  0, -1,  0,  0
+bound_ymax = -1, -1,  1,  0,  0,  0
+bound_zmin =  1,  1,  1,  1,  0, -1
+bound_zmax = -1, -1, -1, -1,  1,  0
+/
+
+&POISSON_PARAMS
+epsilon=1.d-6
+level_fmm_to_amr=1
+/
+
+&REFINE_PARAMS
+m_refine=10*0.1,
+/
