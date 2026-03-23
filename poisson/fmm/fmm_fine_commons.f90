@@ -579,7 +579,7 @@ subroutine fmm_amr_intermediate(s, ilev, jlev, use_merged)
   type(msg_large_realdp) :: dummy_realdp
   real(kind=8), dimension(1:multipole_size) :: multipole
   real(kind=8), dimension(taylor_size) :: parent_taylor
-  logical :: cycle_flag, neighbors_cached
+  logical :: cycle_flag, neighbors_cached, reset_phi_state
 
   real(kind=8) :: dist, D0, D1, D2
   integer(kind=8), dimension(ndim, threetondim) :: offset_list
@@ -629,6 +629,7 @@ subroutine fmm_amr_intermediate(s, ilev, jlev, use_merged)
   dx_loc = r%boxlen / 2.0D0**ilev
   nfine = 2**r%level_fmm_to_amr
   neighbors_cached = .false.
+  reset_phi_state = (jlev == ilev)
 
   ! nbox is the number of cells at the target AMR level
   nbox = nfine ** ndim
@@ -696,6 +697,7 @@ subroutine fmm_amr_intermediate(s, ilev, jlev, use_merged)
 
   ! Loop over octs at this level
   do ioct = m%head(ilev), m%tail(ilev)
+    if (reset_phi_state) m%phi(:, ioct) = 0.0D0
 
     if (all(m%grid(ioct)%refined(1:twotondim))) cycle
 
