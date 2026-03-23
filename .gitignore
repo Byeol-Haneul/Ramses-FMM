@@ -40,5 +40,11 @@ ramses_*
 amr_test/
 namelist/fmm_tests/*/ic_part
 
+# Ignore exectuables
+og
+mg_new
+fmm_hydro_amr
+faster_fmm
+
 # Ignore contents of any dot-prefixed directory (e.g. .bitwise_*/)
 .*/**

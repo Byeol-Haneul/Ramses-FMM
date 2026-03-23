@@ -2,8 +2,8 @@
 #SBATCH --job-name=ramses-amr-bench
 #SBATCH --output=/home/jl4415/mini-ramses/bench_%j.out
 #SBATCH --error=/home/jl4415/mini-ramses/bench_%j.err
-#SBATCH --time=00:30:00
-#SBATCH --nodes=2
+#SBATCH --time=24:00:00
+#SBATCH --nodes=1
 #SBATCH --ntasks-per-node=96
 #SBATCH --exclusive
 #SBATCH --mail-user=jl4415@princeton.edu
@@ -28,52 +28,66 @@ timestamp() { date +"%Y%m%d_%H%M%S"; }
 # ============================
 # Benchmark settings
 # ============================
-NP_LIST=(128)
-NML_FILE="namelist/benchmark/lvl9_13.nml"
+NP_LIST=(64 32 16 8 4 2 1)
+NML_FILE_LIST=("namelist/benchmark/noast/lvl8_12.nml" "namelist/benchmark/noast/lvl9_13.nml")
 
 # ============================
 # OUTER LOOP
 # ============================
-for rep in {1..2}; do
+for rep in {1}; do
     RUNSTAMP=$(timestamp)
-    OUTDIR="/home/jl4415/mini-ramses/benchmark_amr/run_${RUNSTAMP}"
-    mkdir -p "$OUTDIR"
 
     echo "=============================================="
     echo "   AMR BENCHMARK RUN $rep    ($RUNSTAMP)"
     echo "=============================================="
 
-    for NP in "${NP_LIST[@]}"; do
-        echo "--- Strong scaling: MPI ranks $NP | MERGE-FMM-AMR ---"
-        srun -n "$NP" ./ramses_fmm_amr_merge "$NML_FILE"
+    # Loop over NML files
+    for NML_FILE in "${NML_FILE_LIST[@]}"; do
 
-        if [ -f time_fmm.txt ]; then
-            mv time_fmm.txt "${OUTDIR}/strong_mergefmm_amr_lvl9_13_P${NP}_${RUNSTAMP}.txt"
-        else
-            echo "Warning: time_fmm.txt not found for FMM-AMR, NP=$NP"
-        fi
+        # Extract short name (e.g. lvl9_13)
+        NML_TAG=$(basename "$NML_FILE" .nml)
 
-        echo "--- Strong scaling: MPI ranks $NP | FMM-AMR ---"
-        srun -n "$NP" ./ramses_fmm_amr "$NML_FILE"
+        OUTDIR="/home/jl4415/mini-ramses/benchmark_amr_noast/${NML_TAG}/run_${RUNSTAMP}"
+        mkdir -p "$OUTDIR"
 
-        if [ -f time_fmm.txt ]; then
-            mv time_fmm.txt "${OUTDIR}/strong_fmm_amr_lvl9_13_P${NP}_${RUNSTAMP}.txt"
-        else
-            echo "Warning: time_fmm.txt not found for FMM-AMR, NP=$NP"
-        fi
+        echo "##############################################"
+        echo "   Running NML: $NML_FILE"
+        echo "##############################################"
 
-        echo "--- Strong scaling: MPI ranks $NP | MG ---"
-        srun -n "$NP" ./ramses_mg "$NML_FILE"
+        for NP in "${NP_LIST[@]}"; do
+            echo "--- Strong scaling: MPI ranks $NP | MERGE-FMM-AMR ---"
+            srun -n "$NP" ./ramses_fmm_amr_merge "$NML_FILE"
 
-        if [ -f time_mg.txt ]; then
-            mv time_mg.txt "${OUTDIR}/strong_mg_lvl9_13_P${NP}_${RUNSTAMP}.txt"
-        else
-            echo "Warning: time_mg.txt not found for MG, NP=$NP"
-        fi
+            if [ -f time_fmm.txt ]; then
+                mv time_fmm.txt "${OUTDIR}/strong_mergefmm_amr_${NML_TAG}_P${NP}_${RUNSTAMP}.txt"
+            else
+                echo "Warning: time_fmm.txt not found for MERGE-FMM-AMR, NP=$NP"
+            fi
+
+            echo "--- Strong scaling: MPI ranks $NP | FMM-AMR ---"
+            srun -n "$NP" ./ramses_fmm_amr "$NML_FILE"
+
+            if [ -f time_fmm.txt ]; then
+                mv time_fmm.txt "${OUTDIR}/strong_fmm_amr_${NML_TAG}_P${NP}_${RUNSTAMP}.txt"
+            else
+                echo "Warning: time_fmm.txt not found for FMM-AMR, NP=$NP"
+            fi
+
+            echo "--- Strong scaling: MPI ranks $NP | MG ---"
+            srun -n "$NP" ./mg_new "$NML_FILE"
+
+            if [ -f time_mg.txt ]; then
+                mv time_mg.txt "${OUTDIR}/strong_mgnew_${NML_TAG}_P${NP}_${RUNSTAMP}.txt"
+            else
+                echo "Warning: time_mg.txt not found for MG, NP=$NP"
+            fi
+        done
 
     done
 
     echo "===== RUN $rep COMPLETE ====="
 done
+
+echo "===== ALL BENCHMARK RUNS COMPLETE ====="
 
 echo "===== ALL BENCHMARK RUNS COMPLETE ====="
