@@ -132,7 +132,7 @@ subroutine adaptive_loop(pst)
 
      call getmem(core_mem)
      call writemem(core_mem)
-     
+
   end do
 
   call m_output_timer(pst,.false.,'dummy')
