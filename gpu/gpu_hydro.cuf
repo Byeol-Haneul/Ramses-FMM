@@ -804,7 +804,7 @@ contains
   ! =========================================================================
 
   ! =========================================================================
-  attributes(device) subroutine  coarse_cell_update(grid, unew, father, nbor, fluxes_x, fluxes_y, fluxes_z, &
+  attributes(device) subroutine coarse_cell_update(grid, unew, father, nbor, fluxes_x, fluxes_y, fluxes_z, &
        & head_idx, block_idx, thread_idx, ngridmax, dtdx)
     type(oct), device :: grid(*)
     integer, device :: father(*)
@@ -1084,7 +1084,8 @@ contains
     ! =======================================================================
     ! Convert from conserved to primitive variables
     ! =======================================================================
-    call subgrid_conserved_2_primitive(grid, uold, nbor, head_idx, block_idx, thread_idx, subgrid_size, gamma, local_subgrid)
+    call subgrid_conserved_2_primitive(grid, uold, nbor, head_idx, block_idx, thread_idx, &
+         & subgrid_size, gamma, local_subgrid)
 
     ! =======================================================================
     ! Perform tracing step and compute the interface states
@@ -1107,13 +1108,15 @@ contains
     ! Zero fluxes at boundaries with finer levels.
     ! =======================================================================
     if (ilevel < levelmax) then
-       call zero_fine_fluxes(local_subgrid, left_interfaces_x, left_interfaces_y, left_interfaces_z, thread_idx, subgrid_size)
+       call zero_fine_fluxes(local_subgrid, left_interfaces_x, left_interfaces_y, left_interfaces_z, thread_idx, &
+            & subgrid_size)
     endif
 
     ! =======================================================================
     ! Update the conserved variables at current level.
     ! =======================================================================
-    call conservative_update(unew, left_interfaces_x, left_interfaces_y, left_interfaces_z, head_idx, block_idx, thread_idx, subgrid_size, dtdx)
+    call conservative_update(unew, left_interfaces_x, left_interfaces_y, left_interfaces_z, head_idx, block_idx, &
+         & thread_idx, subgrid_size, dtdx)
 
     ! =======================================================================
     ! Update the conserved variables at coarser level.
@@ -1127,7 +1130,8 @@ contains
   ! =========================================================================
 
   ! =========================================================================
-  attributes(device) subroutine hydro_gradient(local_subgrid, gradients_x, gradients_y, gradients_z, thread_idx, subgrid_size, floor_d, floor_p)
+  attributes(device) subroutine hydro_gradient(local_subgrid, gradients_x, gradients_y, gradients_z, &
+       & thread_idx, subgrid_size, floor_d, floor_p)
     type(subgrid_6x6x6cell_primitive), intent(in)    :: local_subgrid
     type(subgrid_3x2x2cell_primitive), intent(inout) :: gradients_x
     type(subgrid_2x3x2cell_primitive), intent(inout) :: gradients_y
@@ -1145,38 +1149,38 @@ contains
           call index_1Dto3D(work_idx, subgrid_size-3, subgrid_size-4, i, j, k)
 
           ! Compute the gradients
-          gradients_x%density   (i,j,k) = (local_subgrid%density   (i + 1, j, k) - local_subgrid%density   (i, j, k)) / &
-               &                          (local_subgrid%density   (i + 1, j, k) + local_subgrid%density   (i, j, k) + floor_d)
+          gradients_x%density   (i,j,k) = (local_subgrid%density (i+1,j,k) - local_subgrid%density (i,j,k)) / &
+               &                          (local_subgrid%density (i+1,j,k) + local_subgrid%density (i,j,k) + floor_d)
           gradients_x%velocity_x(i,j,k) = 0_dp
           gradients_x%velocity_y(i,j,k) = 0_dp
           gradients_x%velocity_z(i,j,k) = 0_dp
-          gradients_x%pressure  (i,j,k) = (local_subgrid%pressure  (i + 1, j, k) - local_subgrid%pressure  (i, j, k)) / &
-               &                          (local_subgrid%pressure  (i + 1, j, k) + local_subgrid%pressure  (i, j, k) + floor_p)
+          gradients_x%pressure  (i,j,k) = (local_subgrid%pressure(i+1,j,k) - local_subgrid%pressure(i,j,k)) / &
+               &                          (local_subgrid%pressure(i+1,j,k) + local_subgrid%pressure(i,j,k) + floor_p)
 
        else if (work_idx < 2 * interface_array_size) then ! Compute fluxes across the y interfaces
           ! Compute the indices in the interface state arrays
-          call index_1Dto3D(work_idx-interface_array_size, subgrid_size-4, subgrid_size-3, i, j, k)
+          call index_1Dto3D(work_idx - interface_array_size, subgrid_size-4, subgrid_size-3, i, j, k)
 
           ! Compute the gradients
-          gradients_y%density   (i,j,k) = (local_subgrid%density   (i, j + 1, k) - local_subgrid%density   (i, j, k)) / &
-               &                          (local_subgrid%density   (i, j + 1, k) + local_subgrid%density   (i, j, k) + floor_d)
+          gradients_y%density   (i,j,k) = (local_subgrid%density (i,j+1,k) - local_subgrid%density (i,j,k)) / &
+               &                          (local_subgrid%density (i,j+1,k) + local_subgrid%density (i,j,k) + floor_d)
           gradients_y%velocity_x(i,j,k) = 0_dp
           gradients_y%velocity_y(i,j,k) = 0_dp
           gradients_y%velocity_z(i,j,k) = 0_dp
-          gradients_y%pressure  (i,j,k) = (local_subgrid%pressure  (i, j + 1, k) - local_subgrid%pressure  (i, j, k)) / &
-               &                          (local_subgrid%pressure  (i, j + 1, k) + local_subgrid%pressure  (i, j, k) + floor_p)
+          gradients_y%pressure  (i,j,k) = (local_subgrid%pressure(i,j+1,k) - local_subgrid%pressure(i,j,k)) / &
+               &                          (local_subgrid%pressure(i,j+1,k) + local_subgrid%pressure(i,j,k) + floor_p)
        else ! Compute fluxes across the z interfaces
           ! Compute the indices in the interface state arrays
           call index_1Dto3D(work_idx - 2*interface_array_size, subgrid_size-4, subgrid_size-4, i, j, k)
 
           ! Compute the gradients
-          gradients_z%density   (i,j,k) = (local_subgrid%density   (i, j, k + 1) - local_subgrid%density   (i, j, k)) / &
-               &                           (local_subgrid%density   (i, j, k + 1) + local_subgrid%density   (i, j, k) + floor_d)
+          gradients_z%density   (i,j,k) = (local_subgrid%density (i,j,k+1) - local_subgrid%density (i,j,k)) / &
+               &                          (local_subgrid%density (i,j,k+1) + local_subgrid%density (i,j,k) + floor_d)
           gradients_z%velocity_x(i,j,k) = 0_dp
           gradients_z%velocity_y(i,j,k) = 0_dp
           gradients_z%velocity_z(i,j,k) = 0_dp
-          gradients_z%pressure  (i,j,k) = (local_subgrid%pressure  (i, j, k + 1) - local_subgrid%pressure  (i, j, k)) / &
-               &                          (local_subgrid%pressure  (i, j, k + 1) + local_subgrid%pressure  (i, j, k) + floor_p)
+          gradients_z%pressure  (i,j,k) = (local_subgrid%pressure(i,j,k+1) - local_subgrid%pressure(i,j,k)) / &
+               &                          (local_subgrid%pressure(i,j,k+1) + local_subgrid%pressure(i,j,k) + floor_p)
        end if
     end do
 
@@ -1214,12 +1218,12 @@ contains
        ok = .false.
 
        ! Compute the errors
-       err_x%density   = 2d0 * MAX(ABS(gradients_x%density   (i, j, k)), ABS(gradients_x%density   (i + 1, j, k)))
-       err_y%density   = 2d0 * MAX(ABS(gradients_y%density   (i, j, k)), ABS(gradients_y%density   (i, j + 1, k)))
-       err_z%density   = 2d0 * MAX(ABS(gradients_z%density   (i, j, k)), ABS(gradients_y%density   (i, j, k + 1)))
-       err_x%pressure  = 2d0 * MAX(ABS(gradients_x%pressure  (i, j, k)), ABS(gradients_x%pressure  (i + 1, j, k)))
-       err_y%pressure  = 2d0 * MAX(ABS(gradients_y%pressure  (i, j, k)), ABS(gradients_y%pressure  (i, j + 1, k)))
-       err_z%pressure  = 2d0 * MAX(ABS(gradients_z%pressure  (i, j, k)), ABS(gradients_y%pressure  (i, j, k + 1)))
+       err_x%density  = 2d0 * MAX(ABS(gradients_x%density (i,j,k)), ABS(gradients_x%density (i+1,j,k)))
+       err_y%density  = 2d0 * MAX(ABS(gradients_y%density (i,j,k)), ABS(gradients_y%density (i,j+1,k)))
+       err_z%density  = 2d0 * MAX(ABS(gradients_z%density (i,j,k)), ABS(gradients_z%density (i,j,k+1)))
+       err_x%pressure = 2d0 * MAX(ABS(gradients_x%pressure(i,j,k)), ABS(gradients_x%pressure(i+1,j,k)))
+       err_y%pressure = 2d0 * MAX(ABS(gradients_y%pressure(i,j,k)), ABS(gradients_y%pressure(i,j+1,k)))
+       err_z%pressure = 2d0 * MAX(ABS(gradients_z%pressure(i,j,k)), ABS(gradients_z%pressure(i,j,k+1)))
 
        ! Check if cell needs refinement
        ok = ok .or. (err_x%density  > err_grad_d)
@@ -1265,17 +1269,20 @@ contains
     ! =======================================================================
     ! Convert from conserved to primitive variables
     ! =======================================================================
-    call subgrid_conserved_2_primitive(grid, uold, nbor, head_idx, block_idx, thread_idx, subgrid_size, gamma, local_subgrid)
+    call subgrid_conserved_2_primitive(grid, uold, nbor, head_idx, block_idx, thread_idx, &
+         & subgrid_size, gamma, local_subgrid)
 
     ! =======================================================================
     ! Compute hydro variables gradient at cell interfaces
     ! =======================================================================
-    call hydro_gradient(local_subgrid, gradients_x, gradients_y, gradients_z, thread_idx, subgrid_size, floor_d, floor_p)
+    call hydro_gradient(local_subgrid, gradients_x, gradients_y, gradients_z, thread_idx, &
+         & subgrid_size, floor_d, floor_p)
 
     ! =======================================================================
     ! Set flag1 to 1 if refinement criteria are fullfilled
     ! =======================================================================
-    call hydro_flag_3d(flag1, gradients_x, gradients_y, gradients_z, head_idx, block_idx, thread_idx, subgrid_size, err_grad_d, err_grad_p)
+    call hydro_flag_3d(flag1, gradients_x, gradients_y, gradients_z, head_idx, block_idx, thread_idx, &
+         & subgrid_size, err_grad_d, err_grad_p)
 
   end subroutine hydro_flag_kernel
   ! =========================================================================
@@ -1387,7 +1394,8 @@ contains
   ! =========================================================================
 
   ! =========================================================================
-  attributes(global) subroutine cmpdt_kernel(uold, head_idx, num_octs, mass, ekin, eint, emag, dt, dx, gamma)
+  attributes(global) subroutine cmpdt_kernel(grid, uold, head_idx, num_octs, mass, ekin, eint, emag, dt, dx, gamma)
+    type(oct), device :: grid(*)
     real(kind=dp), device :: uold(1:twotondim,1:nvar,*)
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
@@ -1407,34 +1415,60 @@ contains
     tid = threadIdx%x - 1
     bid = blockIdx%x - 1
 
-    ! Compute the oct idx
+    ! Compute oct idx
     oct_idx = ( tid + bid * blockDim%x ) / twotondim
-    if (oct_idx >= num_octs) return
-    oct_idx = head_idx + oct_idx
 
-    ! Compute the cell idx
-    cell_idx = mod(tid, twotondim) + 1
+    ! If not in block
+    if (oct_idx >= num_octs) then
 
-    ! Load the cell
-    conserved%density    = uold(cell_idx, 1, oct_idx)
-    conserved%momentum_x = uold(cell_idx, 2, oct_idx)
-    conserved%momentum_y = uold(cell_idx, 3, oct_idx)
-    conserved%momentum_z = uold(cell_idx, 4, oct_idx)
-    conserved%energy     = uold(cell_idx, 5, oct_idx)
+       dt_loc   = huge(0d0)
+       mass_loc = 0d0
+       ekin_loc = 0d0
+       eint_loc = 0d0
+       emag_loc = 0d0
 
-    ! Convert to primitive variables
-    primitive = conserved_2_primitive(conserved, gamma)
+    else
 
-    ! Compute extensive quantities
-    vol_loc = dx*dx*dx
-    mass_loc = primitive%density*vol_loc
-    ekin_loc = conserved%energy*vol_loc
-    eint_loc = primitive%pressure/(gamma-1d0)*vol_loc
-    emag_loc = 0_dp
+       oct_idx = head_idx + oct_idx
 
-    ! Compute time step
-    sound_speed = sqrt(gamma*primitive%pressure/primitive%density)
-    dt_loc = dx / (abs(primitive%velocity_x)+abs(primitive%velocity_y)+abs(primitive%velocity_z)+3*sound_speed)
+       ! Compute cell idx
+       cell_idx = mod(tid, twotondim) + 1
+
+       ! If refined
+       if(grid(oct_idx)%refined(cell_idx))then
+
+          dt_loc   = huge(0d0)
+          mass_loc = 0d0
+          ekin_loc = 0d0
+          eint_loc = 0d0
+          emag_loc = 0d0
+
+       else
+
+          ! Load the cell
+          conserved%density    = uold(cell_idx, 1, oct_idx)
+          conserved%momentum_x = uold(cell_idx, 2, oct_idx)
+          conserved%momentum_y = uold(cell_idx, 3, oct_idx)
+          conserved%momentum_z = uold(cell_idx, 4, oct_idx)
+          conserved%energy     = uold(cell_idx, 5, oct_idx)
+
+          ! Convert to primitive variables
+          primitive = conserved_2_primitive(conserved, gamma)
+
+          ! Compute extensive quantities
+          vol_loc = dx*dx*dx
+          mass_loc = primitive%density*vol_loc
+          ekin_loc = conserved%energy*vol_loc
+          eint_loc = primitive%pressure/(gamma-1d0)*vol_loc
+          emag_loc = 0_dp
+
+          ! Compute time step
+          sound_speed = sqrt(gamma*primitive%pressure/primitive%density)
+          dt_loc = dx / (abs(primitive%velocity_x)+abs(primitive%velocity_y)+abs(primitive%velocity_z)+3*sound_speed)
+
+       end if
+
+    endif
 
     dt_loc   = block_reduce_min(dt_loc)
     mass_loc = block_reduce_sum(mass_loc)

@@ -33,16 +33,16 @@ subroutine m_refine_fine(pst,ilevel)
   if(s%m%noct_tot(ilevel)==0)return
 
   if(s%r%verbose)write(*,111)ilevel
-111 format(' Entering refine_fine for level ',I2)
+111 format('   Entering refine_fine for level ',I2)
 
   ! Create new octs and destroy unecessary octs
   call r_refine_fine(pst,ilevel,1,out_refine_fine,2)
 
   if(s%r%verbose)write(*,112)out_refine_fine%make
-112 format(' ==> Make ',i7,' sub-grids')
+112 format('   ==> Make ',i7,' sub-grids')
 
   if(s%r%verbose)write(*,113)out_refine_fine%kill
-113 format(' ==> Kill ',i7,' sub-grids')
+113 format('   ==> Kill ',i7,' sub-grids')
 
   ! Get total, min and max grid count (only in master)
   do ilev=ilevel+1,s%r%nlevelmax
@@ -110,7 +110,11 @@ recursive subroutine r_refine_fine(pst,ilevel,input_size,output,output_size)
      output%kill = output%kill + next_output%kill
   else
 #ifdef _CUDA
-     call gpu_refine(pst%s,ilevel)
+     if(pst%s%m%data_on_device)then
+        call gpu_refine(pst%s,ilevel,output%make,output%kill)
+     else
+        call refine_fine(pst%s,ilevel,output%make,output%kill)
+     endif
 #else
      call refine_fine(pst%s,ilevel,output%make,output%kill)
 #endif

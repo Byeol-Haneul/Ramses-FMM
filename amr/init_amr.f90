@@ -436,6 +436,10 @@ subroutine init_amr(r,g,m,type)
      allocate(m%head_cache(1:r%nlevelmax))
      allocate(m%tail_cache(1:r%nlevelmax))
      allocate(m%noct_cache(1:r%nlevelmax))
+     m%head_cache=1
+     m%tail_cache=0
+     m%noct_cache=0
+     m%ifree_cache=1
   endif
   ! Compute Cartesian key offset for GPU hash table
   allocate(m%key_off(1:r%nlevelmax+1))

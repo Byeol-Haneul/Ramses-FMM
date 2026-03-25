@@ -85,9 +85,13 @@ recursive subroutine r_init_flag(pst,ilevel,input_size,noct,output_size)
      noct=noct+next_noct
   else
 #ifdef _CUDA
-     call nvtxStartRange("GPU Initflag", color=6)!teal
-     call gpu_init_flag(pst%s, ilevel)
-     call nvtxEndRange()
+     if(pst%s%m%data_on_device)then
+        call nvtxStartRange("GPU Initflag", color=6)!teal
+        call gpu_init_flag(pst%s, ilevel, nflag)
+        call nvtxEndRange()
+     else
+        call init_flag(pst%s,ilevel,nflag)
+     endif
 #else
      call init_flag(pst%s,ilevel,nflag)
 #endif
@@ -253,9 +257,13 @@ recursive subroutine r_user_flag(pst,ilevel,input_size,noct,output_size)
      noct=noct+next_noct
   else
 #ifdef _CUDA
-     call nvtxStartRange("GPU Userflag", color=6)!teal
-     call gpu_user_flag(pst%s, ilevel)
-     call nvtxEndRange()
+     if(pst%s%m%data_on_device)then
+        call nvtxStartRange("GPU Userflag", color=6)!teal
+        call gpu_user_flag(pst%s, ilevel, nflag)
+        call nvtxEndRange()
+     else
+        call user_flag(pst%s,ilevel,nflag)
+     endif
 #else
      call user_flag(pst%s,ilevel,nflag)
 #endif
@@ -327,9 +335,13 @@ recursive subroutine r_ensure_ref_rules(pst,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
 #ifdef _CUDA
-     call nvtxStartRange("GPU enforce rules", color=6)!teal
-     call gpu_enforce_rules(pst%s, ilevel)
-     call nvtxEndRange()
+     if(pst%s%m%data_on_device)then
+        call nvtxStartRange("GPU enforce rules", color=6)!teal
+        call gpu_enforce_rules(pst%s, ilevel)
+        call nvtxEndRange()
+     else
+        call ensure_ref_rules(pst%s,ilevel)
+     endif
 #else
      call ensure_ref_rules(pst%s,ilevel)
 #endif

@@ -29,9 +29,13 @@ recursive subroutine r_smooth_fine(pst,ilevel,input_size,noct,output_size)
      noct=noct+next_noct
   else
 #ifdef _CUDA
-     call nvtxStartRange("GPU Smoothflag", color=6)!teal
-     call gpu_smooth_flag(pst%s, ilevel)
-     call nvtxEndRange()
+     if(pst%s%m%data_on_device)then
+        call nvtxStartRange("GPU Smoothflag", color=6)!teal
+        call gpu_smooth_flag(pst%s, ilevel, nflag)
+        call nvtxEndRange()
+     else
+        call smooth_fine(pst%s,ilevel,nflag)
+     endif
 #else
      call smooth_fine(pst%s,ilevel,nflag)
 #endif

@@ -8,11 +8,13 @@ attributes(device) subroutine warp_scan(scan, lane)
   implicit none
   integer :: lane, scan
 
-  integer :: offset
+  integer :: offset, num
 
   offset = 1
-  do while (offset < warpsize)
-     if (offset < lane) scan = scan + __shfl_up(scan, offset)
+  do
+     if (offset .ge. warpsize) exit
+     num = __shfl_up(scan, offset)
+     if (offset < lane) scan = scan + num 
      offset = offset * 2
   end do
 

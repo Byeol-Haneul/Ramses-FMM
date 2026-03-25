@@ -63,12 +63,13 @@ recursive subroutine r_set_grid_device(pst)
      num_threads = 128
      num_blocks = (num_octs + num_threads - 1) / num_threads
      do ind = 1, threetondim
-        call update_nbor_array<<<num_blocks, num_threads>>>(nbor, grid, ckey_max, key_off, &
-             & box_ckey_min, box_ckey_max, periodic, &
-             & hash_key, hash_val, pst%s%m%hash_size, head_idx, num_octs, ind)
+        call update_nbor_array<<<num_blocks, num_threads>>>(nbor, grid, hash_key, hash_val, pst%s%m%hash_size, &
+             & ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, head_idx, num_octs, ind)
      end do
      call GPU_Error_Check(__FILE__, __LINE__)
      call nvtxEndRange()
+
+     pst%s%m%data_on_device=.true.
 
   endif
 
