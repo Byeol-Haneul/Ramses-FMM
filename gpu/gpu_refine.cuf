@@ -541,8 +541,9 @@ contains
     end do
     mask = 0
     do ind = 1, twotondim
-       bit = int(grid(old_oct_idx)%refined(ind), kind=4)
-       mask = mask + bit * 2**(ind - 1)
+       if (grid(old_oct_idx)%refined(ind)) then
+          mask = IBSET(mask, ind - 1)
+       end if
     end do
     flag2(ndim + 2, oct_idx) = mask
 
@@ -555,7 +556,7 @@ contains
     integer(kind=4), device :: flag2(1:twotondim,*)
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
-    
+
     integer :: oct_idx, thread_idx, block_idx
     integer :: ind, idim, mask, bit
 
@@ -574,7 +575,7 @@ contains
        grid(oct_idx)%ckey(idim) = flag2(1 + idim, oct_idx)
     end do
     mask = flag2(ndim + 2, oct_idx)
-    do ind = twotondim, 1, -1
+    do ind = 1, twotondim
        bit = IBITS(mask, ind - 1, 1)
        grid(oct_idx)%refined(ind) = (bit == 1)
     end do

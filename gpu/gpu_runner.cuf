@@ -285,14 +285,14 @@ contains
     ! Create new octs and put them at the end
     head_idx = sim%m%head(ilevel)
     old_ifree = sim%m%ifree
-!!$    num_octs = old_ifree - head_idx
-!!$    threadsX_per_block = 8
-!!$    threadsY_per_block = 16
-!!$    num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
-!!$    if (num_octs > 0) then
-!!$       call refine_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(grid, flag1, uold, &
-!!$            & ifree, head_idx, num_octs)
-!!$    endif
+    num_octs = old_ifree - head_idx
+    threadsX_per_block = 8
+    threadsY_per_block = 16
+    num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
+    if (num_octs > 0) then
+       call refine_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(grid, flag1, uold, &
+            & ifree, head_idx, num_octs)
+    endif
 
     ! Copy back to host new free memory pointer ifree
     sim%m%ifree = ifree
@@ -319,16 +319,16 @@ contains
     end if
 
     ! Remove old octs by setting lev to zero and free their hash table entry
-!!$    do ilev = sim%r%nlevelmax, ilevel+1, -1
-!!$       head_idx = sim%m%head(ilev)
-!!$       num_octs = sim%m%noct(ilev)
-!!$       num_threads = 128
-!!$       num_blocks = (num_octs + num_threads - 1) / num_threads
-!!$       if (num_octs > 0) then
-!!$          call derefine_kernel<<<num_blocks, num_threads>>>(grid, flag1, hash_key, hash_val, sim%m%hash_size, &
-!!$               & ckey_max, key_off, head_idx, num_octs)
-!!$       endif
-!!$    end do
+    do ilev = sim%r%nlevelmax, ilevel+1, -1
+       head_idx = sim%m%head(ilev)
+       num_octs = sim%m%noct(ilev)
+       num_threads = 128
+       num_blocks = (num_octs + num_threads - 1) / num_threads
+       if (num_octs > 0) then
+          call derefine_kernel<<<num_blocks, num_threads>>>(grid, flag1, hash_key, hash_val, sim%m%hash_size, &
+               & ckey_max, key_off, head_idx, num_octs)
+       endif
+    end do
 
     ! Sort remaining octs per level and per Hilbert key
 

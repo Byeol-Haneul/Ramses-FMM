@@ -704,7 +704,7 @@ contains
 
        else if (work_idx < 2 * interface_array_size) then ! Zero fluxes across the y interfaces
           ! Compute the indices in the interface state arrays
-          call index_1Dto3D(work_idx-interface_array_size, subgrid_size-4, subgrid_size-3, i, j, k)
+          call index_1Dto3D(work_idx - interface_array_size, subgrid_size-4, subgrid_size-3, i, j, k)
 
           if (local_subgrid%refined(i+2,j+1,k+2) .or. local_subgrid%refined(i+2,j+2,k+2))then
              fluxes_y%density   (i, j, k) = 0_dp
@@ -716,7 +716,7 @@ contains
 
        else ! Zero fluxes across the z interfaces
           ! Compute the indices in the interface state arrays
-          call index_1Dto3D(work_idx - 2*interface_array_size, subgrid_size-4, subgrid_size-4, i, j, k)
+          call index_1Dto3D(work_idx - 2 * interface_array_size, subgrid_size-4, subgrid_size-4, i, j, k)
 
           if (local_subgrid%refined(i+2,j+2,k+1) .or. local_subgrid%refined(i+2,j+2,k+2))then
              fluxes_z%density   (i, j, k) = 0_dp
