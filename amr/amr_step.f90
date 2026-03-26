@@ -185,10 +185,10 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
 #ifdef FMM
            if(icount > 1) then
              do ilev=ilevel,r%nlevelmax
-               call fmm(pst, ilevel, icount)
+               call fmm(pst, ilev, icount)
              end do
            end if
-           do ilev=pst%s%r%nlevelmax,ilevel,-1
+           do ilev=pst%s%r%nlevelmax-1,ilevel,-1
              call r_fmm_fill_phi(pst, ilev, 1) 
            end do
 #else
@@ -200,7 +200,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
         do ilev=r%levelmin,r%nlevelmax
            call fmm(pst, ilev, icount)
         end do
-        do ilev=pst%s%r%nlevelmax,pst%s%r%levelmin-1,-1
+        do ilev=pst%s%r%nlevelmax-1,pst%s%r%levelmin-1,-1
           call r_fmm_fill_phi(pst, ilev, 1) 
         end do
 #else

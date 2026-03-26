@@ -176,6 +176,9 @@ subroutine fmm_fill_phi(s,ilevel)
   real(kind=8) :: phi
 
   associate(mdl=>s%mdl, m=>s%m)
+
+  ! Nothing to average if there is no finer AMR level above ilevel.
+  if (ilevel >= s%r%nlevelmax) return
   
   call open_cache(mdl, m, pack_size=storage_size(dummy_realdp)/32, init=init_flush_phi, flush=pack_flush_phi, combine=unpack_flush_phi)
 
@@ -213,7 +216,7 @@ subroutine init_flush_phi(mesh,igrid,hash_key)
 #ifdef GRAV 
   mesh%grid(igrid)%lev=hash_key(0)
   mesh%grid(igrid)%ckey(1:ndim)=hash_key(1:ndim)
-  mesh%phi=0.0
+  mesh%phi(:,igrid)=0.0D0
 #endif
 end subroutine init_flush_phi
 !###########################################################
