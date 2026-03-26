@@ -146,7 +146,7 @@ function worker_init(mdl) result(pst)
                                 r_reset_correction,r_set_scan_flag,r_gauss_seidel_mg,r_interpolate_and_correct
   use init_fmm_module, only:r_init_fmm, r_build_fmm
   use cleanup_fmm_module, only:r_cleanup_fmm
-  use fmm_fine_commons, only: r_fmm_downward, r_fmm_amr_intermediate, r_fmm_amr_direct
+  use fmm_fine_commons, only: r_fmm_downward, r_fmm_amr_intermediate, r_fmm_amr_direct, r_fmm_fill_phi
   use fmm_multipoles, only: r_reset_multipoles_taylor, r_fmm_multipole_amr2fmm, r_fmm_multipole_fmm2fmm, r_fmm_multipole_shift_downward, r_dump_multipole
 #endif
   use clump_finder_module, only: r_clump_finder
@@ -313,6 +313,7 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_FMM_DOWNWARD,           pst,C_FUNLOC(r_fmm_downward),1,0,"fmm_downward")
   call mdl_add_service(pst%s%mdl,MDL_FMM_AMR_INTERMEDIATE,   pst,C_FUNLOC(r_fmm_amr_intermediate),1,0,"fmm_amr_intermediate")
   call mdl_add_service(pst%s%mdl,MDL_FMM_AMR_DIRECT,         pst,C_FUNLOC(r_fmm_amr_direct),1,0,"fmm_amr_direct")
+  call mdl_add_service(pst%s%mdl,MDL_FMM_FILL_PHI,           pst,C_FUNLOC(r_fmm_fill_phi),1,0,"fmm_fill_phi")
 #endif
   call mdl_add_service(pst%s%mdl,MDL_INIT_RT,                pst,C_FUNLOC(r_init_rt),0,0,"init_rt")
   call mdl_add_service(pst%s%mdl,MDL_RT_UPLOAD_FINE,         pst,C_FUNLOC(r_rt_upload_fine),1,0,"rt_upload_fine")

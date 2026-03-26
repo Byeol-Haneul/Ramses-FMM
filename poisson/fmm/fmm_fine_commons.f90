@@ -19,7 +19,7 @@ subroutine fmm(pst,ilev,icount)
   type(pst_t)::pst
   integer,intent(in) :: ilev,icount
   
-  integer :: ifine, jlev, flev, input_size, jlev_max_amr_direct
+  integer :: ifine, ilevel, jlev, flev, input_size, jlev_max_amr_direct
   logical :: use_merged
   type(double_level_t)::double_level
   type(downward_level_t)::downward_levels
@@ -124,14 +124,98 @@ subroutine fmm(pst,ilev,icount)
       end do
    end if
 
+  do ilevel=ilev-1,pst%s%r%levelmin,-1
+    if(pst%s%r%verbose) print *, "[FILL PHI] LEVEL: ", ilevel
+    call r_fmm_fill_phi(pst, ilevel, 1) ! do upward pass
+  end do
+
    !do i = 1, pst%s%r%levelmin - pst%s%r%level_fmm_to_amr
    !  call dump_taylor(pst%s%r, pst%s%m_fmm, i)
    !end do 
-    
-  ! ---------------------------------------------------------------------
-  ! Cleanup MG levels after solve complete
-  ! ---------------------------------------------------------------------
 end subroutine fmm
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
+recursive subroutine r_fmm_fill_phi(pst,ilevel,input_size)
+  use mdl_module
+  use ramses_commons, only: pst_t
+  use mdl_parameters
+  implicit none
+  type(pst_t)::pst
+  integer::ilevel
+  integer,VALUE::input_size
+  integer::rID
+
+  if(pst%nLower>0)then
+     rID = mdl_send_request(pst%s%mdl,MDL_FMM_FILL_PHI,pst%iUpper+1,input_size,0,ilevel)
+     call r_fmm_fill_phi(pst%pLower,ilevel,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
+  else
+     call fmm_fill_phi(pst%s,ilevel)
+  endif
+
+end subroutine r_fmm_fill_phi
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
+subroutine fmm_fill_phi(s,ilevel)
+  use amr_parameters, only: ndim, twotondim, multipole_size
+  use amr_commons, only: mesh_t
+  use ramses_commons, only: ramses_t
+  use nbors_utils
+  use cache_commons
+  use cache
+  implicit none
+  type(ramses_t)::s
+  integer::ind,ioct,icell,igrid,ilevel
+  integer(kind=8),dimension(0:ndim)::hash_key
+  type(msg_small_realdp)::dummy_realdp
+
+  real(kind=8) :: phi
+
+  associate(mdl=>s%mdl, m=>s%m)
+  
+  call open_cache(mdl, m, pack_size=storage_size(dummy_realdp)/32, init=init_flush_phi, flush=pack_flush_phi, combine=unpack_flush_phi)
+
+  ! Loop over finer level grids
+  hash_key(0)=ilevel+1
+  do ioct=m%head(ilevel+1),m%tail(ilevel+1)
+     hash_key(1:ndim)=m%grid(ioct)%ckey(1:ndim)
+     ! Get parent cell using a write-only cache
+     call get_parent_cell(s,hash_key,igrid,icell,flush_cache=.true.,fetch_cache=.false.)
+     if (igrid <= 0) cycle
+     phi = 0.0D0
+#ifdef GRAV
+     do ind=1,twotondim
+       phi = phi + m%phi(ind,ioct)
+     end do
+     !print *, "before: ", m%phi(icell,igrid)
+     m%phi(icell,igrid) = phi / twotondim
+     !print *, "after: ", m%phi(icell,igrid)
+#endif
+  end do
+  call close_cache(mdl)
+  end associate
+end subroutine fmm_fill_phi
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine init_flush_phi(mesh,igrid,hash_key)
+  use amr_parameters, only: ndim,twotondim
+  use amr_commons, only: mesh_t
+  integer::igrid
+  type(mesh_t)::mesh
+  integer(kind=8),dimension(0:ndim)::hash_key
+
+#ifdef GRAV 
+  mesh%grid(igrid)%lev=hash_key(0)
+  mesh%grid(igrid)%ckey(1:ndim)=hash_key(1:ndim)
+  mesh%phi=0.0
+#endif
+end subroutine init_flush_phi
 !###########################################################
 !###########################################################
 !###########################################################
@@ -756,6 +840,7 @@ subroutine fmm_amr_intermediate(s, ilev, jlev, use_merged)
 #endif
       ! Far field
       do icell = 1, twotondim
+        if (m%grid(ioct)%refined(icell)) cycle
         diff = far_diff_list(:, icell, igrid)
         call calc_phi(parent_taylor, diff, phi)
 #ifdef FMM
@@ -1837,6 +1922,50 @@ end subroutine unpack_fetch_taylor
 !################################################################
 !################################################################
 !################################################################
+subroutine pack_flush_phi(mesh,igrid,msg_size,msg_array)
+  use amr_parameters, only: ndim,twotondim,taylor_size
+  use amr_commons, only: mesh_t
+  use cache_commons, only: msg_small_realdp
+  integer::igrid
+  type(mesh_t)::mesh
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+
+  integer::ind
+  type(msg_small_realdp)::msg
+#ifdef GRAV
+  do ind=1,twotondim
+    msg%realdp(ind)=mesh%phi(ind,igrid)
+  end do
+#endif
+  msg_array=transfer(msg,msg_array)
+end subroutine pack_flush_phi
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine unpack_flush_phi(mesh,igrid,msg_size,msg_array,hash_key)
+  use amr_parameters, only: ndim,twotondim,taylor_size
+  use amr_commons, only: mesh_t
+  use cache_commons, only: msg_small_realdp
+  integer::igrid
+  type(mesh_t)::mesh
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
+
+  integer::ind
+  type(msg_small_realdp)::msg
+
+  mesh%grid(igrid)%lev=hash_key(0)
+  mesh%grid(igrid)%ckey(1:ndim)=hash_key(1:ndim)
+  msg=transfer(msg_array,msg)
+#ifdef GRAV
+  do ind=1,twotondim
+    mesh%phi(ind,igrid)=msg%realdp(ind) ! Don't add, substitute.
+  end do
+#endif
+end subroutine unpack_flush_phi
 !################################################################
 !################################################################
 !################################################################

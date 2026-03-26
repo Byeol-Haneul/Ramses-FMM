@@ -13,7 +13,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   use upload_module, only: m_upload_fine
   use rho_fine_module, only: m_rho_fine
 #ifdef FMM
-  use fmm_fine_commons, only: fmm
+  use fmm_fine_commons, only: fmm, r_fmm_fill_phi
   use cleanup_fmm_module, only: r_cleanup_fmm
 #endif
 #ifdef GRAV
@@ -183,14 +183,26 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
            call m_phi_fine_cg(pst, ilevel, icount)
         else
 #ifdef FMM
-           call fmm(pst, ilevel, icount)
+           if(icount > 1) then
+             do ilev=ilevel,r%nlevelmax
+               call fmm(pst, ilevel, icount)
+             end do
+           end if
+           do ilev=pst%s%r%nlevelmax,ilevel,-1
+             call r_fmm_fill_phi(pst, ilev, 1) 
+           end do
 #else
            call multigrid(pst, ilevel, icount)
 #endif
         end if
      else
 #ifdef FMM
-        call fmm(pst, r%levelmin, icount)
+        do ilev=r%levelmin,r%nlevelmax
+           call fmm(pst, ilev, icount)
+        end do
+        do ilev=pst%s%r%nlevelmax,pst%s%r%levelmin-1,-1
+          call r_fmm_fill_phi(pst, ilev, 1) 
+        end do
 #else
         call multigrid(pst, r%levelmin, icount)
 #endif
