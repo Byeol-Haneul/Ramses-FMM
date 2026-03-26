@@ -15,9 +15,6 @@ module gpu_runner
   integer(kind=4), device, allocatable, dimension(:,:,:) :: bound_ckey_min
   integer(kind=4), device, allocatable, dimension(:,:,:) :: bound_ckey_max
 
-  ! Pointer to free main memory on the device
-  integer(kind=4), device :: ifree
-
   !> Arrays to hold the grid on the device
   type(oct), device, allocatable, dimension(:) :: grid
 
@@ -261,21 +258,14 @@ contains
     integer, intent(in) :: ilevel
     integer, intent(out) :: nmake, nkill
     !
-    integer(kind=4) :: head_idx, num_octs, num_threads
+    integer(kind=4) :: head_idx, num_octs
     integer(kind=4) :: head_cache
-    integer(kind=4) :: num_blocks, threadsX_per_block, threadsY_per_block
+    integer(kind=4) :: num_blocks, num_threads, num_blocks_2, num_threads_2
+    integer(kind=4) :: threadsX_per_block, threadsY_per_block
     integer(kind=4) :: new_ifree, old_ifree, new_head, new_tail, new_noct
     integer(kind=4) :: ilev, ind, ibit, ibucket, skip_bit, noct_level
 
     integer(kind=4), device :: ifree
-
-    integer(kind=4), allocatable, dimension(:) :: prefix_sum_host
-    integer(kind=8), allocatable, dimension(:) :: hash_key_host
-    integer(kind=4), allocatable, dimension(:) :: hash_val_host
-
-    allocate(hash_key_host(1:sim%m%hash_size))
-    allocate(hash_val_host(1:sim%m%hash_size))
-    allocate(prefix_sum_host(1:sim%r%ngridmax+sim%r%ncachemax))
 
     ! Wipe clean cache memory for all higher levels
     head_cache = sim%m%head_cache(ilevel+1)
@@ -295,14 +285,14 @@ contains
     ! Create new octs and put them at the end
     head_idx = sim%m%head(ilevel)
     old_ifree = sim%m%ifree
-    num_octs = old_ifree - head_idx
-    threadsX_per_block = 8
-    threadsY_per_block = 16
-    num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
-    if (num_octs > 0) then
-       call refine_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(grid, flag1, uold, &
-            & ifree, head_idx, num_octs)
-    endif
+!!$    num_octs = old_ifree - head_idx
+!!$    threadsX_per_block = 8
+!!$    threadsY_per_block = 16
+!!$    num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
+!!$    if (num_octs > 0) then
+!!$       call refine_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(grid, flag1, uold, &
+!!$            & ifree, head_idx, num_octs)
+!!$    endif
 
     ! Copy back to host new free memory pointer ifree
     sim%m%ifree = ifree
@@ -310,7 +300,6 @@ contains
     ! Compute new octs
     new_ifree = sim%m%ifree
     nmake = new_ifree - old_ifree
-    write(*,*)'  Make octs:', nmake
 
     ! Check we have enough memory
     if (new_ifree > sim%r%ngridmax) then
@@ -329,7 +318,7 @@ contains
             & ckey_max, key_off, head_idx, num_octs)
     end if
 
-!!$    ! Remove old octs by setting lev to zero and free their hash table entry
+    ! Remove old octs by setting lev to zero and free their hash table entry
 !!$    do ilev = sim%r%nlevelmax, ilevel+1, -1
 !!$       head_idx = sim%m%head(ilev)
 !!$       num_octs = sim%m%noct(ilev)
@@ -379,9 +368,6 @@ contains
           call init_prefix_sum_level<<<num_blocks, num_threads>>>(grid, swap_global, prefix_sum, &
                & head_idx, num_octs, ilev)
 
-          prefix_sum_host = prefix_sum
-          write(*,*)prefix_sum_host(head_idx:head_idx+num_octs-1)
-
           ! Compute prefix sum
           call gpu_scan(head_idx, num_octs, new_noct)
 
@@ -409,7 +395,6 @@ contains
     ! New pointer to free memory
     sim%m%ifree = new_head
     nkill = new_ifree - sim%m%ifree
-    write(*,*)'  Kill octs:', nkill
 
     ! Copy back to device
     ifree = sim%m%ifree
@@ -495,8 +480,6 @@ contains
             & ckey_max, key_off, head_idx, num_octs)
     endif
 
-    write(*,*)'After update father'
-    
     ! Update nbor index array level by level
     ! If nbor is absent, make a ghost oct in the cache and insert in hash table
 
@@ -515,6 +498,8 @@ contains
           ! Compute kernel size and offset
           head_idx = sim%m%head(ilev)
           num_octs = noct_level
+          num_threads = 128
+          num_blocks = (num_octs + num_threads - 1) / num_threads
 
           ! Loop over 27 neighbors
           do ind = 1, threetondim
@@ -532,6 +517,8 @@ contains
              ! Transfer head index of first free cache oct from device
              head_cache = sim%r%ngridmax + sim%m%ifree_cache
              new_ifree = sim%m%ifree_cache + new_noct
+             num_threads_2 = 128
+             num_blocks_2 = (new_noct + num_threads - 1) / num_threads
 
              if (new_noct > 0) then
 
@@ -545,17 +532,13 @@ contains
                 ! Compute cache swap table
                 call compute_cache_swap_table<<<num_blocks, num_threads>>>(swap_local, prefix_sum, head_idx, num_octs)
 
-                ! Compute kernel size and offset
-                num_threads = 128
-                num_blocks = (new_noct + num_threads - 1) / num_threads
-
                 ! Make new ghost octs in cache
-                call make_cache_octs<<<num_blocks, num_threads>>>(grid, flag1, uold, swap_local, father, nbor, &
+                call make_cache_octs<<<num_blocks_2, num_threads_2>>>(grid, flag1, uold, swap_local, father, nbor, &
                      & hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, &
                      & head_cache, new_noct, ind)
 
                 ! Insert new octs in hash table
-                call insert_hash_kernel<<<num_blocks, num_threads>>>(grid, hash_key, hash_val, sim%m%hash_size, &
+                call insert_hash_kernel<<<num_blocks_2, num_threads_2>>>(grid, hash_key, hash_val, sim%m%hash_size, &
                      & ckey_max, key_off, head_cache, new_noct)
 
              end if
@@ -576,14 +559,6 @@ contains
 
     end do
     ! End loop over levels
-
-    write(*,*)'  New cache size:', sim%m%ifree_cache
-
-    if(nmake>0)stop
-
-    deallocate(hash_key_host)
-    deallocate(hash_val_host)
-    deallocate(prefix_sum_host)
 
   end subroutine gpu_refine
 
