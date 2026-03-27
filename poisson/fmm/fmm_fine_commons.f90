@@ -19,7 +19,7 @@ subroutine fmm(pst,ilev,icount)
   type(pst_t)::pst
   integer,intent(in) :: ilev,icount
   
-  integer :: ifine, ilevel, jlev, flev, input_size, jlev_max_amr_direct
+  integer :: ifine, jlev, flev, input_size, jlev_max_amr_direct
   logical :: use_merged
   type(double_level_t)::double_level
   type(downward_level_t)::downward_levels
@@ -124,15 +124,36 @@ subroutine fmm(pst,ilev,icount)
       end do
    end if
 
-  do ilevel=ilev-1,pst%s%r%levelmin,-1
-    if(pst%s%r%verbose) print *, "[FILL PHI] LEVEL: ", ilevel
-    call r_fmm_fill_phi(pst, ilevel, 1) ! do upward pass
-  end do
-
    !do i = 1, pst%s%r%levelmin - pst%s%r%level_fmm_to_amr
    !  call dump_taylor(pst%s%r, pst%s%m_fmm, i)
    !end do 
 end subroutine fmm
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
+subroutine reset_phi_fmm(s,ilevel_start)
+  use amr_parameters, only: twotondim
+  use ramses_commons, only: ramses_t
+  implicit none
+  type(ramses_t), intent(inout) :: s
+  integer, intent(in) :: ilevel_start
+
+  integer :: ilevel, ioct
+
+  associate(r=>s%r, m=>s%m)
+  do ilevel=max(ilevel_start,r%levelmin),r%nlevelmax
+     if(m%noct_tot(ilevel)<=0) cycle
+     if(m%head(ilevel)<=0) cycle
+     if(m%tail(ilevel)<m%head(ilevel)) cycle
+     do ioct=m%head(ilevel),m%tail(ilevel)
+#ifdef GRAV
+        m%phi(1:twotondim,ioct)=0.0D0
+#endif
+     end do
+  end do
+  end associate
+end subroutine reset_phi_fmm
 !###########################################################
 !###########################################################
 !###########################################################
@@ -179,7 +200,7 @@ subroutine fmm_fill_phi(s,ilevel)
 
   ! Nothing to average if there is no finer AMR level above ilevel.
   if (ilevel >= s%r%nlevelmax) return
-  
+
   call open_cache(mdl, m, pack_size=storage_size(dummy_realdp)/32, init=init_flush_phi, flush=pack_flush_phi, combine=unpack_flush_phi)
 
   ! Loop over finer level grids
@@ -194,9 +215,7 @@ subroutine fmm_fill_phi(s,ilevel)
      do ind=1,twotondim
        phi = phi + m%phi(ind,ioct)
      end do
-     !print *, "before: ", m%phi(icell,igrid)
-     m%phi(icell,igrid) = phi / twotondim
-     !print *, "after: ", m%phi(icell,igrid)
+     m%phi(icell,igrid) = m%phi(icell,igrid) + phi / twotondim
 #endif
   end do
   call close_cache(mdl)
@@ -1965,7 +1984,7 @@ subroutine unpack_flush_phi(mesh,igrid,msg_size,msg_array,hash_key)
   msg=transfer(msg_array,msg)
 #ifdef GRAV
   do ind=1,twotondim
-    mesh%phi(ind,igrid)=msg%realdp(ind) ! Don't add, substitute.
+    mesh%phi(ind,igrid)=mesh%phi(ind,igrid)+msg%realdp(ind)
   end do
 #endif
 end subroutine unpack_flush_phi

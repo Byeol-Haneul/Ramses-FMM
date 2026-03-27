@@ -19,6 +19,9 @@ subroutine gravana(r,g,x,f,dx,ncell)
   !================================================================
   integer::idim,i
   real(kind=8)::gmass,emass,xmass,ymass,zmass,rr,rx,ry,rz
+  
+  ! Default to zero acceleration for unsupported gravity_type values.
+  f(1:ncell,1:ndim)=0.0d0
 
   ! Multipole expansion for isolated boundary conditions
   if(r%gravity_type==0)then
