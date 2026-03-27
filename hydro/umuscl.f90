@@ -1132,7 +1132,7 @@ subroutine trace3d(q,dq,qm,qp, &
               qp(i,j,k,ie+irad,1) = e(irad) - dex(irad)
            end do
 #endif
-           ! Left state at left interface
+           ! Left state at right interface
            qm(i,j,k,ir,1) = r + drx
            qm(i,j,k,iu,1) = u + dux
            qm(i,j,k,iv,1) = v + dvx

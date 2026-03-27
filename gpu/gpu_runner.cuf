@@ -74,12 +74,13 @@ contains
 
     integer(kind=4) :: head_idx, num_octs
     integer :: num_threads, num_blocks
-    real(kind=dp) :: gamma, dx
+    real(kind=dp) :: gamma, dx, courant_factor
     real(kind=8), device :: mass_d, ekin_d, eint_d, emag_d, dt_d
 
     gamma = sim%r%gamma
     dx = sim%r%boxlen/2**ilevel
     dt = dx/sim%r%smallc
+    courant_factor = sim%r%courant_factor
 
     ! host to device
     dt_d = dt
@@ -94,7 +95,7 @@ contains
     num_blocks = (num_octs * twotondim + num_threads - 1 ) / num_threads
     call nvtxStartRange("GPU cmpdt", color=0)!green
     call cmpdt_kernel<<<num_blocks, num_threads>>>(grid, uold, head_idx, num_octs, &
-         & mass_d, ekin_d, eint_d, emag_d, dt_d, dx, gamma)
+         & mass_d, ekin_d, eint_d, emag_d, dt_d, dx, gamma, courant_factor)
     call GPU_Error_Check(__FILE__, __LINE__)
     call nvtxEndRange()
 
@@ -104,9 +105,6 @@ contains
     ekin = ekin_d
     eint = eint_d
     emag = emag_d
-
-    ! Rescale with Courant factor
-    dt = sim%r%courant_factor*dt
 
   end subroutine gpu_cmpdt
 
@@ -187,6 +185,7 @@ contains
     integer(kind=4) :: head_idx, num_octs
     integer :: err_code, threads_per_block, num_blocks, subgrid_size, ngridmax
     real(dp) :: dt, dx, gamma
+    integer :: slope, riemann
 
     if(sim%r%verbose.and.sim%g%myid==1)write(*,'("   Entering gpu_godunov for level ",I2)')ilevel
 
@@ -199,10 +198,13 @@ contains
     threads_per_block = 64
     subgrid_size = 6
     ngridmax = sim%m%ngridmax
+    slope = sim%r%slope_type
+    riemann = sim%r%riemann
 
     call nvtxStartRange("GPU Godunov", color=0)!green
     call hydro_integrator_kernel<<<num_blocks, threads_per_block>>>(grid, uold, unew, father, nbor, &
-         & head_idx, num_octs, subgrid_size, ngridmax, ilevel, sim%r%levelmin, sim%r%nlevelmax, gamma, dt/dx)
+         & head_idx, num_octs, subgrid_size, ngridmax, ilevel, sim%r%levelmin, sim%r%nlevelmax, &
+         & gamma, dt/dx, slope, riemann)
     call GPU_Error_Check(__FILE__, __LINE__)
     call nvtxEndRange()
 
@@ -630,33 +632,25 @@ contains
     integer, intent(inout) :: nflag
 
     integer(kind=4) :: head_idx, num_octs
-    integer :: threadsX_per_block, threadsY_per_block, num_threads, num_blocks, subgrid_size
+    integer :: threadsX_per_block, threadsY_per_block, num_threads, num_blocks
     real(kind=8) :: gamma, err_grad_d, err_grad_p, floor_d, floor_p
     integer(kind=8) :: nflag_h
     integer(kind=8), device :: nflag_d
 
-    subgrid_size = 6
     gamma = sim%r%gamma
-    if(sim%r%err_grad_d >= 0.)then
-       err_grad_d = sim%r%err_grad_d
-    else
-       err_grad_d = huge(0d0)
-    endif
-    if(sim%r%err_grad_p >= 0.)then
-       err_grad_p = sim%r%err_grad_p
-    else
-       err_grad_p = huge(0d0)
-    endif
+    err_grad_d = sim%r%err_grad_d
+    err_grad_p = sim%r%err_grad_p
     floor_d = sim%r%floor_d
     floor_p = sim%r%floor_p
 
     head_idx = sim%m%head(ilevel)
     num_octs = sim%m%noct(ilevel)
-    num_threads = 128
-    num_blocks = (num_octs + num_threads - 1) / num_threads
-    if (num_octs > 0) then
-       call hydro_flag_kernel<<<num_blocks, num_threads>>>(flag1, grid, nbor, uold, head_idx, num_octs, subgrid_size, &
-            & gamma, err_grad_d, err_grad_p, floor_d, floor_p)
+    threadsX_per_block = 8
+    threadsY_per_block = 16
+    num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
+    if(num_octs > 0)then
+       call hydro_flag_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(flag1, grid, nbor, uold, &
+            & head_idx, num_octs, gamma, err_grad_d, err_grad_p, floor_d, floor_p)
     endif
 
     nflag_h = 0

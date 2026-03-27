@@ -1,10 +1,24 @@
 module hydro_device
   use amr_parameters, only: dp, ndim, twotondim, threetondim
-  use hydro_parameters, only: nvar
+  use hydro_parameters
   use oct_commons, only: oct
   use gpu_utils, only: subgrid_6x6x6cell_conserved, subgrid_6x6x6cell_primitive
   use cudafor
   implicit none
+  integer,dimension(1:8,1:6),parameter::ggg=reshape(&
+       & (/13,14,13,14,13,14,13,14,&
+       &   14,15,14,15,14,15,14,15,&
+       &   11,11,14,14,11,11,14,14,&
+       &   14,14,17,17,14,14,17,17,&
+       &   5,5,5,5,14,14,14,14,&
+       &   14,14,14,14,23,23,23,23/),(/8,6/))
+  integer,dimension(1:8,1:6),parameter::hhh=reshape(&
+       & (/2,1,4,3,6,5,8,7,&
+       &   2,1,4,3,6,5,8,7,&
+       &   3,4,1,2,7,8,5,6,&
+       &   3,4,1,2,7,8,5,6,&
+       &   5,6,7,8,1,2,3,4,&
+       &   5,6,7,8,1,2,3,4/),(/8,6/))
 
   !> @brief
   !> Contains a 3 x 3 x 3 subgrid of primitive variables. Intended to act as a subgrid
@@ -14,7 +28,7 @@ module hydro_device
      real(kind=dp), dimension(0:2, 0:1, 0:1) :: density, velocity_x, velocity_y, velocity_z, pressure
   end type subgrid_3x2x2cell_primitive
   type, public :: subgrid_2x3x2cell_primitive
-     real(kind=dp), dimension(0:1, 0:2, 0:2) :: density, velocity_x, velocity_y, velocity_z, pressure
+     real(kind=dp), dimension(0:1, 0:2, 0:1) :: density, velocity_x, velocity_y, velocity_z, pressure
   end type subgrid_2x3x2cell_primitive
   type, public :: subgrid_2x2x3cell_primitive
      real(kind=dp), dimension(0:1, 0:1, 0:2) :: density, velocity_x, velocity_y, velocity_z, pressure
@@ -154,24 +168,29 @@ contains
   !> @param[in] middle : The value in the cell
   !> @param[in] right : The value to the "left" side of the cell
   !> @return
-  !> The minmod slope in the cell
-  attributes(device) function slope_moncen(left, middle, right)
+  !> The moncen slope in the cell with minmod or 1st order as options
+  attributes(device) function slope_moncen(left, middle, right, slope)
     real(kind=dp), value :: left, middle, right
+    integer, value :: slope
+
     real(kind=dp) :: slope_left, slope_right, slope_central
-    real(kind=dp) :: slope_minmod, slope_moncen
+    real(kind=dp) :: slope_minmod, slope_moncen, factor
 
     slope_left = middle - left
     slope_right = right - middle
     slope_central = 0.5 * (slope_left + slope_right)
 
+    ! Slope type factor, 0: 1st order, 1: minmod, 2: moncen
+    factor = real(slope, kind=8) 
+
     if (slope_left*slope_right <= 0.0) then
        slope_moncen = 0.0
     else if (slope_left > 0) then
        slope_minmod = min(slope_left, slope_right)
-       slope_moncen = min(2 * slope_minmod, slope_central)
+       slope_moncen = min(factor * slope_minmod, slope_central)
     else
        slope_minmod = max(slope_left, slope_right)
-       slope_moncen = max(2 * slope_minmod, slope_central)
+       slope_moncen = max(factor * slope_minmod, slope_central)
     end if
   end function slope_moncen
   ! ==========================================================================
@@ -330,12 +349,15 @@ contains
   !> @param[in] right_interfaces_y : The right side interfaces normal to y
   !> @param[in] right_interfaces_z : The right side interfaces normal to z
   !>
-  attributes(device) subroutine trace_3d(local_subgrid, thread_idx, subgrid_size, gamma, dtdx, &
-       & left_interfaces_x, right_interfaces_x,left_interfaces_y, right_interfaces_y, left_interfaces_z, right_interfaces_z)
+  attributes(device) subroutine trace_3d(local_subgrid, thread_idx, subgrid_size, &
+       & left_interfaces_x, right_interfaces_x,left_interfaces_y, right_interfaces_y, &
+       & left_interfaces_z, right_interfaces_z, gamma, dtdx, slope)
     type(subgrid_6x6x6cell_primitive), intent(inout) :: local_subgrid ! The subgrid that this block is working on in shared memory
     integer, value :: thread_idx
     integer, value :: subgrid_size
     real(kind=dp), value :: gamma, dtdx
+    integer, value :: slope
+
     type(subgrid_3x2x2cell_primitive) :: left_interfaces_x, right_interfaces_x
     type(subgrid_2x3x2cell_primitive) :: left_interfaces_y, right_interfaces_y
     type(subgrid_2x2x3cell_primitive) :: left_interfaces_z, right_interfaces_z
@@ -368,23 +390,23 @@ contains
        cell%pressure   = local_subgrid%pressure  (i, j, k)
 
        ! Compute the TVD Slopes
-       slopes_x%density    = 0.5 * slope_minmod(local_subgrid%density   (i - 1, j, k), cell%density,    local_subgrid%density   (i + 1, j, k))
-       slopes_x%velocity_x = 0.5 * slope_minmod(local_subgrid%velocity_x(i - 1, j, k), cell%velocity_x, local_subgrid%velocity_x(i + 1, j, k))
-       slopes_x%velocity_y = 0.5 * slope_minmod(local_subgrid%velocity_y(i - 1, j, k), cell%velocity_y, local_subgrid%velocity_y(i + 1, j, k))
-       slopes_x%velocity_z = 0.5 * slope_minmod(local_subgrid%velocity_z(i - 1, j, k), cell%velocity_z, local_subgrid%velocity_z(i + 1, j, k))
-       slopes_x%pressure   = 0.5 * slope_minmod(local_subgrid%pressure  (i - 1, j, k), cell%pressure,   local_subgrid%pressure  (i + 1, j, k))
+       slopes_x%density    = 0.5 * slope_moncen(local_subgrid%density   (i - 1, j, k), cell%density,    local_subgrid%density   (i + 1, j, k), slope)
+       slopes_x%velocity_x = 0.5 * slope_moncen(local_subgrid%velocity_x(i - 1, j, k), cell%velocity_x, local_subgrid%velocity_x(i + 1, j, k), slope)
+       slopes_x%velocity_y = 0.5 * slope_moncen(local_subgrid%velocity_y(i - 1, j, k), cell%velocity_y, local_subgrid%velocity_y(i + 1, j, k), slope)
+       slopes_x%velocity_z = 0.5 * slope_moncen(local_subgrid%velocity_z(i - 1, j, k), cell%velocity_z, local_subgrid%velocity_z(i + 1, j, k), slope)
+       slopes_x%pressure   = 0.5 * slope_moncen(local_subgrid%pressure  (i - 1, j, k), cell%pressure,   local_subgrid%pressure  (i + 1, j, k), slope)
 
-       slopes_y%density    = 0.5 * slope_minmod(local_subgrid%density   (i, j - 1, k), cell%density,    local_subgrid%density(   i, j + 1, k))
-       slopes_y%velocity_x = 0.5 * slope_minmod(local_subgrid%velocity_x(i, j - 1, k), cell%velocity_x, local_subgrid%velocity_x(i, j + 1, k))
-       slopes_y%velocity_y = 0.5 * slope_minmod(local_subgrid%velocity_y(i, j - 1, k), cell%velocity_y, local_subgrid%velocity_y(i, j + 1, k))
-       slopes_y%velocity_z = 0.5 * slope_minmod(local_subgrid%velocity_z(i, j - 1, k), cell%velocity_z, local_subgrid%velocity_z(i, j + 1, k))
-       slopes_y%pressure   = 0.5 * slope_minmod(local_subgrid%pressure  (i, j - 1, k), cell%pressure,   local_subgrid%pressure(  i, j + 1, k))
+       slopes_y%density    = 0.5 * slope_moncen(local_subgrid%density   (i, j - 1, k), cell%density,    local_subgrid%density(   i, j + 1, k), slope)
+       slopes_y%velocity_x = 0.5 * slope_moncen(local_subgrid%velocity_x(i, j - 1, k), cell%velocity_x, local_subgrid%velocity_x(i, j + 1, k), slope)
+       slopes_y%velocity_y = 0.5 * slope_moncen(local_subgrid%velocity_y(i, j - 1, k), cell%velocity_y, local_subgrid%velocity_y(i, j + 1, k), slope)
+       slopes_y%velocity_z = 0.5 * slope_moncen(local_subgrid%velocity_z(i, j - 1, k), cell%velocity_z, local_subgrid%velocity_z(i, j + 1, k), slope)
+       slopes_y%pressure   = 0.5 * slope_moncen(local_subgrid%pressure  (i, j - 1, k), cell%pressure,   local_subgrid%pressure(  i, j + 1, k), slope)
 
-       slopes_z%density    = 0.5 * slope_minmod(local_subgrid%density   (i, j, k - 1), cell%density,    local_subgrid%density   (i, j, k + 1))
-       slopes_z%velocity_x = 0.5 * slope_minmod(local_subgrid%velocity_x(i, j, k - 1), cell%velocity_x, local_subgrid%velocity_x(i, j, k + 1))
-       slopes_z%velocity_y = 0.5 * slope_minmod(local_subgrid%velocity_y(i, j, k - 1), cell%velocity_y, local_subgrid%velocity_y(i, j, k + 1))
-       slopes_z%velocity_z = 0.5 * slope_minmod(local_subgrid%velocity_z(i, j, k - 1), cell%velocity_z, local_subgrid%velocity_z(i, j, k + 1))
-       slopes_z%pressure   = 0.5 * slope_minmod(local_subgrid%pressure  (i, j, k - 1), cell%pressure,   local_subgrid%pressure  (i, j, k + 1))
+       slopes_z%density    = 0.5 * slope_moncen(local_subgrid%density   (i, j, k - 1), cell%density,    local_subgrid%density   (i, j, k + 1), slope)
+       slopes_z%velocity_x = 0.5 * slope_moncen(local_subgrid%velocity_x(i, j, k - 1), cell%velocity_x, local_subgrid%velocity_x(i, j, k + 1), slope)
+       slopes_z%velocity_y = 0.5 * slope_moncen(local_subgrid%velocity_y(i, j, k - 1), cell%velocity_y, local_subgrid%velocity_y(i, j, k + 1), slope)
+       slopes_z%velocity_z = 0.5 * slope_moncen(local_subgrid%velocity_z(i, j, k - 1), cell%velocity_z, local_subgrid%velocity_z(i, j, k + 1), slope)
+       slopes_z%pressure   = 0.5 * slope_moncen(local_subgrid%pressure  (i, j, k - 1), cell%pressure,   local_subgrid%pressure  (i, j, k + 1), slope)
 
        ! Source terms
        source_term%density    = -cell%velocity_x * slopes_x%density    &
@@ -495,7 +517,6 @@ contains
   attributes(device) function hll_flux(speed_l, speed_r, left_flux, right_flux, left_c, right_c) result(flux)
     real(kind=dp), value :: speed_l, speed_r,  left_flux, right_flux, left_c, right_c
     real(kind=dp) :: flux
-
     flux = (speed_r * left_flux - speed_l*right_flux + speed_r * speed_l * (right_c-left_c)) / (speed_r-speed_l)
   end function hll_flux
   ! =========================================================================
@@ -509,16 +530,17 @@ contains
   !>
   !> @return
   !> flux : The conserved_t of the HLL fluxes 
-  attributes(device) function hll_fluxes(left_state_p, right_state_p, gamma) result(flux)
+  attributes(device) function hll_fluxes(left_state_p, right_state_p, gamma, llf) result(flux)
     type(primitive_t), intent(inout) :: left_state_p, right_state_p
     real(kind=dp), value :: gamma
+    logical, value :: llf
     type(conserved_t) :: flux
     ! Both `smallr` and `smallc`/`smallp` are usually defined in amr_commons. I'm redefining them here so that they will be evaluated at compile time
     real(kind=dp), parameter :: smallr = 1.d-10 
     real(kind=dp), parameter :: smallc_squared = (1.d-10)**2
     type(conserved_t) :: left_state_c, right_state_c, left_fluxes, right_fluxes
     real(kind=dp) :: smallp
-    real(kind=dp) :: sound_speed_l, sound_speed_r, speed_l, speed_r
+    real(kind=dp) :: sound_speed_l, sound_speed_r, speed_l, speed_r, speed_max
 
     ! Verify that the density and pressure are reasonable and positive
     smallp = smallc_squared / gamma ! The minimum pressure
@@ -527,11 +549,19 @@ contains
     left_state_p%pressure  = max(left_state_p%pressure,  smallp * left_state_p%density)
     right_state_p%pressure = max(right_state_p%pressure, smallp * right_state_p%density)
 
-    ! Compute the wave speeds
+    ! Compute the sound speeds
     sound_speed_l = sound_speed(left_state_p, gamma)
     sound_speed_r = sound_speed(right_state_p, gamma)
-    speed_l = min(min(left_state_p%velocity_x, right_state_p%velocity_x) - max(sound_speed_l, sound_speed_r), 0.0_dp)
-    speed_r = max(max(left_state_p%velocity_x, right_state_p%velocity_x) + max(sound_speed_l, sound_speed_r), 0.0_dp)
+
+    ! Compute the wave speeds
+    if (llf) then
+       speed_max = max(abs(left_state_p%velocity_x)+sound_speed_l,abs(right_state_p%velocity_x)+sound_speed_r)
+       speed_l = -speed_max
+       speed_r = speed_max
+    else
+       speed_l = min(min(left_state_p%velocity_x, right_state_p%velocity_x) - max(sound_speed_l, sound_speed_r), 0.0_dp)
+       speed_r = max(max(left_state_p%velocity_x, right_state_p%velocity_x) + max(sound_speed_l, sound_speed_r), 0.0_dp)
+    endif
 
     ! Convert to conserved variables
     left_state_c = primitive_2_conserved(left_state_p, gamma)
@@ -574,12 +604,14 @@ contains
   !> @param[in] subgrid_size : The size of the subgrid in cells on each edge
   !> @param[in] thread_idx : The index of this thread
   !>
-  attributes(device) subroutine riemann_driver(left_interfaces_x, right_interfaces_x, &
-       & left_interfaces_y, right_interfaces_y, left_interfaces_z, right_interfaces_z, gamma, subgrid_size, thread_idx)
+  attributes(device) subroutine riemann_driver(left_interfaces_x, right_interfaces_x, left_interfaces_y, &
+       & right_interfaces_y, left_interfaces_z, right_interfaces_z, subgrid_size, thread_idx, &
+       & gamma, riemann)
     type(subgrid_3x2x2cell_primitive), intent(inout) :: left_interfaces_x, right_interfaces_x
     type(subgrid_2x3x2cell_primitive), intent(inout) :: left_interfaces_y, right_interfaces_y
     type(subgrid_2x2x3cell_primitive), intent(inout) :: left_interfaces_z, right_interfaces_z
     real(kind=dp), value :: gamma
+    integer, value :: riemann
     integer, value :: subgrid_size, thread_idx
     integer :: work_idx, interface_array_size, i, j, k
     type(primitive_t) :: left_interface, right_interface
@@ -606,7 +638,11 @@ contains
           right_interface%pressure   = right_interfaces_x%pressure(i,j,k)
 
           ! Call the Riemann Solver
-          flux = hll_fluxes(left_interface, right_interface, gamma)
+          if(riemann .eq. solver_llf)then
+             flux = hll_fluxes(left_interface, right_interface, gamma, .true.)
+          else if (riemann .eq. solver_hll) then
+             flux = hll_fluxes(left_interface, right_interface, gamma, .false.)
+          endif
 
           ! Unpack the fluxes into the interface state arrays
           left_interfaces_x%density   (i,j,k) = flux%density
@@ -633,7 +669,11 @@ contains
           right_interface%pressure   = right_interfaces_y%pressure(i,j,k)
 
           ! Call the Riemann Solver
-          flux = hll_fluxes(left_interface, right_interface, gamma)
+          if(riemann .eq. solver_llf)then
+             flux = hll_fluxes(left_interface, right_interface, gamma, .true.)
+          else if (riemann .eq. solver_hll) then
+             flux = hll_fluxes(left_interface, right_interface, gamma, .false.)
+          endif
 
           ! Unpack the fluxes into the interface state arrays
           left_interfaces_y%density   (i,j,k) = flux%density
@@ -659,7 +699,11 @@ contains
           right_interface%pressure   = right_interfaces_z%pressure(i,j,k)
 
           ! Call the Riemann Solver
-          flux = hll_fluxes(left_interface, right_interface, gamma)
+          if(riemann .eq. solver_llf)then
+             flux = hll_fluxes(left_interface, right_interface, gamma, .true.)
+          else if (riemann .eq. solver_hll) then
+             flux = hll_fluxes(left_interface, right_interface, gamma, .false.)
+          endif
 
           ! Unpack the fluxes into the interface state arrays
           left_interfaces_z%density   (i,j,k) = flux%density
@@ -1053,7 +1097,8 @@ contains
 
   ! =========================================================================
   attributes(global) subroutine hydro_integrator_kernel(grid, uold, unew, father, nbor, &
-       & head_idx, num_octs, subgrid_size, ngridmax, ilevel, levelmin, levelmax, gamma, dtdx)
+       & head_idx, num_octs, subgrid_size, ngridmax, ilevel, levelmin, levelmax, &
+       & gamma, dtdx, slope, riemann)
     type(oct), device :: grid(*)
     integer, device :: father(*)
     integer, device :: nbor(1:threetondim,*)
@@ -1066,6 +1111,8 @@ contains
     integer, intent(in), value :: ilevel, levelmin, levelmax
     real(kind=dp), intent(in), value :: gamma
     real(kind=dp), intent(in), value :: dtdx
+    integer, intent(in), value :: slope
+    integer, intent(in), value :: riemann
 
     type(subgrid_3x2x2cell_primitive), shared :: left_interfaces_x, right_interfaces_x
     type(subgrid_2x3x2cell_primitive), shared :: left_interfaces_y, right_interfaces_y
@@ -1091,8 +1138,9 @@ contains
     ! Perform tracing step and compute the interface states
     ! =======================================================================
     ! This will compute the interface states and write them to shared memory
-    call trace_3d(local_subgrid, thread_idx, subgrid_size, gamma, dtdx, left_interfaces_x, right_interfaces_x, &
-         & left_interfaces_y, right_interfaces_y, left_interfaces_z, right_interfaces_z)
+    call trace_3d(local_subgrid, thread_idx, subgrid_size, &
+         & left_interfaces_x, right_interfaces_x, left_interfaces_y, right_interfaces_y, &
+         & left_interfaces_z, right_interfaces_z, gamma, dtdx, slope)
 
     ! =======================================================================
     ! Compute the fluxes.
@@ -1102,7 +1150,8 @@ contains
     ! fluxes are in the conserved variables despite what the member variables
     ! names say
     call riemann_driver(left_interfaces_x, right_interfaces_x, left_interfaces_y, &
-         & right_interfaces_y, left_interfaces_z, right_interfaces_z, gamma, subgrid_size, thread_idx)
+         & right_interfaces_y, left_interfaces_z, right_interfaces_z, subgrid_size, thread_idx, &
+         & gamma, riemann)
 
     ! =======================================================================
     ! Zero fluxes at boundaries with finer levels.
@@ -1130,162 +1179,106 @@ contains
   ! =========================================================================
 
   ! =========================================================================
-  attributes(device) subroutine hydro_gradient(local_subgrid, gradients_x, gradients_y, gradients_z, &
-       & thread_idx, subgrid_size, floor_d, floor_p)
-    type(subgrid_6x6x6cell_primitive), intent(in)    :: local_subgrid
-    type(subgrid_3x2x2cell_primitive), intent(inout) :: gradients_x
-    type(subgrid_2x3x2cell_primitive), intent(inout) :: gradients_y
-    type(subgrid_2x2x3cell_primitive), intent(inout) :: gradients_z
-    integer, value :: subgrid_size, thread_idx
-    real(kind=dp), value :: floor_d, floor_p
-
-    integer :: work_idx, interface_array_size, i, j, k
-
-    interface_array_size = (subgrid_size-3) * (subgrid_size-4)**2
-
-    do work_idx = thread_idx, interface_array_size * 3 - 1, blockDim%x
-       if (work_idx < interface_array_size) then ! Compute fluxes across the x interfaces
-          ! Compute the indices in the interface state arrays
-          call index_1Dto3D(work_idx, subgrid_size-3, subgrid_size-4, i, j, k)
-
-          ! Compute the gradients
-          gradients_x%density   (i,j,k) = (local_subgrid%density (i+1,j,k) - local_subgrid%density (i,j,k)) / &
-               &                          (local_subgrid%density (i+1,j,k) + local_subgrid%density (i,j,k) + floor_d)
-          gradients_x%velocity_x(i,j,k) = 0_dp
-          gradients_x%velocity_y(i,j,k) = 0_dp
-          gradients_x%velocity_z(i,j,k) = 0_dp
-          gradients_x%pressure  (i,j,k) = (local_subgrid%pressure(i+1,j,k) - local_subgrid%pressure(i,j,k)) / &
-               &                          (local_subgrid%pressure(i+1,j,k) + local_subgrid%pressure(i,j,k) + floor_p)
-
-       else if (work_idx < 2 * interface_array_size) then ! Compute fluxes across the y interfaces
-          ! Compute the indices in the interface state arrays
-          call index_1Dto3D(work_idx - interface_array_size, subgrid_size-4, subgrid_size-3, i, j, k)
-
-          ! Compute the gradients
-          gradients_y%density   (i,j,k) = (local_subgrid%density (i,j+1,k) - local_subgrid%density (i,j,k)) / &
-               &                          (local_subgrid%density (i,j+1,k) + local_subgrid%density (i,j,k) + floor_d)
-          gradients_y%velocity_x(i,j,k) = 0_dp
-          gradients_y%velocity_y(i,j,k) = 0_dp
-          gradients_y%velocity_z(i,j,k) = 0_dp
-          gradients_y%pressure  (i,j,k) = (local_subgrid%pressure(i,j+1,k) - local_subgrid%pressure(i,j,k)) / &
-               &                          (local_subgrid%pressure(i,j+1,k) + local_subgrid%pressure(i,j,k) + floor_p)
-       else ! Compute fluxes across the z interfaces
-          ! Compute the indices in the interface state arrays
-          call index_1Dto3D(work_idx - 2*interface_array_size, subgrid_size-4, subgrid_size-4, i, j, k)
-
-          ! Compute the gradients
-          gradients_z%density   (i,j,k) = (local_subgrid%density (i,j,k+1) - local_subgrid%density (i,j,k)) / &
-               &                          (local_subgrid%density (i,j,k+1) + local_subgrid%density (i,j,k) + floor_d)
-          gradients_z%velocity_x(i,j,k) = 0_dp
-          gradients_z%velocity_y(i,j,k) = 0_dp
-          gradients_z%velocity_z(i,j,k) = 0_dp
-          gradients_z%pressure  (i,j,k) = (local_subgrid%pressure(i,j,k+1) - local_subgrid%pressure(i,j,k)) / &
-               &                          (local_subgrid%pressure(i,j,k+1) + local_subgrid%pressure(i,j,k) + floor_p)
-       end if
-    end do
-
-    call syncthreads()
-
-  end subroutine hydro_gradient
-  ! =========================================================================
-
-  ! =========================================================================
-  attributes(device) subroutine hydro_flag_3d(flag1, gradients_x, gradients_y, gradients_z, &
-       & head_idx, block_idx, thread_idx, subgrid_size, err_grad_d, err_grad_p)
-    integer(kind=4), device :: flag1(1:twotondim,*)
-    type(subgrid_3x2x2cell_primitive), intent(in) :: gradients_x
-    type(subgrid_2x3x2cell_primitive), intent(in) :: gradients_y
-    type(subgrid_2x2x3cell_primitive), intent(in) :: gradients_z
-    integer, value :: thread_idx, head_idx, block_idx, subgrid_size
+  attributes(device) subroutine hydro_crit(prim_lft, prim_mid, prim_rgt, ok, &
+       & err_grad_d, err_grad_p, floor_d, floor_p)
+    type(primitive_t) :: prim_lft, prim_mid, prim_rgt
     real(kind=dp), value :: err_grad_d, err_grad_p
-
-    type(primitive_t) :: err_x, err_y, err_z
-    integer :: work_idx, cell_idx, oct_idx
-    integer :: i, j, k, work_size
+    real(kind=dp), value :: floor_d, floor_p
     logical :: ok
 
-    ! Compute the size of the section of the subgrid to operate on
-    work_size = subgrid_size - 4
-    do work_idx = thread_idx, work_size**3 - 1, blockDim%x
-       call index_1Dto3D(work_idx, work_size, work_size, i, j, k)
+    real(kind=8) :: err_lft, err_rgt, error
 
-       ! Compute the oct index
-       oct_idx = head_idx + block_idx
+    ok = .false.
 
-       ! Compute the cell index
-       cell_idx = mod(work_idx, 8) + 1
+    if (err_grad_d > 0.0) then
+       err_lft = abs((prim_mid%density - prim_lft%density) / (prim_mid%density + prim_lft%density + floor_d))
+       err_rgt = abs((prim_rgt%density - prim_mid%density) / (prim_rgt%density + prim_mid%density + floor_d))
+       error = 2.0d0*max(err_lft, err_rgt)
+       if (error > err_grad_d) ok = .true.
+    endif
 
-       ok = .false.
+    if (err_grad_p > 0.0) then
+       err_lft = abs((prim_mid%pressure - prim_lft%pressure) / (prim_mid%pressure + prim_lft%pressure + floor_d))
+       err_rgt = abs((prim_rgt%pressure - prim_mid%pressure) / (prim_rgt%pressure + prim_mid%pressure + floor_d))
+       error = 2.0d0*max(err_lft, err_rgt)
+       if (error > err_grad_p) ok = .true.
+    endif
 
-       ! Compute the errors
-       err_x%density  = 2d0 * MAX(ABS(gradients_x%density (i,j,k)), ABS(gradients_x%density (i+1,j,k)))
-       err_y%density  = 2d0 * MAX(ABS(gradients_y%density (i,j,k)), ABS(gradients_y%density (i,j+1,k)))
-       err_z%density  = 2d0 * MAX(ABS(gradients_z%density (i,j,k)), ABS(gradients_z%density (i,j,k+1)))
-       err_x%pressure = 2d0 * MAX(ABS(gradients_x%pressure(i,j,k)), ABS(gradients_x%pressure(i+1,j,k)))
-       err_y%pressure = 2d0 * MAX(ABS(gradients_y%pressure(i,j,k)), ABS(gradients_y%pressure(i,j+1,k)))
-       err_z%pressure = 2d0 * MAX(ABS(gradients_z%pressure(i,j,k)), ABS(gradients_z%pressure(i,j,k+1)))
-
-       ! Check if cell needs refinement
-       ok = ok .or. (err_x%density  > err_grad_d)
-       ok = ok .or. (err_y%density  > err_grad_d)
-       ok = ok .or. (err_z%density  > err_grad_d)
-       ok = ok .or. (err_x%pressure > err_grad_p)
-       ok = ok .or. (err_y%pressure > err_grad_p)
-       ok = ok .or. (err_z%pressure > err_grad_p)
-
-       if (ok) flag1(cell_idx, oct_idx) = 1
-
-    end do
-
-  end subroutine hydro_flag_3d
+  end subroutine hydro_crit
   ! =========================================================================
 
   ! =========================================================================
-  attributes(global) subroutine hydro_flag_kernel(flag1, grid, nbor, uold, &
-       & head_idx, num_octs, subgrid_size, gamma, err_grad_d, err_grad_p, floor_d, floor_p)
+  attributes(global) subroutine hydro_flag_kernel(flag1, grid, nbor, uold, head_idx, num_octs, & 
+       & gamma, err_grad_d, err_grad_p, floor_d, floor_p)
     type(oct), device :: grid(*)
     real(kind=dp), device :: uold(1:twotondim,1:nvar,*)
     integer(kind=4), device :: nbor(1:threetondim,*)
     integer(kind=4), device :: flag1(1:twotondim,*)
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
-    integer, intent(in), value :: subgrid_size
     real(kind=dp), intent(in), value :: gamma
     real(kind=dp), intent(in), value :: err_grad_d, floor_d
     real(kind=dp), intent(in), value :: err_grad_p, floor_p
 
-    type(subgrid_6x6x6cell_primitive), shared :: local_subgrid
-    type(subgrid_3x2x2cell_primitive), shared :: gradients_x
-    type(subgrid_2x3x2cell_primitive), shared :: gradients_y
-    type(subgrid_2x2x3cell_primitive), shared :: gradients_z
-    integer :: block_idx
-    integer :: thread_idx
+    integer :: cell_idx, oct_idx, block_idx, source_idx, icell, inbor, idim
+    type(primitive_t) :: prim_lft, prim_mid, prim_rgt
+    type(conserved_t) :: cons_lft, cons_mid, cons_rgt
+    logical :: ok
 
     block_idx = blockIdx%x - 1
-    thread_idx = threadIdx%x - 1
 
-    if (block_idx >= num_octs) return
+    ! Compute the oct idx
+    oct_idx = block_idx * blockDim%y + threadIdx%y - 1
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
 
-    ! =======================================================================
-    ! Convert from conserved to primitive variables
-    ! =======================================================================
-    call subgrid_conserved_2_primitive(grid, uold, nbor, head_idx, block_idx, thread_idx, &
-         & subgrid_size, gamma, local_subgrid)
+    ! Compute the cell idx
+    cell_idx = threadIdx%x
 
-    ! =======================================================================
-    ! Compute hydro variables gradient at cell interfaces
-    ! =======================================================================
-    call hydro_gradient(local_subgrid, gradients_x, gradients_y, gradients_z, thread_idx, &
-         & subgrid_size, floor_d, floor_p)
+    ! Middle cell
+    cons_mid%density    = uold(cell_idx, 1, oct_idx)
+    cons_mid%momentum_x = uold(cell_idx, 2, oct_idx)
+    cons_mid%momentum_y = uold(cell_idx, 3, oct_idx)
+    cons_mid%momentum_z = uold(cell_idx, 4, oct_idx)
+    cons_mid%energy     = uold(cell_idx, 5, oct_idx)
+    prim_mid = conserved_2_primitive(cons_mid, gamma)
 
-    ! =======================================================================
-    ! Set flag1 to 1 if refinement criteria are fullfilled
-    ! =======================================================================
-    call hydro_flag_3d(flag1, gradients_x, gradients_y, gradients_z, head_idx, block_idx, thread_idx, &
-         & subgrid_size, err_grad_d, err_grad_p)
+    ! Loop over dimensions
+    do idim = 1, ndim
+
+       ! Left cell
+       icell = hhh(cell_idx, 2 * (idim-1) + 1)
+       inbor = ggg(cell_idx, 2 * (idim-1) + 1)
+       source_idx = nbor(inbor, oct_idx)
+       cons_lft%density    = uold(icell, 1, source_idx)
+       cons_lft%momentum_x = uold(icell, 2, source_idx)
+       cons_lft%momentum_y = uold(icell, 3, source_idx)
+       cons_lft%momentum_z = uold(icell, 4, source_idx)
+       cons_lft%energy     = uold(icell, 5, source_idx)
+       prim_lft = conserved_2_primitive(cons_lft, gamma)
+
+       ! Right cell
+       icell = hhh(cell_idx, 2 * (idim-1) + 2)
+       inbor = ggg(cell_idx, 2 * (idim-1) + 2)
+       source_idx = nbor(inbor, oct_idx)
+       cons_rgt%density    = uold(icell, 1, source_idx)
+       cons_rgt%momentum_x = uold(icell, 2, source_idx)
+       cons_rgt%momentum_y = uold(icell, 3, source_idx)
+       cons_rgt%momentum_z = uold(icell, 4, source_idx)
+       cons_rgt%energy     = uold(icell, 5, source_idx)
+       prim_rgt = conserved_2_primitive(cons_rgt, gamma)
+
+       ! Check refinement criteria
+       call hydro_crit(prim_lft, prim_mid, prim_rgt, ok, &
+            & err_grad_d, err_grad_p, floor_d, floor_p)
+
+       ! If satisfied set flag1 to 1
+       if (ok) flag1(cell_idx, oct_idx) = 1
+
+    end do
 
   end subroutine hydro_flag_kernel
-  ! =========================================================================
+  ! =========================================================================~
 
   ! =========================================================================
   attributes(global) subroutine upload_kernel(grid, father, uold, head_idx, num_octs)
@@ -1394,13 +1387,13 @@ contains
   ! =========================================================================
 
   ! =========================================================================
-  attributes(global) subroutine cmpdt_kernel(grid, uold, head_idx, num_octs, mass, ekin, eint, emag, dt, dx, gamma)
+  attributes(global) subroutine cmpdt_kernel(grid, uold, head_idx, num_octs, mass, ekin, eint, emag, dt, dx, gamma, courant_factor)
     type(oct), device :: grid(*)
     real(kind=dp), device :: uold(1:twotondim,1:nvar,*)
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
     real(kind=8), device, intent(inout) :: mass, ekin, eint, emag, dt
-    real(kind=dp), value :: dx, gamma
+    real(kind=dp), value :: dx, gamma, courant_factor
 
     type(primitive_t) :: primitive
     type(conserved_t) :: conserved
@@ -1409,7 +1402,7 @@ contains
     integer :: cell_idx ! The index of the cell
     integer :: oct_idx ! The index of the oct
     real(kind=8) :: vol_loc, mass_loc, ekin_loc, eint_loc, emag_loc, dt_loc
-    real(kind=8) :: sound_speed
+    real(kind=8) :: sound_speed, grav, ctot
 
     ! Thread and block id
     tid = threadIdx%x - 1
@@ -1463,8 +1456,10 @@ contains
           emag_loc = 0_dp
 
           ! Compute time step
+          grav = 0.0001d0 ! Placeholder for gravity
           sound_speed = sqrt(gamma*primitive%pressure/primitive%density)
-          dt_loc = dx / (abs(primitive%velocity_x)+abs(primitive%velocity_y)+abs(primitive%velocity_z)+3*sound_speed)
+          ctot = (abs(primitive%velocity_x)+abs(primitive%velocity_y)+abs(primitive%velocity_z)+3d0*sound_speed)
+          dt_loc = dx / ctot*(sqrt(1d0+2d0*courant_factor*grav)-1d0)/grav
 
        end if
 

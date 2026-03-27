@@ -211,6 +211,10 @@ contains
     ! Compute the cell idx
     cell_idx = threadIdx%x
 
+    if (flag1(cell_idx, oct_idx) == 1) then
+       flag2(cell_idx, oct_idx) = 0
+    endif
+
     if (flag2(cell_idx, oct_idx) >= num_nbors) then
        flag1(cell_idx, oct_idx) = 1
     endif
