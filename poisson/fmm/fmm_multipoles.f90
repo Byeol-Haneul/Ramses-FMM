@@ -60,10 +60,6 @@ subroutine m_fmm_multipoles(pst,ilevel)
     call r_fmm_multipole_shift_downward(pst,fmm_levels,input_size)
  end do
 
-  !do i=r%levelmin-r%level_fmm_to_amr,r%bound_levelmin,-1
-  !  write(*,'(" [M2M] DUMPING FOR MULT ",I2)')i
-  !  call r_dump_multipole(pst, i,1)
-  !end do
   end associate
 
 end subroutine m_fmm_multipoles
@@ -323,6 +319,9 @@ subroutine fmm_merge_multipoles_all(s,active_levelmin)
   use amr_parameters, only: ndim, twotondim, multipole_size, taylor_size
   use amr_commons, only: mesh_t
   use ramses_commons, only: ramses_t
+  use cache_commons
+  use cache
+  use nbors_utils
   use hash
   implicit none
 
@@ -331,8 +330,9 @@ subroutine fmm_merge_multipoles_all(s,active_levelmin)
   type(mesh_t), pointer :: m_merged
   integer::ilevel, flev, ioct, igrid_merged
   integer(kind=8),dimension(0:ndim)::hash_key
+  type(msg_large_realdp)::dummy_realdp
 
-  associate(r=>s%r)
+  associate(r=>s%r, mdl=>s%mdl)
   if (.not. associated(s%m_fmm_merged)) return
 
   m_merged => s%m_fmm_merged
@@ -347,6 +347,9 @@ subroutine fmm_merge_multipoles_all(s,active_levelmin)
      end do
   end do
 
+  call open_cache(mdl, m_merged, pack_size=storage_size(dummy_realdp)/32, &
+       init=init_flush_multipole, flush=pack_flush_multipole, combine=unpack_flush_multipole)
+
   do ilevel=active_levelmin,r%nlevelmax
      do flev=r%bound_levelmin,ilevel-r%level_fmm_to_amr
         if (s%m_fmm_list(ilevel)%tail(flev) < s%m_fmm_list(ilevel)%head(flev)) cycle
@@ -354,7 +357,9 @@ subroutine fmm_merge_multipoles_all(s,active_levelmin)
 
         do ioct=s%m_fmm_list(ilevel)%head(flev),s%m_fmm_list(ilevel)%tail(flev)
            hash_key(1:ndim)=s%m_fmm_list(ilevel)%grid(ioct)%ckey(1:ndim)
-           igrid_merged=hash_getp(m_merged%grid_dict,hash_key)
+           ! Use the write-only cache so off-rank merged grids receive all
+           ! multipole contributions instead of silently dropping remote ones.
+           call get_grid(s, hash_key, igrid_merged, flush_cache=.true., fetch_cache=.false.)
            if(igrid_merged<=0) cycle
 #ifdef FMM
            m_merged%multipole(:,:,igrid_merged)=m_merged%multipole(:,:,igrid_merged)+s%m_fmm_list(ilevel)%multipole(:,:,ioct)
@@ -362,6 +367,8 @@ subroutine fmm_merge_multipoles_all(s,active_levelmin)
         end do
      end do
   end do
+
+  call close_cache(mdl)
 
   if(r%verbose) print *, "      <MERGED MULTIPOLES> accumulation done"
   end associate
@@ -446,10 +453,14 @@ subroutine init_flush_multipole(mesh,igrid,hash_key)
   integer::igrid
   type(mesh_t)::mesh
   integer(kind=8),dimension(0:ndim)::hash_key
+  integer :: ind
 
 #ifdef FMM
   mesh%grid(igrid)%lev=hash_key(0)
   mesh%grid(igrid)%ckey(1:ndim)=hash_key(1:ndim)
+  do ind=1,twotondim
+     mesh%grid(igrid)%refined(ind)=.true.
+  end do
   mesh%multipole(:,:,igrid)=0.0
 #endif
 end subroutine init_flush_multipole

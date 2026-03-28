@@ -40,19 +40,21 @@ subroutine fmm(pst,ilev,icount)
       call r_build_fmm(pst,double_level,storage_size(double_level)/32)
     end do
   end do
-  double_level%ilevel=ilev+1
-  double_level%ifine=ilev
-  double_level%mode=FMM_BUILD_MERGED
-  call r_build_fmm(pst,double_level,storage_size(double_level)/32)
+  use_merged = .false.
+  if (use_merged) then
+     double_level%ilevel=ilev+1
+     double_level%ifine=ilev
+     double_level%mode=FMM_BUILD_MERGED
+     call r_build_fmm(pst,double_level,storage_size(double_level)/32)
+  end if
 
   if(pst%s%r%verbose) print '(A)','FMM Hierarchy done '
 
   do jlev=ilev,pst%s%r%nlevelmax
     call m_fmm_multipoles(pst, jlev) ! do upward pass !
   end do
-  call merge_multipoles(pst,ilev+1)
-  use_merged = associated(pst%s%m_fmm_merged) .and. (pst%s%m_fmm_merged%noct_used > 0) .and. &
-       &       (ilev < pst%s%r%nlevelmax)
+  if (use_merged) call merge_multipoles(pst,ilev+1)
+  use_merged = use_merged .and. associated(pst%s%m_fmm_merged) .and. (pst%s%m_fmm_merged%noct_used > 0)
 
    ! Downward pass for fmm grids. 
    input_size = storage_size(downward_levels)/32
@@ -332,7 +334,8 @@ subroutine fmm_downward(s, ilev, jlev, flev, use_merged)
   ! Open cache for multipoles
   call open_cache(mdl, m_source, pack_size=storage_size(dummy_realdp)/32,& 
             pack=pack_fetch_taylor,unpack=unpack_fetch_taylor,& 
-            init=init_flush_taylor, flush=pack_flush_taylor, combine=unpack_flush_taylor)
+            init=init_flush_taylor, flush=pack_flush_taylor, combine=unpack_flush_taylor, &
+            bound=init_bound_taylor_zero)
 
   ! (debug logging removed)
 
@@ -537,7 +540,8 @@ subroutine fmm_downward_coarse(s, ilev, jlev, flev, use_merged)
   associate(r=>s%r, m=>s%m, mdl=>s%mdl)
   
   ! Open cache for multipoles
-  call open_cache(mdl, m_source, pack_size=storage_size(dummy_rho)/32, pack=pack_fetch_rho, unpack=unpack_fetch_rho)
+  call open_cache(mdl, m_source, pack_size=storage_size(dummy_rho)/32, pack=pack_fetch_rho, &
+                  unpack=unpack_fetch_rho, bound=init_bound_rho_zero)
 
   hash_key(0) = flev
   hash_nbor_periodic(0) = flev - 1
@@ -724,7 +728,8 @@ subroutine fmm_amr_intermediate(s, ilev, jlev, use_merged)
   ! Open cache for multipoles
   call open_cache(mdl, m_fmm, pack_size=storage_size(dummy_realdp)/32,&
                   pack=pack_fetch_taylor, unpack=unpack_fetch_taylor,&
-                  init=init_flush_taylor, flush=pack_flush_taylor, combine=unpack_flush_taylor)
+                  init=init_flush_taylor, flush=pack_flush_taylor, combine=unpack_flush_taylor, &
+                  bound=init_bound_taylor_zero)
 
   hash_key(0) = ilev
   hash_fmm_grid(0) = ilev - r%level_fmm_to_amr
@@ -993,7 +998,7 @@ subroutine fmm_direct_coarsest(s, ilev, jlev)
 
   ! Open cache for multipoles
   call open_cache(mdl, m, pack_size=storage_size(dummy_rho)/32,&
-                  pack=pack_fetch_rho, unpack=unpack_fetch_rho)
+                  pack=pack_fetch_rho, unpack=unpack_fetch_rho, bound=init_bound_rho_zero)
 
   hash_key(0) = ilev
   hash_fmm_grid(0)  = ilev - 1
@@ -1152,7 +1157,7 @@ subroutine fmm_combined_direct(s, ilev, jlev)
 
   ! Open cache for multipoles
   call open_cache(mdl, m, pack_size=storage_size(dummy_rho)/32,&
-                  pack=pack_fetch_rho, unpack=unpack_fetch_rho)
+                  pack=pack_fetch_rho, unpack=unpack_fetch_rho, bound=init_bound_rho_zero)
 
   hash_key(0) = ilev
   hash_fmm_grid(0) = ilev - 1
@@ -1304,7 +1309,7 @@ subroutine fmm_amr_direct(s, ilev, jlev)
 
   ! Open cache for multipoles
   call open_cache(mdl, m, pack_size=storage_size(dummy_rho)/32,&
-            pack=pack_fetch_rho, unpack=unpack_fetch_rho)
+                  pack=pack_fetch_rho, unpack=unpack_fetch_rho, bound=init_bound_rho_zero)
 
   hash_key(0) = ilev
   hash_fmm_grid(0) = ilev - r%level_fmm_to_amr
@@ -1586,7 +1591,8 @@ subroutine fmm_amr_direct_taylor(s, ilev, jlev, use_merged)
 
 
   ! Open cache for multipoles
-  call open_cache(mdl, m_source, pack_size=storage_size(dummy_realdp)/32, pack=pack_fetch_multipole,unpack=unpack_fetch_multipole)
+  call open_cache(mdl, m_source, pack_size=storage_size(dummy_realdp)/32, pack=pack_fetch_multipole, &
+                  unpack=unpack_fetch_multipole, bound=init_bound_multipole_zero)
 
   hash_key(0) = ilev
   hash_fmm_grid(0) = ilev - r%level_fmm_to_amr
@@ -1844,6 +1850,70 @@ subroutine init_flush_taylor(mesh,igrid,hash_key)
   mesh%taylor_coeff(:,:,igrid)=0.0
 #endif
 end subroutine init_flush_taylor
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine init_bound_taylor_zero(r,g,m,igrid,igrid_ref,ibound)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: run_t, global_t, mesh_t
+  implicit none
+  type(run_t)   :: r
+  type(global_t):: g
+  type(mesh_t)  :: m
+  integer       :: igrid, igrid_ref, ibound
+  integer       :: ind
+
+#ifdef FMM
+  m%multipole(:,:,igrid)=0.0D0
+  m%taylor_coeff(:,:,igrid)=0.0D0
+#endif
+  do ind=1,twotondim
+     m%grid(igrid)%refined(ind)=.false.
+  end do
+end subroutine init_bound_taylor_zero
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine init_bound_multipole_zero(r,g,m,igrid,igrid_ref,ibound)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: run_t, global_t, mesh_t
+  implicit none
+  type(run_t)   :: r
+  type(global_t):: g
+  type(mesh_t)  :: m
+  integer       :: igrid, igrid_ref, ibound
+  integer       :: ind
+
+#ifdef FMM
+  m%multipole(:,:,igrid)=0.0D0
+#endif
+  do ind=1,twotondim
+     m%grid(igrid)%refined(ind)=.false.
+  end do
+end subroutine init_bound_multipole_zero
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine init_bound_rho_zero(r,g,m,igrid,igrid_ref,ibound)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: run_t, global_t, mesh_t
+  implicit none
+  type(run_t)   :: r
+  type(global_t):: g
+  type(mesh_t)  :: m
+  integer       :: igrid, igrid_ref, ibound
+  integer       :: ind
+
+#ifdef GRAV
+  m%rho(:,igrid)=0.0D0
+#endif
+  do ind=1,twotondim
+     m%grid(igrid)%refined(ind)=.false.
+  end do
+end subroutine init_bound_rho_zero
 !################################################################
 !################################################################
 !################################################################

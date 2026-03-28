@@ -112,12 +112,13 @@ subroutine build_fmm(s, m, m_fmm, input)
   type(double_level_t),intent(in)::input
 
   type(mesh_t)::m,m_fmm
-  integer::ifinelevel,icoarselevel,igrid,idim,ichild,grid_cpu,ind,ifather
-  integer(kind=8),dimension(0:ndim)::hash_key,hash_father
+  integer::ifinelevel,icoarselevel,igrid,idim,ichild,grid_cpu,child_cpu,ind,ifather
+  integer::i1,j1,k1,i1min,i1max,j1min,j1max,k1min,k1max
+  integer(kind=8),dimension(0:ndim)::hash_key,hash_father,hash_child
   integer(kind=4),dimension(1:ndim)::cart_key
-  integer(kind=8),dimension(1:nhilbert)::hk
+  integer(kind=8),dimension(1:nhilbert)::hk, hk_child
   integer(kind=8),dimension(1:ndim)::ix
-  logical::in_rank,in_domain,check_refinement,flag_all_refined
+  logical::in_domain,check_refinement,flag_all_refined
   type(msg_small_realdp)::dummy_small_realdp
 
   associate(r=>s%r,g=>s%g,mdl=>s%mdl)
@@ -130,6 +131,16 @@ subroutine build_fmm(s, m, m_fmm, input)
 
   check_refinement = (input%ilevel == ifinelevel)
 
+  if (g%ncpu > 1 .and. check_refinement) then
+     i1min = -1; i1max = 1
+     j1min = -1*(ndim/2); j1max = 1*(ndim/2)
+     k1min = -1*(ndim/3); k1max = 1*(ndim/3)
+  else
+     i1min = 0; i1max = 0
+     j1min = 0; j1max = 0
+     k1min = 0; k1max = 0
+  end if
+
   call open_cache(mdl, m_fmm, pack_size=storage_size(dummy_small_realdp)/32, &
        flush=pack_flush_build_fmm, combine=unpack_flush_build_fmm)
 
@@ -137,23 +148,54 @@ subroutine build_fmm(s, m, m_fmm, input)
   do igrid=m%head(ifinelevel),m%tail(ifinelevel)
 
     hash_key(1:ndim)=m%grid(igrid)%ckey(1:ndim)
-    hash_father(1:ndim)=hash_key(1:ndim)/2
 
     ! prob not worry
-    in_domain = .true.
-    do idim = 1, ndim
-        in_domain = in_domain .and. hash_father(idim) .ge. m_fmm%box_ckey_min(idim,icoarselevel) &
-            &                .and. hash_father(idim) .lt.  m_fmm%box_ckey_max(idim,icoarselevel)
-    end do
-
-    ! OPTIMIZATION NEEDED
     if (check_refinement) then
       flag_all_refined = all(m%grid(igrid)%refined)
     else
       flag_all_refined = .false.
     end if
 
-    if(in_domain .and. (.not. flag_all_refined))then
+    do k1=k1min,k1max
+       do j1=j1min,j1max
+          do i1=i1min,i1max
+             if ((i1 == 0) .and. (j1 == 0) .and. (k1 == 0) .and. flag_all_refined) cycle
+
+             hash_child(0) = ifinelevel
+#if NDIM>0
+             hash_child(1) = hash_key(1) + i1
+#endif
+#if NDIM>1
+             hash_child(2) = hash_key(2) + j1
+#endif
+#if NDIM>2
+             hash_child(3) = hash_key(3) + k1
+#endif
+
+             in_domain = .true.
+             do idim = 1, ndim
+                if (r%periodic(idim)) then
+                   if (hash_child(idim) < m%box_ckey_min(idim,ifinelevel)) then
+                      hash_child(idim) = m%box_ckey_max(idim,ifinelevel) - 1
+                   end if
+                   if (hash_child(idim) >= m%box_ckey_max(idim,ifinelevel)) then
+                      hash_child(idim) = m%box_ckey_min(idim,ifinelevel)
+                   end if
+                end if
+                in_domain = in_domain .and. hash_child(idim) .ge. m%box_ckey_min(idim,ifinelevel) &
+                     &                  .and. hash_child(idim) .lt. m%box_ckey_max(idim,ifinelevel)
+             end do
+             if (.not. in_domain) cycle
+
+             hash_father(1:ndim)=hash_child(1:ndim)/2
+
+             in_domain = .true.
+             do idim = 1, ndim
+                in_domain = in_domain .and. hash_father(idim) .ge. m_fmm%box_ckey_min(idim,icoarselevel) &
+                     &                  .and. hash_father(idim) .lt.  m_fmm%box_ckey_max(idim,icoarselevel)
+             end do
+
+             if(.not. in_domain) cycle
 
         ! Access hash table
         ifather=hash_getp(m_fmm%grid_dict,hash_father)
@@ -168,11 +210,21 @@ subroutine build_fmm(s, m, m_fmm, input)
           ix(1:ndim)=cart_key(1:ndim)
           hk(1:nhilbert)=hilbert_key(ix,icoarselevel-1)
 
-          ! Check if grid sits inside processor boundaries
-          in_rank = ge_keys(hk,m_fmm%domain(icoarselevel)%b(1:nhilbert,mdl_self(mdl)-1)).and. &
-                &    gt_keys(m_fmm%domain(icoarselevel)%b(1:nhilbert,mdl_self(mdl)),hk)
+          ! Use the unique domain owner for coarse FMM grids. After the
+          ! Hilbert boundaries are coarsened, the lower/upper-bound test can
+          ! become ambiguous across ranks and duplicate parent ownership.
+          grid_cpu = m_fmm%domain(icoarselevel)%get_rank(hk)
 
-          if(in_rank)then
+          if ((i1 /= 0 .or. j1 /= 0 .or. k1 /= 0) .and. check_refinement) then
+             cart_key(1:ndim)=int(hash_child(1:ndim),kind=4)
+             ix(1:ndim)=cart_key(1:ndim)
+             hk_child(1:nhilbert)=hilbert_key(ix,ifinelevel-1)
+             child_cpu = m%domain(ifinelevel)%get_rank(hk_child)
+             if (child_cpu == mdl_self(mdl) .or. grid_cpu /= mdl_self(mdl)) cycle
+             cart_key(1:ndim)=int(hash_father(1:ndim),kind=4)
+          end if
+
+          if(grid_cpu == mdl_self(mdl))then
 
               ! Set grid index to a virtual grid in local main memory
               ichild=m_fmm%ifree
@@ -189,8 +241,7 @@ subroutine build_fmm(s, m, m_fmm, input)
 
           else
 
-              ! Otherwise, determine parent processor and use the cache
-              grid_cpu = m_fmm%domain(icoarselevel)%get_rank(hk)
+              ! Otherwise, stage the parent grid in the cache for its owner.
               ! If next cache line is occupied, free it.
               if(m_fmm%occupied(m_fmm%free_cache))call destage(mdl,m_fmm%ngridmax+m_fmm%free_cache)
               ! Set grid index to a virtual grid in local cache memory
@@ -231,7 +282,9 @@ subroutine build_fmm(s, m, m_fmm, input)
 
         end if
 
-    end if
+          end do
+       end do
+    end do
   end do
   ! End loop over grids
 
