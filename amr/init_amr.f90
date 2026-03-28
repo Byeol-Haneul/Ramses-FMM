@@ -115,6 +115,8 @@ subroutine init_amr(r,g,m,type)
   ! Allocate grid arrays
   allocate(m%flag1(1:twotondim,1:m%ngridmax+m%ncachemax))
   allocate(m%flag2(1:twotondim,1:m%ngridmax+m%ncachemax))
+  m%flag1=0
+  m%flag2=0
 
   ! Allocate the device arrays
 #ifdef _CUDA
@@ -124,6 +126,10 @@ subroutine init_amr(r,g,m,type)
      allocate(flag2(1:twotondim,1:m%ngridmax+m%ncachemax))
      allocate(father(1:m%ngridmax+m%ncachemax))
      allocate(nbor(1:threetondim,1:m%ngridmax))
+     flag1=0
+     flag2=0
+     father=0
+     nbor=0
      ! Allocate hash table space
      m%hash_size=2*(m%ngridmax + m%ncachemax)
      allocate(hash_key(1:m%hash_size))
@@ -137,6 +143,9 @@ subroutine init_amr(r,g,m,type)
      allocate(partial_sums_0(1:max(1,(m%ngridmax+m%ncachemax)/256)))
      allocate(partial_sums_1(1:max(1,(m%ngridmax+m%ncachemax)/65536)))
      allocate(partial_sums_2(1:max(1,(m%ngridmax+m%ncachemax)/16777216)))
+     swap_local=0
+     swap_global=0
+     prefix_sum=0
   endif
 #endif
 
@@ -145,6 +154,8 @@ subroutine init_amr(r,g,m,type)
 #ifdef HYDRO
      allocate(m%uold(1:twotondim,1:nvar,1:m%ngridmax+m%ncachemax))
      allocate(m%unew(1:twotondim,1:nvar,1:m%ngridmax+m%ncachemax))
+     m%uold=0d0
+     m%unew=0d0
 #endif
 #ifdef MHD
      allocate(m%bold(1:twotondim,1:6,1:m%ngridmax+m%ncachemax))
@@ -172,6 +183,8 @@ subroutine init_amr(r,g,m,type)
   if(type=='amr')then
      allocate(uold(1:twotondim,1:nvar,1:m%ngridmax+m%ncachemax))
      allocate(unew(1:twotondim,1:nvar,1:m%ngridmax+m%ncachemax))
+     uold=0d0
+     unew=0d0
   endif
 #endif
 
