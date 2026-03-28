@@ -35,6 +35,7 @@ module gpu_runner
   integer(kind=4), device, allocatable, dimension(:) :: prefix_sum
   integer(kind=4), device, allocatable, dimension(:) :: partial_sums_0
   integer(kind=4), device, allocatable, dimension(:) :: partial_sums_1
+  integer(kind=4), device, allocatable, dimension(:) :: partial_sums_2
 
   !> The Fortran array of hydro variables of ghost and halo octs on the host and on the device
   real(kind=dp), allocatable, dimension(:) :: uold_send_host, uold_recv_host
@@ -771,7 +772,7 @@ contains
 
     if(num_octs <= num_max_0)then
 
-       ! Works only for arrray size smaller or equal than 256^2=65536
+       ! Works only for arrray size smaller or equal than 256^2=65'536
        grid_size_0 = (num_octs + block_size - 1) / block_size
        call block_scan<<<grid_size_0, block_size>>>(prefix_sum, head_idx, num_octs, partial_sums_0, total_sum_d)
        if (grid_size_0 > 1) then
@@ -783,11 +784,11 @@ contains
 
     else if(num_octs <= num_max_1)then
 
-       ! Works only for arrray size smaller or equal than 256^3=16777216
+       ! Works only for arrray size smaller or equal than 256^3=16'777'216
        grid_size_0 = (num_octs + block_size - 1) / block_size
        call block_scan<<<grid_size_0, block_size>>>(prefix_sum, head_idx, num_octs, partial_sums_0)
        grid_size_1 = (grid_size_0 + block_size - 1) / block_size
-       call block_scan<<<grid_size_1, block_size>>>(partial_sums_0, 1, grid_size_1, partial_sums_1)
+       call block_scan<<<grid_size_1, block_size>>>(partial_sums_0, 1, grid_size_0, partial_sums_1)
        if (grid_size_1 > 1) then
           call block_scan<<<1, grid_size_1>>>(partial_sums_1, 1, grid_size_1)
           offset = 1 + block_size
@@ -800,12 +801,29 @@ contains
 
     else if(num_octs <= num_max_2)then
 
-       write(*,*)'Prefix sum for that many elements not yet implemented.'
-       stop
+       ! Works only for arrray size smaller or equal than huge(1_4)=2'147'483'647
+       grid_size_0 = (num_octs + block_size - 1) / block_size
+       call block_scan<<<grid_size_0, block_size>>>(prefix_sum, head_idx, num_octs, partial_sums_0)
+       grid_size_1 = (grid_size_0 + block_size - 1) / block_size
+       call block_scan<<<grid_size_1, block_size>>>(partial_sums_0, 1, grid_size_0, partial_sums_1)
+       grid_size_2 = (grid_size_1 + block_size - 1) / block_size
+       call block_scan<<<grid_size_2, block_size>>>(partial_sums_1, 1, grid_size_1, partial_sums_2)
+       if (grid_size_2 > 1) then
+          call block_scan<<<1, grid_size_2>>>(partial_sums_2, 1, grid_size_2)
+          offset = 1 + block_size
+          size = grid_size_1 - block_size
+          call uniform_add<<<grid_size_2 - 1, block_size>>>(partial_sums_1, offset, size, partial_sums_2)
+       end if
+       offset = 1 + block_size
+       size =  grid_size_0 - block_size
+       call uniform_add<<<grid_size_1 - 1, block_size>>>(partial_sums_0, offset, size, partial_sums_1)
+       offset = head_idx + block_size
+       size = num_octs - block_size
+       call uniform_add<<<grid_size_0 - 1, block_size>>>(prefix_sum, offset, size, partial_sums_0, total_sum_d)
 
     else
 
-       write(*,*)'Too many octs for prefix sum.'
+       write(*,*)'Too many octs for prefix sum...'
        stop
 
     endif

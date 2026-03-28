@@ -136,6 +136,7 @@ subroutine init_amr(r,g,m,type)
      allocate(prefix_sum(1:m%ngridmax+m%ncachemax))
      allocate(partial_sums_0(1:max(1,(m%ngridmax+m%ncachemax)/256)))
      allocate(partial_sums_1(1:max(1,(m%ngridmax+m%ncachemax)/65536)))
+     allocate(partial_sums_2(1:max(1,(m%ngridmax+m%ncachemax)/16777216)))
   endif
 #endif
 
