@@ -305,6 +305,8 @@ subroutine build_fmm_merged(s,active_levelmin)
   use amr_parameters, only: nhilbert, ndim, twotondim, multipole_size, taylor_size
   use ramses_commons, only: ramses_t
   use amr_commons, only: mesh_t
+  use cache_commons
+  use cache
   use hilbert
   use hash
   implicit none
@@ -317,7 +319,9 @@ subroutine build_fmm_merged(s,active_levelmin)
   integer(kind=4),dimension(1:ndim)::cart_key
   integer(kind=8),dimension(1:nhilbert)::hk
   integer(kind=8),dimension(1:ndim)::ix
-  logical::in_rank, in_domain
+  integer :: grid_cpu
+  logical::in_domain
+  type(msg_small_realdp)::dummy_small_realdp
 
   associate(r=>s%r, mdl=>s%mdl)
   if (.not. associated(s%m_fmm_merged)) return
@@ -333,6 +337,8 @@ subroutine build_fmm_merged(s,active_levelmin)
   m_merged%noct_used=0
 
   call init_fmm(r,s%m,m_merged,r%nlevelmax)
+  call open_cache(mdl, m_merged, pack_size=storage_size(dummy_small_realdp)/32, &
+       flush=pack_flush_build_fmm, combine=unpack_flush_build_fmm)
 
   do flev=r%bound_levelmin,r%nlevelmax
      first_ifree = m_merged%ifree
@@ -358,20 +364,32 @@ subroutine build_fmm_merged(s,active_levelmin)
            ix(1:ndim)=cart_key(1:ndim)
            hk(1:nhilbert)=hilbert_key(ix,flev-1)
 
-           in_rank = ge_keys(hk,m_merged%domain(flev)%b(1:nhilbert,mdl_self(mdl)-1)).and. &
-                &    gt_keys(m_merged%domain(flev)%b(1:nhilbert,mdl_self(mdl)),hk)
-           if(.not. in_rank) cycle
+           grid_cpu = m_merged%domain(flev)%get_rank(hk)
 
-           igrid_new=m_merged%ifree
-           m_merged%ifree=m_merged%ifree+1
-           if(m_merged%ifree.GT.m_merged%ngridmax)then
-              write(*,*)'No more free memory'
-              write(*,*)'in merged fmm tree'
-              write(*,*)'Increase ngridmax'
-              call mdl_abort(mdl)
+           if(grid_cpu == mdl_self(mdl)) then
+              igrid_new=m_merged%ifree
+              m_merged%ifree=m_merged%ifree+1
+              if(m_merged%ifree.GT.m_merged%ngridmax)then
+                 write(*,*)'No more free memory'
+                 write(*,*)'in merged fmm tree'
+                 write(*,*)'Increase ngridmax'
+                 call mdl_abort(mdl)
+              end if
+              call hash_setp(m_merged%grid_dict,hash_key,igrid_new)
+           else
+              if(m_merged%occupied(m_merged%free_cache))call destage(mdl,m_merged%ngridmax+m_merged%free_cache)
+              igrid_new=m_merged%ngridmax+m_merged%free_cache
+              m_merged%occupied(m_merged%free_cache)=.true.
+              m_merged%parent_cpu(m_merged%free_cache)=grid_cpu
+              m_merged%dirty(m_merged%free_cache)=.true.
+              m_merged%ghost_parent_grid(m_merged%free_cache)=0
+              m_merged%ghost_parent_cell(m_merged%free_cache)=0
+              m_merged%free_cache=m_merged%free_cache+1
+              m_merged%ncache=m_merged%ncache+1
+              if(m_merged%free_cache.GT.m_merged%ncachemax)m_merged%free_cache=1
+              if(m_merged%ncache.GT.m_merged%ncachemax)m_merged%ncache=m_merged%ncachemax
+              call hash_setp(m_merged%grid_dict,hash_key,igrid_new)
            end if
-
-           call hash_setp(m_merged%grid_dict,hash_key,igrid_new)
 
            m_merged%grid(igrid_new)%lev=flev
            m_merged%grid(igrid_new)%ckey(1:ndim)=cart_key(1:ndim)
@@ -400,6 +418,8 @@ subroutine build_fmm_merged(s,active_levelmin)
         m_merged%noct(flev)=0
      end if
   end do
+
+  call close_cache(mdl)
 
   m_merged%noct_used=m_merged%ifree-1
   if(r%verbose) print *, "      <MERGED TREE> created: ", m_merged%noct_used

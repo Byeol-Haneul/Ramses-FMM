@@ -40,21 +40,19 @@ subroutine fmm(pst,ilev,icount)
       call r_build_fmm(pst,double_level,storage_size(double_level)/32)
     end do
   end do
-  use_merged = .false.
-  if (use_merged) then
-     double_level%ilevel=ilev+1
-     double_level%ifine=ilev
-     double_level%mode=FMM_BUILD_MERGED
-     call r_build_fmm(pst,double_level,storage_size(double_level)/32)
-  end if
+  double_level%ilevel=ilev+1
+  double_level%ifine=ilev
+  double_level%mode=FMM_BUILD_MERGED
+  call r_build_fmm(pst,double_level,storage_size(double_level)/32)
 
   if(pst%s%r%verbose) print '(A)','FMM Hierarchy done '
 
   do jlev=ilev,pst%s%r%nlevelmax
     call m_fmm_multipoles(pst, jlev) ! do upward pass !
   end do
-  if (use_merged) call merge_multipoles(pst,ilev+1)
-  use_merged = use_merged .and. associated(pst%s%m_fmm_merged) .and. (pst%s%m_fmm_merged%noct_used > 0)
+  call merge_multipoles(pst,ilev+1)
+  use_merged = associated(pst%s%m_fmm_merged) .and. (pst%s%m_fmm_merged%noct_used > 0) .and. &
+       &       (ilev < pst%s%r%nlevelmax)
 
    ! Downward pass for fmm grids. 
    input_size = storage_size(downward_levels)/32
@@ -2062,28 +2060,5 @@ end subroutine unpack_flush_phi
 !################################################################
 !################################################################
 !################################################################
-subroutine dump_taylor(r, m, ilev)
-  use amr_parameters, only: ndim, twotondim
-  use amr_commons, only: run_t, mesh_t
-  implicit none
-  type(run_t) :: r
-  type(mesh_t) :: m
-  integer, intent(in) :: ilev
-
-  integer :: ioct, icell, unit_debug
-  character(len=256) :: filename
-
-  ! Construct filename based on level
-  write(filename, '(A,I0,A)') "./out_fmm/taylor_level", ilev, ".out"
-
-  unit_debug = 999
-  open(unit_debug, file=filename, status="replace")
-#ifdef FMM
-  do ioct = m%head(ilev), m%tail(ilev)
-    write(unit_debug, '(3I6, 20E20.5)') m%grid(ioct)%ckey(1:ndim), m%taylor_coeff(:,:,ioct)
-  end do
-#endif
-  close(unit_debug)
-end subroutine dump_taylor
 #endif
 end module fmm_fine_commons
