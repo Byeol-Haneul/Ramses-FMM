@@ -19,9 +19,6 @@ recursive subroutine r_set_grid_device(pst)
 
   integer::rID
   integer::head_idx, num_octs, num_threads, num_blocks, ind
-
-  integer(kind=8), dimension(:), allocatable:: hash_key_host
-  integer(kind=4), dimension(:), allocatable:: hash_val_host
   
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_SET_GRID_DEVICE,pst%iUpper+1)
@@ -48,14 +45,6 @@ recursive subroutine r_set_grid_device(pst)
      call GPU_Error_Check(__FILE__, __LINE__)
      call nvtxEndRange()
 
-!!$     allocate(hash_key_host(1:pst%s%m%hash_size))
-!!$     allocate(hash_val_host(1:pst%s%m%hash_size))
-!!$     hash_key_host = hash_key
-!!$     hash_val_host = hash_val
-!!$     write(*,*)hash_key_host(1:100)
-!!$     write(*,*)hash_val_host(1:100)
-!!$     deallocate(hash_key_host, hash_val_host)
-
      ! Compute nbor grids array for coarse level only
      call nvtxStartRange("Compute nbor array", color=5)!red
      head_idx = 1
@@ -74,6 +63,36 @@ recursive subroutine r_set_grid_device(pst)
   endif
 
 end subroutine r_set_grid_device
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
+recursive subroutine r_transfer_grid_host(pst)
+  use mdl_module
+  use ramses_commons, only: pst_t
+  use mdl_parameters
+  implicit none
+  type(pst_t)::pst
+
+  integer::rID
+
+  if(pst%nLower>0)then
+     rID = mdl_send_request(pst%s%mdl,MDL_TRANSFER_GRID_HOST,pst%iUpper+1)
+     call r_transfer_grid_host(pst%pLower)
+     call mdl_get_reply(pst%s%mdl,rID,0)
+  else
+
+     ! Copy grid from device to host
+     call nvtxStartRange("Copy entire mesh from device to host", color=5)!red
+     pst%s%m%grid = grid
+     pst%s%m%flag1 = flag1
+     pst%s%m%uold = uold
+     call GPU_Error_Check(__FILE__, __LINE__)
+     call nvtxEndRange()
+
+  endif
+
+end subroutine r_transfer_grid_host
 !###########################################################
 !###########################################################
 !###########################################################

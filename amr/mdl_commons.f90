@@ -129,6 +129,7 @@ module mdl_parameters
      enumerator::MDL_CHECK_PART_EMISSION
      enumerator::MDL_STAR_RT_FEEDBACK
      enumerator::MDL_SET_GRID_DEVICE
+     enumerator::MDL_TRANSFER_GRID_HOST
      enumerator::MDL_INIT_TURB
      enumerator::MDL_UPDATE_TURB
      enumerator::MDL_DRIVE_TURB

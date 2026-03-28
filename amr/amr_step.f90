@@ -38,6 +38,9 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   use sink_merger_module, only: r_sink_merger
   use turb_driving, only: r_drive_turb
   use turb_hydro_module, only: m_turb_hydro
+#ifdef _CUDA
+  use gpu_manager, only: r_transfer_grid_host
+#endif
 
   implicit none
 
@@ -106,6 +109,9 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
            ! Write output files to disk
            !---------------------------
            call m_timer(pst,'output','start')
+#ifdef _CUDA
+           call r_transfer_grid_host(pst)
+#endif
            call m_dump_all(pst,.false.)
         endif
      endif
@@ -115,12 +121,18 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
      tcurr=wallclock()
      if(tcurr>tprev+r%bkp_time_hrs*3600)then
         call m_timer(pst,'backup','start')
+#ifdef _CUDA
+           call r_transfer_grid_host(pst)
+#endif
         call m_dump_all(pst,.true.)
         tprev=tcurr
      endif
      if(r%run_time_hrs>0.and..not.bkp_last_done)then
         if(tcurr>r%run_time_hrs*3600-r%bkp_last_min*60)then
            call m_timer(pst,'backup','start')
+#ifdef _CUDA
+           call r_transfer_grid_host(pst)
+#endif
            call m_dump_all(pst,.true.)
            bkp_last_done=.true.
         endif

@@ -58,7 +58,7 @@ subroutine m_refine_fine(pst,ilevel)
   call m_load_balance(pst,ilevel)
 
   ! Find clean and dirty octs
-  call r_clean_dirty(pst,ilevel,1)
+!  call r_clean_dirty(pst,ilevel,1)
 
   ! Get total, min and max grid count (only in master).
   do ilev=ilevel+1,s%r%nlevelmax
@@ -101,7 +101,7 @@ recursive subroutine r_refine_fine(pst,ilevel,input_size,output,output_size)
 
   type(out_refine_fine_t)::next_output
   integer::rID
-  
+
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_REFINE_FINE,pst%iUpper+1,input_size,output_size,ilevel)
      call r_refine_fine(pst%pLower,ilevel,input_size,output,output_size)

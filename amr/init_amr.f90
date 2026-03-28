@@ -477,14 +477,14 @@ subroutine init_amr(r,g,m,type)
   m%noct_used_tot=0  ! Total number of oct used (all cpus)
 
   ! Allocate head, tail, numbers and indice for clean and dirty octs at each level
-  allocate(m%head_clean(1:r%nlevelmax))
-  allocate(m%tail_clean(1:r%nlevelmax))
-  allocate(m%noct_clean(1:r%nlevelmax))
-  allocate(m%indx_clean(1:m%ngridmax))
-  allocate(m%head_dirty(1:r%nlevelmax))
-  allocate(m%tail_dirty(1:r%nlevelmax))
-  allocate(m%noct_dirty(1:r%nlevelmax))
-  allocate(m%indx_dirty(1:m%ngridmax))
+!!$  allocate(m%head_clean(1:r%nlevelmax))
+!!$  allocate(m%tail_clean(1:r%nlevelmax))
+!!$  allocate(m%noct_clean(1:r%nlevelmax))
+!!$  allocate(m%indx_clean(1:m%ngridmax))
+!!$  allocate(m%head_dirty(1:r%nlevelmax))
+!!$  allocate(m%tail_dirty(1:r%nlevelmax))
+!!$  allocate(m%noct_dirty(1:r%nlevelmax))
+!!$  allocate(m%indx_dirty(1:m%ngridmax))
 
 end subroutine init_amr
 !###############################################
