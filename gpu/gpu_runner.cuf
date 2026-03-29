@@ -394,6 +394,7 @@ contains
        sim%m%tail(ilev) = new_tail
 
     end do
+    sim%m%noct_used=sim%m%tail(sim%r%nlevelmax)
 
     ! New pointer to free memory
     sim%m%ifree = new_head
