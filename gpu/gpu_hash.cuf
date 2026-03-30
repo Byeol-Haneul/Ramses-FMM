@@ -8,11 +8,15 @@ attributes(device) pure function mix64(key)
   integer(kind=8) :: mix64
   integer(kind=8) :: hash
 
-  hash = key + int(z'9E3779B97F4A7C15', kind=8)
+  integer(kind=8), parameter :: mix64_1 = -7046029254386353131_8
+  integer(kind=8), parameter :: mix64_2 = -4658895280553007687_8
+  integer(kind=8), parameter :: mix64_3 = -7723592293110705685_8
+
+  hash = key + mix64_1
   hash = ieor(hash, ishft(hash, -30))
-  hash = hash * int(z'BF58476D1CE4E5B9', kind=8)
+  hash = hash * mix64_2
   hash = ieor(hash, ishft(hash, -27))
-  hash = hash * int(z'94D049BB133111EB', kind=8)
+  hash = hash * mix64_3
   hash = ieor(hash, ishft(hash, -31))
 
   mix64 = hash
@@ -31,8 +35,8 @@ attributes(device) pure function fnv64(key)
   integer(kind=8) :: k, hash
   integer :: j
 
-  integer(kind=8), parameter :: fnv64_basis = int(z'CBF29CE484222325', kind=8)
-  integer(kind=8), parameter :: fnv64_prime = int(z'100000001B3', kind=8)
+  integer(kind=8), parameter :: fnv64_basis = 14695981039346656037_8
+  integer(kind=8), parameter :: fnv64_prime = 1099511628211_8
 
   hash = fnv64_basis
 
@@ -89,7 +93,9 @@ attributes(device) subroutine hash_set(hash_key, hash_val, hash_size, key, val)
   integer(kind=8) :: ibucket, prev
 
   ! Compute bucket idx from hash function
-  ibucket = MOD(fnv32(key), hash_size) + 1
+  ibucket = MOD(fnv64(key), hash_size)
+  if (ibucket < 0) ibucket = ibucket + hash_size
+  ibucket = ibucket + 1
 
   ! Insert value using linear probing
   do
@@ -118,7 +124,9 @@ attributes(device) subroutine hash_free(hash_key, hash_val, hash_size, key)
   integer(kind=8) :: ibucket
 
   ! Compute bucket idx from hash function
-  ibucket = MOD(fnv32(key), hash_size) + 1
+  ibucket = MOD(fnv64(key), hash_size)
+  if (ibucket < 0) ibucket = ibucket + hash_size
+  ibucket = ibucket + 1
 
   ! Delete value using linear probing
   ! Note that key is left in the hash table
@@ -151,7 +159,9 @@ attributes(device) subroutine hash_update(hash_key, hash_val, hash_size, key, va
   integer(kind=8) :: ibucket
 
   ! Compute bucket idx from hash function
-  ibucket = MOD(fnv32(key), hash_size) + 1
+  ibucket = MOD(fnv64(key), hash_size)
+  if (ibucket < 0) ibucket = ibucket + hash_size
+  ibucket = ibucket + 1
 
   ! Update value using linear probing
   do
@@ -183,7 +193,9 @@ attributes(device) function hash_get(hash_key, hash_val, hash_size, key)
   integer(kind=8) :: ibucket
 
   ! Compute bucket idx from hash function
-  ibucket = MOD(fnv32(key), hash_size) + 1
+  ibucket = MOD(fnv64(key), hash_size)
+  if (ibucket < 0) ibucket = ibucket + hash_size
+  ibucket = ibucket + 1
 
   ! Read value using linear probing
   do

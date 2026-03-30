@@ -74,7 +74,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   !------------------------------
   if(ilevel==r%levelmin.or.icount>1)then
      if(.not.r%static_mesh.and.r%nlevelmax>r%levelmin)then
-        call m_timer(pst,'refine','start')
+        call m_timer('refine','start')
         call m_refine_fine(pst,ilevel)
      endif
   endif
@@ -83,7 +83,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   ! Sink formation in clumps
   !-------------------------
   if(r%sink.and.ilevel==r%levelmin.and.r%sink_form)then
-     call m_timer(pst,'sink - formation','start')
+     call m_timer('sink - formation','start')
      call m_sink_formation(pst)
   endif
 
@@ -91,7 +91,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   ! Merging tree particle formation
   !--------------------------------
   if(r%tree.and.ilevel==r%levelmin)then
-     call m_timer(pst,'tree - formation','start')
+     call m_timer('tree - formation','start')
      call m_tree_formation(pst)
   endif
 
@@ -102,13 +102,13 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
            ! Call the clump finder
            !----------------------------
            if(r%clump_finder)then ! Create output and no need to keep alive
-              call m_timer(pst,'clump','start')
+              call m_timer('clump','start')
               call m_clump_finder(pst,.true.,.false.)
            endif
            !---------------------------
            ! Write output files to disk
            !---------------------------
-           call m_timer(pst,'output','start')
+           call m_timer('output','start')
 #ifdef _CUDA
            call r_transfer_grid_host(pst)
 #endif
@@ -120,7 +120,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
      !----------------------------
      tcurr=wallclock()
      if(tcurr>tprev+r%bkp_time_hrs*3600)then
-        call m_timer(pst,'backup','start')
+        call m_timer('backup','start')
 #ifdef _CUDA
            call r_transfer_grid_host(pst)
 #endif
@@ -129,7 +129,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
      endif
      if(r%run_time_hrs>0.and..not.bkp_last_done)then
         if(tcurr>r%run_time_hrs*3600-r%bkp_last_min*60)then
-           call m_timer(pst,'backup','start')
+           call m_timer('backup','start')
 #ifdef _CUDA
            call r_transfer_grid_host(pst)
 #endif
@@ -139,7 +139,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
      endif
      ! Lightcone
      if (r%lightcone) then
-        call m_timer(pst,'lightcone','start')
+        call m_timer('lightcone','start')
         call m_output_lightcone(pst)
      endif
   endif
@@ -161,14 +161,14 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   ! just for particle list for pic only
   !------------------------------------
   if(ilevel==r%levelmin.or.icount>1)then
-     call m_timer(pst,'rho','start')
+     call m_timer('rho','start')
      call m_rho_fine(pst,ilevel,0)
   endif
 
   ! Remove gravity source term with half time step and old force
   if(r%hydro.and..not.r%static_gas)then
      if(r%poisson.or.maxval(abs(r%constant_gravity))>0)then
-        call m_timer(pst,'hydro - gravity','start')
+        call m_timer('hydro - gravity','start')
         call m_synchro_hydro_fine(pst,ilevel,-0.5d0*dble(g%dtnew(ilevel)))
      end if
   endif
@@ -178,7 +178,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   !---------------
 #ifdef GRAV
   if(r%poisson.and.r%gravity_type<=0)then
-     call m_timer(pst,'poisson','start')
+     call m_timer('poisson','start')
 
      ! Save old potential for time-extrapolation at level boundaries
      call r_save_phi_old(pst,ilevel,1)
@@ -200,21 +200,21 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
 
   ! Compute gravitational acceleration
   if(r%poisson)then
-     call m_timer(pst,'grav force','start')
+     call m_timer('grav force','start')
      call m_force_fine(pst,ilevel,icount)
   end if
 #endif
 
   ! Perform second kick for particles
   if(r%pic)then
-     call m_timer(pst,'particle - kickdrift','start')
+     call m_timer('particle - kickdrift','start')
      call m_kick_drift_part(pst,ilevel,action_kick_only)
   endif
 
   ! Add gravity source term with half time step and new force
   if(r%hydro.and..not.r%static_gas)then
      if(r%poisson.or.maxval(abs(r%constant_gravity))>0)then
-        call m_timer(pst,'hydro - gravity','start')
+        call m_timer('hydro - gravity','start')
         call m_synchro_hydro_fine(pst,ilevel,+0.5d0*dble(g%dtnew(ilevel)))
      endif
   end if
@@ -223,21 +223,21 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   ! Compute turbulent driving
   !--------------------------
   if(r%turb)then
-     call m_timer(pst,'hydro - turbulence','start')
+     call m_timer('hydro - turbulence','start')
      call r_drive_turb(pst,ilevel,1)
   endif
 
   !----------------------
   ! Compute new time step
   !----------------------
-  call m_timer(pst,'time step','start')
+  call m_timer('time step','start')
   call m_newdt_fine(pst,ilevel)
 
   !-----------------------
   ! Set unew equal to uold
   !-----------------------
   if(r%hydro.and..not.r%static_gas)then
-     call m_timer(pst,'hydro - set unew','start')
+     call m_timer('hydro - set unew','start')
      call r_set_unew(pst,ilevel,1)
   endif
 
@@ -245,7 +245,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   ! Set rtunew equal to rtuold
   !---------------------------
   if(r%rt)then
-     call m_timer(pst,'radiative transfer','start')
+     call m_timer('radiative transfer','start')
      call r_set_rtunew(pst,ilevel,1)
      call r_set_emissivity(pst,ilevel,1)
   endif
@@ -254,7 +254,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   ! Recursive call to amr_step
   !---------------------------
   if(ilevel<r%nlevelmax)then
-     call m_timer(pst,'recursive call','start')
+     call m_timer('recursive call','start')
      if(m%noct_tot(ilevel+1)>0)then
         if(r%nsubcycle(ilevel)==2)then
            call m_amr_step(pst,ilevel+1,1,done)
@@ -275,11 +275,11 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
         call r_broadcast_dt(pst,in_broadcast_dt,storage_size(in_broadcast_dt)/32)
 
         ! Update time variable
-        call m_timer(pst,'update time','start')
+        call m_timer('update time','start')
         call m_update_time(pst,ilevel,done)
      end if
   else
-     call m_timer(pst,'update time','start')
+     call m_timer('update time','start')
      call m_update_time(pst,ilevel,done)
   end if
   if (done)return
@@ -288,7 +288,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   ! Thermal feedback
   !------------------
   if(r%star.and.r%thermal_feedback)then
-     call m_timer(pst,'star - feedback','start')
+     call m_timer('star - feedback','start')
      call r_thermal_feedback(pst,ilevel,1,output_fbk,2)
      if(output_fbk%mass>0)then
         g%mass_star_tot=g%mass_star_tot-output_fbk%mass
@@ -308,7 +308,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
         endif
      end if
      if(ok_fbk)then
-        call m_timer(pst,'star - feedback','start')
+        call m_timer('star - feedback','start')
         call m_mechanical_feedback(pst,ilevel,mass_fbk)           
         if(mass_fbk>0)then
            g%mass_star_tot=g%mass_star_tot-mass_fbk
@@ -320,7 +320,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   ! Sink accretion and feedback
   !----------------------------
   if(r%sink)then
-     call m_timer(pst,'sink - evolution','start')
+     call m_timer('sink - evolution','start')
      call r_sink_evolution(pst,ilevel,1,output_acc,2)
      if(output_acc%mass>0)then
         g%mass_sink_tot=g%mass_sink_tot+output_acc%mass
@@ -334,40 +334,40 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
 
      if(.not.r%static_gas)then
         ! Hyperbolic solver
-        call m_timer(pst,'hydro - godunov','start')
+        call m_timer('hydro - godunov','start')
         call r_godunov_fine(pst,ilevel,1)
 
         ! Add gravity source terms to unew with half time step
         if(r%poisson.or.maxval(abs(r%constant_gravity))>0)then
-           call m_timer(pst,'hydro - gravity','start')
+           call m_timer('hydro - gravity','start')
            call r_gravity_hydro_fine(pst,ilevel,1)
         endif
 
         ! Add other hydro source terms to unew
-        call m_timer(pst,'hydro - source','start')
+        call m_timer('hydro - source','start')
         call r_source_hydro_fine(pst,ilevel,1)
 
         ! Set uold equal to unew
-        call m_timer(pst,'hydro - set uold','start')
+        call m_timer('hydro - set uold','start')
         call r_set_uold(pst,ilevel,1)
 
         ! Add gravity source terms to uold with half time step
         ! to complete the time step with old force (will be removed later)
         if(r%poisson.or.maxval(abs(r%constant_gravity))>0)then
-           call m_timer(pst,'hydro - gravity','start')
+           call m_timer('hydro - gravity','start')
            call m_synchro_hydro_fine(pst,ilevel,+0.5d0*dble(g%dtnew(ilevel)))
         endif
 
         ! Add turbulent driving source terms to uold with full time step
         if(r%turb)then
-           call m_timer(pst,'hydro - turbulence','start')
+           call m_timer('hydro - turbulence','start')
            call m_turb_hydro(pst,ilevel,dble(g%dtnew(ilevel)))
         endif
      endif
 
      ! Restriction operator
      if(ilevel<r%nlevelmax)then
-        call m_timer(pst,'hydro - upload','start')
+        call m_timer('hydro - upload','start')
         call m_upload_fine(pst,ilevel)
      endif
   endif
@@ -377,7 +377,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   !------------------------
   if(r%rt)then
      if(r%rt_advect)then
-        call m_timer(pst,'radiative transfer','start')
+        call m_timer('radiative transfer','start')
         call m_rt_step(pst,ilevel)
      else
         if(r%hydro .and. (r%neq_chem.or.r%cooling_ism.or.r%cooling.or.r%isothermal))call r_cooling_fine(pst,ilevel,1)
@@ -388,7 +388,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   ! Compute cooling/heating
   !------------------------
   if(r%hydro .and. (.not.r%rt) .and. (r%cooling.or.r%cooling_ism.or.r%isothermal.or.r%neq_chem))then
-     call m_timer(pst,'cooling','start')
+     call m_timer('cooling','start')
      call r_cooling_fine(pst,ilevel,1)
   endif
 
@@ -396,7 +396,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   ! Sink merger
   !----------------------------
   if(r%sink.and.r%sink_merge)then
-     call m_timer(pst,'sink - merger','start')
+     call m_timer('sink - merger','start')
      call r_sink_merger(pst,ilevel,1)
   end if
 
@@ -404,7 +404,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   ! Perform first kick and drift for particles
   !-------------------------------------------
   if(r%pic)then
-     call m_timer(pst,'particle - kickdrift','start')
+     call m_timer('particle - kickdrift','start')
      call m_kick_drift_part(pst,ilevel,action_kick_drift)
   endif
 
@@ -412,7 +412,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   ! Star formation in leaf cells only
   !----------------------------------
   if(r%star.and.r%hydro)then
-     call m_timer(pst,'star - formation','start')
+     call m_timer('star - formation','start')
      call r_star_formation(pst,ilevel,1,output_star,2)
      if(output_star%mass>0)then
         g%mass_star_tot=g%mass_star_tot+output_star%mass
@@ -423,7 +423,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   ! Compute refinement map
   !-----------------------
   if(ilevel<r%nlevelmax)then
-     call m_timer(pst,'flag','start')
+     call m_timer('flag','start')
      if(.not.r%static_mesh)call m_flag_fine(pst,ilevel,icount)
   endif
 
@@ -436,7 +436,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
      if(icount==2)g%dtnew(ilevel-1)=g%dtold(ilevel)+g%dtnew(ilevel)
 
      ! Broadcast updated time step to all CPUs
-     call m_timer(pst,'recursive call','start')
+     call m_timer('recursive call','start')
      in_broadcast_dt%ilevel=ilevel-1
      in_broadcast_dt%dtnew=g%dtnew(ilevel-1)
      in_broadcast_dt%dtold=g%dtold(ilevel-1)

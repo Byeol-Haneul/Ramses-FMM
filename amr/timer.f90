@@ -67,12 +67,10 @@ end module timer_module
 !################################################################
 !################################################################
 !################################################################
-subroutine m_timer(pst,label,cmd)
+subroutine m_timer(label,cmd)
   use mdl_module
-  use ramses_commons, only: pst_t
   use timer_module
   implicit none
-  type(pst_t)::pst
   character(len=*) label, cmd
   real(kind=8) wallclock, current
   current = wallclock()                                                 ! current time
@@ -90,13 +88,11 @@ end subroutine m_timer
 !################################################################
 !################################################################
 !################################################################
-subroutine m_output_timer(pst,write_file,filename)
+subroutine m_output_timer(write_file,filename)
   use amr_parameters, only: flen
   use mdl_module
-  use ramses_commons, only: pst_t
   use timer_module
   implicit none
-  type(pst_t)::pst
   real(kind=8)::total
   character(len=*)::filename
   character(len=flen)::fileloc

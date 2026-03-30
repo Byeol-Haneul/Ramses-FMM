@@ -230,12 +230,12 @@ contains
     integer(kind=4) :: head_idx, num_octs
     integer :: err_code, threads_per_block, num_blocks
 
-    head_idx = sim%m%head(ilevel + 1)
-    num_octs = sim%m%noct(ilevel + 1)
+    head_idx = sim%m%head(ilevel+1)
+    num_octs = sim%m%noct(ilevel+1)
     num_blocks = num_octs
     threads_per_block = 128
 
-    call nvtxStartRange("GPU Godunov", color=0)!green
+    call nvtxStartRange("GPU Upload", color=0)!green
     call upload_kernel<<<num_blocks, threads_per_block>>>(grid, father, uold, head_idx, num_octs)
     call GPU_Error_Check(__FILE__, __LINE__)
     call nvtxEndRange()
@@ -262,7 +262,7 @@ contains
     integer, intent(out) :: nmake, nkill
     !
     integer(kind=4) :: head_idx, num_octs
-    integer(kind=4) :: head_cache
+    integer(kind=4) :: head_cache, info
     integer(kind=4) :: num_blocks, num_threads, num_blocks_2, num_threads_2
     integer(kind=4) :: threadsX_per_block, threadsY_per_block
     integer(kind=4) :: new_ifree, old_ifree, new_head, new_tail, new_noct
@@ -477,6 +477,9 @@ contains
        call update_hash_kernel<<<num_blocks, num_threads>>>(grid, hash_key, hash_val, sim%m%hash_size, &
             & ckey_max, key_off, head_idx, num_octs)
     end if
+
+    info = cudaDeviceSynchronize()
+    call m_timer('cache','start')
 
     ! Update father index array (they should always exist without MPI)
     if (num_octs > 0) then
