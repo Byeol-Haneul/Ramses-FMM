@@ -48,3 +48,5 @@ faster_fmm
 
 # Ignore contents of any dot-prefixed directory (e.g. .bitwise_*/)
 .*/**
+.ipynb_checkpoints/
+*.png

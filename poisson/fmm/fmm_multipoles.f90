@@ -5,12 +5,13 @@ contains
 !###############################################
 !###############################################
 !###############################################
-subroutine m_fmm_multipoles(pst,ilevel)
+subroutine m_fmm_multipoles(pst,ilevel,update_global_multipole)
   use ramses_commons, only: pst_t
   use init_fmm_module, only: fmm_level_t, FMM_MULTIPOLE_STANDARD
   implicit none
   type(pst_t)::pst
   integer::ilevel
+  logical, intent(in) :: update_global_multipole
   !------------------------------------------------------------------
   ! This master routine computes the mass density field to be used
   ! as source term in the Poisson solver.
@@ -53,6 +54,8 @@ subroutine m_fmm_multipoles(pst,ilevel)
      call r_fmm_multipole_fmm2fmm(pst,fmm_levels,input_size)
   end do
 
+  if (update_global_multipole) call accumulate_fmm_global_multipole(pst%s, ilevel)
+
   if(r%verbose) print *, "[M2M] LEVEL: ", ilevel
   do i=r%bound_levelmin,ilevel-r%level_fmm_to_amr
     if(r%verbose)write(*,'("      <SHIFTING> TREE for AMR LEVEL: ",I2,", TREE LEVEL: ",I2)')ilevel, i
@@ -63,6 +66,152 @@ subroutine m_fmm_multipoles(pst,ilevel)
   end associate
 
 end subroutine m_fmm_multipoles
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine reset_fmm_global_multipole(s)
+  use ramses_commons, only: ramses_t
+  implicit none
+  type(ramses_t) :: s
+
+  s%g%multipole%q = 0.0d0
+end subroutine reset_fmm_global_multipole
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine accumulate_fmm_global_multipole(s,ilevel)
+  use amr_parameters, only: twotondim, multipole_size
+  use ramses_commons, only: ramses_t
+  implicit none
+  type(ramses_t) :: s
+  integer, intent(in) :: ilevel
+
+  integer :: ioct, icell
+
+  associate(r=>s%r, g=>s%g, m_fmm=>s%m_fmm_list(ilevel))
+  if (m_fmm%tail(r%bound_levelmin) < m_fmm%head(r%bound_levelmin)) return
+
+  do ioct=m_fmm%head(r%bound_levelmin),m_fmm%tail(r%bound_levelmin)
+     do icell=1,twotondim
+        g%multipole%q(1:multipole_size) = g%multipole%q(1:multipole_size) + &
+             & m_fmm%multipole(icell,1:multipole_size,ioct)
+     end do
+  end do
+  end associate
+end subroutine accumulate_fmm_global_multipole
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine sync_fmm_global_multipole(pst)
+  use amr_commons, only: multipole_t
+  use ramses_commons, only: pst_t
+  implicit none
+  type(pst_t) :: pst
+
+  type(multipole_t) :: multipole_tot
+  integer :: input_size
+
+  multipole_tot%q = 0.0d0
+  input_size = storage_size(multipole_tot)/32
+  call r_collect_fmm_global_multipole(pst,pst%s%r%levelmin,1,multipole_tot,input_size)
+  call center_fmm_global_multipole(multipole_tot)
+  call r_broadcast_fmm_global_multipole(pst,multipole_tot,input_size)
+end subroutine sync_fmm_global_multipole
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine center_fmm_global_multipole(multipole)
+  use amr_parameters, only: ndim
+  use amr_commons, only: multipole_t
+  implicit none
+  type(multipole_t), intent(inout) :: multipole
+
+  real(kind=8) :: mass
+  real(kind=8), dimension(3) :: center
+
+  mass = multipole%q(1)
+  if (mass <= 0.0d0) then
+     multipole%q = 0.0d0
+     return
+  end if
+
+  center = 0.0d0
+  center(1:ndim) = multipole%q(2:ndim+1)/mass
+
+#if NDIM==1
+  multipole%q(3) = multipole%q(3) - mass*center(1)*center(1)
+#endif
+#if NDIM==2
+  multipole%q(4) = multipole%q(4) - mass*center(1)*center(1)
+  multipole%q(5) = multipole%q(5) - mass*center(1)*center(2)
+  multipole%q(6) = multipole%q(6) - mass*center(2)*center(2)
+#endif
+#if NDIM==3
+  multipole%q(5)  = multipole%q(5)  - mass*center(1)*center(1)
+  multipole%q(6)  = multipole%q(6)  - mass*center(1)*center(2)
+  multipole%q(7)  = multipole%q(7)  - mass*center(1)*center(3)
+  multipole%q(8)  = multipole%q(8)  - mass*center(2)*center(2)
+  multipole%q(9)  = multipole%q(9)  - mass*center(2)*center(3)
+  multipole%q(10) = multipole%q(10) - mass*center(3)*center(3)
+#endif
+end subroutine center_fmm_global_multipole
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+recursive subroutine r_collect_fmm_global_multipole(pst,ilevel,input_size,multipole,output_size)
+  use mdl_module
+  use ramses_commons, only: pst_t
+  use amr_commons, only: multipole_t
+  use mdl_parameters
+  implicit none
+  type(pst_t)::pst
+  integer,VALUE::input_size
+  integer::output_size
+  integer::ilevel
+  type(multipole_t)::multipole,next_multipole
+
+  integer::rID
+
+  if(pst%nLower>0)then
+     rID = mdl_send_request(pst%s%mdl,MDL_COLLECT_MULTIPOLE,pst%iUpper+1,input_size,output_size,ilevel)
+     call r_collect_fmm_global_multipole(pst%pLower,ilevel,input_size,multipole,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_multipole)
+     multipole%q = multipole%q + next_multipole%q
+  else
+     multipole%q = pst%s%g%multipole%q
+  endif
+end subroutine r_collect_fmm_global_multipole
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+recursive subroutine r_broadcast_fmm_global_multipole(pst,multipole,input_size)
+  use mdl_module
+  use amr_parameters, only: ndim
+  use ramses_commons, only: pst_t
+  use amr_commons, only: multipole_t
+  use mdl_parameters
+  implicit none
+  type(pst_t)::pst
+  integer,VALUE::input_size
+  type(multipole_t)::multipole
+
+  integer::rID
+
+  if(pst%nLower>0)then
+     rID = mdl_send_request(pst%s%mdl,MDL_BROADCAST_MULTIPOLE,pst%iUpper+1,input_size,0,multipole)
+     call r_broadcast_fmm_global_multipole(pst%pLower,multipole,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
+  else
+     pst%s%g%multipole = multipole
+     pst%s%g%rho_tot = pst%s%g%multipole%q(1)/PRODUCT(pst%s%r%box_size(1:ndim))
+  endif
+end subroutine r_broadcast_fmm_global_multipole
 !################################################################
 !################################################################
 !################################################################

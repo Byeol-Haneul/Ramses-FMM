@@ -9,7 +9,11 @@ module amr_commons
   use domain_m
 
   type multipole_t
+#ifdef FMM
+    real(kind=8),dimension(1:multipole_size)::q
+#else
     real(kind=8),dimension(1:ndim+1)::q
+#endif
   end type multipole_t
 
   type run_t
@@ -768,4 +772,3 @@ contains
   end subroutine set_hydro_parameters
 
 end module amr_commons
-

@@ -13,7 +13,8 @@ subroutine fmm(pst,ilev,icount)
   use ramses_commons, only: pst_t
   use init_fmm_module, only: r_init_fmm, r_build_fmm, double_level_t, downward_level_t, &
        & FMM_BUILD_STANDARD, FMM_BUILD_MERGED, FMM_TREE_SOURCE_STANDARD, FMM_TREE_SOURCE_MERGED
-  use fmm_multipoles, only: m_fmm_multipoles, merge_multipoles
+  use fmm_multipoles, only: m_fmm_multipoles, merge_multipoles, reset_fmm_global_multipole, &
+       & sync_fmm_global_multipole
   use cleanup_fmm_module, only: r_cleanup_fmm
   implicit none
   type(pst_t)::pst
@@ -47,9 +48,11 @@ subroutine fmm(pst,ilev,icount)
 
   if(pst%s%r%verbose) print '(A)','FMM Hierarchy done '
 
+  if (ilev == pst%s%r%levelmin) call reset_fmm_global_multipole(pst%s)
   do jlev=ilev,pst%s%r%nlevelmax
-    call m_fmm_multipoles(pst, jlev) ! do upward pass !
+    call m_fmm_multipoles(pst, jlev, ilev == pst%s%r%levelmin) ! do upward pass !
   end do
+  if (ilev == pst%s%r%levelmin) call sync_fmm_global_multipole(pst)
   call merge_multipoles(pst,ilev+1)
   use_merged = associated(pst%s%m_fmm_merged) .and. (pst%s%m_fmm_merged%noct_used > 0) .and. &
        &       (ilev < pst%s%r%nlevelmax)
