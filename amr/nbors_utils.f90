@@ -583,11 +583,15 @@ subroutine get_grid(s,hash_key,child,flush_cache,fetch_cache,lock,use_ghost)
 
      call get_bound(s,ix,ilevel,ibound)
 
-     hash_ref(0)=ilevel
-     hash_ref(1:ndim)=ix(1:ndim)
-     hash_ref(r%bound_dir(ibound))=hash_ref(r%bound_dir(ibound))+r%bound_shift(ibound)
+     if (ibound > 0) then
+        hash_ref(0)=ilevel
+        hash_ref(1:ndim)=ix(1:ndim)
+        hash_ref(r%bound_dir(ibound))=hash_ref(r%bound_dir(ibound))+r%bound_shift(ibound)
 
-     child_ref=hash_getp(m%grid_dict,hash_ref)
+        child_ref=hash_getp(m%grid_dict,hash_ref)
+     else
+        child_ref=0
+     endif
 
      if (child_ref>0)then
 

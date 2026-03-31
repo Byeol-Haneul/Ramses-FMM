@@ -93,12 +93,14 @@ subroutine accumulate_fmm_global_multipole(s,ilevel)
   associate(r=>s%r, g=>s%g, m_fmm=>s%m_fmm_list(ilevel))
   if (m_fmm%tail(r%bound_levelmin) < m_fmm%head(r%bound_levelmin)) return
 
+#ifdef FMM
   do ioct=m_fmm%head(r%bound_levelmin),m_fmm%tail(r%bound_levelmin)
      do icell=1,twotondim
         g%multipole%q(1:multipole_size) = g%multipole%q(1:multipole_size) + &
              & m_fmm%multipole(icell,1:multipole_size,ioct)
      end do
   end do
+#endif
   end associate
 end subroutine accumulate_fmm_global_multipole
 !################################################################
@@ -141,7 +143,7 @@ subroutine center_fmm_global_multipole(multipole)
 
   center = 0.0d0
   center(1:ndim) = multipole%q(2:ndim+1)/mass
-
+#ifdef FMM
 #if NDIM==1
   multipole%q(3) = multipole%q(3) - mass*center(1)*center(1)
 #endif
@@ -157,6 +159,7 @@ subroutine center_fmm_global_multipole(multipole)
   multipole%q(8)  = multipole%q(8)  - mass*center(2)*center(2)
   multipole%q(9)  = multipole%q(9)  - mass*center(2)*center(3)
   multipole%q(10) = multipole%q(10) - mass*center(3)*center(3)
+#endif
 #endif
 end subroutine center_fmm_global_multipole
 !################################################################

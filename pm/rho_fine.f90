@@ -1214,6 +1214,7 @@ subroutine split_part(s,p,ilevel)
      ! Loop over particles
      npart_coarse=0
      do i=p%headp(ilevel),p%tailp(r%nlevelmax)
+        ipart=i
         p%sortp(i)=i
         in_domain=.true.
         do idim=1,ndim
