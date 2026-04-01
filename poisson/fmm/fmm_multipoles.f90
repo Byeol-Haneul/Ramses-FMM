@@ -54,7 +54,10 @@ subroutine m_fmm_multipoles(pst,ilevel,update_global_multipole)
      call r_fmm_multipole_fmm2fmm(pst,fmm_levels,input_size)
   end do
 
-  if (update_global_multipole) call accumulate_fmm_global_multipole(pst%s, ilevel)
+  if (update_global_multipole) then
+     call accumulate_fmm_global_multipole(pst%s, ilevel)
+     call sync_fmm_global_multipole(pst)
+  endif
 
   if(r%verbose) print *, "[M2M] LEVEL: ", ilevel
   do i=r%bound_levelmin,ilevel-r%level_fmm_to_amr
@@ -116,11 +119,20 @@ subroutine sync_fmm_global_multipole(pst)
   type(multipole_t) :: multipole_tot
   integer :: input_size
 
-  multipole_tot%q = 0.0d0
-  input_size = storage_size(multipole_tot)/32
-  call r_collect_fmm_global_multipole(pst,pst%s%r%levelmin,1,multipole_tot,input_size)
-  call center_fmm_global_multipole(multipole_tot)
-  call r_broadcast_fmm_global_multipole(pst,multipole_tot,input_size)
+  ! Only the root of the MDL tree (nLower=0) should collect and broadcast
+  if (pst%nLower == 0) then
+     ! Root node - collect from all children and broadcast
+     multipole_tot%q = 0.0d0
+     input_size = storage_size(multipole_tot)/32
+     call r_collect_fmm_global_multipole(pst,pst%s%r%levelmin,1,multipole_tot,input_size)
+     call center_fmm_global_multipole(multipole_tot)
+     call r_broadcast_fmm_global_multipole(pst,multipole_tot,input_size)
+  else
+     ! Non-root node - just receive the broadcast
+     multipole_tot%q = 0.0d0
+     input_size = storage_size(multipole_tot)/32
+     call r_broadcast_fmm_global_multipole(pst,multipole_tot,input_size)
+  end if
 end subroutine sync_fmm_global_multipole
 !################################################################
 !################################################################
@@ -320,14 +332,14 @@ subroutine fmm_multipole_amr2fmm(s,ilevel)
      hash_key_amr(1:ndim)=m%grid(ioct)%ckey(1:ndim)
      hash_key_fmm(1:ndim)= hash_key_amr(1:ndim)/(2**r%level_fmm_to_amr)
      ii(1:ndim)=hash_key_amr(1:ndim)-(2**r%level_fmm_to_amr)*hash_key_fmm(1:ndim) ! 0 to 2^(level_fmm_to_amr)-1
-     ii(1:ndim)=ii(1:ndim)/(2**(r%level_fmm_to_amr-1)) ! 0 or 1 
+     ii(1:ndim)=ii(1:ndim)/(2**(r%level_fmm_to_amr-1)) ! 0 or 1
      icell=1
      do idim=1,ndim
        icell=icell+2**(idim-1)*ii(idim) ! 1 to twotondim
      end do
      ! Get fmm grid using a write-only cache
      call get_grid(s,hash_key_fmm,igrid_fmm,flush_cache=.true.,fetch_cache=.false.)
-     
+
      if (igrid_fmm <= 0) cycle
 
      multipole = 0.0D0
@@ -368,7 +380,7 @@ subroutine fmm_multipole_amr2fmm(s,ilevel)
            quadrupole(4) = quadrupole(4) + mmm * xx(2)**2        ! quadrupole_yy
            quadrupole(5) = quadrupole(5) + mmm * xx(2)*xx(3)     ! quadrupole_yz
            quadrupole(6) = quadrupole(6) + mmm * xx(3)**2        ! quadrupole_zz
-#endif           
+#endif
         end if
         multipole(1) = multipole(1) + monopole
         multipole(2:1+ndim) = multipole(2:1+ndim) + dipole
@@ -721,9 +733,7 @@ subroutine unpack_flush_multipole(mesh,igrid,msg_size,msg_array,hash_key)
 #ifdef FMM  
   do ivar=1,multipole_size
      do ind=1,twotondim
-        if(mesh%grid(igrid)%refined(ind))then
-           mesh%multipole(ind,ivar,igrid)=mesh%multipole(ind,ivar,igrid)+msg%realdp_fmm_multipole(ind,ivar)
-        endif
+        mesh%multipole(ind,ivar,igrid)=mesh%multipole(ind,ivar,igrid)+msg%realdp_fmm_multipole(ind,ivar)
      end do
   end do
 #endif

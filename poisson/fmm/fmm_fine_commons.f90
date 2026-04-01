@@ -52,7 +52,8 @@ subroutine fmm(pst,ilev,icount)
   do jlev=ilev,pst%s%r%nlevelmax
     call m_fmm_multipoles(pst, jlev, ilev == pst%s%r%levelmin) ! do upward pass !
   end do
-  if (ilev == pst%s%r%levelmin) call sync_fmm_global_multipole(pst)
+  ! sync_fmm_global_multipole is already called in m_fmm_multipoles when update_global_multipole=.true.
+  ! Removed duplicate call to avoid double-counting multipoles
   call merge_multipoles(pst,ilev+1)
   use_merged = associated(pst%s%m_fmm_merged) .and. (pst%s%m_fmm_merged%noct_used > 0) .and. &
        &       (ilev < pst%s%r%nlevelmax)
@@ -831,7 +832,7 @@ subroutine fmm_amr_intermediate(s, ilev, jlev, use_merged)
         end do
       end if
 
-      if(ilev == jlev) call get_grid(s, hash_fmm_grid, igrid_parent, flush_cache=.false., fetch_cache=.true.)
+      if(ilev == jlev) call get_grid(s, hash_fmm_grid, igrid_parent, flush_cache=.false., fetch_cache=.true., lock=.true.)
 
       call get_intermediate_nbor_grid(s, hash_fmm_cell, grid_nbors, flush_cache=.false., fetch_cache=.true.)
       source_active_count(:) = 0
@@ -1458,7 +1459,7 @@ subroutine fmm_amr_direct(s, ilev, jlev)
             mm_jcell_list(:, jgrid, ind) = 0.0d0
             cycle
           end if
-          call get_grid(s, hash_direct, igrid_nbor, flush_cache = .false., fetch_cache = .true.)
+          call get_grid(s, hash_direct, igrid_nbor, flush_cache = .false., fetch_cache = .true., lock=.true.)
           if (igrid_nbor .le. 0) then 
             mm_jcell_list(:, jgrid, ind) = 0.0d0
             cycle
@@ -1468,7 +1469,7 @@ subroutine fmm_amr_direct(s, ilev, jlev)
           if (source_all_refined) then
             do jcell = 1, twotondim
               hash_fine(1:ndim) = 2 * hash_direct(1:ndim) + displacement_list(jcell, :)
-              call get_grid(s, hash_fine, igrid_fine, flush_cache = .false., fetch_cache = .true.)
+              call get_grid(s, hash_fine, igrid_fine, flush_cache = .false., fetch_cache = .true., lock=.true.)
               if (igrid_fine .le. 0) then
                 mm_jfinecell_list(:, jcell, jgrid, ind) = 0.0d0
               else
@@ -1751,7 +1752,7 @@ subroutine fmm_amr_direct_taylor(s, ilev, jlev, use_merged)
           if (cycle_flag) then
             cycle
           end if
-          call get_grid(s, hash_direct, igrid_nbor, flush_cache = .false., fetch_cache = .true.)
+          call get_grid(s, hash_direct, igrid_nbor, flush_cache = .false., fetch_cache = .true., lock=.true.)
           if (igrid_nbor .le. 0) then 
             cycle
           end if
