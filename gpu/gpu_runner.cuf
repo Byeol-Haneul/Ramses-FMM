@@ -638,7 +638,7 @@ contains
 
     integer(kind=4) :: head_idx, num_octs
     integer :: threadsX_per_block, threadsY_per_block, num_threads, num_blocks
-    real(kind=8) :: gamma, err_grad_d, err_grad_p, floor_d, floor_p
+    real(kind=dp) :: gamma, err_grad_d, err_grad_p, floor_d, floor_p
     integer(kind=8) :: nflag_h
     integer(kind=8), device :: nflag_d
 
