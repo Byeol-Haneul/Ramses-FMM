@@ -148,7 +148,7 @@ function worker_init(mdl) result(pst)
   use init_fmm_module, only:r_init_fmm, r_build_fmm
   use cleanup_fmm_module, only:r_cleanup_fmm
   use fmm_fine_commons, only: r_fmm_downward, r_fmm_amr_intermediate, r_fmm_amr_direct, r_fmm_fill_phi
-  use fmm_multipoles, only: r_reset_multipoles_taylor, r_fmm_multipole_amr2fmm, r_fmm_multipole_fmm2fmm, r_fmm_multipole_shift_downward, r_dump_multipole
+  use fmm_multipoles, only: r_reset_multipoles_taylor, r_fmm_multipole_amr2fmm, r_fmm_multipole_fmm2fmm, r_fmm_multipole_shift_downward, r_dump_multipole, r_collect_fmm_global_multipole, r_broadcast_fmm_global_multipole, r_accumulate_fmm_global_multipole
 #endif
 #endif
   use clump_finder_module, only: r_clump_finder
@@ -317,6 +317,9 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_FMM_AMR_INTERMEDIATE,   pst,C_FUNLOC(r_fmm_amr_intermediate),1,0,"fmm_amr_intermediate")
   call mdl_add_service(pst%s%mdl,MDL_FMM_AMR_DIRECT,         pst,C_FUNLOC(r_fmm_amr_direct),1,0,"fmm_amr_direct")
   call mdl_add_service(pst%s%mdl,MDL_FMM_FILL_PHI,           pst,C_FUNLOC(r_fmm_fill_phi),1,0,"fmm_fill_phi")
+  call mdl_add_service(pst%s%mdl,MDL_COLLECT_MULTIPOLE_FMM,  pst,C_FUNLOC(r_collect_fmm_global_multipole),1,storage_size(pst%s%g%multipole)/32,"collect_fmm_global_multipole")
+  call mdl_add_service(pst%s%mdl,MDL_ACCUM_MULTIPOLE_FMM,    pst,C_FUNLOC(r_accumulate_fmm_global_multipole),1,storage_size(pst%s%g%multipole)/32,"accumulate_fmm_global_multipole")
+  call mdl_add_service(pst%s%mdl,MDL_BROADCAST_MULTIPOLE_FMM,pst,C_FUNLOC(r_broadcast_fmm_global_multipole),storage_size(pst%s%g%multipole)/32,0,"broadcast_fmm_global_multipole")
 #endif
 #endif
   call mdl_add_service(pst%s%mdl,MDL_INIT_RT,                pst,C_FUNLOC(r_init_rt),0,0,"init_rt")

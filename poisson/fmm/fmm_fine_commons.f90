@@ -11,10 +11,9 @@ contains
 #ifdef GRAV
 subroutine fmm(pst,ilev,icount)
   use ramses_commons, only: pst_t
-  use init_fmm_module, only: r_init_fmm, r_build_fmm, double_level_t, downward_level_t, &
-       & FMM_BUILD_STANDARD, FMM_BUILD_MERGED, FMM_TREE_SOURCE_STANDARD, FMM_TREE_SOURCE_MERGED
-  use fmm_multipoles, only: m_fmm_multipoles, merge_multipoles, reset_fmm_global_multipole, &
-       & sync_fmm_global_multipole
+  use init_fmm_module, only: r_init_fmm, r_build_fmm, double_level_t, downward_level_t, fmm_level_t, &
+       & FMM_BUILD_STANDARD, FMM_BUILD_MERGED, FMM_TREE_SOURCE_STANDARD, FMM_TREE_SOURCE_MERGED, FMM_MULTIPOLE_STANDARD
+  use fmm_multipoles, only: m_fmm_multipoles, merge_multipoles, sync_fmm_global_multipole, r_fmm_multipole_shift_downward
   use cleanup_fmm_module, only: r_cleanup_fmm
   implicit none
   type(pst_t)::pst
@@ -24,6 +23,7 @@ subroutine fmm(pst,ilev,icount)
   logical :: use_merged
   type(double_level_t)::double_level
   type(downward_level_t)::downward_levels
+  type(fmm_level_t)::fmm_levels
 
   if(pst%s%r%gravity_type>0)return
   if(pst%s%m%noct_tot(ilev)==0)return
@@ -48,10 +48,21 @@ subroutine fmm(pst,ilev,icount)
 
   if(pst%s%r%verbose) print '(A)','FMM Hierarchy done '
 
-  if (ilev == pst%s%r%levelmin) call reset_fmm_global_multipole(pst%s)
   do jlev=ilev,pst%s%r%nlevelmax
-    call m_fmm_multipoles(pst, jlev, ilev == pst%s%r%levelmin) ! do upward pass !
+    call m_fmm_multipoles(pst, jlev) ! do upward pass !
   end do
+
+  do jlev=ilev,pst%s%r%nlevelmax
+    if(pst%s%r%verbose) print *, "[M2M] LEVEL: ", jlev
+    fmm_levels%ilev = jlev
+    fmm_levels%mode = FMM_MULTIPOLE_STANDARD
+    do flev=pst%s%r%bound_levelmin,jlev-pst%s%r%level_fmm_to_amr
+      if(pst%s%r%verbose)write(*,'("      <SHIFTING> TREE for AMR LEVEL: ",I2,", TREE LEVEL: ",I2)')jlev, flev
+      fmm_levels%flev=flev
+      call r_fmm_multipole_shift_downward(pst,fmm_levels,storage_size(fmm_levels)/32)
+    end do
+  end do
+
   ! sync_fmm_global_multipole is already called in m_fmm_multipoles when update_global_multipole=.true.
   ! Removed duplicate call to avoid double-counting multipoles
   call merge_multipoles(pst,ilev+1)
