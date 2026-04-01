@@ -41,10 +41,6 @@ subroutine fmm(pst,ilev,icount)
       call r_build_fmm(pst,double_level,storage_size(double_level)/32)
     end do
   end do
-  double_level%ilevel=ilev+1
-  double_level%ifine=ilev
-  double_level%mode=FMM_BUILD_MERGED
-  call r_build_fmm(pst,double_level,storage_size(double_level)/32)
 
   if(pst%s%r%verbose) print '(A)','FMM Hierarchy done '
 
@@ -65,9 +61,14 @@ subroutine fmm(pst,ilev,icount)
 
   ! sync_fmm_global_multipole is already called in m_fmm_multipoles when update_global_multipole=.true.
   ! Removed duplicate call to avoid double-counting multipoles
-  call merge_multipoles(pst,ilev+1)
-  use_merged = associated(pst%s%m_fmm_merged) .and. (pst%s%m_fmm_merged%noct_used > 0) .and. &
-       &       (ilev < pst%s%r%nlevelmax)
+  if (ilev < pst%s%r%nlevelmax) then
+    double_level%ilevel=ilev+1
+    double_level%ifine=ilev
+    double_level%mode=FMM_BUILD_MERGED
+    call r_build_fmm(pst,double_level,storage_size(double_level)/32)
+    call merge_multipoles(pst,ilev+1)
+  end if
+  use_merged = associated(pst%s%m_fmm_merged) .and. (pst%s%m_fmm_merged%noct_used > 0) .and. (ilev < pst%s%r%nlevelmax)
 
    ! Downward pass for fmm grids. 
    input_size = storage_size(downward_levels)/32
@@ -397,7 +398,6 @@ subroutine fmm_downward(s, ilev, jlev, flev, use_merged)
     ! Only do L2L if source and target trees are the same.
     if (ilev == jlev) then
       call get_parent_cell(s, hash_key, igrid_parent, pcell, flush_cache=.false., fetch_cache=.true.)
-    
 #ifdef FMM
       if (igrid_parent > 0) then
         parent_taylor = m_source%taylor_coeff(pcell, :, igrid_parent)
@@ -410,7 +410,7 @@ subroutine fmm_downward(s, ilev, jlev, flev, use_merged)
       do icell = 1, twotondim
         do idim =1,ndim
           dx(idim) = (displacement_list(icell, idim) - 0.5) * dx_loc
-        end do 
+        end do
         call shift_taylor(parent_taylor, dx, temp_taylor)
         accum_taylor(icell,:) = accum_taylor(icell,:) + temp_taylor
       end do
@@ -641,7 +641,7 @@ subroutine fmm_downward_coarse(s, ilev, jlev, flev, use_merged)
 #endif
 	     ! Unlock neighbor octs
 	     do inbor = 1, threetondim
-	        call unlock_cache(m_source, grid_nbors(inbor))
+	        if (grid_nbors(inbor)>0) call unlock_cache(m_source, grid_nbors(inbor))
 	     end do
   end do
   call close_cache(mdl)
@@ -835,37 +835,9 @@ subroutine fmm_amr_intermediate(s, ilev, jlev, use_merged)
       igrid = igrid + nstride * MOD(hash_key(idim), nfine)
     end do
 
-    ! Check if we need to fetch neighbors & parent Taylor
-    if (.not. all(hash_fmm_grid == prev_hash_fmm_grid)) then
-      if (neighbors_cached) then
-        do ind = 1, threetondim
-          call unlock_cache(m_fmm, grid_nbors(ind))
-        end do
-      end if
-
-      if(ilev == jlev) call get_grid(s, hash_fmm_grid, igrid_parent, flush_cache=.false., fetch_cache=.true., lock=.true.)
-
-      call get_intermediate_nbor_grid(s, hash_fmm_cell, grid_nbors, flush_cache=.false., fetch_cache=.true.)
-      source_active_count(:) = 0
-      do ind = 1, threetondim
-        igrid_nbor = grid_nbors(ind)
-        if (igrid_nbor <= 0) cycle
-        do jcell = 1, twotondim
-#ifdef FMM
-          multipole_jcell_list(:, jcell, ind) = m_fmm%multipole(jcell, 1:multipole_size, igrid_nbor)
-          if (any(multipole_jcell_list(:, jcell, ind) /= 0.0d0)) then
-            source_active_count(ind) = source_active_count(ind) + 1
-            source_active_idx(source_active_count(ind), ind) = jcell
-          end if
-#endif
-        end do
-      end do
-      neighbors_cached = .true.
-      prev_hash_fmm_grid = hash_fmm_grid
-    end if
-
     !! FAR-FIELD
     if(ilev == jlev) then
+      call get_grid(s, hash_fmm_grid, igrid_parent, flush_cache=.false., fetch_cache=.true.)
       pcell = 1
       do idim=1,ndim
         nstride = 2**(idim-1)
@@ -887,6 +859,33 @@ subroutine fmm_amr_intermediate(s, ilev, jlev, use_merged)
         m%phi(icell, ioct) = m%phi(icell, ioct) + phi
 #endif
       end do
+    end if
+
+    ! Check if we need to fetch neighbors & parent Taylor
+    if (.not. all(hash_fmm_grid == prev_hash_fmm_grid)) then
+      if (neighbors_cached) then
+        do ind = 1, threetondim
+          if(grid_nbors(ind)>0) call unlock_cache(m_fmm, grid_nbors(ind))
+        end do
+      end if
+
+      call get_intermediate_nbor_grid(s, hash_fmm_cell, grid_nbors, flush_cache=.false., fetch_cache=.true.)
+      source_active_count(:) = 0
+      do ind = 1, threetondim
+        igrid_nbor = grid_nbors(ind)
+        if (igrid_nbor <= 0) cycle
+        do jcell = 1, twotondim
+#ifdef FMM
+          multipole_jcell_list(:, jcell, ind) = m_fmm%multipole(jcell, 1:multipole_size, igrid_nbor)
+          if (any(multipole_jcell_list(:, jcell, ind) /= 0.0d0)) then
+            source_active_count(ind) = source_active_count(ind) + 1
+            source_active_idx(source_active_count(ind), ind) = jcell
+          end if
+#endif
+        end do
+      end do
+      neighbors_cached = .true.
+      prev_hash_fmm_grid = hash_fmm_grid
     end if
 
     ! Intermediate field
@@ -920,6 +919,12 @@ subroutine fmm_amr_intermediate(s, ilev, jlev, use_merged)
       end do
     end do
   end do
+
+  if (neighbors_cached) then
+    do ind = 1, threetondim
+      if (grid_nbors(ind) > 0) call unlock_cache(m_fmm, grid_nbors(ind))
+    end do
+  end if
 
   deallocate(D0_list, D1_list, D2_list, intermediate_diff_list, far_diff_list, multipole_jcell_list, &
        &     direct_neighbor_list, cell_diff_list, fmm_grid_center_offset, fmm_cell_center_offset, &
@@ -1084,7 +1089,7 @@ subroutine fmm_direct_coarsest(s, ilev, jlev)
     if (.not. all(hash_fmm_grid == prev_hash_fmm_grid)) then
       if (neighbors_cached) then
         do ind = 1, threetondim
-          call unlock_cache(m, grid_nbors(ind))
+          if(grid_nbors(ind)>0) call unlock_cache(m, grid_nbors(ind))
         end do
       end if
 
@@ -1232,7 +1237,7 @@ subroutine fmm_combined_direct(s, ilev, jlev)
     if (.not. all(hash_fmm_grid == prev_hash_fmm_grid)) then
       if (neighbors_cached) then
         do ind = 1, threetondim
-          call unlock_cache(m, grid_nbors(ind))
+          if (grid_nbors(ind)>0) call unlock_cache(m, grid_nbors(ind))
         end do
       end if
 
@@ -1470,7 +1475,7 @@ subroutine fmm_amr_direct(s, ilev, jlev)
             mm_jcell_list(:, jgrid, ind) = 0.0d0
             cycle
           end if
-          call get_grid(s, hash_direct, igrid_nbor, flush_cache = .false., fetch_cache = .true., lock=.true.)
+          call get_grid(s, hash_direct, igrid_nbor, flush_cache = .false., fetch_cache = .true.)
           if (igrid_nbor .le. 0) then 
             mm_jcell_list(:, jgrid, ind) = 0.0d0
             cycle
@@ -1480,7 +1485,7 @@ subroutine fmm_amr_direct(s, ilev, jlev)
           if (source_all_refined) then
             do jcell = 1, twotondim
               hash_fine(1:ndim) = 2 * hash_direct(1:ndim) + displacement_list(jcell, :)
-              call get_grid(s, hash_fine, igrid_fine, flush_cache = .false., fetch_cache = .true., lock=.true.)
+              call get_grid(s, hash_fine, igrid_fine, flush_cache = .false., fetch_cache = .true.)
               if (igrid_fine .le. 0) then
                 mm_jfinecell_list(:, jcell, jgrid, ind) = 0.0d0
               else
@@ -1763,7 +1768,7 @@ subroutine fmm_amr_direct_taylor(s, ilev, jlev, use_merged)
           if (cycle_flag) then
             cycle
           end if
-          call get_grid(s, hash_direct, igrid_nbor, flush_cache = .false., fetch_cache = .true., lock=.true.)
+          call get_grid(s, hash_direct, igrid_nbor, flush_cache = .false., fetch_cache = .true.)
           if (igrid_nbor .le. 0) then 
             cycle
           end if
@@ -1882,7 +1887,7 @@ subroutine init_bound_taylor_zero(r,g,m,igrid,igrid_ref,ibound)
   m%taylor_coeff(:,:,igrid)=0.0D0
 #endif
   do ind=1,twotondim
-     m%grid(igrid)%refined(ind)=.false.
+     m%grid(igrid)%refined(ind)=.true.
   end do
 end subroutine init_bound_taylor_zero
 !################################################################
@@ -1903,7 +1908,7 @@ subroutine init_bound_multipole_zero(r,g,m,igrid,igrid_ref,ibound)
   m%multipole(:,:,igrid)=0.0D0
 #endif
   do ind=1,twotondim
-     m%grid(igrid)%refined(ind)=.false.
+     m%grid(igrid)%refined(ind)=.true.
   end do
 end subroutine init_bound_multipole_zero
 !################################################################
