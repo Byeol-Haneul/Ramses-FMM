@@ -288,14 +288,15 @@ subroutine build_fmm(s, m, m_fmm, input)
   end do
   ! End loop over grids
 
-  ! Multigrid oct statistics
+  call close_cache(mdl)
+
+  ! Finalize level bounds after close_cache because COMBINER_CREATE may
+  ! materialize owner-local parent grids during the cache drain.
   m_fmm%tail(icoarselevel)=m_fmm%ifree-1
   m_fmm%noct(icoarselevel)=m_fmm%tail(icoarselevel)-m_fmm%head(icoarselevel)+1
   m_fmm%noct_used=m_fmm%tail(icoarselevel)
 
   if(r%verbose) print *, "      <LEV>: ", icoarselevel, "| created: ", m_fmm%noct(icoarselevel)
-
-  call close_cache(mdl)
   end associate
 
 end subroutine build_fmm
