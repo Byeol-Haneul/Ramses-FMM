@@ -1,0 +1,97 @@
+This is the RAMSES parameter file for 3D core collapse test.
+Compile the code with:
+
+make NDIM=3 MPI=1 GRAV=1 HYDRO=1 UNITS=COEUR INIT=COEUR
+
+&RUN_PARAMS 
+hydro=.true.
+poisson=.true.
+ncontrol=1
+nsubcycle=1,1,10*2,
+nrestart=0
+nsuperoct=0
+verbose=.false.
+/
+
+&AMR_PARAMS 
+levelmin=7
+levelmax=16
+ngridmax=1000000
+nexpand=10*6
+boxlen=1.0
+/
+
+&BOUNDARY_PARAMS
+bound_levelmin = 3
+box_size = 1.0
+box_xmin = 1
+box_ymin = 1
+box_zmin = 1
+box_xmax = -1
+box_ymax = -1
+box_zmax = -1
+nbound = 6
+periodic = .false., .false., .false.
+bound_dir   = 1, 1, 2, 2, 3, 3
+bound_shift = 1, -1, 1, -1, 1, -1
+bound_type  = 1, 1, 1, 1, 1, 1
+bound_xmin =  0, -1,  0,  0,  0,  0
+bound_xmax =  1,  0,  0,  0,  0,  0
+bound_ymin =  1,  1,  0, -1,  0,  0
+bound_ymax = -1, -1,  1,  0,  0,  0
+bound_zmin =  1,  1,  1,  1,  0, -1
+bound_zmax = -1, -1, -1, -1,  1,  0
+/
+
+&INIT_PARAMS
+/
+
+&OUTPUT_PARAMS
+delta_tout = 0.7
+tend = 5.6
+/
+
+&HYDRO_PARAMS
+gamma=1.6666667
+courant_factor=0.8
+slope_type=1
+riemann='hllc'
+/
+
+&COOLING_PARAMS
+isothermal=.true.
+eos_type=3
+eos_T2=4.29
+eos_nH=1d10
+eos_index=2.0
+/
+
+&REFINE_PARAMS
+jeans_refine=10*6.
+interpol_var=0
+interpol_type=0
+/
+
+&POISSON_PARAMS
+gravity_type=0
+epsilon=1.d-4
+fast_solver=.true.
+level_fmm_to_amr=1
+/
+
+&MOVIE_PARAMS
+movie=.true.
+tendmov=5.62
+imovout=1600
+nw_frame=512
+nh_frame=512
+levelmax_frame=16
+xcentre_frame=0.5,0.,0.,0.
+ycentre_frame=0.5,0.,0.,0.
+zcentre_frame=0.5,0.,0.,0.
+deltax_frame=0.01,0.
+deltay_frame=0.01,0.
+deltaz_frame=0.01,0.
+proj_axis='z'
+movie_vars_txt='dens','vx'
+/

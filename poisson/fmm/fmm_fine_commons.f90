@@ -150,7 +150,7 @@ subroutine fmm(pst,ilev,icount)
    end if
 
    if (icount > 1) then
-     print *, "clean merged_tree: "
+     !print *, "clean merged_tree: "
      if (associated(pst%s%m_fmm_merged) .and. (pst%s%m_fmm_merged%noct_used > 0)) call r_cleanup_fmm_merge(pst)
    end if
 end subroutine fmm
