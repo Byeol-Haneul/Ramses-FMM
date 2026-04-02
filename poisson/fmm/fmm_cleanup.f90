@@ -1,25 +1,37 @@
 module cleanup_fmm_module
 #ifdef GRAV
 contains
-recursive subroutine r_cleanup_fmm(pst, ilevel)
+recursive subroutine r_cleanup_fmm(pst,ilevel,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::rID, ilevel
-    
-  if(pst%nLower>0) then
-     rID = mdl_send_request(pst%s%mdl,MDL_CLEANUP_FMM,pst%iUpper+1,1,0,ilevel)
-     call r_cleanup_fmm(pst%pLower, ilevel)
+  integer::ilevel
+  integer,VALUE::input_size
+  integer::rID
+
+  if(pst%nLower>0)then
+     rID = mdl_send_request(pst%s%mdl,MDL_CLEANUP_FMM,pst%iUpper+1,input_size,0,ilevel)
+     call r_cleanup_fmm(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call m_cleanup_fmm(pst%s%m_fmm_list(ilevel))
-     if (ilevel==pst%s%r%levelmin) then
+     if (ilevel > 0) then
+        call m_cleanup_fmm(pst%s%m_fmm_list(ilevel))
+     else
         if (associated(pst%s%m_fmm_merged)) call m_cleanup_fmm(pst%s%m_fmm_merged)
      end if
   endif
+
 end subroutine r_cleanup_fmm
+
+recursive subroutine r_cleanup_fmm_merge(pst)
+  use ramses_commons, only: pst_t
+  implicit none
+  type(pst_t)::pst
+
+  call r_cleanup_fmm(pst, 0, 1)
+end subroutine r_cleanup_fmm_merge
 
 subroutine m_cleanup_fmm(m)
   use amr_commons, only: mesh_t

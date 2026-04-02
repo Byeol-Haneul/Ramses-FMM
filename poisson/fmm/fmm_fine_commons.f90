@@ -14,7 +14,7 @@ subroutine fmm(pst,ilev,icount)
   use init_fmm_module, only: r_init_fmm, r_build_fmm, double_level_t, downward_level_t, fmm_level_t, &
        & FMM_BUILD_STANDARD, FMM_BUILD_MERGED, FMM_TREE_SOURCE_STANDARD, FMM_TREE_SOURCE_MERGED, FMM_MULTIPOLE_STANDARD
   use fmm_multipoles, only: m_fmm_multipoles, merge_multipoles, sync_fmm_global_multipole, r_fmm_multipole_shift_downward
-  use cleanup_fmm_module, only: r_cleanup_fmm
+  use cleanup_fmm_module, only: r_cleanup_fmm, r_cleanup_fmm_merge
   implicit none
   type(pst_t)::pst
   integer,intent(in) :: ilev,icount
@@ -27,48 +27,57 @@ subroutine fmm(pst,ilev,icount)
 
   if(pst%s%r%gravity_type>0)return
   if(pst%s%m%noct_tot(ilev)==0)return
+
+  !print *, "CALLING FMM TREE at LEVEL ", ilev, " (icount)=", icount
   
   if(pst%s%r%verbose) print '(A,I2)','Entering fmm at AMR level ',ilev
 
-  do jlev=ilev,pst%s%r%nlevelmax
-    if(pst%s%r%verbose) print '(A,I2)','[Build FMM] ', jlev
-    call r_cleanup_fmm(pst, jlev)
-    call r_init_fmm(pst, jlev, 1)
-    double_level%ilevel=jlev
-    double_level%mode=FMM_BUILD_STANDARD
-    do ifine=jlev,pst%s%r%bound_levelmin+1,-1
-      double_level%ifine=ifine
+  if (ilev == pst%s%r%levelmin .or. icount > 1) then
+    !cleanup FMM trees
+    if (ilev > pst%s%r%levelmin) then
+     do jlev=ilev,pst%s%r%nlevelmax
+       !print *, "clean tree: ", jlev
+       call r_cleanup_fmm(pst, jlev, 1)
+     end do
+    end if
+
+    do jlev=ilev,pst%s%r%nlevelmax
+      if(pst%s%r%verbose) print '(A,I2)','[Build FMM] ', jlev
+      call r_init_fmm(pst, jlev, 1)
+      double_level%ilevel=jlev
+      double_level%mode=FMM_BUILD_STANDARD
+      do ifine=jlev,pst%s%r%bound_levelmin+1,-1
+        double_level%ifine=ifine
+        call r_build_fmm(pst,double_level,storage_size(double_level)/32)
+      end do
+    end do
+
+    if(pst%s%r%verbose) print '(A)','FMM Hierarchy done '
+
+    do jlev=ilev,pst%s%r%nlevelmax
+      call m_fmm_multipoles(pst, jlev) ! do upward pass !
+    end do
+
+    do jlev=ilev,pst%s%r%nlevelmax
+      if(pst%s%r%verbose) print *, "[M2M] LEVEL: ", jlev
+      fmm_levels%ilev = jlev
+      fmm_levels%mode = FMM_MULTIPOLE_STANDARD
+      do flev=pst%s%r%bound_levelmin,jlev-pst%s%r%level_fmm_to_amr
+        if(pst%s%r%verbose)write(*,'("      <SHIFTING> TREE for AMR LEVEL: ",I2,", TREE LEVEL: ",I2)')jlev, flev
+        fmm_levels%flev=flev
+        call r_fmm_multipole_shift_downward(pst,fmm_levels,storage_size(fmm_levels)/32)
+      end do
+    end do
+
+    if (ilev < pst%s%r%nlevelmax) then
+      double_level%ilevel=ilev+1
+      double_level%ifine=ilev
+      double_level%mode=FMM_BUILD_MERGED
       call r_build_fmm(pst,double_level,storage_size(double_level)/32)
-    end do
-  end do
-
-  if(pst%s%r%verbose) print '(A)','FMM Hierarchy done '
-
-  do jlev=ilev,pst%s%r%nlevelmax
-    call m_fmm_multipoles(pst, jlev) ! do upward pass !
-  end do
-
-  do jlev=ilev,pst%s%r%nlevelmax
-    if(pst%s%r%verbose) print *, "[M2M] LEVEL: ", jlev
-    fmm_levels%ilev = jlev
-    fmm_levels%mode = FMM_MULTIPOLE_STANDARD
-    do flev=pst%s%r%bound_levelmin,jlev-pst%s%r%level_fmm_to_amr
-      if(pst%s%r%verbose)write(*,'("      <SHIFTING> TREE for AMR LEVEL: ",I2,", TREE LEVEL: ",I2)')jlev, flev
-      fmm_levels%flev=flev
-      call r_fmm_multipole_shift_downward(pst,fmm_levels,storage_size(fmm_levels)/32)
-    end do
-  end do
-
-  ! sync_fmm_global_multipole is already called in m_fmm_multipoles when update_global_multipole=.true.
-  ! Removed duplicate call to avoid double-counting multipoles
-  if (ilev < pst%s%r%nlevelmax) then
-    double_level%ilevel=ilev+1
-    double_level%ifine=ilev
-    double_level%mode=FMM_BUILD_MERGED
-    call r_build_fmm(pst,double_level,storage_size(double_level)/32)
-    call merge_multipoles(pst,ilev+1)
+      call merge_multipoles(pst,ilev+1)
+    end if
+    use_merged = associated(pst%s%m_fmm_merged) .and. (pst%s%m_fmm_merged%noct_used > 0) .and. (ilev < pst%s%r%nlevelmax)
   end if
-  use_merged = associated(pst%s%m_fmm_merged) .and. (pst%s%m_fmm_merged%noct_used > 0) .and. (ilev < pst%s%r%nlevelmax)
 
    ! Downward pass for fmm grids. 
    input_size = storage_size(downward_levels)/32
@@ -140,9 +149,10 @@ subroutine fmm(pst,ilev,icount)
       end do
    end if
 
-   !do i = 1, pst%s%r%levelmin - pst%s%r%level_fmm_to_amr
-   !  call dump_taylor(pst%s%r, pst%s%m_fmm, i)
-   !end do 
+   if (icount > 1) then
+     print *, "clean merged_tree: "
+     if (associated(pst%s%m_fmm_merged) .and. (pst%s%m_fmm_merged%noct_used > 0)) call r_cleanup_fmm_merge(pst)
+   end if
 end subroutine fmm
 !###########################################################
 !###########################################################
