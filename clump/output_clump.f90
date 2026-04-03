@@ -151,7 +151,8 @@ subroutine halo_mass_def(s,mbin,rad,r200b,rmax,c)
   pi=ACOS(-1.0D0)
   G=1d0
   if(s%r%cosmo)G=3d0/8d0/pi*s%g%omega_m*s%g%aexp
-  d200=s%r%density_threshold*200d0/80d0
+  !d200=s%r%density_threshold*200d0/80d0
+  d200 = 200d0
   ! Find densest bin
   deltamax=0
   imax=1
