@@ -36,9 +36,9 @@ module mdl_parameters
      enumerator::MDL_INIT_FMM
      enumerator::MDL_BUILD_FMM
      enumerator::MDL_CLEANUP_FMM
-     enumerator::MDL_COLLECT_MULTIPOLE_FMM
-     enumerator::MDL_BROADCAST_MULTIPOLE_FMM
-     enumerator::MDL_ACCUM_MULTIPOLE_FMM
+     enumerator::MDL_COLLECT_GLOBAL_MULTIPOLE_FMM
+     enumerator::MDL_BROADCAST_GLOBAL_MULTIPOLE_FMM
+     enumerator::MDL_ACCUM_GLOBAL_MULTIPOLE_FMM
      enumerator::MDL_FMM_DOWNWARD
      enumerator::MDL_FMM_AMR_INTERMEDIATE
      enumerator::MDL_FMM_AMR_DIRECT

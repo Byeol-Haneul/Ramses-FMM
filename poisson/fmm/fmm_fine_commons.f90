@@ -10,6 +10,7 @@ contains
 ! Used variables:
 #ifdef GRAV
 subroutine fmm(pst,ilev,icount)
+  use amr_parameters, only: multipole_size
   use ramses_commons, only: pst_t
   use init_fmm_module, only: r_init_fmm, r_build_fmm, double_level_t, downward_level_t, fmm_level_t, &
        & FMM_BUILD_STANDARD, FMM_BUILD_MERGED, FMM_TREE_SOURCE_STANDARD, FMM_TREE_SOURCE_MERGED, FMM_MULTIPOLE_STANDARD
@@ -33,6 +34,13 @@ subroutine fmm(pst,ilev,icount)
   if(pst%s%r%verbose) print '(A,I2)','Entering fmm at AMR level ',ilev
 
   if (ilev == pst%s%r%levelmin .or. icount > 1) then
+    if (ilev == pst%s%r%levelmin) then
+      pst%s%g%multipole_fmm_raw%q(1:multipole_size) = 0.0d0
+      do jlev=pst%s%r%levelmin,pst%s%r%nlevelmax
+        pst%s%g%multipole_fmm_level(jlev)%q(1:multipole_size) = 0.0d0
+      end do
+    end if
+
     !cleanup FMM trees
     if (ilev > pst%s%r%levelmin) then
      do jlev=ilev,pst%s%r%nlevelmax
@@ -54,12 +62,14 @@ subroutine fmm(pst,ilev,icount)
 
     if(pst%s%r%verbose) print '(A)','FMM Hierarchy done '
 
-    do jlev=ilev,pst%s%r%nlevelmax
-      call m_fmm_multipoles(pst, jlev) ! do upward pass !
-    end do
+	    do jlev=ilev,pst%s%r%nlevelmax
+	      call m_fmm_multipoles(pst, jlev) ! do upward pass !
+	    end do
 
-    do jlev=ilev,pst%s%r%nlevelmax
-      if(pst%s%r%verbose) print *, "[M2M] LEVEL: ", jlev
+      call sync_fmm_global_multipole(pst)
+
+	    do jlev=ilev,pst%s%r%nlevelmax
+	      if(pst%s%r%verbose) print *, "[M2M] LEVEL: ", jlev
       fmm_levels%ilev = jlev
       fmm_levels%mode = FMM_MULTIPOLE_STANDARD
       do flev=pst%s%r%bound_levelmin,jlev-pst%s%r%level_fmm_to_amr
@@ -1897,7 +1907,7 @@ subroutine init_bound_taylor_zero(r,g,m,igrid,igrid_ref,ibound)
   m%taylor_coeff(:,:,igrid)=0.0D0
 #endif
   do ind=1,twotondim
-     m%grid(igrid)%refined(ind)=.true.
+     m%grid(igrid)%refined(ind)=.false.
   end do
 end subroutine init_bound_taylor_zero
 !################################################################
@@ -1918,7 +1928,7 @@ subroutine init_bound_multipole_zero(r,g,m,igrid,igrid_ref,ibound)
   m%multipole(:,:,igrid)=0.0D0
 #endif
   do ind=1,twotondim
-     m%grid(igrid)%refined(ind)=.true.
+     m%grid(igrid)%refined(ind)=.false.
   end do
 end subroutine init_bound_multipole_zero
 !################################################################

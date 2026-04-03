@@ -317,9 +317,9 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_FMM_AMR_INTERMEDIATE,   pst,C_FUNLOC(r_fmm_amr_intermediate),1,0,"fmm_amr_intermediate")
   call mdl_add_service(pst%s%mdl,MDL_FMM_AMR_DIRECT,         pst,C_FUNLOC(r_fmm_amr_direct),1,0,"fmm_amr_direct")
   call mdl_add_service(pst%s%mdl,MDL_FMM_FILL_PHI,           pst,C_FUNLOC(r_fmm_fill_phi),1,0,"fmm_fill_phi")
-  call mdl_add_service(pst%s%mdl,MDL_COLLECT_MULTIPOLE_FMM,  pst,C_FUNLOC(r_collect_fmm_global_multipole),1,storage_size(pst%s%g%multipole)/32,"collect_fmm_global_multipole")
-  call mdl_add_service(pst%s%mdl,MDL_ACCUM_MULTIPOLE_FMM,    pst,C_FUNLOC(r_accumulate_fmm_global_multipole),1,storage_size(pst%s%g%multipole)/32,"accumulate_fmm_global_multipole")
-  call mdl_add_service(pst%s%mdl,MDL_BROADCAST_MULTIPOLE_FMM,pst,C_FUNLOC(r_broadcast_fmm_global_multipole),storage_size(pst%s%g%multipole)/32,0,"broadcast_fmm_global_multipole")
+  call mdl_add_service(pst%s%mdl,MDL_COLLECT_GLOBAL_MULTIPOLE_FMM,  pst,C_FUNLOC(r_collect_fmm_global_multipole),1,storage_size(pst%s%g%multipole)/32,"collect_global_multipole_fmm")
+  call mdl_add_service(pst%s%mdl,MDL_ACCUM_GLOBAL_MULTIPOLE_FMM,    pst,C_FUNLOC(r_accumulate_fmm_global_multipole),1,storage_size(pst%s%g%multipole)/32,"accumulate_global_multipole_fmm")
+  call mdl_add_service(pst%s%mdl,MDL_BROADCAST_GLOBAL_MULTIPOLE_FMM,pst,C_FUNLOC(r_broadcast_fmm_global_multipole),storage_size(pst%s%g%multipole)/32,0,"broadcast_global_multipole_fmm")
 #endif
 #endif
   call mdl_add_service(pst%s%mdl,MDL_INIT_RT,                pst,C_FUNLOC(r_init_rt),0,0,"init_rt")

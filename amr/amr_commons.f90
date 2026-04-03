@@ -641,6 +641,8 @@ module amr_commons
 
      ! Multipole coefficients
      type(multipole_t)::multipole
+     type(multipole_t)::multipole_fmm_raw
+     type(multipole_t),dimension(1:MAXLEVEL)::multipole_fmm_level
 
      ! RT global variables
      real(kind=8),dimension(1:MAXLEVEL)::rt_c=1d0            ! Reduced lightspeed in code units

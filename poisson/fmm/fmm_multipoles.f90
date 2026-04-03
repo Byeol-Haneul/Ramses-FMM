@@ -53,7 +53,7 @@ subroutine m_fmm_multipoles(pst,ilevel)
      call r_fmm_multipole_fmm2fmm(pst,fmm_levels,input_size)
   end do
 
-  if (ilevel == r%nlevelmax) call sync_fmm_global_multipole(pst)
+  call update_fmm_local_multipole_level(pst, ilevel)
 
   end associate
 
@@ -73,7 +73,7 @@ recursive subroutine r_accumulate_fmm_global_multipole(pst,ilevel,input_size)
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_ACCUM_MULTIPOLE_FMM,pst%iUpper+1,input_size,0,ilevel)
+     rID = mdl_send_request(pst%s%mdl,MDL_ACCUM_GLOBAL_MULTIPOLE_FMM,pst%iUpper+1,input_size,0,ilevel)
      call r_accumulate_fmm_global_multipole(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
@@ -98,10 +98,12 @@ subroutine accumulate_fmm_global_multipole(s,ilevel)
 
   associate(r=>s%r, g=>s%g)
   m_fmm => s%m_fmm_list(ilevel)
+#ifdef FMM
+  g%multipole%q(1:multipole_size) = 0.0d0
+#endif
   if (m_fmm%tail(r%bound_levelmin) < m_fmm%head(r%bound_levelmin)) return
 
 #ifdef FMM
-  if(ilevel==r%levelmin) g%multipole%q(1:multipole_size) = 0.0d0
   do ioct=m_fmm%head(r%bound_levelmin),m_fmm%tail(r%bound_levelmin)
      do icell=1,twotondim
         g%multipole%q(1:multipole_size) = g%multipole%q(1:multipole_size) + &
@@ -115,6 +117,22 @@ end subroutine accumulate_fmm_global_multipole
 !################################################################
 !################################################################
 !################################################################
+subroutine update_fmm_local_multipole_level(pst,ilevel)
+  use amr_parameters, only: multipole_size
+  use ramses_commons, only: pst_t
+  implicit none
+  type(pst_t) :: pst
+  integer, intent(in) :: ilevel
+
+  associate(g=>pst%s%g)
+  call r_accumulate_fmm_global_multipole(pst, ilevel, 1)
+  g%multipole_fmm_level(ilevel)%q(1:multipole_size) = g%multipole%q(1:multipole_size)
+  end associate
+end subroutine update_fmm_local_multipole_level
+!################################################################
+!################################################################
+!################################################################
+!################################################################
 subroutine sync_fmm_global_multipole(pst)
   use amr_parameters, only: multipole_size
   use amr_commons, only: multipole_t
@@ -122,31 +140,24 @@ subroutine sync_fmm_global_multipole(pst)
   implicit none
   type(pst_t) :: pst
 
-  type(multipole_t) :: multipole_tot, multipole_level
+  type(multipole_t) :: multipole_tot
   integer :: input_size, ilevel
 
   associate(g=>pst%s%g, r=>pst%s%r)
-  ! Each FMM tree at level ilevel only holds mass info from leaf cells at that level.
-  ! So we must accumulate and collect from each level separately, then sum them up.
-
   multipole_tot%q(1:multipole_size) = 0.0d0
   input_size = storage_size(multipole_tot)/32
 
   do ilevel = r%levelmin, r%nlevelmax
-     ! Accumulate multipoles from all FMM trees at this level (recursive, finer→coarser)
-     call r_accumulate_fmm_global_multipole(pst, ilevel, 1)
-
-     ! Collect across parallel domains for this level
-     call r_collect_fmm_global_multipole(pst, ilevel, input_size, multipole_level, input_size)
-
-     ! Add this level's contribution to the total
-     multipole_tot%q(1:multipole_size) = multipole_tot%q(1:multipole_size) + multipole_level%q(1:multipole_size)
+     multipole_tot%q(1:multipole_size) = multipole_tot%q(1:multipole_size) + &
+          & g%multipole_fmm_level(ilevel)%q(1:multipole_size)
   end do
 
-  ! Center the collected multipole
+  g%multipole_fmm_raw%q(1:multipole_size) = multipole_tot%q(1:multipole_size)
+  multipole_tot%q(1:multipole_size) = 0.0d0
+  call r_collect_fmm_global_multipole(pst, r%levelmin, input_size, multipole_tot, input_size)
+  g%multipole_fmm_raw%q(1:multipole_size) = multipole_tot%q(1:multipole_size)
   call center_fmm_global_multipole(multipole_tot)
 
-  ! Broadcast the result to all domains
   call r_broadcast_fmm_global_multipole(pst, multipole_tot, input_size)
   end associate
 end subroutine sync_fmm_global_multipole
@@ -208,13 +219,16 @@ recursive subroutine r_collect_fmm_global_multipole(pst,ilevel,input_size,multip
 
   integer::rID
 
+  multipole%q = 0.0d0
+  next_multipole%q = 0.0d0
+
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_COLLECT_MULTIPOLE_FMM,pst%iUpper+1,input_size,output_size,ilevel)
+     rID = mdl_send_request(pst%s%mdl,MDL_COLLECT_GLOBAL_MULTIPOLE_FMM,pst%iUpper+1,input_size,output_size,ilevel)
      call r_collect_fmm_global_multipole(pst%pLower,ilevel,input_size,multipole,output_size)
      call mdl_get_reply(pst%s%mdl,rID,output_size,next_multipole)
      multipole%q = multipole%q + next_multipole%q
   else
-     multipole%q = pst%s%g%multipole%q
+     multipole%q = pst%s%g%multipole_fmm_raw%q
   endif
 end subroutine r_collect_fmm_global_multipole
 !################################################################
@@ -235,7 +249,7 @@ recursive subroutine r_broadcast_fmm_global_multipole(pst,multipole,input_size)
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_BROADCAST_MULTIPOLE_FMM,pst%iUpper+1,input_size,0,multipole)
+     rID = mdl_send_request(pst%s%mdl,MDL_BROADCAST_GLOBAL_MULTIPOLE_FMM,pst%iUpper+1,input_size,0,multipole)
      call r_broadcast_fmm_global_multipole(pst%pLower,multipole,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
