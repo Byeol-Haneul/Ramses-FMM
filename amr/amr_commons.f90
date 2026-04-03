@@ -16,6 +16,10 @@ module amr_commons
 #endif
   end type multipole_t
 
+  type fmm_multipole_t
+    real(kind=8),dimension(1:multipole_size)::q
+  end type fmm_multipole_t
+
   type run_t
 
      ! Run control
@@ -641,8 +645,8 @@ module amr_commons
 
      ! Multipole coefficients
      type(multipole_t)::multipole
-     type(multipole_t)::multipole_fmm_raw
-     type(multipole_t),dimension(1:MAXLEVEL)::multipole_fmm_level
+     type(fmm_multipole_t)::multipole_fmm_raw
+     type(fmm_multipole_t),dimension(1:MAXLEVEL)::multipole_fmm_level
 
      ! RT global variables
      real(kind=8),dimension(1:MAXLEVEL)::rt_c=1d0            ! Reduced lightspeed in code units

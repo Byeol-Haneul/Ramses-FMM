@@ -78,6 +78,7 @@ recursive subroutine r_accumulate_fmm_global_multipole(pst,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
      call accumulate_fmm_global_multipole(pst%s,ilevel)
+     pst%s%g%multipole_fmm_level(ilevel)%q = pst%s%g%multipole_fmm_raw%q
   endif
 
 end subroutine r_accumulate_fmm_global_multipole
@@ -99,14 +100,14 @@ subroutine accumulate_fmm_global_multipole(s,ilevel)
   associate(r=>s%r, g=>s%g)
   m_fmm => s%m_fmm_list(ilevel)
 #ifdef FMM
-  g%multipole%q(1:multipole_size) = 0.0d0
+  g%multipole_fmm_raw%q(1:multipole_size) = 0.0d0
 #endif
   if (m_fmm%tail(r%bound_levelmin) < m_fmm%head(r%bound_levelmin)) return
 
 #ifdef FMM
   do ioct=m_fmm%head(r%bound_levelmin),m_fmm%tail(r%bound_levelmin)
      do icell=1,twotondim
-        g%multipole%q(1:multipole_size) = g%multipole%q(1:multipole_size) + &
+        g%multipole_fmm_raw%q(1:multipole_size) = g%multipole_fmm_raw%q(1:multipole_size) + &
              & m_fmm%multipole(icell,1:multipole_size,ioct)
      end do
   end do
@@ -118,16 +119,12 @@ end subroutine accumulate_fmm_global_multipole
 !################################################################
 !################################################################
 subroutine update_fmm_local_multipole_level(pst,ilevel)
-  use amr_parameters, only: multipole_size
   use ramses_commons, only: pst_t
   implicit none
   type(pst_t) :: pst
   integer, intent(in) :: ilevel
 
-  associate(g=>pst%s%g)
   call r_accumulate_fmm_global_multipole(pst, ilevel, 1)
-  g%multipole_fmm_level(ilevel)%q(1:multipole_size) = g%multipole%q(1:multipole_size)
-  end associate
 end subroutine update_fmm_local_multipole_level
 !################################################################
 !################################################################
@@ -135,25 +132,18 @@ end subroutine update_fmm_local_multipole_level
 !################################################################
 subroutine sync_fmm_global_multipole(pst)
   use amr_parameters, only: multipole_size
-  use amr_commons, only: multipole_t
+  use amr_commons, only: fmm_multipole_t
   use ramses_commons, only: pst_t
   implicit none
   type(pst_t) :: pst
 
-  type(multipole_t) :: multipole_tot
-  integer :: input_size, ilevel
+  type(fmm_multipole_t) :: multipole_tot
+  integer :: input_size
 
   associate(g=>pst%s%g, r=>pst%s%r)
   multipole_tot%q(1:multipole_size) = 0.0d0
   input_size = storage_size(multipole_tot)/32
 
-  do ilevel = r%levelmin, r%nlevelmax
-     multipole_tot%q(1:multipole_size) = multipole_tot%q(1:multipole_size) + &
-          & g%multipole_fmm_level(ilevel)%q(1:multipole_size)
-  end do
-
-  g%multipole_fmm_raw%q(1:multipole_size) = multipole_tot%q(1:multipole_size)
-  multipole_tot%q(1:multipole_size) = 0.0d0
   call r_collect_fmm_global_multipole(pst, r%levelmin, input_size, multipole_tot, input_size)
   g%multipole_fmm_raw%q(1:multipole_size) = multipole_tot%q(1:multipole_size)
   call center_fmm_global_multipole(multipole_tot)
@@ -167,9 +157,9 @@ end subroutine sync_fmm_global_multipole
 !################################################################
 subroutine center_fmm_global_multipole(multipole)
   use amr_parameters, only: ndim
-  use amr_commons, only: multipole_t
+  use amr_commons, only: fmm_multipole_t
   implicit none
-  type(multipole_t), intent(inout) :: multipole
+  type(fmm_multipole_t), intent(inout) :: multipole
 
   real(kind=8) :: mass
   real(kind=8), dimension(3) :: center
@@ -207,15 +197,16 @@ end subroutine center_fmm_global_multipole
 !################################################################
 recursive subroutine r_collect_fmm_global_multipole(pst,ilevel,input_size,multipole,output_size)
   use mdl_module
+  use amr_parameters, only: multipole_size
   use ramses_commons, only: pst_t
-  use amr_commons, only: multipole_t
+  use amr_commons, only: fmm_multipole_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer,VALUE::input_size
   integer::output_size
   integer::ilevel
-  type(multipole_t)::multipole,next_multipole
+  type(fmm_multipole_t)::multipole,next_multipole
 
   integer::rID
 
@@ -228,7 +219,11 @@ recursive subroutine r_collect_fmm_global_multipole(pst,ilevel,input_size,multip
      call mdl_get_reply(pst%s%mdl,rID,output_size,next_multipole)
      multipole%q = multipole%q + next_multipole%q
   else
-     multipole%q = pst%s%g%multipole_fmm_raw%q
+     do rID = pst%s%r%levelmin, pst%s%r%nlevelmax
+        multipole%q(1:multipole_size) = multipole%q(1:multipole_size) + &
+             & pst%s%g%multipole_fmm_level(rID)%q(1:multipole_size)
+     end do
+     pst%s%g%multipole_fmm_raw%q = multipole%q
   endif
 end subroutine r_collect_fmm_global_multipole
 !################################################################
@@ -239,12 +234,12 @@ recursive subroutine r_broadcast_fmm_global_multipole(pst,multipole,input_size)
   use mdl_module
   use amr_parameters, only: ndim
   use ramses_commons, only: pst_t
-  use amr_commons, only: multipole_t
+  use amr_commons, only: fmm_multipole_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer,VALUE::input_size
-  type(multipole_t)::multipole
+  type(fmm_multipole_t)::multipole
 
   integer::rID
 
@@ -253,7 +248,7 @@ recursive subroutine r_broadcast_fmm_global_multipole(pst,multipole,input_size)
      call r_broadcast_fmm_global_multipole(pst%pLower,multipole,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     pst%s%g%multipole = multipole
+     pst%s%g%multipole%q = multipole%q(1:size(pst%s%g%multipole%q))
      pst%s%g%rho_tot = pst%s%g%multipole%q(1)/PRODUCT(pst%s%r%box_size(1:ndim))
   endif
 end subroutine r_broadcast_fmm_global_multipole
@@ -763,7 +758,9 @@ subroutine unpack_flush_multipole(mesh,igrid,msg_size,msg_array,hash_key)
 #ifdef FMM  
   do ivar=1,multipole_size
      do ind=1,twotondim
-        mesh%multipole(ind,ivar,igrid)=mesh%multipole(ind,ivar,igrid)+msg%realdp_fmm_multipole(ind,ivar)
+        if(mesh%grid(igrid)%refined(ind))then
+           mesh%multipole(ind,ivar,igrid)=mesh%multipole(ind,ivar,igrid)+msg%realdp_fmm_multipole(ind,ivar)
+        endif
      end do
   end do
 #endif
