@@ -1,8 +1,8 @@
 module gpu_runner
-  use amr_parameters, only: ndim, twotondim, threetondim, dp
+  use amr_parameters, only: ndim, twotondim, dp
+  use oct_commons, only: oct
   use gpu_utils
   use cudafor
-  use oct_commons, only: oct
   implicit none
   integer, dimension(1:3), parameter::n_nbor = (/1,2,2/)
 
@@ -124,7 +124,7 @@ contains
     integer, intent(in)::ilevel
 
     integer(kind=4) :: head_idx, num_octs
-    integer :: err_code, threadsX_per_block, threadsY_per_block, num_blocks
+    integer :: threadsX_per_block, threadsY_per_block, num_blocks
 
     head_idx = sim%m%head(ilevel)
     num_octs = sim%m%noct(ilevel)
@@ -153,7 +153,7 @@ contains
     integer, intent(in)::ilevel
 
     integer(kind=4) :: head_idx, num_octs
-    integer :: err_code, threadsX_per_block, threadsY_per_block, num_blocks
+    integer :: threadsX_per_block, threadsY_per_block, num_blocks
 
     head_idx = sim%m%head(ilevel)
     num_octs = sim%m%noct(ilevel)
@@ -183,28 +183,27 @@ contains
     type(ramses_t), intent(inout)::sim
     integer, intent(in)::ilevel
     !
-    integer(kind=4) :: head_idx, num_octs
-    integer :: err_code, threads_per_block, num_blocks, subgrid_size, ngridmax
+    integer(kind=4) :: head_idx, num_subgrids
+    integer :: threads_per_block, num_blocks, ngridmax
     real(dp) :: dt, dx, gamma
     integer :: slope, riemann
 
     if(sim%r%verbose.and.sim%g%myid==1)write(*,'("   Entering gpu_godunov for level ",I2)')ilevel
 
-    head_idx = sim%m%head(ilevel)
-    num_octs = sim%m%noct(ilevel)
+    head_idx = (sim%m%head(ilevel) - 1) / nsubgridtondim + 1
+    num_subgrids = sim%m%noct(ilevel) / nsubgridtondim
     dt = sim%g%dtnew(ilevel)
     dx = sim%r%boxlen/2**ilevel
     gamma = sim%r%gamma
-    num_blocks = num_octs
-    threads_per_block = 64
-    subgrid_size = 6
+    num_blocks = num_subgrids
+    threads_per_block = 256
     ngridmax = sim%m%ngridmax
     slope = sim%r%slope_type
     riemann = sim%r%riemann
 
     call nvtxStartRange("GPU Godunov", color=0)!green
     call hydro_integrator_kernel<<<num_blocks, threads_per_block>>>(grid, uold, unew, father, nbor, &
-         & head_idx, num_octs, subgrid_size, ngridmax, ilevel, sim%r%levelmin, sim%r%nlevelmax, &
+         & head_idx, num_subgrids, ngridmax, ilevel, sim%r%levelmin, sim%r%nlevelmax, &
          & gamma, dt/dx, slope, riemann)
     call GPU_Error_Check(__FILE__, __LINE__)
     call nvtxEndRange()
@@ -228,7 +227,7 @@ contains
     integer, intent(in)::ilevel
     !
     integer(kind=4) :: head_idx, num_octs
-    integer :: err_code, threads_per_block, num_blocks
+    integer :: threads_per_block, num_blocks
 
     head_idx = sim%m%head(ilevel+1)
     num_octs = sim%m%noct(ilevel+1)
@@ -261,7 +260,7 @@ contains
     integer, intent(in) :: ilevel
     integer, intent(out) :: nmake, nkill
     !
-    integer(kind=4) :: head_idx, num_octs
+    integer(kind=4) :: head_idx, num_octs, num_subgrids
     integer(kind=4) :: head_cache, info
     integer(kind=4) :: num_blocks, num_threads, num_blocks_2, num_threads_2
     integer(kind=4) :: threadsX_per_block, threadsY_per_block
@@ -503,23 +502,23 @@ contains
        if (noct_level > 0) then
 
           ! Compute kernel size and offset
-          head_idx = sim%m%head(ilev)
-          num_octs = noct_level
+          head_idx = (sim%m%head(ilev) - 1) / nsubgridtondim + 1
+          num_subgrids = noct_level / nsubgridtondim
           num_threads = 128
-          num_blocks = (num_octs + num_threads - 1) / num_threads
+          num_blocks = (num_subgrids + num_threads - 1) / num_threads
 
           ! Loop over 27 neighbors
-          do ind = 1, threetondim
+          do ind = 1, subgridsize
 
              ! Get nbor index from hash table
              call update_nbor_array<<<num_blocks, num_threads>>>(nbor, grid, hash_key, hash_val, sim%m%hash_size, &
-                  & ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, head_idx, num_octs, ind)
+                  & ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, head_idx, num_subgrids, ind)
 
              ! Init prefix sum (count non existing nbor index)
-             call init_prefix_sum_nbor<<<num_blocks, num_threads>>>(nbor, prefix_sum, head_idx, num_octs, ind)
+             call init_prefix_sum_nbor<<<num_blocks, num_threads>>>(nbor, prefix_sum, head_idx, num_subgrids, ind)
 
              ! Compute prefix sum
-             call gpu_scan(head_idx, num_octs, new_noct)
+             call gpu_scan(head_idx, num_subgrids, new_noct)
 
              ! Transfer head index of first free cache oct from device
              head_cache = sim%r%ngridmax + sim%m%ifree_cache
@@ -537,7 +536,7 @@ contains
                 endif
 
                 ! Compute cache swap table
-                call compute_cache_swap_table<<<num_blocks, num_threads>>>(swap_local, prefix_sum, head_idx, num_octs)
+                call compute_cache_swap_table<<<num_blocks, num_threads>>>(swap_local, prefix_sum, head_idx, num_subgrids)
 
                 ! Make new ghost octs in cache
                 call make_cache_octs<<<num_blocks_2, num_threads_2>>>(grid, flag1, uold, swap_local, father, nbor, &
@@ -620,6 +619,32 @@ contains
     nflag = int(nflag_h, kind=4)
 
   end subroutine gpu_init_flag
+
+  !> @brief
+  !> Enforce entire oct to have flag = 1.
+  !>
+  !> @detail
+  !> If one cell is flagged, then flag the entire oct.
+  !>
+  subroutine gpu_enforce_subgrid(sim, ilevel)
+    use nvtx
+    use flag_device, only: enforce_subgrid_kernel
+    use ramses_commons, only: ramses_t
+    type(ramses_t), intent(inout) :: sim
+    integer, intent(in) :: ilevel
+
+    integer(kind=4) :: head_idx, num_octs
+    integer :: num_threads, num_blocks
+
+    head_idx = sim%m%head(ilevel)
+    num_octs = sim%m%noct(ilevel)
+    num_threads = 128
+    num_blocks = (num_octs + num_threads - 1) / num_threads
+    if (num_octs > 0) then
+       call enforce_subgrid_kernel<<<num_blocks, num_threads>>>(flag1, head_idx, num_octs)
+    endif
+
+  end subroutine gpu_enforce_subgrid
 
   !> @brief
   !> User defined refinement criteria

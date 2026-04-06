@@ -80,8 +80,9 @@ subroutine init_amr(r,g,m,type)
   use hash
   use hilbert
 #ifdef _CUDA
-  use cudafor
   use gpu_runner
+  use gpu_utils
+  use cudafor
 #endif
   implicit none
   type(run_t)::r
@@ -90,6 +91,7 @@ subroutine init_amr(r,g,m,type)
   character(len=*)::type
   ! Local variables
   integer::idim,ilevel,icpu,igrid,ibound,ilevelmin
+  integer::nborarrsize
   integer(kind=8)::max_key
   real(kind=8)::dx
   integer(kind=8)::ngrid_tot,ikey
@@ -125,7 +127,8 @@ subroutine init_amr(r,g,m,type)
      allocate(flag1(1:twotondim,1:m%ngridmax+m%ncachemax))
      allocate(flag2(1:twotondim,1:m%ngridmax+m%ncachemax))
      allocate(father(1:m%ngridmax+m%ncachemax))
-     allocate(nbor(1:threetondim,1:m%ngridmax))
+     nborarrsize = (m%ngridmax + nsubgridtondim - 1) / nsubgridtondim
+     allocate(nbor(1:subgridsize,1:nborarrsize))
      flag1=0
      flag2=0
      father=0

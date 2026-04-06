@@ -3,7 +3,6 @@ module gpu_manager
   use nvtx
   use gpu_utils
   use gpu_runner
-  use amr_parameters, only: threetondim
 contains
 !###########################################################
 !###########################################################
@@ -18,7 +17,7 @@ recursive subroutine r_set_grid_device(pst)
   type(pst_t)::pst
 
   integer::rID
-  integer::head_idx, num_octs, num_threads, num_blocks, ind
+  integer::head_idx, num_octs, num_subgrids, num_threads, num_blocks, ind
   
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_SET_GRID_DEVICE,pst%iUpper+1)
@@ -48,12 +47,12 @@ recursive subroutine r_set_grid_device(pst)
      ! Compute nbor grids array for coarse level only
      call nvtxStartRange("Compute nbor array", color=5)!red
      head_idx = 1
-     num_octs = pst%s%m%noct(pst%s%r%levelmin)
+     num_subgrids = pst%s%m%noct(pst%s%r%levelmin) / nsubgridtondim
      num_threads = 128
-     num_blocks = (num_octs + num_threads - 1) / num_threads
-     do ind = 1, threetondim
+     num_blocks = (num_subgrids + num_threads - 1) / num_threads
+     do ind = 1, subgridsize
         call update_nbor_array<<<num_blocks, num_threads>>>(nbor, grid, hash_key, hash_val, pst%s%m%hash_size, &
-             & ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, head_idx, num_octs, ind)
+             & ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, head_idx, num_subgrids, ind)
      end do
      call GPU_Error_Check(__FILE__, __LINE__)
      call nvtxEndRange()

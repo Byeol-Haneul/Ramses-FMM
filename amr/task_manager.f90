@@ -90,7 +90,7 @@ function worker_init(mdl) result(pst)
   use ramses_commons, only: pst_t, ramses_t
   use call_back, only: ramses_function
   use mdl_parameters
-  use flag_utils, only: r_init_flag, r_ensure_ref_rules, r_user_flag
+  use flag_utils, only: r_init_flag, r_ensure_ref_rules, r_ensure_subgrid, r_user_flag
   use init_amr_module, only: r_init_amr, r_set_add
   use params_module, only: r_broadcast_params,r_broadcast_global
   use init_time_module, only: r_init_time
@@ -206,6 +206,7 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_NPART_MAX,              pst,C_FUNLOC(r_npart_max),0,1,"npart_max")
   call mdl_add_service(pst%s%mdl,MDL_INIT_FLAG,              pst,C_FUNLOC(r_init_flag),1,1,"init_flag")
   call mdl_add_service(pst%s%mdl,MDL_USER_FLAG,              pst,C_FUNLOC(r_user_flag),1,1,"user_flag")
+  call mdl_add_service(pst%s%mdl,MDL_ENSURE_SUBGRID,         pst,C_FUNLOC(r_ensure_subgrid),1,0,"ensure_subgrid")
   call mdl_add_service(pst%s%mdl,MDL_ENSURE_REF_RULES,       pst,C_FUNLOC(r_ensure_ref_rules),1,0,"ensure_ref_rules")
   call mdl_add_service(pst%s%mdl,MDL_COLLECT_NOCT,           pst,C_FUNLOC(r_collect_noct),1,ncpu*storage_size(dummy)/32,"collect_noct")
   call mdl_add_service(pst%s%mdl,MDL_NOCT_TOT,               pst,C_FUNLOC(r_noct_tot),1,2,"noct_tot")

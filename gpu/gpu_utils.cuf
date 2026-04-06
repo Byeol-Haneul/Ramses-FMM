@@ -1,8 +1,15 @@
 module gpu_utils
-  use amr_parameters, only: dp, twotondim
+  use amr_parameters, only: dp, twotondim, ndim
   use oct_commons, only: oct
   use cudafor
   implicit none
+
+  integer, parameter :: nsubgrid = 2
+  integer, parameter :: nsubgridsq = nsubgrid**2
+  integer, parameter :: nsubgridtondim = nsubgrid**ndim
+  integer, parameter :: nsubgridp2 = nsubgrid+2
+  integer, parameter :: nsubgridp2sq = nsubgridp2**2
+  integer, parameter :: subgridsize = nsubgridp2**ndim
 
   !> @brief
   !> Contains a 6 by 6 by 6 subgrid of primitive variables. Intended to act as a subgrid
@@ -10,8 +17,12 @@ module gpu_utils
   !> Can either be used on it's own or allocated in shared memory. Note that it is zero
   !> indexed to make 1D to 3D indexing easier
   type, public :: subgrid_6x6x6cell_primitive
-     real(kind=dp), dimension(0:5, 0:5, 0:5) :: density, velocity_x, velocity_y, velocity_z, pressure
-     logical      , dimension(0:5, 0:5, 0:5) :: refined
+     real(kind=dp), dimension(0:2*nsubgrid+3, 0:2*nsubgrid+3, 0:2*nsubgrid+3) :: density
+     real(kind=dp), dimension(0:2*nsubgrid+3, 0:2*nsubgrid+3, 0:2*nsubgrid+3) :: velocity_x
+     real(kind=dp), dimension(0:2*nsubgrid+3, 0:2*nsubgrid+3, 0:2*nsubgrid+3) :: velocity_y
+     real(kind=dp), dimension(0:2*nsubgrid+3, 0:2*nsubgrid+3, 0:2*nsubgrid+3) :: velocity_z
+     real(kind=dp), dimension(0:2*nsubgrid+3, 0:2*nsubgrid+3, 0:2*nsubgrid+3) :: pressure
+     logical      , dimension(0:2*nsubgrid+3, 0:2*nsubgrid+3, 0:2*nsubgrid+3) :: refined
   end type subgrid_6x6x6cell_primitive
 
   !> @brief
@@ -20,55 +31,59 @@ module gpu_utils
   !> Can either but used on it's own or allocated in shared memory. Note that it is zero
   !> indexed to make 1D to 3D indexing easier
   type, public :: subgrid_6x6x6cell_conserved
-     real(kind=dp), dimension(0:5, 0:5, 0:5) :: density, momentum_x, momentum_y, momentum_z, energy
+     real(kind=dp), dimension(0:2*nsubgrid+3, 0:2*nsubgrid+3, 0:2*nsubgrid+3) :: density
+     real(kind=dp), dimension(0:2*nsubgrid+3, 0:2*nsubgrid+3, 0:2*nsubgrid+3) :: momentum_x
+     real(kind=dp), dimension(0:2*nsubgrid+3, 0:2*nsubgrid+3, 0:2*nsubgrid+3) :: momentum_y
+     real(kind=dp), dimension(0:2*nsubgrid+3, 0:2*nsubgrid+3, 0:2*nsubgrid+3) :: momentum_z
+     real(kind=dp), dimension(0:2*nsubgrid+3, 0:2*nsubgrid+3, 0:2*nsubgrid+3) :: energy
   end type subgrid_6x6x6cell_conserved
 
 contains
-   ! ==========================================================================
-   !> @brief
-   !> Checks for any CUDA errors. Includes a `cudaDeviceSynchronize` which is
-   !> where it gets the error code. This synchronization, and error checking
-   !> in its entirety, can be disabled by compiling with the
-   !> DISABLE_GPU_ERROR_CHECKING flag.
-   !>
-   !> @param[in] file_name : The name of the file that the check is in, intended
-   !> to be used by simply passing the __FILE__ macro
-   !> @param[in] line_number: The line number in the file that the check is at,
-   !> intended to be used by simply passing the __LINE__ macro
-   subroutine GPU_Error_Check(file_name, line_number)
+  ! ==========================================================================
+  !> @brief
+  !> Checks for any CUDA errors. Includes a `cudaDeviceSynchronize` which is
+  !> where it gets the error code. This synchronization, and error checking
+  !> in its entirety, can be disabled by compiling with the
+  !> DISABLE_GPU_ERROR_CHECKING flag.
+  !>
+  !> @param[in] file_name : The name of the file that the check is in, intended
+  !> to be used by simply passing the __FILE__ macro
+  !> @param[in] line_number: The line number in the file that the check is at,
+  !> intended to be used by simply passing the __LINE__ macro
+  subroutine GPU_Error_Check(file_name, line_number)
 #ifndef DISABLE_GPU_ERROR_CHECKING
-      implicit none
-      character(len=*), intent(in) :: file_name
-      integer, intent(in) :: line_number
-      integer :: code
+    implicit none
+    character(len=*), intent(in) :: file_name
+    integer, intent(in) :: line_number
+    integer :: code
 
-      ! Sync and get code
-      code = cudaDeviceSynchronize()
+    ! Sync and get code
+    code = cudaDeviceSynchronize()
 
-      ! Check the code
-      if (code /= cudaSuccess) then
-         print *, "GPU_Error_Check: Failed in File: ", file_name, "At Line:", line_number, "With code: ", cudaGetErrorString(code)
-         error stop code
-      end if
+    ! Check the code
+    if (code /= cudaSuccess) then
+       print *, "GPU_Error_Check: Failed in File: ", file_name, "At Line:", line_number, "With code: ", cudaGetErrorString(code)
+       error stop code
+    end if
 #endif
-   end subroutine GPU_Error_Check
-   ! ==========================================================================
+  end subroutine GPU_Error_Check
+  ! ==========================================================================
 
-   ! ==========================================================================
-   !> @brief
-   !> Compute the cell index within an oct.
-   !>
-   !> @param[in] i : The i index of the cell, must be 0 or 1
-   !> @param[in] j : The j index of the cell, must be 0 or 1
-   !> @param[in] k : The k index of the cell, must be 0 or 1
-   !>
-   !> @return
-   !> The index of the cell within the oct
-   attributes(host, device) function oct2cell_idx(i, j, k) result(idx)
-      integer, intent(in) :: i, j, k
-      integer :: idx
-      idx = 1 + i + 2*j + 4*k
-   end function oct2cell_idx
-   ! ==========================================================================
+  ! ==========================================================================
+  !> @brief
+  !> Compute the cell index within an oct.
+  !>
+  !> @param[in] i : The i index of the cell, must be 0 or 1
+  !> @param[in] j : The j index of the cell, must be 0 or 1
+  !> @param[in] k : The k index of the cell, must be 0 or 1
+  !>
+  !> @return
+  !> The index of the cell within the oct
+  attributes(host, device) function oct2cell_idx(i, j, k) result(idx)
+    integer, intent(in) :: i, j, k
+    integer :: idx
+    idx = 1 + i + 2*j + 4*k
+  end function oct2cell_idx
+  ! ==========================================================================
 end module gpu_utils
 

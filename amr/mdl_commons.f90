@@ -25,6 +25,7 @@ module mdl_parameters
      enumerator::MDL_NPART_MAX
      enumerator::MDL_INIT_FLAG
      enumerator::MDL_USER_FLAG
+     enumerator::MDL_ENSURE_SUBGRID
      enumerator::MDL_ENSURE_REF_RULES
      enumerator::MDL_COLLECT_NOCT
      enumerator::MDL_NOCT_TOT

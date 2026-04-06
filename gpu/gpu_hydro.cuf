@@ -1,17 +1,13 @@
 module hydro_device
-  use amr_parameters, only: dp, ndim, twotondim, threetondim
+  use amr_parameters, only: dp, ndim, twotondim
   use hydro_parameters
   use oct_commons, only: oct
-  use gpu_utils, only: subgrid_6x6x6cell_conserved, subgrid_6x6x6cell_primitive
+  use gpu_utils
   use cudafor
   implicit none
-  integer,dimension(1:8,1:6),parameter::ggg=reshape(&
-       & (/13,14,13,14,13,14,13,14,&
-       &   14,15,14,15,14,15,14,15,&
-       &   11,11,14,14,11,11,14,14,&
-       &   14,14,17,17,14,14,17,17,&
-       &   5,5,5,5,14,14,14,14,&
-       &   14,14,14,14,23,23,23,23/),(/8,6/))
+
+  !> @brief
+  !> Cell index and grid offset to access neighbors.
   integer,dimension(1:8,1:6),parameter::hhh=reshape(&
        & (/2,1,4,3,6,5,8,7,&
        &   2,1,4,3,6,5,8,7,&
@@ -19,19 +15,38 @@ module hydro_device
        &   3,4,1,2,7,8,5,6,&
        &   5,6,7,8,1,2,3,4,&
        &   5,6,7,8,1,2,3,4/),(/8,6/))
+  integer,dimension(1:8,1:6),parameter::iii=reshape(&
+       & (/-1,0,-1,0,-1,0,-1,0,&
+       &   0,1,0,1,0,1,0,1,&
+       &   -1,-1,0,0,-1,-1,0,0,&
+       &   0,0,1,1,0,0,1,1,&
+       &   -1,-1,-1,-1,0,0,0,0,&
+       &   0,0,0,0,1,1,1,1/),(/8,6/))
 
   !> @brief
   !> Contains a 3 x 3 x 3 subgrid of primitive variables. Intended to act as a subgrid
   !> for interface states and fluxes. Note that it is zero indexed to make 1D to 3D
   !> indexing easier
   type, public :: subgrid_3x2x2cell_primitive
-     real(kind=dp), dimension(0:2, 0:1, 0:1) :: density, velocity_x, velocity_y, velocity_z, pressure
+     real(kind=dp), dimension(0:2*nsubgrid, 0:2*nsubgrid-1, 0:2*nsubgrid-1) :: density
+     real(kind=dp), dimension(0:2*nsubgrid, 0:2*nsubgrid-1, 0:2*nsubgrid-1) :: velocity_x
+     real(kind=dp), dimension(0:2*nsubgrid, 0:2*nsubgrid-1, 0:2*nsubgrid-1) :: velocity_y
+     real(kind=dp), dimension(0:2*nsubgrid, 0:2*nsubgrid-1, 0:2*nsubgrid-1) :: velocity_z
+     real(kind=dp), dimension(0:2*nsubgrid, 0:2*nsubgrid-1, 0:2*nsubgrid-1) :: pressure
   end type subgrid_3x2x2cell_primitive
   type, public :: subgrid_2x3x2cell_primitive
-     real(kind=dp), dimension(0:1, 0:2, 0:1) :: density, velocity_x, velocity_y, velocity_z, pressure
+     real(kind=dp), dimension(0:2*nsubgrid-1, 0:2*nsubgrid, 0:2*nsubgrid-1) :: density
+     real(kind=dp), dimension(0:2*nsubgrid-1, 0:2*nsubgrid, 0:2*nsubgrid-1) :: velocity_x
+     real(kind=dp), dimension(0:2*nsubgrid-1, 0:2*nsubgrid, 0:2*nsubgrid-1) :: velocity_y
+     real(kind=dp), dimension(0:2*nsubgrid-1, 0:2*nsubgrid, 0:2*nsubgrid-1) :: velocity_z
+     real(kind=dp), dimension(0:2*nsubgrid-1, 0:2*nsubgrid, 0:2*nsubgrid-1) :: pressure
   end type subgrid_2x3x2cell_primitive
   type, public :: subgrid_2x2x3cell_primitive
-     real(kind=dp), dimension(0:1, 0:1, 0:2) :: density, velocity_x, velocity_y, velocity_z, pressure
+     real(kind=dp), dimension(0:2*nsubgrid-1, 0:2*nsubgrid-1, 0:2*nsubgrid) :: density
+     real(kind=dp), dimension(0:2*nsubgrid-1, 0:2*nsubgrid-1, 0:2*nsubgrid) :: velocity_x
+     real(kind=dp), dimension(0:2*nsubgrid-1, 0:2*nsubgrid-1, 0:2*nsubgrid) :: velocity_y
+     real(kind=dp), dimension(0:2*nsubgrid-1, 0:2*nsubgrid-1, 0:2*nsubgrid) :: velocity_z
+     real(kind=dp), dimension(0:2*nsubgrid-1, 0:2*nsubgrid-1, 0:2*nsubgrid) :: pressure
   end type subgrid_2x2x3cell_primitive
 
   !> @brief
@@ -61,7 +76,7 @@ contains
   ! ==========================================================================
   !> @brief
   !> Compute the magnitude squared of a vector. Returns x^2 + y^2 + z^2.
- !> Parentheses are used to guarantee associativity of transverse terms.
+  !> Parentheses are used to guarantee associativity of transverse terms.
   !>
   !> @param[in] x : The x component of the vector
   !> @param[in] y : The y component of the vector
@@ -260,42 +275,62 @@ contains
   end subroutine index_1Dto3D
   ! ==========================================================================
 
+  ! ==========================================================================
+  !> @brief
+  !> Convert a zero based 1D index into zero based 2D indices
+  !>
+  !> @param[in] index : The 1D index to convert
+  !> @param[in] nx : The size of the grid in the X direction
+  !> @param[out] xid : The x component of the 2D index
+  !> @param[out] yid : The y component of the 2D index
+  attributes(device) subroutine index_1Dto2D(index, nx, xid, yid)
+    integer, value :: index, nx
+    integer, intent(out) :: xid, yid
+    yid = index/nx
+    xid = index - yid*nx
+  end subroutine index_1Dto2D
+  ! ==========================================================================
+
   ! =========================================================================
   !> @brief
   !> Convert a subgrid of conserved variables to primitive variables in shared memory
   !>
-  !> @param[in] conserved_subgrids : The array of conserved subgrids in global memory
   !> @param[in] head_idx : The head index of the octs at the current AMR level
   !> @param[in] block_idx : The CUDA block index of the calling thread
   !> @param[in] thread_idx : The index of calling thread within its block
-  !> @param[in] subgrid_size : The size of the subgrid in each dimension
   !> @param[in] gamma : The adiabatic index
   !> @param[out] local_subgrid : The local subgrid in shared memory to write the primitive variables to
   !>
   attributes(device) subroutine subgrid_conserved_2_primitive(grid, uold, nbor, &
-       & head_idx, block_idx, thread_idx, subgrid_size, gamma, local_subgrid)
+       & head_idx, block_idx, thread_idx, gamma, local_subgrid)
     type(oct), device :: grid(*)
     real(kind=dp), device :: uold(1:twotondim,1:nvar,*)
-    integer(kind=4), device :: nbor(1:threetondim,*)
+    integer(kind=4), device :: nbor(1:subgridsize,*)
     integer(kind=4), value :: head_idx
-    integer(kind=4), value :: block_idx, thread_idx, subgrid_size
+    integer(kind=4), value :: block_idx, thread_idx
     real(kind=dp), value :: gamma
     type(subgrid_6x6x6cell_primitive), intent(inout) :: local_subgrid
 
     type(conserved_t) :: conserved ! object to hold the conserved variables
     type(primitive_t) :: primitive ! object to hold the primitive variables
-    integer :: work_idx, ind_nbor ! Loop index for unit of work
-    integer :: i, j, k, i_subgrid_idx, j_subgrid_idx, k_subgrid_idx, cell_idx, source_idx, oct_idx ! Cell indices
+    integer :: work_idx, ind_nbor
+    integer :: i, j, k, i_subgrid_idx, j_subgrid_idx, k_subgrid_idx
+    integer :: cell_idx, source_idx, subgrid_idx
+    integer :: work_size
 
-    do work_idx = thread_idx, subgrid_size**3 - 1, blockDim%x
+    work_size = 2*nsubgrid+4
+
+    do work_idx = thread_idx, work_size**3 - 1, blockDim%x
 
        ! Compute the subgrid_indices index, i.e. determine the oct to load
-       call index_1Dto3D(work_idx/8, subgrid_size/2, subgrid_size/2, i_subgrid_idx, j_subgrid_idx, k_subgrid_idx)
-       oct_idx = head_idx + block_idx
+       call index_1Dto3D(work_idx/8, work_size/2, work_size/2, i_subgrid_idx, j_subgrid_idx, k_subgrid_idx)
+
+       ! Get subgrid index
+       subgrid_idx = head_idx + block_idx
 
        ! Get neighbour index
        ind_nbor = work_idx/8 + 1
-       source_idx = nbor(ind_nbor, oct_idx)
+       source_idx = nbor(ind_nbor, subgrid_idx)
 
        ! Now that we have the index to the oct we need to figure out which cell within it to load 
        cell_idx = mod(work_idx, 8) + 1
@@ -339,7 +374,6 @@ contains
   !>
   !> @param[in] local_subgrid : The subgrid of primitive variables to solve
   !> @param[in] thread_idx : The index of the current thread
-  !> @param[in] subgrid_size : The size of the subgrid on each subgrid_size
   !> @param[in] gamma : The adiabatic index
   !> @param[in] dtdx : dt / dx
   !> @param[in] left_interfaces_x : The left side interfaces normal to x
@@ -349,12 +383,11 @@ contains
   !> @param[in] right_interfaces_y : The right side interfaces normal to y
   !> @param[in] right_interfaces_z : The right side interfaces normal to z
   !>
-  attributes(device) subroutine trace_3d(local_subgrid, thread_idx, subgrid_size, &
+  attributes(device) subroutine trace_3d(local_subgrid, thread_idx, &
        & left_interfaces_x, right_interfaces_x,left_interfaces_y, right_interfaces_y, &
        & left_interfaces_z, right_interfaces_z, gamma, dtdx, slope)
     type(subgrid_6x6x6cell_primitive), intent(inout) :: local_subgrid ! The subgrid that this block is working on in shared memory
     integer, value :: thread_idx
-    integer, value :: subgrid_size
     real(kind=dp), value :: gamma, dtdx
     integer, value :: slope
 
@@ -370,7 +403,7 @@ contains
     integer :: work_size
 
     ! Compute the size of the section of the subgrid to operate on
-    work_size = subgrid_size - 2
+    work_size = 2*nsubgrid+2
 
     ! Note that we're now excluding the outermost shell of cells since this
     ! stencil operation requires 1 ghost cell. This also requires the
@@ -378,9 +411,7 @@ contains
     do work_idx = thread_idx, work_size**3 - 1, blockDim%x
        ! Compute the 3D indices, note the tranformation so that we're indexing 1-6 and not 0-5
        call index_1Dto3D(work_idx, work_size, work_size, i, j, k)
-       i = i + 1
-       j = j + 1
-       k = k + 1
+       i = i + 1; j = j + 1; k = k + 1
 
        ! Cell centered values
        cell%density    = local_subgrid%density   (i, j, k)
@@ -440,7 +471,7 @@ contains
        ! Compute and write out the interface states
 
        ! The right state at i-1/2
-       if (i > 1 .and. (j > 1 .and. j < 4) .and. (k > 1 .and. k < 4)) then
+       if (i > 1 .and. (j > 1 .and. j < work_size) .and. (k > 1 .and. k < work_size)) then
           right_interfaces_x%density   (i-2, j-2, k-2) = cell%density    - slopes_x%density
           right_interfaces_x%velocity_x(i-2, j-2, k-2) = cell%velocity_x - slopes_x%velocity_x
           right_interfaces_x%velocity_y(i-2, j-2, k-2) = cell%velocity_y - slopes_x%velocity_y
@@ -449,7 +480,7 @@ contains
        end if
 
        ! The left state at i+1/2
-       if (i < 4 .and. (j > 1 .and. j < 4) .and. (k > 1 .and. k < 4)) then
+       if (i < work_size .and. (j > 1 .and. j < work_size) .and. (k > 1 .and. k < work_size)) then
           left_interfaces_x%density   (i-1, j-2, k-2) = cell%density    + slopes_x%density
           left_interfaces_x%velocity_x(i-1, j-2, k-2) = cell%velocity_x + slopes_x%velocity_x
           left_interfaces_x%velocity_y(i-1, j-2, k-2) = cell%velocity_y + slopes_x%velocity_y
@@ -458,7 +489,7 @@ contains
        end if
 
        ! The right state at j-1/2
-       if ((i > 1 .and. i < 4) .and. j > 1 .and. (k > 1 .and. k < 4)) then
+       if ((i > 1 .and. i < work_size) .and. j > 1 .and. (k > 1 .and. k < work_size)) then
           right_interfaces_y%density   (i-2, j-2, k-2) = cell%density    - slopes_y%density
           right_interfaces_y%velocity_x(i-2, j-2, k-2) = cell%velocity_x - slopes_y%velocity_x
           right_interfaces_y%velocity_y(i-2, j-2, k-2) = cell%velocity_y - slopes_y%velocity_y
@@ -467,7 +498,7 @@ contains
        end if
 
        ! The left state at j+1/2
-       if ((i > 1 .and. i < 4) .and. j < 4 .and. (k > 1 .and. k < 4)) then
+       if ((i > 1 .and. i < work_size) .and. j < work_size .and. (k > 1 .and. k < work_size)) then
           left_interfaces_y%density   (i-2, j-1, k-2) = cell%density    + slopes_y%density
           left_interfaces_y%velocity_x(i-2, j-1, k-2) = cell%velocity_x + slopes_y%velocity_x
           left_interfaces_y%velocity_y(i-2, j-1, k-2) = cell%velocity_y + slopes_y%velocity_y
@@ -476,7 +507,7 @@ contains
        end if
 
        ! The right state at k-1/2
-       if ((i > 1 .and. i < 4) .and. (j > 1 .and. j < 4) .and. k > 1) then
+       if ((i > 1 .and. i < work_size) .and. (j > 1 .and. j < work_size) .and. k > 1) then
           right_interfaces_z%density   (i-2, j-2, k-2) = cell%density    - slopes_z%density
           right_interfaces_z%velocity_x(i-2, j-2, k-2) = cell%velocity_x - slopes_z%velocity_x
           right_interfaces_z%velocity_y(i-2, j-2, k-2) = cell%velocity_y - slopes_z%velocity_y
@@ -485,7 +516,7 @@ contains
        end if
 
        ! The left state at k+1/2
-       if ((i > 1 .and. i < 4) .and. (j > 1 .and. j < 4) .and. k < 4) then
+       if ((i > 1 .and. i < work_size) .and. (j > 1 .and. j < work_size) .and. k < work_size) then
           left_interfaces_z%density   (i-2, j-2, k-1) = cell%density    + slopes_z%density
           left_interfaces_z%velocity_x(i-2, j-2, k-1) = cell%velocity_x + slopes_z%velocity_x
           left_interfaces_z%velocity_y(i-2, j-2, k-1) = cell%velocity_y + slopes_z%velocity_y
@@ -601,28 +632,27 @@ contains
   !> @param[in,out] left_interfaces_z : The left interfaces at the k+1/2 interfaces. The fluxes along the Z interfaces are returned in this array
   !> @param[in] right_interfaces_z : The right interfaces at the k-1/2 interfaces.
   !> @param[in] gamma : The adiabatic index
-  !> @param[in] subgrid_size : The size of the subgrid in cells on each edge
   !> @param[in] thread_idx : The index of this thread
   !>
   attributes(device) subroutine riemann_driver(left_interfaces_x, right_interfaces_x, left_interfaces_y, &
-       & right_interfaces_y, left_interfaces_z, right_interfaces_z, subgrid_size, thread_idx, &
+       & right_interfaces_y, left_interfaces_z, right_interfaces_z, thread_idx, &
        & gamma, riemann)
     type(subgrid_3x2x2cell_primitive), intent(inout) :: left_interfaces_x, right_interfaces_x
     type(subgrid_2x3x2cell_primitive), intent(inout) :: left_interfaces_y, right_interfaces_y
     type(subgrid_2x2x3cell_primitive), intent(inout) :: left_interfaces_z, right_interfaces_z
     real(kind=dp), value :: gamma
     integer, value :: riemann
-    integer, value :: subgrid_size, thread_idx
+    integer, value :: thread_idx
     integer :: work_idx, interface_array_size, i, j, k
     type(primitive_t) :: left_interface, right_interface
     type(conserved_t) :: flux
 
-    interface_array_size = (subgrid_size-3) * (subgrid_size-4)**2
+    interface_array_size = (2*nsubgrid+1) * (2*nsubgrid)**2
 
     do work_idx = thread_idx, interface_array_size * 3 - 1, blockDim%x
        if (work_idx < interface_array_size) then ! Compute fluxes across the x interfaces
           ! Compute the indices in the interface state arrays
-          call index_1Dto3D(work_idx, subgrid_size-3, subgrid_size-4, i, j, k)
+          call index_1Dto3D(work_idx, 2*nsubgrid+1, 2*nsubgrid, i, j, k)
 
           ! Gather the interface states
           left_interface%density    = left_interfaces_x%density(i,j,k)
@@ -653,7 +683,7 @@ contains
 
        else if (work_idx < 2 * interface_array_size) then ! Compute fluxes across the y interfaces
           ! Compute the indices in the interface state arrays
-          call index_1Dto3D(work_idx-interface_array_size, subgrid_size-4, subgrid_size-3, i, j, k)
+          call index_1Dto3D(work_idx - interface_array_size, 2*nsubgrid, 2*nsubgrid+1, i, j, k)
 
           ! Gather the interface states
           left_interface%density    = left_interfaces_y%density(i,j,k)
@@ -683,7 +713,7 @@ contains
           left_interfaces_y%pressure  (i,j,k) = flux%energy
        else ! Compute fluxes across the z interfaces
           ! Compute the indices in the interface state arrays
-          call index_1Dto3D(work_idx - 2*interface_array_size, subgrid_size-4, subgrid_size-4, i, j, k)
+          call index_1Dto3D(work_idx - 2*interface_array_size, 2*nsubgrid, 2*nsubgrid, i, j, k)
 
           ! Gather the interface states
           left_interface%density    = left_interfaces_z%density(i,j,k)
@@ -720,23 +750,23 @@ contains
   ! =========================================================================
 
   ! =========================================================================
-  attributes(device) subroutine zero_fine_fluxes(local_subgrid, fluxes_x, fluxes_y, fluxes_z, thread_idx, subgrid_size)
+  attributes(device) subroutine zero_fine_fluxes(local_subgrid, fluxes_x, fluxes_y, fluxes_z, thread_idx)
     type(subgrid_6x6x6cell_primitive), intent(in)    :: local_subgrid
     type(subgrid_3x2x2cell_primitive), intent(inout) :: fluxes_x
     type(subgrid_2x3x2cell_primitive), intent(inout) :: fluxes_y
     type(subgrid_2x2x3cell_primitive), intent(inout) :: fluxes_z
-    integer, value :: thread_idx, subgrid_size
+    integer, value :: thread_idx
 
     integer :: work_idx, interface_array_size
     integer :: i, j, k
 
-    interface_array_size = (subgrid_size-3) * (subgrid_size-4)**2
+    interface_array_size = (2*nsubgrid+1) * (2*nsubgrid)**2
 
     do work_idx = thread_idx, interface_array_size * 3 - 1, blockDim%x
 
        if (work_idx < interface_array_size) then ! Zero fluxes across the x interfaces
           ! Compute the indices in the interface state arrays
-          call index_1Dto3D(work_idx, subgrid_size-3, subgrid_size-4, i, j, k)
+          call index_1Dto3D(work_idx, 2*nsubgrid+1, 2*nsubgrid, i, j, k)
 
           if (local_subgrid%refined(i+1,j+2,k+2) .or. local_subgrid%refined(i+2,j+2,k+2))then
              fluxes_x%density   (i, j, k) = 0_dp
@@ -748,7 +778,7 @@ contains
 
        else if (work_idx < 2 * interface_array_size) then ! Zero fluxes across the y interfaces
           ! Compute the indices in the interface state arrays
-          call index_1Dto3D(work_idx - interface_array_size, subgrid_size-4, subgrid_size-3, i, j, k)
+          call index_1Dto3D(work_idx - interface_array_size, 2*nsubgrid, 2*nsubgrid+1, i, j, k)
 
           if (local_subgrid%refined(i+2,j+1,k+2) .or. local_subgrid%refined(i+2,j+2,k+2))then
              fluxes_y%density   (i, j, k) = 0_dp
@@ -760,7 +790,7 @@ contains
 
        else ! Zero fluxes across the z interfaces
           ! Compute the indices in the interface state arrays
-          call index_1Dto3D(work_idx - 2 * interface_array_size, subgrid_size-4, subgrid_size-4, i, j, k)
+          call index_1Dto3D(work_idx - 2 * interface_array_size, 2*nsubgrid, 2*nsubgrid, i, j, k)
 
           if (local_subgrid%refined(i+2,j+2,k+1) .or. local_subgrid%refined(i+2,j+2,k+2))then
              fluxes_z%density   (i, j, k) = 0_dp
@@ -779,35 +809,49 @@ contains
   ! =========================================================================
 
   ! =========================================================================
-  attributes(device) subroutine  conservative_update(unew, fluxes_x, fluxes_y, fluxes_z, &
-       & head_idx, block_idx, thread_idx, subgrid_size, dtdx)
+  attributes(device) subroutine conservative_update(unew, nbor, fluxes_x, fluxes_y, fluxes_z, &
+       & head_idx, block_idx, thread_idx, dtdx)
     real(kind=dp), device :: unew(1:twotondim,1:nvar,*)
+    integer(kind=4), device :: nbor(1:subgridsize,*)
     type(subgrid_3x2x2cell_primitive), intent(in) :: fluxes_x
     type(subgrid_2x3x2cell_primitive), intent(in) :: fluxes_y
     type(subgrid_2x2x3cell_primitive), intent(in) :: fluxes_z
     integer(kind=4), value :: head_idx
-    integer, value :: block_idx, thread_idx, subgrid_size
+    integer, value :: block_idx, thread_idx
     real(kind=dp), value :: dtdx
 
-    integer :: work_idx  ! Loop index for unit of work
-    integer :: i, j, k  ! Cell indices
-    integer :: work_size, oct_idx, cell_idx
+    integer :: work_size
+    integer :: i, j, k, i_subgrid_idx, j_subgrid_idx, k_subgrid_idx
+    integer :: work_idx, subgrid_idx, oct_idx, cell_idx, ind_nbor
     type(conserved_t) :: update_term
 
     ! Compute the size of the section of the subgrid to operate on
-    work_size = subgrid_size - 4
+    work_size = 2*nsubgrid
 
     ! Note that we're now excluding the ghost cells since this operation doesn't need them.
     do work_idx = thread_idx, work_size**3 - 1, blockDim%x
 
+       ! Compute the subgrid index
+       subgrid_idx = head_idx + block_idx
+
+       ! Compute the subgrid_indices index, i.e. determine the oct to load
+       call index_1Dto3D(work_idx/8, work_size/2, work_size/2, i_subgrid_idx, j_subgrid_idx, k_subgrid_idx)
+       i_subgrid_idx = i_subgrid_idx + 1
+       j_subgrid_idx = j_subgrid_idx + 1
+       k_subgrid_idx = k_subgrid_idx + 1
+
        ! Compute the oct index
-       oct_idx = head_idx + block_idx
+       ind_nbor = 1 + i_subgrid_idx + nsubgridp2 * j_subgrid_idx + nsubgridp2sq * k_subgrid_idx
+       oct_idx = nbor(ind_nbor, subgrid_idx)
 
        ! Compute the cell index
        cell_idx = mod(work_idx, 8) + 1
 
        ! Compute the flux indices
        call index_1Dto3D(cell_idx - 1, 2, 2, i, j, k)
+       i = i + 2*(i_subgrid_idx - 1)
+       j = j + 2*(j_subgrid_idx - 1)
+       k = k + 2*(k_subgrid_idx - 1)
 
        ! Gather the fluxes, computing the update term as we go. Note that the flux 
        ! variables names are the primitive names but the actual variables are the 
@@ -852,7 +896,7 @@ contains
        & head_idx, block_idx, thread_idx, ngridmax, dtdx)
     type(oct), device :: grid(*)
     integer, device :: father(*)
-    integer, device :: nbor(1:threetondim,*)
+    integer, device :: nbor(1:subgridsize,*)
     real(kind=dp), device :: unew(1:twotondim,1:nvar,*)
     type(subgrid_3x2x2cell_primitive), intent(in) :: fluxes_x
     type(subgrid_2x3x2cell_primitive), intent(in) :: fluxes_y
@@ -863,18 +907,28 @@ contains
     integer, value :: ngridmax
     real(kind=dp), value :: dtdx
 
-    integer :: i, j, k, info
-    integer :: oct_idx, cell_idx, source_idx, father_idx
+    integer :: i, j, k, i_subgrid_idx, j_subgrid_idx, k_subgrid_idx
+    integer :: subgrid_idx, cell_idx, source_idx, father_idx, work_idx
+    integer :: interface_array_size, info, ind_nbor
     type(conserved_t) :: flux
 
+    interface_array_size = nsubgrid**(ndim-1)
+
     ! Compute the oct index
-    oct_idx = head_idx + block_idx
+    subgrid_idx = head_idx + block_idx
 
     !============
     ! X direction
     !============
 
-    if (thread_idx == 0) then
+    if (thread_idx < interface_array_size) then
+
+       ! Compute the subgrid indices in the interface
+       work_idx = thread_idx
+       call index_1Dto2D(work_idx, nsubgrid, j_subgrid_idx, k_subgrid_idx)
+       i_subgrid_idx = 0
+       j_subgrid_idx = j_subgrid_idx + 1
+       k_subgrid_idx = k_subgrid_idx + 1
 
        ! Compute left coarse X flux
        flux%density    = 0_dp
@@ -882,8 +936,8 @@ contains
        flux%momentum_y = 0_dp
        flux%momentum_z = 0_dp
        flux%energy     = 0_dp
-       do j = 0, 1
-          do k = 0, 1
+       do j = 2*j_subgrid_idx - 2, 2*j_subgrid_idx - 1
+          do k = 2*k_subgrid_idx - 2, 2*k_subgrid_idx - 1
              flux%density    = flux%density    - fluxes_x%density   (0, j, k) * dtdx / dble(twotondim)
              flux%momentum_x = flux%momentum_x - fluxes_x%velocity_x(0, j, k) * dtdx / dble(twotondim)
              flux%momentum_y = flux%momentum_y - fluxes_x%velocity_y(0, j, k) * dtdx / dble(twotondim)
@@ -891,9 +945,10 @@ contains
              flux%energy     = flux%energy     - fluxes_x%pressure  (0, j, k) * dtdx / dble(twotondim)
           end do
        end do
-    
+
        ! Update left coarse X cell if necessary
-       source_idx = nbor(13, oct_idx)
+       ind_nbor = 1 + i_subgrid_idx + nsubgridp2 * j_subgrid_idx + nsubgridp2sq * k_subgrid_idx
+       source_idx = nbor(ind_nbor, subgrid_idx)
        if (source_idx > ngridmax) then
           father_idx = father(source_idx)
           i = grid(source_idx)%ckey(1) - 2 * grid(father_idx)%ckey(1)
@@ -907,9 +962,14 @@ contains
           info = atomicadd(unew(cell_idx, 5, father_idx), flux%energy)
        endif
 
-    endif
+    else if (thread_idx < 2 * interface_array_size) then
 
-    if (thread_idx == 1) then
+       ! Compute the subgrid indices in the interface
+       work_idx = thread_idx - interface_array_size
+       call index_1Dto2D(work_idx, nsubgrid, j_subgrid_idx, k_subgrid_idx)
+       i_subgrid_idx = nsubgrid + 1
+       j_subgrid_idx = j_subgrid_idx + 1
+       k_subgrid_idx = k_subgrid_idx + 1
 
        ! Compute right coarse X flux
        flux%density    = 0_dp
@@ -917,18 +977,19 @@ contains
        flux%momentum_y = 0_dp
        flux%momentum_z = 0_dp
        flux%energy     = 0_dp
-       do j = 0, 1
-          do k = 0, 1
-             flux%density    = flux%density    + fluxes_x%density   (2, j, k) * dtdx / dble(twotondim)
-             flux%momentum_x = flux%momentum_x + fluxes_x%velocity_x(2, j, k) * dtdx / dble(twotondim)
-             flux%momentum_y = flux%momentum_y + fluxes_x%velocity_y(2, j, k) * dtdx / dble(twotondim)
-             flux%momentum_z = flux%momentum_z + fluxes_x%velocity_z(2, j, k) * dtdx / dble(twotondim)
-             flux%energy     = flux%energy     + fluxes_x%pressure  (2, j, k) * dtdx / dble(twotondim)
+       do j = 2*j_subgrid_idx - 2, 2*j_subgrid_idx - 1
+          do k = 2*k_subgrid_idx - 2, 2*k_subgrid_idx - 1
+             flux%density    = flux%density    + fluxes_x%density   (2*nsubgrid, j, k) * dtdx / dble(twotondim)
+             flux%momentum_x = flux%momentum_x + fluxes_x%velocity_x(2*nsubgrid, j, k) * dtdx / dble(twotondim)
+             flux%momentum_y = flux%momentum_y + fluxes_x%velocity_y(2*nsubgrid, j, k) * dtdx / dble(twotondim)
+             flux%momentum_z = flux%momentum_z + fluxes_x%velocity_z(2*nsubgrid, j, k) * dtdx / dble(twotondim)
+             flux%energy     = flux%energy     + fluxes_x%pressure  (2*nsubgrid, j, k) * dtdx / dble(twotondim)
           end do
        end do
 
        ! Update right coarse X cell if necessary
-       source_idx = nbor(15, oct_idx)
+       ind_nbor = 1 + i_subgrid_idx + nsubgridp2 * j_subgrid_idx + nsubgridp2sq * k_subgrid_idx
+       source_idx = nbor(ind_nbor, subgrid_idx)
        if (source_idx > ngridmax) then
           father_idx = father(source_idx)
           i = grid(source_idx)%ckey(1) - 2 * grid(father_idx)%ckey(1)
@@ -942,13 +1003,18 @@ contains
           info = atomicadd(unew(cell_idx, 5, father_idx), flux%energy)
        endif
 
-    endif
-
     !============
     ! Y direction
     !============
 
-    if (thread_idx == 2) then
+    else if (thread_idx < 3 * interface_array_size) then
+
+       ! Compute the subgrid indices in the interface
+       work_idx = thread_idx - 2 * interface_array_size
+       call index_1Dto2D(work_idx, nsubgrid, i_subgrid_idx, k_subgrid_idx)
+       i_subgrid_idx = i_subgrid_idx + 1
+       j_subgrid_idx = 0
+       k_subgrid_idx = k_subgrid_idx + 1
 
        ! Compute left coarse Y flux
        flux%density    = 0_dp
@@ -956,8 +1022,8 @@ contains
        flux%momentum_y = 0_dp
        flux%momentum_z = 0_dp
        flux%energy     = 0_dp
-       do i = 0, 1
-          do k = 0, 1
+       do i = 2*i_subgrid_idx - 2, 2*i_subgrid_idx - 1
+          do k = 2*k_subgrid_idx - 2, 2*k_subgrid_idx - 1
              flux%density    = flux%density    - fluxes_y%density   (i, 0, k) * dtdx / dble(twotondim)
              flux%momentum_x = flux%momentum_x - fluxes_y%velocity_x(i, 0, k) * dtdx / dble(twotondim)
              flux%momentum_y = flux%momentum_y - fluxes_y%velocity_y(i, 0, k) * dtdx / dble(twotondim)
@@ -967,7 +1033,8 @@ contains
        end do
     
        ! Update left coarse Y cell if necessary
-       source_idx = nbor(11, oct_idx)
+       ind_nbor = 1 + i_subgrid_idx + nsubgridp2 * j_subgrid_idx + nsubgridp2sq * k_subgrid_idx
+       source_idx = nbor(ind_nbor, subgrid_idx)
        if (source_idx > ngridmax) then
           father_idx = father(source_idx)
           i = grid(source_idx)%ckey(1) - 2 * grid(father_idx)%ckey(1)
@@ -981,9 +1048,14 @@ contains
           info = atomicadd(unew(cell_idx, 5, father_idx), flux%energy)
        endif
 
-    endif
+    else if (thread_idx < 4 * interface_array_size) then
 
-    if (thread_idx == 3) then
+       ! Compute the subgrid indices in the interface
+       work_idx = thread_idx - 3 * interface_array_size
+       call index_1Dto2D(work_idx, nsubgrid, i_subgrid_idx, k_subgrid_idx)
+       i_subgrid_idx = i_subgrid_idx + 1
+       j_subgrid_idx = nsubgrid + 1
+       k_subgrid_idx = k_subgrid_idx + 1
 
        ! Compute right coarse Y flux
        flux%density    = 0_dp
@@ -991,18 +1063,19 @@ contains
        flux%momentum_y = 0_dp
        flux%momentum_z = 0_dp
        flux%energy     = 0_dp
-       do i = 0, 1
-          do k = 0, 1
-             flux%density    = flux%density    + fluxes_y%density   (i, 2, k) * dtdx / dble(twotondim)
-             flux%momentum_x = flux%momentum_x + fluxes_y%velocity_x(i, 2, k) * dtdx / dble(twotondim)
-             flux%momentum_y = flux%momentum_y + fluxes_y%velocity_y(i, 2, k) * dtdx / dble(twotondim)
-             flux%momentum_z = flux%momentum_z + fluxes_y%velocity_z(i, 2, k) * dtdx / dble(twotondim)
-             flux%energy     = flux%energy     + fluxes_y%pressure  (i, 2, k) * dtdx / dble(twotondim)
+       do i = 2*i_subgrid_idx - 2, 2*i_subgrid_idx - 1
+          do k = 2*k_subgrid_idx - 2, 2*k_subgrid_idx - 1
+             flux%density    = flux%density    + fluxes_y%density   (i, 2*nsubgrid, k) * dtdx / dble(twotondim)
+             flux%momentum_x = flux%momentum_x + fluxes_y%velocity_x(i, 2*nsubgrid, k) * dtdx / dble(twotondim)
+             flux%momentum_y = flux%momentum_y + fluxes_y%velocity_y(i, 2*nsubgrid, k) * dtdx / dble(twotondim)
+             flux%momentum_z = flux%momentum_z + fluxes_y%velocity_z(i, 2*nsubgrid, k) * dtdx / dble(twotondim)
+             flux%energy     = flux%energy     + fluxes_y%pressure  (i, 2*nsubgrid, k) * dtdx / dble(twotondim)
           end do
        end do
 
        ! Update right coarse Y cell if necessary
-       source_idx = nbor(17, oct_idx)
+       ind_nbor = 1 + i_subgrid_idx + nsubgridp2 * j_subgrid_idx + nsubgridp2sq * k_subgrid_idx
+       source_idx = nbor(ind_nbor, subgrid_idx)
        if (source_idx > ngridmax) then
           father_idx = father(source_idx)
           i = grid(source_idx)%ckey(1) - 2 * grid(father_idx)%ckey(1)
@@ -1016,13 +1089,18 @@ contains
           info = atomicadd(unew(cell_idx, 5, father_idx), flux%energy)
        endif
 
-    endif
-
     !============
     ! Z direction
     !============
 
-    if (thread_idx == 4) then
+    else if (thread_idx < 5 * interface_array_size) then
+
+       ! Compute the subgrid indices in the interface
+       work_idx = thread_idx - 4 * interface_array_size
+       call index_1Dto2D(work_idx, nsubgrid, i_subgrid_idx, j_subgrid_idx)
+       i_subgrid_idx = i_subgrid_idx + 1
+       j_subgrid_idx = j_subgrid_idx + 1
+       k_subgrid_idx = 0
 
        ! Compute left coarse Z flux
        flux%density    = 0_dp
@@ -1030,8 +1108,8 @@ contains
        flux%momentum_y = 0_dp
        flux%momentum_z = 0_dp
        flux%energy     = 0_dp
-       do i = 0, 1
-          do j = 0, 1
+       do i = 2*i_subgrid_idx - 2, 2*i_subgrid_idx - 1
+          do j = 2*j_subgrid_idx - 2, 2*j_subgrid_idx - 1
              flux%density    = flux%density    - fluxes_z%density   (i, j, 0) * dtdx / dble(twotondim)
              flux%momentum_x = flux%momentum_x - fluxes_z%velocity_x(i, j, 0) * dtdx / dble(twotondim)
              flux%momentum_y = flux%momentum_y - fluxes_z%velocity_y(i, j, 0) * dtdx / dble(twotondim)
@@ -1041,7 +1119,8 @@ contains
        end do
     
        ! Update left coarse Z cell if necessary
-       source_idx = nbor(5, oct_idx)
+       ind_nbor = 1 + i_subgrid_idx + nsubgridp2 * j_subgrid_idx + nsubgridp2sq * k_subgrid_idx
+       source_idx = nbor(ind_nbor, subgrid_idx)
        if (source_idx > ngridmax) then
           father_idx = father(source_idx)
           i = grid(source_idx)%ckey(1) - 2 * grid(father_idx)%ckey(1)
@@ -1055,9 +1134,14 @@ contains
           info = atomicadd(unew(cell_idx, 5, father_idx), flux%energy)
        endif
 
-    endif
+    else if (thread_idx < 6 * interface_array_size) then
 
-    if (thread_idx == 5) then
+       ! Compute the subgrid indices in the interface
+       work_idx = thread_idx - 5 * interface_array_size
+       call index_1Dto2D(work_idx, nsubgrid, i_subgrid_idx, j_subgrid_idx)
+       i_subgrid_idx = i_subgrid_idx + 1
+       j_subgrid_idx = j_subgrid_idx + 1
+       k_subgrid_idx = nsubgrid + 1
 
        ! Compute right coarse Z flux
        flux%density    = 0_dp
@@ -1065,18 +1149,19 @@ contains
        flux%momentum_y = 0_dp
        flux%momentum_z = 0_dp
        flux%energy     = 0_dp
-       do i = 0, 1
-          do j = 0, 1
-             flux%density    = flux%density    + fluxes_z%density   (i, j, 2) * dtdx / dble(twotondim)
-             flux%momentum_x = flux%momentum_x + fluxes_z%velocity_x(i, j, 2) * dtdx / dble(twotondim)
-             flux%momentum_y = flux%momentum_y + fluxes_z%velocity_y(i, j, 2) * dtdx / dble(twotondim)
-             flux%momentum_z = flux%momentum_z + fluxes_z%velocity_z(i, j, 2) * dtdx / dble(twotondim)
-             flux%energy     = flux%energy     + fluxes_z%pressure  (i, j, 2) * dtdx / dble(twotondim)
+       do i = 2*i_subgrid_idx - 2, 2*i_subgrid_idx - 1
+          do j = 2*j_subgrid_idx - 2, 2*j_subgrid_idx - 1
+             flux%density    = flux%density    + fluxes_z%density   (i, j, 2*nsubgrid) * dtdx / dble(twotondim)
+             flux%momentum_x = flux%momentum_x + fluxes_z%velocity_x(i, j, 2*nsubgrid) * dtdx / dble(twotondim)
+             flux%momentum_y = flux%momentum_y + fluxes_z%velocity_y(i, j, 2*nsubgrid) * dtdx / dble(twotondim)
+             flux%momentum_z = flux%momentum_z + fluxes_z%velocity_z(i, j, 2*nsubgrid) * dtdx / dble(twotondim)
+             flux%energy     = flux%energy     + fluxes_z%pressure  (i, j, 2*nsubgrid) * dtdx / dble(twotondim)
           end do
        end do
 
        ! Update right coarse Z cell if necessary
-       source_idx = nbor(23, oct_idx)
+       ind_nbor = 1 + i_subgrid_idx + nsubgridp2 * j_subgrid_idx + nsubgridp2sq * k_subgrid_idx
+       source_idx = nbor(ind_nbor, subgrid_idx)
        if (source_idx > ngridmax) then
           father_idx = father(source_idx)
           i = grid(source_idx)%ckey(1) - 2 * grid(father_idx)%ckey(1)
@@ -1097,16 +1182,15 @@ contains
 
   ! =========================================================================
   attributes(global) subroutine hydro_integrator_kernel(grid, uold, unew, father, nbor, &
-       & head_idx, num_octs, subgrid_size, ngridmax, ilevel, levelmin, levelmax, &
+       & head_idx, num_subgrids, ngridmax, ilevel, levelmin, levelmax, &
        & gamma, dtdx, slope, riemann)
     type(oct), device :: grid(*)
     integer, device :: father(*)
-    integer, device :: nbor(1:threetondim,*)
+    integer, device :: nbor(1:subgridsize,*)
     real(kind=dp), device :: uold(1:twotondim,1:nvar,*)
     real(kind=dp), device :: unew(1:twotondim,1:nvar,*)
     integer(kind=4), intent(in), value :: head_idx
-    integer(kind=4), intent(in), value :: num_octs
-    integer, intent(in), value :: subgrid_size
+    integer(kind=4), intent(in), value :: num_subgrids
     integer, intent(in), value :: ngridmax
     integer, intent(in), value :: ilevel, levelmin, levelmax
     real(kind=dp), intent(in), value :: gamma
@@ -1117,7 +1201,7 @@ contains
     type(subgrid_3x2x2cell_primitive), shared :: left_interfaces_x, right_interfaces_x
     type(subgrid_2x3x2cell_primitive), shared :: left_interfaces_y, right_interfaces_y
     type(subgrid_2x2x3cell_primitive), shared :: left_interfaces_z, right_interfaces_z
-    type(subgrid_6x6x6cell_primitive), shared :: local_subgrid ! The subgrid that this block is working on in shared memory
+    type(subgrid_6x6x6cell_primitive), shared :: local_subgrid
     integer :: block_idx  ! The index of this block, corresponds to the subgrid to load
     integer :: thread_idx ! The index of this thread within the block
 
@@ -1125,20 +1209,19 @@ contains
     block_idx = blockIdx%x - 1
     thread_idx = threadIdx%x - 1
 
-    ! thread guard, probably not needed since num_blocks should always be equal to num_octs
-    if (block_idx >= num_octs) return
+    ! thread guard, probably not needed since num_blocks should always be equal to num_subgrids
+    if (block_idx >= num_subgrids) return
 
     ! =======================================================================
     ! Convert from conserved to primitive variables
     ! =======================================================================
-    call subgrid_conserved_2_primitive(grid, uold, nbor, head_idx, block_idx, thread_idx, &
-         & subgrid_size, gamma, local_subgrid)
+    call subgrid_conserved_2_primitive(grid, uold, nbor, head_idx, block_idx, thread_idx, gamma, local_subgrid)
 
     ! =======================================================================
     ! Perform tracing step and compute the interface states
     ! =======================================================================
     ! This will compute the interface states and write them to shared memory
-    call trace_3d(local_subgrid, thread_idx, subgrid_size, &
+    call trace_3d(local_subgrid, thread_idx, &
          & left_interfaces_x, right_interfaces_x, left_interfaces_y, right_interfaces_y, &
          & left_interfaces_z, right_interfaces_z, gamma, dtdx, slope)
 
@@ -1150,22 +1233,21 @@ contains
     ! fluxes are in the conserved variables despite what the member variables
     ! names say
     call riemann_driver(left_interfaces_x, right_interfaces_x, left_interfaces_y, &
-         & right_interfaces_y, left_interfaces_z, right_interfaces_z, subgrid_size, thread_idx, &
+         & right_interfaces_y, left_interfaces_z, right_interfaces_z, thread_idx, &
          & gamma, riemann)
 
     ! =======================================================================
     ! Zero fluxes at boundaries with finer levels.
     ! =======================================================================
     if (ilevel < levelmax) then
-       call zero_fine_fluxes(local_subgrid, left_interfaces_x, left_interfaces_y, left_interfaces_z, thread_idx, &
-            & subgrid_size)
+       call zero_fine_fluxes(local_subgrid, left_interfaces_x, left_interfaces_y, left_interfaces_z, thread_idx)
     endif
 
     ! =======================================================================
     ! Update the conserved variables at current level.
     ! =======================================================================
-    call conservative_update(unew, left_interfaces_x, left_interfaces_y, left_interfaces_z, head_idx, block_idx, &
-         & thread_idx, subgrid_size, dtdx)
+    call conservative_update(unew, nbor, left_interfaces_x, left_interfaces_y, left_interfaces_z, head_idx, block_idx, &
+         & thread_idx, dtdx)
 
     ! =======================================================================
     ! Update the conserved variables at coarser level.
@@ -1212,7 +1294,7 @@ contains
        & gamma, err_grad_d, err_grad_p, floor_d, floor_p)
     type(oct), device :: grid(*)
     real(kind=dp), device :: uold(1:twotondim,1:nvar,*)
-    integer(kind=4), device :: nbor(1:threetondim,*)
+    integer(kind=4), device :: nbor(1:subgridsize,*)
     integer(kind=4), device :: flag1(1:twotondim,*)
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
@@ -1220,7 +1302,9 @@ contains
     real(kind=dp), intent(in), value :: err_grad_d, floor_d
     real(kind=dp), intent(in), value :: err_grad_p, floor_p
 
-    integer :: cell_idx, oct_idx, block_idx, source_idx, icell, inbor, idim
+    integer :: cell_idx, oct_idx, block_idx, source_idx, subgrid_idx
+    integer :: i, j, k, il, jl, kl, ir, jr, kr
+    integer :: icell, inbor, idim, ind_nbor
     type(primitive_t) :: prim_lft, prim_mid, prim_rgt
     type(conserved_t) :: cons_lft, cons_mid, cons_rgt
     logical :: ok
@@ -1235,6 +1319,20 @@ contains
     ! Compute the cell idx
     cell_idx = threadIdx%x
 
+    ! Compute subgrid idx
+    subgrid_idx = (oct_idx - 1) / nsubgridtondim + 1
+
+    ! Compute oct idx within subgrid
+    oct_idx = (oct_idx - 1) - (subgrid_idx - 1) * nsubgridtondim
+    k = oct_idx / nsubgridsq
+    j = (oct_idx - k * nsubgridsq) / nsubgrid
+    i = oct_idx - j * nsubgrid - k * nsubgridsq
+    i = i + 1; j = j + 1; k = k + 1
+
+    ! Compute true oct idx
+    ind_nbor = 1 + i + nsubgridp2 * j  + nsubgridp2sq * k
+    oct_idx = nbor(ind_nbor, subgrid_idx)
+
     ! Middle cell
     cons_mid%density    = uold(cell_idx, 1, oct_idx)
     cons_mid%momentum_x = uold(cell_idx, 2, oct_idx)
@@ -1246,10 +1344,23 @@ contains
     ! Loop over dimensions
     do idim = 1, ndim
 
+       il = 0; jl = 0; kl = 0
+       ir = 0; jr = 0; kr = 0
+       if (idim == 1) then
+          il = iii(cell_idx, 2 * (idim-1) + 1)
+          ir = iii(cell_idx, 2 * (idim-1) + 2)
+       else if (idim == 2) then
+          jl = iii(cell_idx, 2 * (idim-1) + 1)
+          jr = iii(cell_idx, 2 * (idim-1) + 2)
+       else
+          kl = iii(cell_idx, 2 * (idim-1) + 1)
+          kr = iii(cell_idx, 2 * (idim-1) + 2)
+       endif
+
        ! Left cell
        icell = hhh(cell_idx, 2 * (idim-1) + 1)
-       inbor = ggg(cell_idx, 2 * (idim-1) + 1)
-       source_idx = nbor(inbor, oct_idx)
+       inbor = 1 + (i + il) + nsubgridp2 * (j + jl)  + nsubgridp2sq * (k + kl)
+       source_idx = nbor(inbor, subgrid_idx)
        cons_lft%density    = uold(icell, 1, source_idx)
        cons_lft%momentum_x = uold(icell, 2, source_idx)
        cons_lft%momentum_y = uold(icell, 3, source_idx)
@@ -1259,8 +1370,8 @@ contains
 
        ! Right cell
        icell = hhh(cell_idx, 2 * (idim-1) + 2)
-       inbor = ggg(cell_idx, 2 * (idim-1) + 2)
-       source_idx = nbor(inbor, oct_idx)
+       inbor = 1 + (i + ir) + nsubgridp2 * (j + jr)  + nsubgridp2sq * (k + kr)
+       source_idx = nbor(inbor, subgrid_idx)
        cons_rgt%density    = uold(icell, 1, source_idx)
        cons_rgt%momentum_x = uold(icell, 2, source_idx)
        cons_rgt%momentum_y = uold(icell, 3, source_idx)
@@ -1269,8 +1380,7 @@ contains
        prim_rgt = conserved_2_primitive(cons_rgt, gamma)
 
        ! Check refinement criteria
-       call hydro_crit(prim_lft, prim_mid, prim_rgt, ok, &
-            & err_grad_d, err_grad_p, floor_d, floor_p)
+       call hydro_crit(prim_lft, prim_mid, prim_rgt, ok, err_grad_d, err_grad_p, floor_d, floor_p)
 
        ! If satisfied set flag1 to 1
        if (ok) flag1(cell_idx, oct_idx) = 1

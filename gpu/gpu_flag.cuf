@@ -1,16 +1,13 @@
 module flag_device
-  use amr_parameters, only: dp, ndim, twondim, twotondim, threetondim, nhilbert
+  use amr_parameters, only: dp, ndim, twondim, twotondim, nhilbert
   use hydro_parameters, only: nvar
   use oct_commons, only: oct
+  use gpu_utils, only: nsubgrid, nsubgridsq, nsubgridtondim, nsubgridp2, nsubgridp2sq, subgridsize
   use cudafor
   implicit none
-  integer,dimension(1:8,1:6),parameter::ggg=reshape(&
-       & (/13,14,13,14,13,14,13,14,&
-       &   14,15,14,15,14,15,14,15,&
-       &   11,11,14,14,11,11,14,14,&
-       &   14,14,17,17,14,14,17,17,&
-       &   5,5,5,5,14,14,14,14,&
-       &   14,14,14,14,23,23,23,23/),(/8,6/))
+
+  !> @brief
+  !> Cell index and grid offset to access neighbors.
   integer,dimension(1:8,1:6),parameter::hhh=reshape(&
        & (/2,1,4,3,6,5,8,7,&
        &   2,1,4,3,6,5,8,7,&
@@ -18,7 +15,16 @@ module flag_device
        &   3,4,1,2,7,8,5,6,&
        &   5,6,7,8,1,2,3,4,&
        &   5,6,7,8,1,2,3,4/),(/8,6/))
+  integer,dimension(1:8,1:6),parameter::iii=reshape(&
+       & (/-1,0,-1,0,-1,0,-1,0,&
+       &   0,1,0,1,0,1,0,1,&
+       &   -1,-1,0,0,-1,-1,0,0,&
+       &   0,0,1,1,0,0,1,1,&
+       &   -1,-1,-1,-1,0,0,0,0,&
+       &   0,0,0,0,1,1,1,1/),(/8,6/))
+
 contains
+
   include 'gpu_hash.cuf'
   include 'gpu_hilbert.cuf'
   include 'gpu_scan.cuf'
@@ -115,7 +121,7 @@ contains
 
   end subroutine count_flag1_kernel
   ! =========================================================================
-  
+
   ! =========================================================================
   attributes(global) subroutine init_flag_kernel(flag1, grid, father, head_idx, num_octs)
     type(oct), device :: grid(*)
@@ -159,12 +165,13 @@ contains
   attributes(global) subroutine count_neighbors(flag2, flag1, nbor, head_idx, num_octs)
     integer(kind=4), device :: flag1(1:twotondim,*)
     integer(kind=4), device :: flag2(1:twotondim,*)
-    integer(kind=4), device :: nbor(1:threetondim,*)
+    integer(kind=4), device :: nbor(1:subgridsize,*)
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
 
-    integer :: cell_idx, oct_idx, block_idx, source_idx, icell, inbor
-    integer :: number_nbors, ind
+    integer :: cell_idx, oct_idx, block_idx, source_idx, subgrid_idx, num_idx
+    integer :: number_nbors, ind, icell, idir, ind_nbor
+    integer :: i, j, k, in, jn, kn
 
     block_idx = blockIdx%x - 1
 
@@ -176,15 +183,39 @@ contains
     ! Compute the cell idx
     cell_idx = threadIdx%x
 
+    ! Compute subgrid idx
+    subgrid_idx = (oct_idx - 1) / nsubgridtondim + 1
+
+    ! Compute oct rank within subgrid
+    num_idx = oct_idx - (subgrid_idx - 1) * nsubgridtondim
+    num_idx = num_idx - 1
+    k = num_idx / nsubgridsq
+    num_idx = num_idx - k * nsubgridsq
+    j = num_idx / nsubgrid
+    i = num_idx - j * nsubgrid
+    i = i + 1; j = j + 1; k = k + 1
+
+    ! Compute true oct idx
+    ind_nbor = 1 + i + nsubgridp2 * j  + nsubgridp2sq * k
+    oct_idx = nbor(ind_nbor, subgrid_idx)
+
     ! Store in flag2 the number of neighbors with flag1 = 1
     number_nbors = 0
-    do ind = 1, twondim
-       icell = hhh(cell_idx, ind)
-       inbor = ggg(cell_idx, ind)
-       source_idx = nbor(inbor, oct_idx)
+    do idir = 1, twondim
+       icell = hhh(cell_idx, idir)
+       in = 0; jn = 0; kn = 0
+       if(idir < 3) then
+          in = iii(cell_idx, idir)
+       else if(idir < 5) then
+          jn = iii(cell_idx, idir)
+       else
+          kn = iii(cell_idx, idir)
+       end if
+       ind = 1 + (i + in) + nsubgridp2 * (j + jn)  + nsubgridp2sq * (k + kn)
+       source_idx = nbor(ind, subgrid_idx)
        if (source_idx > 0) then
           number_nbors = number_nbors + flag1(icell, source_idx)
-       endif
+       end if
     end do
     flag2(cell_idx, oct_idx) = number_nbors
 
@@ -223,14 +254,13 @@ contains
   ! =========================================================================~
 
   ! =========================================================================
-  attributes(global) subroutine enforce_rules(flag1, nbor, head_idx, num_octs, ngridmax)
+  attributes(global) subroutine enforce_subgrid_kernel(flag1, head_idx, num_octs)
     integer(kind=4), device :: flag1(1:twotondim,*)
-    integer(kind=4), device :: nbor(1:threetondim,*)
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
-    integer(kind=4), intent(in), value :: ngridmax
 
-    integer :: tid, bid, oct_idx, ind
+    integer :: tid, bid, oct_idx
+    integer :: ind
     logical :: ok
 
     ! Thread and block id
@@ -242,14 +272,69 @@ contains
     if (oct_idx >= num_octs) return
     oct_idx = head_idx + oct_idx
 
+    ! If any cell is flagged then flag entire oct
+    ok = .false.
+    do ind = 1, twotondim
+       ok = ok .or. (flag1(ind, oct_idx) == 1)
+    end do
+    if (ok) then
+       do ind = 1, twotondim
+          flag1(ind, oct_idx) = 1
+       end do
+    end if
+
+  end subroutine enforce_subgrid_kernel
+  ! =========================================================================~
+
+  ! =========================================================================
+  attributes(global) subroutine enforce_rules(flag1, nbor, head_idx, num_octs, ngridmax)
+    integer(kind=4), device :: flag1(1:twotondim,*)
+    integer(kind=4), device :: nbor(1:subgridsize,*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+    integer(kind=4), intent(in), value :: ngridmax
+
+    integer :: tid, bid, oct_idx, subgrid_idx
+    integer :: i, j, k, in, jn, kn
+    integer :: ind, ind_nbor
+    logical :: ok
+
+    ! Thread and block id
+    tid = threadIdx%x - 1
+    bid = blockIdx%x - 1
+
+    ! Compute oct idx
+    oct_idx = tid + bid * blockDim%x
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Compute subgrid idx
+    subgrid_idx = (oct_idx - 1) / nsubgridtondim + 1
+
+    ! Compute oct idx within subgrid
+    oct_idx = (oct_idx - 1) - (subgrid_idx - 1) * nsubgridtondim
+    k = oct_idx / nsubgridsq
+    j = (oct_idx - k * nsubgridsq) / nsubgrid
+    i = oct_idx - j * nsubgrid - k * nsubgridsq
+    i = i + 1; j = j + 1; k = k + 1
+
+    ! Compute true oct idx
+    ind_nbor = 1 + i + nsubgridp2 * j  + nsubgridp2sq * k
+    oct_idx = nbor(ind_nbor, subgrid_idx)
+
     ! Check if one neighboring grid is missing or in the cache
     ok = .false.
-    do ind = 1, threetondim
-       ok = ok .or. (nbor(ind, oct_idx) == 0)
-       ok = ok .or. (nbor(ind, oct_idx) > ngridmax)
+    do in = -1, 1
+       do jn = -1, 1
+          do kn = -1, 1
+             ind = 1 + (i + in) + nsubgridp2 * (j + jn)  + nsubgridp2sq * (k + kn)
+             ok = ok .or. (nbor(ind, subgrid_idx) == 0)
+             ok = ok .or. (nbor(ind, subgrid_idx) > ngridmax)
+          end do
+       end do
     end do
 
-    ! If one grid id missing, set flag1 to zero (no refinement allowed)
+    ! If one grid is missing, set flag1 to zero (no refinement allowed)
     if (ok) then
        do ind = 1, twotondim
           flag1(ind, oct_idx) = 0

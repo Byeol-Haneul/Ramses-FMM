@@ -317,6 +317,7 @@ contains
 #endif
 #ifdef _CUDA
     integer::error_code
+    type(cudaDeviceProp) :: prop
 #endif
 #ifndef WITHOUTMPI
     call MPI_INIT(info)
@@ -336,6 +337,11 @@ contains
     mdl%mydev = mod(mdl%myid, mdl%ngpu) ! Determine which GPU this rank will use
     err_code = cudaSetDevice(mdl%mydev) ! Set the device for this rank
     if(mdl%myid==1)write(*,'(" Launching CUDA with ndevice/task =",I6)')mdl%ngpu
+    err_code = cudaGetDeviceProperties(prop,0)
+    write(*,'(" Device Name: ",A)')trim(prop%name)
+    write(*,'(" Compute Capability: ",i0,".",i0)')prop%major,prop%minor
+    write(*,'(" Shared Memory per Block: ",i16)')prop%sharedMemPerBlock
+    write(*,'(" Maximum Shared Memory per Block: ",i8)')prop%sharedMemPerBlockOptIn
 #endif
   end subroutine mdl_initialize
   !##############################################################
