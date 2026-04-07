@@ -1521,7 +1521,7 @@ end subroutine pcs_trace_gas_part
 !#########################################################################
 !#########################################################################
 subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
-   use amr_parameters, only: ndim, twotondim
+   use amr_parameters, only: ndim, twotondim, dp
    use pm_parameters
    use pm_commons, only: part_t
    use ramses_commons, only: ramses_t
@@ -1619,7 +1619,7 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
             momentum(1:ndim)=momentum(1:ndim)+m%uold(icell,2:ndim+1,igrid)*vol(ind)
             rho=rho+m%uold(icell,1,igrid)*vol(ind)
             if(use_sgs)then
-               kappa_cells(ind)=tracer_cell_kappa(m%uold(icell,1,igrid),m%uold(icell,r%iturb,igrid),dx_loc,r%smallr)
+               kappa_cells(ind)=tracer_cell_kappa(m%uold(icell,1,igrid),m%uold(icell,r%iturb,igrid),real(dx_loc,dp),real(r%smallr,dp))
                kappa_mid=kappa_mid+kappa_cells(ind)*vol(ind)
             end if
          end if
@@ -1688,7 +1688,7 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
  end subroutine cic_trace_gas_part_sgs_turb
  
  subroutine tsc_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
-   use amr_parameters, only: ndim, threetondim
+   use amr_parameters, only: ndim, threetondim, dp
    use pm_parameters
    use pm_commons, only: part_t
    use ramses_commons, only: ramses_t
@@ -1787,7 +1787,7 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
             momentum(1:ndim)=momentum(1:ndim)+m%uold(icell,2:ndim+1,igrid)*vol(ind)
             rho=rho+m%uold(icell,1,igrid)*vol(ind)
             if(use_sgs)then
-               kappa_cells(ind)=tracer_cell_kappa(m%uold(icell,1,igrid),m%uold(icell,r%iturb,igrid),dx_loc,r%smallr)
+               kappa_cells(ind)=tracer_cell_kappa(m%uold(icell,1,igrid),m%uold(icell,r%iturb,igrid),real(dx_loc,dp),real(r%smallr,dp))
                kappa_mid=kappa_mid+kappa_cells(ind)*vol(ind)
             end if
          end if
@@ -2495,7 +2495,7 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
 !#########################################################################
 !#########################################################################
 subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
-  use amr_parameters, only: ndim, twotondim
+  use amr_parameters, only: ndim, twotondim, dp
   use hydro_parameters, only: nener
   use pm_parameters
   use pm_commons, only: part_t
@@ -2639,6 +2639,7 @@ subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
               end do
 #endif
 #ifdef MHD
+              emag=0.0d0
               do idim=1,3
                  emag = emag + 0.125d0*(m%bold(icell2,idim,igrid)+m%bold(icell2,3+idim,igrid))**2
               end do
@@ -2677,7 +2678,7 @@ subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
 end subroutine cic_kick_drift_dust
 
 subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
-  use amr_parameters, only: ndim, threetondim
+  use amr_parameters, only: ndim, threetondim, dp
   use hydro_parameters, only: nener
   use pm_parameters
   use pm_commons, only: part_t
@@ -2804,6 +2805,7 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
               end do
 #endif
 #ifdef MHD
+              emag=0.0d0
               do idim=1,3
                  emag = emag + 0.125d0*(m%bold(icell2,idim,igrid)+m%bold(icell2,3+idim,igrid))**2
               end do
@@ -2811,7 +2813,6 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
               eint = eint + (etot - ekin - erad - emag) * vol2(ind)
            end if
 
-           ! Need to add MHD support here
 #endif
         end do
         cs2 = r%gamma * (r%gamma-1.0d0) * max(eint, r%smallc**2) / max(rho_gas, r%smallr)
@@ -2868,7 +2869,7 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
 end subroutine tsc_kick_drift_dust
 
 subroutine pcs_kick_drift_dust(s,p,ilevel,action_part)
-  use amr_parameters, only: ndim, fourtondim
+  use amr_parameters, only: ndim, fourtondim, dp
   use hydro_parameters, only: nener
   use pm_parameters
   use pm_commons, only: part_t
@@ -3029,6 +3030,7 @@ subroutine pcs_kick_drift_dust(s,p,ilevel,action_part)
              end do
 #endif
 #ifdef MHD
+             emag=0.0d0
              do idim=1,3
                 emag = emag + 0.125d0*(m%bold(icell2,idim,igrid)+m%bold(icell2,3+idim,igrid))**2
              end do
@@ -3162,12 +3164,12 @@ end function fully_implicit_drag
 !#########################################################################
 !#########################################################################
 subroutine compute_lorentz(driftvel, bfield, dt, charge_parameter)
-  use amr_parameters, only: ndim
+  use amr_parameters, only: ndim, dp
   implicit none
   real(kind=8), dimension(1:ndim), intent(inout) :: driftvel
   real(kind=8), dimension(1:ndim), intent(in)    :: bfield
   real(kind=8), intent(in)                       :: dt
-  real(kind=8), intent(in)                       :: charge_parameter
+  real(dp), intent(in)                           :: charge_parameter
   real(kind=8) :: det, bsquared, dteff
   real(kind=8) :: v1_new, v2_new, v3_new
   real(kind=8), dimension(1:3,1:3) :: matrix
@@ -3213,12 +3215,12 @@ end subroutine compute_lorentz
 !#########################################################################
 !#########################################################################
 subroutine compute_lorentz_step(driftvel, bfield, dt, charge_parameter, analytic_dust_force)
-  use amr_parameters, only: ndim
+  use amr_parameters, only: ndim, dp
   implicit none
   real(kind=8), dimension(1:ndim), intent(inout) :: driftvel
   real(kind=8), dimension(1:ndim), intent(in)    :: bfield
   real(kind=8), intent(in)                       :: dt
-  real(kind=8), intent(in)                       :: charge_parameter
+  real(dp), intent(in)                           :: charge_parameter
   logical, intent(in)                            :: analytic_dust_force
 #ifdef MHD
   if (.not. analytic_dust_force) then
@@ -3231,12 +3233,12 @@ end subroutine compute_lorentz_step
 !#########################################################################
 !#########################################################################
 subroutine compute_lorentz_analytic(driftvel, bfield, dt, charge_parameter)
-  use amr_parameters, only: ndim
+  use amr_parameters, only: ndim, dp
   implicit none
   real(kind=8), dimension(1:ndim), intent(inout) :: driftvel
   real(kind=8), dimension(1:ndim), intent(in)    :: bfield
   real(kind=8), intent(in)                       :: dt
-  real(kind=8), intent(in)                       :: charge_parameter
+  real(dp), intent(in)                           :: charge_parameter
   real(kind=8) :: dteff, bsquared, bnorm, theta, costh, sinth, vdotb, t2
   real(kind=8), dimension(1:ndim) :: bhat, v, kxv
 #if NDIM==3
@@ -3504,17 +3506,18 @@ subroutine wrap_cell_coords(st,x_cell,levelp1)
   end do
 end subroutine wrap_cell_coords
 
-real(kind=8) function tracer_cell_kappa(dens_in,eturb_in,dx_in,smallr_in) result(kappa_val)
+real(dp) function tracer_cell_kappa(dens_in,eturb_in,dx_in,smallr_in) result(kappa_val)
+  use amr_parameters, only: dp
   implicit none
-  real(kind=8),intent(in)::dens_in,eturb_in,dx_in,smallr_in
-  real(kind=8)::rho_eff,sigma_sq
+  real(dp),intent(in)::dens_in,eturb_in,dx_in,smallr_in
+  real(dp)::rho_eff,sigma_sq
 
   rho_eff = max(dens_in,smallr_in)
-  sigma_sq = max(2.0d0*max(eturb_in,0.0d0)/rho_eff,0.0d0)
-  if(sigma_sq>0.0d0)then
+  sigma_sq = max(2.0_dp*max(eturb_in,0.0_dp)/rho_eff,0.0_dp)
+  if(sigma_sq>0.0_dp)then
      kappa_val = dx_in*sqrt(sigma_sq)
   else
-     kappa_val = 0.0d0
+     kappa_val = 0.0_dp
   end if
 end function tracer_cell_kappa
 
@@ -3603,7 +3606,7 @@ real(kind=8) function mc_kernel_skewness(pr, pl) result(gamma1)
 end function mc_kernel_skewness
 
 subroutine gather_cic_state(st,x_cell,level_in,dx_cell,use_sgs_in,vel_out,kappa_out)
-  use amr_parameters, only: ndim, twotondim
+  use amr_parameters, only: ndim, twotondim, dp
   use ramses_commons, only: ramses_t
   use nbors_utils
   use cache
@@ -3648,7 +3651,7 @@ subroutine gather_cic_state(st,x_cell,level_in,dx_cell,use_sgs_in,vel_out,kappa_
         momentum(1:ndim)=momentum(1:ndim)+st%m%uold(icell,2:ndim+1,igrid)*vol(ind)
         rho=rho+st%m%uold(icell,1,igrid)*vol(ind)
         if(use_sgs_in)then
-           kappa_sum=kappa_sum+tracer_cell_kappa(st%m%uold(icell,1,igrid),st%m%uold(icell,st%r%iturb,igrid),dx_cell,st%r%smallr)*vol(ind)
+           kappa_sum=kappa_sum+tracer_cell_kappa(st%m%uold(icell,1,igrid),st%m%uold(icell,st%r%iturb,igrid),real(dx_cell,dp),real(st%r%smallr,dp))*vol(ind)
         end if
      end if
 #endif
@@ -3668,7 +3671,7 @@ subroutine gather_cic_state(st,x_cell,level_in,dx_cell,use_sgs_in,vel_out,kappa_
 end subroutine gather_cic_state
 
 subroutine gather_tsc_state(st,x_cell,level_in,dx_cell,use_sgs_in,vel_out,kappa_out)
-  use amr_parameters, only: ndim, threetondim
+  use amr_parameters, only: ndim, threetondim, dp
   use ramses_commons, only: ramses_t
   use nbors_utils
   use cache
@@ -3714,7 +3717,7 @@ subroutine gather_tsc_state(st,x_cell,level_in,dx_cell,use_sgs_in,vel_out,kappa_
         momentum(1:ndim)=momentum(1:ndim)+st%m%uold(icell,2:ndim+1,igrid)*vol(ind)
         rho=rho+st%m%uold(icell,1,igrid)*vol(ind)
         if(use_sgs_in)then
-           kappa_sum=kappa_sum+tracer_cell_kappa(st%m%uold(icell,1,igrid),st%m%uold(icell,st%r%iturb,igrid),dx_cell,st%r%smallr)*vol(ind)
+           kappa_sum=kappa_sum+tracer_cell_kappa(st%m%uold(icell,1,igrid),st%m%uold(icell,st%r%iturb,igrid),real(dx_cell,dp),real(st%r%smallr,dp))*vol(ind)
         end if
      end if
 #endif
