@@ -75,7 +75,7 @@ subroutine output_clump_properties(s,filename)
   integer::ilun,j,ind,igrid,hid
   character(LEN=flen)::fileloc
   integer(kind=8),dimension(s%r%levelmin:s%r%nlevelmax)::nskip
-  real(kind=8)::pi,grav,rad,mass,r200b,rmax,concentration,purity
+  real(kind=8)::pi,grav,rad,mass,r200c,rmax,concentration,purity
   real(kind=8),dimension(1:nbin)::mbin
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
@@ -101,7 +101,7 @@ subroutine output_clump_properties(s,filename)
         ! Get clump particle mass
         mass=c%mass_bin(j,nbin)
         ! Comnpute r200, rmax and concentration
-        call halo_mass_def(s,mbin,rad,r200b,rmax,concentration)
+        call halo_mass_def(s,mbin,rad,r200c,rmax,concentration)
         ! Compute clump purity
         purity=c%npart(j)*g%mp_min/mass
 
@@ -119,7 +119,7 @@ subroutine output_clump_properties(s,filename)
                 ,c%clump_mass(j)/c%clump_vol(j)&
                 ,c%clump_mass(j)&
                 ,mass&
-                ,r200b&
+                ,r200c&
                 ,rmax&
                 ,concentration&
                 ,c%peak_pos(j,1),c%peak_pos(j,2),c%peak_pos(j,3)&
@@ -138,21 +138,20 @@ end subroutine output_clump_properties
 !###################################################
 !###################################################
 !###################################################
-subroutine halo_mass_def(s,mbin,rad,r200b,rmax,c)
+subroutine halo_mass_def(s,mbin,rad,r200c,rmax,c)
   use amr_parameters, only: nbin
   use ramses_commons, only: ramses_t
   type(ramses_t)::s
   real(kind=8),dimension(1:nbin)::mbin
-  real(kind=8)::rad,rmax,r200b,c,deltamax,cmin,cmax
+  real(kind=8)::rad,rmax,r200c,c,deltamax,cmin,cmax
   real(kind=8)::pi,G,delta,deltaold,rbin,vcirc,volbin,alpha
-  real(kind=8)::d200,vmax,v200b,c0,cl,cr,err,const,dr
+  real(kind=8)::d200c,vmax,v200c,c0,cl,cr,err,const,dr
   integer::i,imax
   ! Constants
   pi=ACOS(-1.0D0)
   G=1d0
   if(s%r%cosmo)G=3d0/8d0/pi*s%g%omega_m*s%g%aexp
-  !d200=s%r%density_threshold*200d0/80d0
-  d200 = 200d0
+  d200c = 200d0/s%g%omega_m !200c is 200 times the critical density, not the mean density
   ! Find densest bin
   deltamax=0
   imax=1
@@ -170,7 +169,7 @@ subroutine halo_mass_def(s,mbin,rad,r200b,rmax,c)
   end do
   ! Initializations
   vmax=0
-  r200b=0
+  r200c=0
   rmax=0
   delta=0
   ! Loop over radial bins
@@ -185,25 +184,25 @@ subroutine halo_mass_def(s,mbin,rad,r200b,rmax,c)
      volbin=4d0/3d0*pi*rbin**3
      deltaold=delta
      delta=mbin(i)/volbin
-     if(delta<=d200.and.r200b==0)then
+     if(delta<=d200c.and.r200c==0)then
         if(deltaold>0)then
-           alpha=log(d200/delta)/log(deltaold/delta)
-           r200b=rbin*(dble(i-1)/dble(i))**alpha
+           alpha=log(d200c/delta)/log(deltaold/delta)
+           r200c=rbin*(dble(i-1)/dble(i))**alpha
         else
-           r200b=rbin
+           r200c=rbin
         endif
      endif
   end do
-  ! Compute quantities at r200b
-  if(delta>d200.and.r200b==0)then
-     alpha=log(d200/delta)/log(deltaold/delta)
-     r200b=2d0*rad*(dble(nbin-1)/dble(nbin))**alpha
+  ! Compute quantities at r200c
+  if(delta>d200c.and.r200c==0)then
+     alpha=log(d200c/delta)/log(deltaold/delta)
+     r200c=2d0*rad*(dble(nbin-1)/dble(nbin))**alpha
   endif
   c0=2.1626
-  v200b=sqrt(G*4d0*pi/3d0*d200*r200b**2)
+  v200c=sqrt(G*4d0*pi/3d0*d200c*r200c**2)
   ! Find concentration parameter
-  vmax=max(vmax,v200b)
-  const=MIN(dble(vmax**2/v200b**2),4d0)*c0/(log(1d0+c0)-c0/(1d0+c0))
+  vmax=max(vmax,v200c)
+  const=MIN(dble(vmax**2/v200c**2),4d0)*c0/(log(1d0+c0)-c0/(1d0+c0))
   ! Find large root
   cl=c0
   cr=100d0
@@ -237,12 +236,12 @@ subroutine halo_mass_def(s,mbin,rad,r200b,rmax,c)
   end do
   cmin=c
   ! Choose the right root
-  if(rmax>r200b)then
+  if(rmax>r200c)then
      c=cmin
   else
      c=cmax
   endif
-!!$  write(*,*)c,r200b,v200b,rmax,vmax
+!!$  write(*,*)c,r200c,v200c,rmax,vmax
 !!$  do i=1,nbin
 !!$     if(mbin(i)==0)cycle
 !!$     rbin=dble(i)*dr
