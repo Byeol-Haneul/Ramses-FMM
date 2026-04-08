@@ -142,6 +142,9 @@ subroutine set_unew(r,g,m,ilevel)
   !$OMP PARALLEL DO
   do i = m%head(ilevel),m%tail(ilevel)
      m%unew(:,:,i) = m%uold(:,:,i)
+#ifdef TRCFLX
+     m%mflux(:,:,i) = 0.0d0
+#endif
   end do
   !$OMP END PARALLEL DO
 #endif
@@ -276,6 +279,7 @@ subroutine godfine1(s,ind_grid,ilevel,h)
   logical::okx,oky,okz,oknbor
   logical::ok1,ok2,ok3
   integer::igrid,ichild
+  real(kind=8)::fluxL,fluxR
 
 #ifdef MHD
   jj(1:8,1)=(/4,1,4,1,4,1,4,1/)
@@ -747,6 +751,16 @@ subroutine godfine1(s,ind_grid,ilevel,h)
 #endif
 #if NDIM>2
                        k3=1+2*(k1-1)+k2
+#endif
+                       ! Store old density for MC tracers
+#ifdef TRCFLX
+                       m%mflux(ind_son,1,ichild) = max(m%uold(ind_son,1,ichild), r%smallr)
+
+                       ! Store time-integrated mass flux on the two faces along the current direction
+                       fluxL = h%flux(i3   ,j3   ,k3   ,1,idim)
+                       fluxR = h%flux(i3+i0,j3+j0,k3+k0,1,idim)
+                       m%mflux(ind_son,1+idim,ichild)=fluxL
+                       m%mflux(ind_son,1+ndim+idim,ichild)=fluxR
 #endif
                        ! Update conservative variables new state vector
                        do ivar=1,5
@@ -1335,6 +1349,9 @@ subroutine init_flush_godunov(mesh,igrid,hash_key)
         mesh%unew(ind,ivar,igrid)=0.0d0
      enddo
   enddo
+#ifdef TRCFLX
+  mesh%mflux(:,:,igrid)=0.0d0
+#endif
 #endif
 
 #ifdef MHD
@@ -1369,8 +1386,10 @@ subroutine pack_flush_godunov(mesh,igrid,msg_size,msg_array)
         msg%realdp_hydro(ind,ivar)=mesh%unew(ind,ivar,igrid)
      end do
   end do
+#ifdef TRCFLX
+  msg%realdp_mflux=mesh%mflux(:,:,igrid)
 #endif
-
+#endif
 #ifdef MHD
   do ivar=1,6
      do ind=1,twotondim
@@ -1410,6 +1429,9 @@ subroutine unpack_flush_godunov(mesh,igrid,msg_size,msg_array,hash_key)
         mesh%unew(ind,ivar,igrid)=mesh%unew(ind,ivar,igrid)+msg%realdp_hydro(ind,ivar)
      end do
   end do
+#ifdef TRCFLX
+  mesh%mflux(:,:,igrid)=mesh%mflux(:,:,igrid)+msg%realdp_mflux
+#endif
 #endif
 
 #ifdef MHD

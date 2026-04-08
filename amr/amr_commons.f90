@@ -71,6 +71,8 @@ module amr_commons
      integer::ndustmax=0         ! Maximum number of dust particles
      integer::ntrac_per_cell=1   ! Number of tracer particles per cell in ICs
      integer::ndust_per_cell=1   ! Number of dust particles per cell in ICs
+     logical::part_subcell_positions=.true.  ! Use subcell positions for particles
+     character(LEN=32)::tracer_kick_pdf='piecewise_skew_uniform' ! Tracer kick PDF type
      real(kind=8)::dust_to_gas_mass_ratio=0.0d0   ! Dust to gas mass ratio
      real(kind=8)::grain_size_parameter=0.0d0   ! Dust particle size parameter (dimensionless)
      real(kind=8)::grain_charge_parameter=0.0d0  ! Dust particle charge-to-mass ratio (dimensionless)
@@ -134,6 +136,8 @@ module amr_commons
      logical ::induction=.false.
      logical ::entropy=.false.
      logical ::sgs_turb=.false.
+     logical ::equilibrium_sgs=.false.       ! Equilibrium SGS turbulence
+     real(kind=8)::smagorinsky_lilly_constant=1.0d0 ! Smagorinsky-Lilly constant for SGS turbulence
      real(kind=8)::dual_energy=-1
      real(kind=8)::T2_fix=0d0
      character(LEN=10)::scheme='muscl'
@@ -693,6 +697,9 @@ module amr_commons
 #ifdef HYDRO
      real(dp),allocatable,dimension(:,:,:)::uold
      real(dp),allocatable,dimension(:,:,:)::unew
+#ifdef TRCFLX
+     real(dp),allocatable,dimension(:,:,:)::mflux      ! Time-integrated mass flux for tracers
+#endif
 #endif
 #ifdef MHD
      real(dp),allocatable,dimension(:,:,:)::bold

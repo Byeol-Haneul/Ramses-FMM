@@ -74,6 +74,7 @@ subroutine m_read_params(pst)
   ! IC subcell multiplicity
   integer::ntrac_per_cell=1
   integer::ndust_per_cell=1
+  logical :: part_subcell_positions=.true.
 
   ! Dust parameters
   real(kind=8)::dust_to_gas_mass_ratio=0.0d0
@@ -81,6 +82,9 @@ subroutine m_read_params(pst)
   real(kind=8)::grain_charge_parameter=0.0d0
   real(kind=8)::dust_gyro_factor=0.1d0 ! At least 10 steps per gyro-period.
   logical :: analytic_dust_force = .false.
+
+  ! Tracer parameters
+  character(LEN=32)::tracer_kick_pdf='piecewise_skew_uniform' ! Tracer kick PDF
 
   ! Number of superoct levels
   integer::nsuperoct=0
@@ -273,11 +277,13 @@ subroutine m_read_params(pst)
   logical ::induction=.false.
   logical ::entropy=.false.
   logical ::sgs_turb=.false.
+  logical ::equilibrium_sgs=.false.
   real(kind=8)::dual_energy=-1
   real(kind=8)::T2_fix=0d0
   real(kind=8),dimension(1:3)::constant_gravity=0.0d0
   real(kind=8)::switch_llf_dmin=-1
   real(kind=8)::switch_llf_pmin=-1
+  real(kind=8)::smagorinsky_lilly_constant=1.0d0
 
   ! Non-thernal energies and passive scalars index
   integer ::inener,ientropy,imetal,iturb,ichem
@@ -304,9 +310,9 @@ subroutine m_read_params(pst)
   integer :: sink_force_interpolation_scheme=1 ! sink force interpolation schemes
   integer :: tree_mass_deposition_scheme=1     ! tree mass deposition schemes
   integer :: tree_force_interpolation_scheme=1 ! tree force interpolation schemes
-  integer :: trac_interpolation_scheme=1 ! tracer force interpolation schemes
+  integer :: trac_interpolation_scheme=1 ! tracer interpolation/numerical schemes
   integer :: dust_mass_deposition_scheme=1 ! dust mass deposition schemes
-  integer :: dust_force_interpolation_scheme=1 ! dust force interpolation schemes
+  integer :: dust_force_interpolation_scheme=1 ! dust force interpolation/numerical schemes
 
   ! Boundary conditions parameters
   integer::nbound=0
@@ -574,8 +580,8 @@ subroutine m_read_params(pst)
   ! Hydro solver parameters
   namelist/hydro_params/gamma,courant_factor,smallr,smallc &
        & ,slope_type,slope_mag_type,difmag,etamag,gamma_rad &
-       & ,dual_energy,T2_fix,induction,entropy,sgs_turb,riemann,riemann2d,constant_gravity &
-       & ,niter_riemann,scheme,switch_llf_dmin,switch_llf_pmin
+       & ,dual_energy,T2_fix,induction,entropy,sgs_turb,equilibrium_sgs,riemann,riemann2d,constant_gravity &
+       & ,niter_riemann,scheme,switch_llf_dmin,switch_llf_pmin,smagorinsky_lilly_constant
   ! Grid refinement parameters
   namelist/refine_params/x_refine,y_refine,z_refine,r_refine &
        & ,a_refine,b_refine,exp_refine,jeans_refine,mass_cut_refine &
@@ -624,7 +630,7 @@ subroutine m_read_params(pst)
        & ,rtz_primary_cosmic_ray_ionization_rate, rtz_include_HM12_UVB, isH2_rtz &
        & ,rtz_max_cool_timestep, rtz_eqm_min_its
   ! Tracer particles parameters
-  namelist/trac_params/trac,ntracmax,ntractot,ntrac_per_cell,trac_interpolation_scheme
+  namelist/trac_params/trac,ntracmax,ntractot,ntrac_per_cell,trac_interpolation_scheme,part_subcell_positions,tracer_kick_pdf
   namelist/dust_params/dust,ndustmax,ndusttot,ndust_per_cell,dust_to_gas_mass_ratio,&
   & grain_size_parameter,grain_charge_parameter,dust_mass_deposition_scheme,dust_force_interpolation_scheme,dust_gyro_factor,analytic_dust_force
   ! Star particles and star formation recipe
@@ -1031,6 +1037,16 @@ subroutine m_read_params(pst)
   if(sgs_turb)then
      ichem=iturb+1
   endif
+
+  !--------------------------------------------------
+  ! Check for sgs_turb
+  !--------------------------------------------------
+  if(sgs_turb.and.iturb>nvar)then
+     write(*,*)'Error: sgs_turb=.true. needs nvar >= ',iturb
+     write(*,*)'Currently nvar=',nvar,' but iturb=',iturb
+     write(*,*)'Modify NVAR and recompile'
+     nml_ok=.false.
+  endif
   if(hydro.and.(nvar>5)) then
      write(*,'(A50)')"__________________________________________________"
      write(*,*) 'Hydro var extra indices:'
@@ -1218,6 +1234,8 @@ subroutine m_read_params(pst)
   s%r%ndustmax=ndustmax
   s%r%ntrac_per_cell=ntrac_per_cell
   s%r%ndust_per_cell=ndust_per_cell
+  s%r%part_subcell_positions=part_subcell_positions
+  s%r%tracer_kick_pdf=tracer_kick_pdf
   s%r%dust_to_gas_mass_ratio=dust_to_gas_mass_ratio
   s%r%grain_size_parameter=grain_size_parameter
   s%r%grain_charge_parameter=grain_charge_parameter
@@ -1288,6 +1306,7 @@ subroutine m_read_params(pst)
   s%r%induction=induction
   s%r%entropy=entropy
   s%r%sgs_turb=sgs_turb
+  s%r%equilibrium_sgs=equilibrium_sgs
   s%r%inener=inener
   s%r%ientropy=ientropy
   s%r%imetal=imetal
@@ -1319,6 +1338,7 @@ subroutine m_read_params(pst)
 #endif
   s%r%switch_llf_dmin=switch_llf_dmin
   s%r%switch_llf_pmin=switch_llf_pmin
+  s%r%smagorinsky_lilly_constant=smagorinsky_lilly_constant
 
   s%r%units_density=units_density
   s%r%units_time=units_time

@@ -15,6 +15,7 @@ UNITS =
 NENER = 0
 NMETAL = 0
 TURB = 0
+TRCFLX = 0
 N_HYDROGEN_IONS = 0
 N_H2 = 0
 N_HELIUM_IONS = 0
@@ -81,6 +82,9 @@ ifeq ($(GRAV),1)
 endif
 ifeq ($(TURB),1)
    DEFINES += -DTURB
+endif
+ifeq ($(TRCFLX),1)
+   DEFINES += -DTRCFLX
 endif
 ifneq ($(NENER),0)
    DEFINES += -DNENER=$(NENER)
