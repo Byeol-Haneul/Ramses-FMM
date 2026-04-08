@@ -337,8 +337,10 @@ program amr2map
                       & iy<=mapgrid(ilevel)%jmax)then
 
                     if(do_max)then
-                       mapgrid(ilevel)%map(ix,iy)=max(mapgrid(ilevel)%map(ix,iy),map)
-                       mapgrid(ilevel)%rho(ix,iy)=max(mapgrid(ilevel)%rho(ix,iy),rho)
+                       if(weight>0d0)then
+                          mapgrid(ilevel)%map(ix,iy)=max(mapgrid(ilevel)%map(ix,iy),map)
+                          mapgrid(ilevel)%rho(ix,iy)=max(mapgrid(ilevel)%rho(ix,iy),rho)
+                       endif
                     else
                        mapgrid(ilevel)%map(ix,iy)=mapgrid(ilevel)%map(ix,iy)+map*dxline*weight/(zzmax-zzmin)
                        mapgrid(ilevel)%rho(ix,iy)=mapgrid(ilevel)%rho(ix,iy)+rho*dxline*weight/(zzmax-zzmin)

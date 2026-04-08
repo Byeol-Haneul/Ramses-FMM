@@ -648,17 +648,27 @@ module amr_commons
   end type global_t
 
   type mesh_t
+     ! For GPU, is data on device
+     logical::data_on_device=.false.
+
      ! Level related arrays
      integer(kind=4),allocatable,dimension(:)::head      ! Starting index for each level
      integer(kind=4),allocatable,dimension(:)::tail      ! Final index for each level
      integer(kind=4),allocatable,dimension(:)::noct      ! Number of octs for each level
      integer::ifree                                      ! Index of first oct in free memory
 
+     ! Cache related arrays
+     integer(kind=4),allocatable,dimension(:)::head_cache
+     integer(kind=4),allocatable,dimension(:)::tail_cache
+     integer(kind=4),allocatable,dimension(:)::noct_cache
+     integer::ifree_cache
+
      integer(kind=4),allocatable,dimension(:)::noct_min  ! Min. number of octs across cpus
      integer(kind=4),allocatable,dimension(:)::noct_max  ! Max. number of octs across cpus
      integer(kind=8),allocatable,dimension(:)::noct_tot  ! Total number of octs across cpus
 
      integer(kind=4),allocatable,dimension(:)::ckey_max        ! Max. Cartesian key per level
+     integer(kind=8),allocatable,dimension(:)::key_off         ! Key offset for GPU nly
      integer(kind=8),allocatable,dimension(:,:)::hkey_max      ! Max. Hilbert key per level
      integer(kind=4),allocatable,dimension(:,:)::box_ckey_min  ! Min. Cartesian key per level for the box
      integer(kind=4),allocatable,dimension(:,:)::box_ckey_max  ! Max. Cartesian key per level for the box
@@ -678,6 +688,8 @@ module amr_commons
 
      ! Grid hash table
      type(hash_table)::grid_dict
+     integer(kind=4)::hash_size
+     integer(kind=4)::hash_used
 
      ! Grid variables
      integer,allocatable,dimension(:,:)::flag1

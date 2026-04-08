@@ -26,7 +26,9 @@ subroutine m_rho_fine(pst,ilevel,rtype)
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
 
   if(m%noct_tot(ilevel)==0)return
-  if(r%verbose)write(*,'(" Entering rho_fine for level ",I2)')ilevel
+  if(.not. r%poisson .and. .not. r%pic)return
+
+  if(r%verbose)write(*,'("   Entering rho_fine for level ",I2)')ilevel
 
   !---------------------------
   ! Reset multipole to zero

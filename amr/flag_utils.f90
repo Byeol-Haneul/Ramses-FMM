@@ -3,7 +3,11 @@
 !################################################################
 !################################################################
 module flag_utils
-
+#ifdef _CUDA
+  use gpu_utils, only: nsubgrid
+  use gpu_runner, only: gpu_init_flag, gpu_enforce_rules, gpu_user_flag, gpu_enforce_subgrid
+  use nvtx
+#endif
 contains
 
 subroutine m_flag_fine(pst,ilevel,icount)
@@ -19,7 +23,7 @@ subroutine m_flag_fine(pst,ilevel,icount)
   integer::nflag_tot
 
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,mdl=>pst%s%mdl)
-  
+
   if(ilevel==r%nlevelmax)return
   if(ilevel<r%levelmin)return
   if(m%noct_tot(ilevel)==0)return
@@ -29,7 +33,7 @@ subroutine m_flag_fine(pst,ilevel,icount)
   ! Step 1: initialize refinement map to minimal refinement rules
   call r_init_flag(pst,ilevel,1,nflag_tot,1)
   if(r%verbose)write(*,*) '  ==> end step 1',nflag_tot
-  
+
   ! Step 2: make one cubic buffer around flagged cells,
   ! in order to enforce numerical rule.
   call r_smooth_fine(pst,ilevel,1,nflag_tot,1)
@@ -46,6 +50,13 @@ subroutine m_flag_fine(pst,ilevel,icount)
   end do
   if(r%verbose)write(*,*) '  ==> end step 4',nflag_tot
 
+  ! In case of GPU and nsubgrid > 1, force refine the entire oct,
+#ifdef _CUDA
+  if (nsubgrid > 1)then
+     call r_ensure_subgrid(pst,ilevel,1)
+  endif
+#endif
+
   ! In case of adaptive time step ONLY, check for refinement rules
   ! and unflag cells that will not be refined.
   if(ilevel>r%levelmin)then
@@ -55,7 +66,7 @@ subroutine m_flag_fine(pst,ilevel,icount)
   end if
 
   end associate
-  
+
 end subroutine m_flag_fine
 !################################################################
 !################################################################
@@ -81,7 +92,17 @@ recursive subroutine r_init_flag(pst,ilevel,input_size,noct,output_size)
      call mdl_get_reply(pst%s%mdl,rID,output_size,next_noct)
      noct=noct+next_noct
   else
+#ifdef _CUDA
+     if(pst%s%m%data_on_device)then
+        call nvtxStartRange("GPU Initflag", color=6)!teal
+        call gpu_init_flag(pst%s, ilevel, nflag)
+        call nvtxEndRange()
+     else
+        call init_flag(pst%s,ilevel,nflag)
+     endif
+#else
      call init_flag(pst%s,ilevel,nflag)
+#endif
      noct=nflag
   endif
 
@@ -150,6 +171,77 @@ subroutine init_flag(s,ilevel,nflag)
   end associate
   
 end subroutine init_flag
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+recursive subroutine r_ensure_subgrid(pst,ilevel,input_size)
+  use mdl_module
+  use ramses_commons, only: pst_t
+  use mdl_parameters
+  implicit none
+  type(pst_t)::pst
+  integer,VALUE::input_size
+  integer::ilevel
+
+  integer::rID
+
+  if(pst%nLower>0)then
+     rID = mdl_send_request(pst%s%mdl,MDL_ENSURE_SUBGRID,pst%iUpper+1,input_size,0,ilevel)
+     call r_ensure_subgrid(pst%pLower,ilevel,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
+  else
+#ifdef _CUDA
+     if(pst%s%m%data_on_device)then
+        call nvtxStartRange("GPU Enforce subgrid", color=6)!teal
+        call gpu_enforce_subgrid(pst%s, ilevel)
+        call nvtxEndRange()
+     else
+        call ensure_subgrid(pst%s,ilevel)
+     endif
+#else
+     call ensure_subgrid(pst%s,ilevel)
+#endif
+  endif
+
+end subroutine r_ensure_subgrid
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine ensure_subgrid(s,ilevel)
+  use amr_parameters, only: ndim, twotondim
+  use ramses_commons, only: ramses_t
+  use cache_commons
+  use cache
+  use nbors_utils
+  implicit none
+  type(ramses_t)::s
+  integer::ilevel
+  !-------------------------------------------
+  ! This routine forces flag = 1 in the entire
+  ! oct if one cell is flagged.
+  !-------------------------------------------
+  integer :: igrid, ind
+  logical :: ok
+
+  associate(g=>s%g, m=>s%m, mdl=>s%mdl)
+
+  do igrid = m%head(ilevel), m%tail(ilevel)
+     ok = .false.
+     do ind = 1, twotondim
+        ok = ok .or. (m%flag1(ind, igrid) == 1)
+     end do
+     if (ok) then
+        do ind = 1, twotondim
+           m%flag1(ind, igrid) = 1
+        end do
+     end if
+  end do
+
+  end associate
+
+end subroutine ensure_subgrid
 !###############################################################
 !###############################################################
 !###############################################################
@@ -243,7 +335,17 @@ recursive subroutine r_user_flag(pst,ilevel,input_size,noct,output_size)
      call mdl_get_reply(pst%s%mdl,rID,output_size,next_noct)
      noct=noct+next_noct
   else
+#ifdef _CUDA
+     if(pst%s%m%data_on_device)then
+        call nvtxStartRange("GPU Userflag", color=6)!teal
+        call gpu_user_flag(pst%s, ilevel, nflag)
+        call nvtxEndRange()
+     else
+        call user_flag(pst%s,ilevel,nflag)
+     endif
+#else
      call user_flag(pst%s,ilevel,nflag)
+#endif
      noct=nflag
   endif
 
@@ -311,7 +413,17 @@ recursive subroutine r_ensure_ref_rules(pst,ilevel,input_size)
      call r_ensure_ref_rules(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
+#ifdef _CUDA
+     if(pst%s%m%data_on_device)then
+        call nvtxStartRange("GPU enforce rules", color=6)!teal
+        call gpu_enforce_rules(pst%s, ilevel)
+        call nvtxEndRange()
+     else
+        call ensure_ref_rules(pst%s,ilevel)
+     endif
+#else
      call ensure_ref_rules(pst%s,ilevel)
+#endif
   endif
 
 end subroutine r_ensure_ref_rules
@@ -362,7 +474,7 @@ subroutine ensure_ref_rules(s,ilevel)
 
   hash_nbor(0)=ilevel
   do igrid=m%head(ilevel),m%tail(ilevel)
-     
+
      ok=.true.
 
      ! Loop over 3x3x3 neighboring father cells
@@ -407,7 +519,7 @@ subroutine ensure_ref_rules(s,ilevel)
   call close_cache(mdl)
 
   end associate
-  
+
 end subroutine ensure_ref_rules
 !############################################################
 !############################################################

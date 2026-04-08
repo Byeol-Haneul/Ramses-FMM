@@ -1,0 +1,78 @@
+module cooling_device
+  use amr_parameters, only: dp, ndim, twondim, twotondim, nhilbert
+  use hydro_parameters, only: nvar
+  use oct_commons, only: oct
+  use cudafor
+  implicit none
+
+contains
+
+  include 'gpu_hash.cuf'
+  include 'gpu_hilbert.cuf'
+  include 'gpu_scan.cuf'
+  include 'gpu_reduce.cuf'
+
+  ! =========================================================================
+  attributes(global) subroutine cooling_kernel(uold, head_idx, num_octs, gamma, dt &
+       & eos_type, eos_T2, eos_nH, eos_index, scale_T2, scale_nH)
+    real(kind=dp), device :: uold(1:twotondim,1:nvar,*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+    real(kind=dp), value :: gamma, dt
+    real(kind=dp), value :: eos_T2, eos_nH, eos_index
+    real(kind=dp), value :: scale_T2, scale_nH
+    integer(kind=4), value :: eos_type
+
+    integer :: cell_idx, oct_idx, block_idx
+    real(kind=dp) :: density, energy, kinetic, temperature, nH
+    real(kind=dp) :: velocity_x, velocity_y, velocity_z
+
+    block_idx = blockIdx%x - 1
+
+    ! Compute the oct idx
+    oct_idx = block_idx * blockDim%y + threadIdx%y - 1
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Compute the cell idx
+    cell_idx = threadIdx%x
+
+    ! Get cell physical variables
+    density     = uold(cell_idx, 1, oct_idx)
+    velocity_x  = uold(cell_idx, 2, oct_idx) / density
+    velocity_y  = uold(cell_idx, 3, oct_idx) / density
+    velocity_z  = uold(cell_idx, 4, oct_idx) / density
+    energy      = uold(cell_idx, 5, oct_idx) / density
+    kinetic     = 0.5 * (velocity_x**2 + velocity_y**2 + velocity_z**2)
+    temperature = (gamma - 1.0d0) * (energy - kinetic) * scale_T2
+    nH          = density * scale_nH
+
+    ! Compute minimum temperature for isothermal/polytropic EOS.
+    if(eos_type == 1)then ! Strictly isothermal
+       T2min = eos_T2
+    else if(eos_type == 2)then ! Power law
+       T2min = eos_T2 * (nH / eos_nH)**(eos_index - 1.0d0)
+    else if(eos_type == 3)then ! Smooth transition from isothermal to power law
+       T2min = eos_T2 * (1 + (nH / eos_nH)**(eos_index - 1.0d0))
+    else if(eos_type == 4)then ! Sharp transition from isothermal to power law
+       if(nH < eos_nH)then
+          T2min = eos_T2
+       else
+          T2min = eos_T2 * (nH / eos_nH)**(eos_index - 1.0d0)
+       endif
+    endif
+
+    ! Set gas temperature to T2min
+    temperature = T2min
+
+    ! Convert back to conservative variables
+    energy = temperature / scale_T2 / (gamma - 1.0d0) + kinetic
+
+    ! Update unew in main memory
+    uold(cell_idx, 5, oct_idx) = density * energy
+
+  end subroutine cooling_kernel
+  ! =========================================================================~
+
+end module cooling_device
+

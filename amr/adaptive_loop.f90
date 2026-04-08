@@ -10,6 +10,7 @@ subroutine adaptive_loop(pst)
   use init_xion_module, only: m_init_xion
   use input_part_module, only: m_input_part
   use init_refine_basegrid_module, only: m_init_refine_basegrid
+  use init_refine_adaptive_module, only: m_init_refine_adaptive
   use init_refine_restart_module, only: m_init_refine_restart
   use init_refine_ramses_module, only: m_init_refine_ramses
   use turb_init_module, only: r_init_turb
@@ -131,10 +132,10 @@ subroutine adaptive_loop(pst)
 
      call getmem(core_mem)
      call writemem(core_mem)
-     
+
   end do
 
-  call m_output_timer(pst,.false.,'dummy')
+  call m_output_timer(.false.,'dummy')
 
 !  call r_hash_stats(pst)
 

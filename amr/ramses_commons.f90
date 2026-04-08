@@ -92,7 +92,7 @@ subroutine open_file(s,filename,nskip,ilun)
 
 #ifndef WITHOUTMPI
   if(g%myid.EQ.istart(ifile+1)-1)then
-     noct=m%noct
+     noct=m%noct(s%r%levelmin:s%r%nlevelmax)
      if(g%myid.GT.istart(ifile))then
      call MPI_ISEND(noct,r%nlevelmax-r%levelmin+1,MPI_INTEGER8,g%myid-2,tag1,MPI_COMM_WORLD,reqsend,info)
      call MPI_WAIT(reqsend,reqstatus,info)
@@ -100,18 +100,18 @@ subroutine open_file(s,filename,nskip,ilun)
   elseif(g%myid.GT.istart(ifile))then
      call MPI_IRECV(noct,r%nlevelmax-r%levelmin+1,MPI_INTEGER8,g%myid,tag1,MPI_COMM_WORLD,reqrecv,info)
      call MPI_WAIT(reqrecv,reqstatus,info)
-     noct=noct+m%noct
+     noct=noct+m%noct(s%r%levelmin:s%r%nlevelmax)
      call MPI_ISEND(noct,r%nlevelmax-r%levelmin+1,MPI_INTEGER8,g%myid-2,tag1,MPI_COMM_WORLD,reqsend,info)
      call MPI_WAIT(reqsend,reqstatus,info)
   elseif(g%myid.EQ.istart(ifile))then
      call MPI_IRECV(noct,r%nlevelmax-r%levelmin+1,MPI_INTEGER8,g%myid,tag1,MPI_COMM_WORLD,reqrecv,info)
      call MPI_WAIT(reqrecv,reqstatus,info)
-     noct=noct+m%noct
+     noct=noct+m%noct(s%r%levelmin:s%r%nlevelmax)
   else
      write(*,*)'Problem in open_file'
   endif
 #else
-  noct=m%noct
+  noct=m%noct(s%r%levelmin:s%r%nlevelmax)
 #endif
 
   if(g%myid.EQ.istart(ifile))then
