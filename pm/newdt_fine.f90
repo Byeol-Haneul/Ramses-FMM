@@ -12,6 +12,10 @@ type :: out_max_sigma_t
   real(kind=8)::max_sigma
 end type out_max_sigma_t
 
+type :: out_min_nu_eff_t
+  real(kind=8)::min_nu_eff
+end type out_min_nu_eff_t
+
 type :: in_broadcast_dt_t
   integer::ilevel
   real(kind=8)::dtnew,dtold
@@ -40,7 +44,6 @@ subroutine m_newdt_fine(pst,ilevel)
   real(kind=8)::dx,tff,fourpi,threepi2
   real(kind=8)::ekin,vmax
   real(kind=8)::dt_gyro, max_b, max_q
-  real(kind=8)::sigma_max_global
   type(out_courant_fine_t)::out_courant_fine
   type(out_newdt_part_t)::out_newdt_part
   type(in_broadcast_dt_t)::in_broadcast_dt
@@ -75,19 +78,6 @@ subroutine m_newdt_fine(pst,ilevel)
      g%dtnew(ilevel)=MIN(g%dtnew(ilevel),0.1/g%hexp)
   end if
 
-  ! Estimate maximum SGS turbulent speed at this level (for particle CFL)
-  sigma_max_global = 0.0d0
-  if(r%pic .and. r%sgs_turb .and. r%iturb>0 .and. &
-  &( r%trac_interpolation_scheme==6 .or. r%trac_interpolation_scheme==7 .or. &
-  &  r%dust_force_interpolation_scheme==6 .or. r%dust_force_interpolation_scheme==7))then
-     block
-       type(out_max_sigma_t)::sigout
-       sigout%max_sigma = 0.0d0
-       call r_max_sigma(pst,ilevel,1,sigout,storage_size(sigout)/32)
-       sigma_max_global = sigout%max_sigma
-     end block
-  end if
-
   ! Turbulence driving condition
   if(r%turb)then
      g%dtnew(ilevel)=MIN(g%dtnew(ilevel),pst%s%turb%turb_dt)
@@ -100,9 +90,9 @@ subroutine m_newdt_fine(pst,ilevel)
      ekin=out_newdt_part%ekin
      g%ekin_tot=g%ekin_tot+ekin
      vmax=out_newdt_part%vmax
-     if(vmax>0.0d0 .or. sigma_max_global>0.0d0)then
+     if(vmax>0.0d0)then
         g%dtnew(ilevel)=MIN(real(g%dtnew(ilevel),kind=8), &
-             r%courant_factor*dx/(vmax + sigma_max_global))
+             r%courant_factor*dx/vmax)
      endif
   endif
 
@@ -119,7 +109,7 @@ subroutine m_newdt_fine(pst,ilevel)
 
   ! Dust gyro-frequency timestep constraint (MHD + dust only)
 #ifdef MHD
-  if(r%dust)then
+  if(r%dust .and. r%dust_gyro_factor>0.0d0 .and. .not. r%dust_substep)then
      ! Compute maximum |B| at this level and maximum particle charge |q|
      block
        type(out_max_bq_t)::bq
@@ -131,6 +121,20 @@ subroutine m_newdt_fine(pst,ilevel)
         dt_gyro = r%dust_gyro_factor * twopi / (max_q * max_b)
         g%dtnew(ilevel)=MIN(real(g%dtnew(ilevel),kind=8), dt_gyro)
      endif
+  endif
+#endif
+
+  ! Guiding center negative nu_eff timestep restriction
+#ifdef TRCFLX
+  if(r%dust)then
+     block
+       type(out_min_nu_eff_t)::nuout
+       nuout%min_nu_eff = 0.0d0
+       call r_min_nu_eff_gc(pst, ilevel, 1, nuout, storage_size(nuout)/32)
+       if(nuout%min_nu_eff < 0.0d0)then
+          g%dtnew(ilevel) = MIN(real(g%dtnew(ilevel),kind=8), -0.1d0/nuout%min_nu_eff)
+       endif
+     end block
   endif
 #endif
 
@@ -223,60 +227,6 @@ subroutine max_B_and_Q(r,g,m,p,ilevel,max_b,max_q)
 
 end subroutine max_B_and_Q
 
-recursive subroutine r_max_sigma(pst, ilevel, input_size, output, output_size)
-  use mdl_module
-  use ramses_commons, only: pst_t
-  use mdl_parameters
-  use amr_parameters, only: ndim, twotondim
-  implicit none
-  type(pst_t)::pst
-  integer::ilevel
-  integer,VALUE::input_size
-  integer::output_size
-  type(out_max_sigma_t)::output, next_output
-
-  integer::rID
-
-  if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_MAX_SIGMA,pst%iUpper+1,input_size,output_size,ilevel)
-     call r_max_sigma(pst%pLower,ilevel,input_size,output,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size,next_output)
-     output%max_sigma = MAX(output%max_sigma, next_output%max_sigma)
-  else
-     call max_sigma(pst%s%r,pst%s%m,ilevel,output%max_sigma)
-  endif
-
-end subroutine r_max_sigma
-
-subroutine max_sigma(r,m,ilevel,sigma_max)
-  use amr_parameters, only: ndim, twotondim
-  use amr_commons, only: run_t, mesh_t
-  implicit none
-  type(run_t)::r
-  type(mesh_t)::m
-  integer::ilevel
-  real(kind=8)::sigma_max
-
-  integer::igrid,ind
-  real(kind=8)::dens_turb,e_turb,sigma_sq,sigma_cell
-
-  sigma_max = 0.0d0
-  if(.not.(r%sgs_turb .and. r%iturb>0))return
-
-  do igrid=m%head(ilevel),m%tail(ilevel)
-     do ind=1,twotondim
-        if(.not. m%grid(igrid)%refined(ind))then
-           dens_turb = max(dble(m%uold(ind,1,igrid)), r%smallr)
-           e_turb    = max(dble(m%uold(ind,r%iturb,igrid)), 0.0d0)
-           sigma_sq  = max(2.0d0*e_turb/dens_turb, dble(r%smallc)**2)
-           sigma_cell = sqrt(sigma_sq)
-           if(sigma_cell>sigma_max)sigma_max=sigma_cell
-        end if
-     end do
-  end do
-
-end subroutine max_sigma
-
 recursive subroutine r_newdt_part(pst,ilevel,input_size,output,output_size)
   use mdl_module
   use ramses_commons, only: pst_t
@@ -314,7 +264,7 @@ recursive subroutine r_newdt_part(pst,ilevel,input_size,output,output_size)
      if(pst%s%r%trac)then
         call newdt_part(pst%s%r,pst%s%g,pst%s%trac,ilevel,output%ekin,output%vmax)
      endif
-     if(pst%s%r%dust)then
+     if(pst%s%r%dust .and. .not. pst%s%r%dust_substep)then
         call newdt_part(pst%s%r,pst%s%g,pst%s%dust,ilevel,output%ekin,output%vmax)
      endif
   endif
@@ -359,6 +309,52 @@ end subroutine newdt_part
 !#####################################################################
 !#####################################################################
 !#####################################################################
+recursive subroutine r_min_nu_eff_gc(pst,ilevel,input_size,output,output_size)
+  use mdl_module
+  use ramses_commons, only: pst_t
+  use mdl_parameters
+  implicit none
+  type(pst_t)::pst
+  integer::ilevel
+  integer,VALUE::input_size
+  integer::output_size
+  type(out_min_nu_eff_t)::output, next_output
+
+  integer::rID
+
+  if(pst%nLower>0)then
+     rID = mdl_send_request(pst%s%mdl,MDL_MIN_NU_EFF_GC,pst%iUpper+1,input_size,output_size,ilevel)
+     call r_min_nu_eff_gc(pst%pLower,ilevel,input_size,output,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_output)
+     output%min_nu_eff = MIN(output%min_nu_eff, next_output%min_nu_eff)
+  else
+     call min_nu_eff_gc(pst%s%r,pst%s%g,pst%s%dust,ilevel,output%min_nu_eff)
+  endif
+
+end subroutine r_min_nu_eff_gc
+
+subroutine min_nu_eff_gc(r,g,p,ilevel,min_nu_eff)
+  use amr_parameters, only: ndim
+  use amr_commons, only: run_t, global_t
+  use pm_commons, only: part_t
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(part_t)::p
+  integer::ilevel
+  real(kind=8)::min_nu_eff
+
+  integer::ipart
+
+  min_nu_eff = 0.0d0
+  if(.not.allocated(p%nu_eff_gc))return
+
+  do ipart=p%headp(ilevel), p%tailp(ilevel)
+     if(p%nu_eff_gc(ipart) < min_nu_eff) min_nu_eff = p%nu_eff_gc(ipart)
+  end do
+
+end subroutine min_nu_eff_gc
+
 recursive subroutine r_broadcast_dt(pst,input,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
