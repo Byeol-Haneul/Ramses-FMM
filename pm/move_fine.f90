@@ -1003,7 +1003,7 @@ end subroutine unpack_fetch_kick_dust
 !#########################################################################
 !#########################################################################
 subroutine cic_trace_gas_part(s,p,ilevel,action_part)
-  use amr_parameters, only: ndim, twotondim
+  use amr_parameters, only: ndim, twotondim, dp
   use pm_parameters
   use pm_commons, only: part_t
   use ramses_commons, only: ramses_t
@@ -1075,7 +1075,7 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
         call get_parent_cell(s,hash_nbor,igrid,icell,flush_cache=.false.,fetch_cache=.true.)
 #ifdef HYDRO
         if(igrid>0)then
-           ff(1:ndim)=ff(1:ndim)+m%uold(icell,2:ndim+1,igrid)/max(m%uold(icell,1,igrid),r%smallr)*vol(ind)
+           ff(1:ndim)=ff(1:ndim)+real(m%uold(icell,2:ndim+1,igrid),kind=8)/max(real(m%uold(icell,1,igrid),kind=8),real(r%smallr,kind=8))*vol(ind)
         else
            ok_level=.false.
         end if
@@ -1107,7 +1107,7 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
            call get_parent_cell(s,hash_nbor,igrid,icell,flush_cache=.false.,fetch_cache=.true.)
 #ifdef HYDRO
            if(igrid>0)then
-              ff(1:ndim)=ff(1:ndim)+m%uold(icell,2:ndim+1,igrid)/max(m%uold(icell,1,igrid),r%smallr)*vol(ind)
+              ff(1:ndim)=ff(1:ndim)+real(m%uold(icell,2:ndim+1,igrid),kind=8)/max(real(m%uold(icell,1,igrid),kind=8),real(r%smallr,kind=8))*vol(ind)
            end if
 #endif
         end do
@@ -1160,7 +1160,7 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
            call get_parent_cell(s,hash_nbor,igrid,icell2,flush_cache=.false.,fetch_cache=.true.)
 #ifdef HYDRO
            if(igrid>0)then
-              ff(1:ndim)=ff(1:ndim)+m%uold(icell2,2:ndim+1,igrid)/max(m%uold(icell2,1,igrid),r%smallr)*vol2(ind)
+              ff(1:ndim)=ff(1:ndim)+real(m%uold(icell2,2:ndim+1,igrid),kind=8)/max(real(m%uold(icell2,1,igrid),kind=8),real(r%smallr,kind=8))*vol2(ind)
            else
               ok_level=.false.
            end if
@@ -1192,7 +1192,7 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
               call get_parent_cell(s,hash_nbor,igrid,icell2,flush_cache=.false.,fetch_cache=.true.)
 #ifdef HYDRO
               if(igrid>0)then
-                 ff(1:ndim)=ff(1:ndim)+m%uold(icell2,2:ndim+1,igrid)/max(m%uold(icell2,1,igrid),r%smallr)*vol2(ind)
+                 ff(1:ndim)=ff(1:ndim)+real(m%uold(icell2,2:ndim+1,igrid),kind=8)/max(real(m%uold(icell2,1,igrid),kind=8),real(r%smallr,kind=8))*vol2(ind)
               end if
 #endif
            end do
@@ -1288,7 +1288,7 @@ subroutine tsc_trace_gas_part(s,p,ilevel,action_part)
         call get_parent_cell(s,hash_nbor,igrid,icell,flush_cache=.false.,fetch_cache=.true.)
 #ifdef HYDRO
         if(igrid>0)then
-           ff(1:ndim)=ff(1:ndim)+m%uold(icell,2:ndim+1,igrid)/max(m%uold(icell,1,igrid),r%smallr)*vol(ind)
+           ff(1:ndim)=ff(1:ndim)+real(m%uold(icell,2:ndim+1,igrid),kind=8)/max(real(m%uold(icell,1,igrid),kind=8),real(r%smallr,kind=8))*vol(ind)
         end if
 #endif
      end do
@@ -1340,7 +1340,7 @@ subroutine tsc_trace_gas_part(s,p,ilevel,action_part)
            call get_parent_cell(s,hash_nbor,igrid,icell2,flush_cache=.false.,fetch_cache=.true.)
 #ifdef HYDRO
            if(igrid>0)then
-              ff(1:ndim)=ff(1:ndim)+m%uold(icell2,2:ndim+1,igrid)/max(m%uold(icell2,1,igrid),r%smallr)*vol2(ind)
+              ff(1:ndim)=ff(1:ndim)+real(m%uold(icell2,2:ndim+1,igrid),kind=8)/max(real(m%uold(icell2,1,igrid),kind=8),real(r%smallr,kind=8))*vol2(ind)
            end if
 #endif
         end do
@@ -1438,7 +1438,7 @@ subroutine pcs_trace_gas_part(s,p,ilevel,action_part)
         call get_parent_cell(s,hash_nbor,igrid,icell,flush_cache=.false.,fetch_cache=.true.)
 #ifdef HYDRO
         if(igrid>0)then
-           ff(1:ndim)=ff(1:ndim)+m%uold(icell,2:ndim+1,igrid)/max(m%uold(icell,1,igrid),r%smallr)*vol(ind)
+           ff(1:ndim)=ff(1:ndim)+real(m%uold(icell,2:ndim+1,igrid),kind=8)/max(real(m%uold(icell,1,igrid),kind=8),real(r%smallr,kind=8))*vol(ind)
         end if
 #endif
      end do
@@ -1495,7 +1495,7 @@ subroutine pcs_trace_gas_part(s,p,ilevel,action_part)
            call get_parent_cell(s,hash_nbor,igrid,icell2,flush_cache=.false.,fetch_cache=.true.)
 #ifdef HYDRO
            if(igrid>0)then
-              ff(1:ndim)=ff(1:ndim)+m%uold(icell2,2:ndim+1,igrid)/max(m%uold(icell2,1,igrid),r%smallr)*vol2(ind)
+              ff(1:ndim)=ff(1:ndim)+real(m%uold(icell2,2:ndim+1,igrid),kind=8)/max(real(m%uold(icell2,1,igrid),kind=8),real(r%smallr,kind=8))*vol2(ind)
            end if
 #endif
         end do
@@ -1950,7 +1950,7 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
 #ifdef HYDRO
             if(igrid>0)then
                corner_associated=corner_associated+1
-               corner_weight(ind)=max(m%uold(icell,1,igrid),r%smallr)
+               corner_weight(ind)=max(real(m%uold(icell,1,igrid),kind=8),real(r%smallr,kind=8))
             else
                corner_weight(ind)=0.d0
             end if
@@ -2622,7 +2622,7 @@ subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
               ff(1:ndim)=ff(1:ndim)+m%f(icell2,1:ndim,igrid)*vol2(ind)
 #endif
               rho_gas = rho_gas + m%uold(icell2,1,igrid)*vol2(ind)
-              uu(1:ndim)=uu(1:ndim)+m%uold(icell2,2:ndim+1,igrid)/max(m%uold(icell2,1,igrid),r%smallr)*vol2(ind)
+              uu(1:ndim)=uu(1:ndim)+real(m%uold(icell2,2:ndim+1,igrid),kind=8)/max(real(m%uold(icell2,1,igrid),kind=8),real(r%smallr,kind=8))*vol2(ind)
 #ifdef MHD
               bb(1:3)=bb(1:3)+0.5d0*(m%bold(icell2,1:3,igrid)+m%bold(icell2,4:6,igrid))*vol2(ind)
 #endif
@@ -2788,7 +2788,7 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
               ff(1:ndim)=ff(1:ndim)+m%f(icell2,1:ndim,igrid)*vol2(ind)
 #endif
               rho_gas = rho_gas + m%uold(icell2,1,igrid)*vol2(ind)
-              uu(1:ndim)=uu(1:ndim)+m%uold(icell2,2:ndim+1,igrid)/max(m%uold(icell2,1,igrid),r%smallr)*vol2(ind)
+              uu(1:ndim)=uu(1:ndim)+real(m%uold(icell2,2:ndim+1,igrid),kind=8)/max(real(m%uold(icell2,1,igrid),kind=8),real(r%smallr,kind=8))*vol2(ind)
 #ifdef MHD
               bb(1:3)=bb(1:3)+0.5d0*(m%bold(icell2,1:3,igrid)+m%bold(icell2,4:6,igrid))*vol2(ind)
 #endif
@@ -2950,7 +2950,7 @@ subroutine pcs_kick_drift_dust(s,p,ilevel,action_part)
         call get_parent_cell(s,hash_nbor,igrid,icell,flush_cache=.false.,fetch_cache=.true.)
 #ifdef HYDRO
         if(igrid>0)then
-           ff(1:ndim)=ff(1:ndim)+m%uold(icell,2:ndim+1,igrid)/max(m%uold(icell,1,igrid),r%smallr)*vol(ind)
+           ff(1:ndim)=ff(1:ndim)+real(m%uold(icell,2:ndim+1,igrid),kind=8)/max(real(m%uold(icell,1,igrid),kind=8),real(r%smallr,kind=8))*vol(ind)
         end if
 #endif
      end do
@@ -3013,7 +3013,7 @@ subroutine pcs_kick_drift_dust(s,p,ilevel,action_part)
              ff(1:ndim)=ff(1:ndim)+m%f(icell2,1:ndim,igrid)*vol2(ind)
 #endif
              rho_gas = rho_gas + m%uold(icell2,1,igrid)*vol2(ind)
-             uu(1:ndim)=uu(1:ndim)+m%uold(icell2,2:ndim+1,igrid)/max(m%uold(icell2,1,igrid), r%smallr)*vol2(ind)
+             uu(1:ndim)=uu(1:ndim)+real(m%uold(icell2,2:ndim+1,igrid),kind=8)/max(real(m%uold(icell2,1,igrid),kind=8),real(r%smallr,kind=8))*vol2(ind)
 #ifdef MHD
              bb(1:3)=bb(1:3)+0.5d0*(m%bold(icell2,1:3,igrid)+m%bold(icell2,4:6,igrid))*vol2(ind)
 #endif
