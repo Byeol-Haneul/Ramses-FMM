@@ -196,7 +196,11 @@ contains
     dx = sim%r%boxlen/2**ilevel
     gamma = sim%r%gamma
     num_blocks = num_subgrids
-    threads_per_block = 256
+    if(nsubgrid == 1)then
+       threads_per_block = 64
+    else
+       threads_per_block = 256
+    endif
     ngridmax = sim%m%ngridmax
     slope = sim%r%slope_type
     riemann = sim%r%riemann

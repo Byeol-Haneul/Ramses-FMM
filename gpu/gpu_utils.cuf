@@ -4,7 +4,7 @@ module gpu_utils
   use cudafor
   implicit none
 
-  integer, parameter :: nsubgrid = 2
+  integer, parameter :: nsubgrid = 1
   integer, parameter :: nsubgridsq = nsubgrid**2
   integer, parameter :: nsubgridtondim = nsubgrid**ndim
   integer, parameter :: nsubgridp2 = nsubgrid+2
