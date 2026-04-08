@@ -92,7 +92,6 @@ module mdl_parameters
      enumerator::MDL_NEWDT_PART
      enumerator::MDL_BROADCAST_DT
      enumerator::MDL_MAX_B_AND_Q
-     enumerator::MDL_MAX_SIGMA
      enumerator::MDL_MAKE_INITIAL_PHI
      enumerator::MDL_RECURRENCE_ON_P
      enumerator::MDL_RECURRENCE_X_AND_R
