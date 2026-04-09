@@ -1,0 +1,377 @@
+module rho_device
+  use amr_parameters, only: dp, ndim, twondim, twotondim, nhilbert
+  use hydro_parameters, only: nvar
+  use oct_commons, only: oct
+  use cudafor
+  implicit none
+
+contains
+
+  include 'gpu_reduce.cuf'
+
+  ! =========================================================================
+  attributes(device) function cic_weight(dl,dr)
+    real(kind=8),dimension(1:3)::dl,dr
+    real(kind=8),dimension(1:8)::cic_weight
+    cic_weight(1)=dl(1)*dl(2)*dl(3)
+    cic_weight(2)=dr(1)*dl(2)*dl(3)
+    cic_weight(3)=dl(1)*dr(2)*dl(3)
+    cic_weight(4)=dr(1)*dr(2)*dl(3)
+    cic_weight(5)=dl(1)*dl(2)*dr(3)
+    cic_weight(6)=dr(1)*dl(2)*dr(3)
+    cic_weight(7)=dl(1)*dr(2)*dr(3)
+    cic_weight(8)=dr(1)*dr(2)*dr(3)
+  end function cic_weight
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(device) function cic_index(il,ir)
+    integer,dimension(1:3)::il,ir
+    integer,dimension(1:3,1:8)::cic_index
+    cic_index(1:3,1)=(/il(1),il(2),il(3)/)
+    cic_index(1:3,2)=(/ir(1),il(2),il(3)/)
+    cic_index(1:3,3)=(/il(1),ir(2),il(3)/)
+    cic_index(1:3,4)=(/ir(1),ir(2),il(3)/)
+    cic_index(1:3,5)=(/il(1),il(2),ir(3)/)
+    cic_index(1:3,6)=(/ir(1),il(2),ir(3)/)
+    cic_index(1:3,7)=(/il(1),ir(2),ir(3)/)
+    cic_index(1:3,8)=(/ir(1),ir(2),ir(3)/)
+    return
+  end function cic_index
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine reset_rho_kernel(rho, nref, head_idx, num_octs)
+    real(kind=dp), device :: rho(1:twotondim,*)
+    real(kind=dp), device :: nref(1:twotondim,*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
+    integer :: cell_idx, oct_idx, block_idx
+
+    block_idx = blockIdx%x - 1
+
+    ! Compute the oct idx
+    oct_idx = block_idx * blockDim%y + threadIdx%y - 1
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Compute the cell idx
+    cell_idx = threadIdx%x
+
+    rho (cell_idx, oct_idx) = 0
+    nref(cell_idx, oct_idx) = 0
+
+  end subroutine reset_rho_kernel
+  ! =========================================================================~
+
+  ! =========================================================================
+  attributes(global) subroutine reset_multipole_kernel(unew, head_idx, num_octs)
+    real(kind=dp), device :: unew(1:twotondim,1:nvar,*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
+    integer :: cell_idx, oct_idx, block_idx
+
+    block_idx = blockIdx%x - 1
+
+    ! Compute the oct idx
+    oct_idx = block_idx * blockDim%y + threadIdx%y - 1
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Compute the cell idx
+    cell_idx = threadIdx%x
+
+    ! Reset values used for multipoles
+    do ivar = 1, ndim + 1
+       unew(cell_idx, ivar, oct_idx) = 0
+    end do
+
+  end subroutine reset_multipole_kernel
+  ! =========================================================================~
+
+  ! =========================================================================
+  attributes(global) subroutine multipole_leaf_kernel(unew, uold, grid, head_idx, num_octs, &
+       & dx_loc, vol_loc)
+    real(kind=dp), device :: unew(1:twotondim,1:nvar,*)
+    real(kind=dp), device :: uold(1:twotondim,1:nvar,*)
+    type(oct), device :: grid(*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+    real(kind=dp), intent(in), value :: dx_loc
+    real(kind=dp), intent(in), value :: vol_loc
+
+    real(kind=dp) :: monopole, dipole(3), x(3)
+    integer :: cell_idx, oct_idx, block_idx
+    integer :: ind, i, j, k
+    logical :: ok_leaf
+
+    block_idx = blockIdx%x - 1
+
+    ! Compute the oct idx
+    oct_idx = block_idx * blockDim%y + threadIdx%y - 1
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Compute the cell idx
+    cell_idx = threadIdx%x
+    ind = cell_idx - 1
+    k = ind / 4
+    ind = ind - k * 4
+    j = ind / 2
+    i = ind - j * 2
+
+    ! Leaf cell
+    ok_leaf = grid(oct_idx)%refined(cell_idx)
+
+    ! Cell coordinates
+    x(1) = (2*grid(oct_idx)%ckey(1) + i + 0.5d0) * dx_loc
+    x(2) = (2*grid(oct_idx)%ckey(2) + j + 0.5d0) * dx_loc
+    x(3) = (2*grid(oct_idx)%ckey(3) + k + 0.5d0) * dx_loc
+
+    ! Multipoles
+    monopole = uold(cell_idx, 1, oct_idx) * vol_loc
+    dipole(1) = mass * x(1)
+    dipole(2) = mass * x(2)
+    dipole(3) = mass * x(3)
+
+    ! Store in unew if leaf cell
+    if (ok_leaf) then
+       unew(cell_idx, 1, oct_idx) = monopole
+       unew(cell_idx, 2, oct_idx) = dipole(1)
+       unew(cell_idx, 3, oct_idx) = dipole(2)
+       unew(cell_idx, 4, oct_idx) = dipole(3)
+    end if
+
+  end subroutine multipole_leaf_kernel
+  ! =========================================================================~
+
+  ! =========================================================================
+  attributes(global) subroutine multipole_upload_kernel(grid, father, unew, head_idx, num_octs)
+    type(oct), device :: grid(*)
+    real(kind=dp), device :: unew(1:twotondim,1:nvar,*)
+    integer(kind=4), device :: father(*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
+    integer :: tid, bid, cell_idx, oct_idx
+    integer :: ind, father_idx, i, j, k
+
+    ! Thread and block id
+    tid = threadIdx%x - 1
+    bid = blockIdx%x - 1
+
+    ! Compute the oct idx
+    oct_idx = tid + bid * blockDim%x
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Compute the parent cell idx
+    father_idx = father(oct_idx)
+    i = grid(oct_idx)%ckey(1) - 2 * grid(father_idx)%ckey(1)
+    j = grid(oct_idx)%ckey(2) - 2 * grid(father_idx)%ckey(2)
+    k = grid(oct_idx)%ckey(3) - 2 * grid(father_idx)%ckey(3)
+    cell_idx = 1 + i + 2*j + 4*k
+
+    ! Reset conservative variables
+    unew(cell_idx, 1, father_idx) = 0_dp
+    unew(cell_idx, 2, father_idx) = 0_dp
+    unew(cell_idx, 3, father_idx) = 0_dp
+    unew(cell_idx, 4, father_idx) = 0_dp
+
+    ! Average children variables
+    do ind = 1, twotondim
+       unew(cell_idx, 1, father_idx) = unew(cell_idx, 1, father_idx) + unew(ind, 1, oct_idx)
+       unew(cell_idx, 2, father_idx) = unew(cell_idx, 2, father_idx) + unew(ind, 2, oct_idx)
+       unew(cell_idx, 3, father_idx) = unew(cell_idx, 3, father_idx) + unew(ind, 3, oct_idx)
+       unew(cell_idx, 4, father_idx) = unew(cell_idx, 4, father_idx) + unew(ind, 4, oct_idx)
+    end do
+
+  end subroutine multipole_upload_kernel
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine multipole_tot_kernel(grid, unew, head_idx, num_octs, multipole)
+    type(oct), device :: grid(*)
+    real(kind=dp), device :: unew(1:twotondim,1:nvar,*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+    real(kind=8), device, intent(inout) :: multipole(1:ndim+1)
+
+    real(kind=8) :: multipole_loc(1:ndim+1)
+    integer :: tid, bid ! The index of the thread and the block
+    integer :: cell_idx ! The index of the cell
+    integer :: oct_idx ! The index of the oct
+    integer :: info
+
+    ! Thread and block id
+    tid = threadIdx%x - 1
+    bid = blockIdx%x - 1
+
+    ! Compute oct idx
+    oct_idx = ( tid + bid * blockDim%x ) / twotondim
+
+    ! If not in block
+    if (oct_idx >= num_octs) then
+
+       multipole_loc(1:ndim+1) = 0d0
+
+    else
+
+       oct_idx = head_idx + oct_idx
+
+       ! Compute cell idx
+       cell_idx = mod(tid, twotondim) + 1
+
+       ! Load the cell
+       multipole_loc(1) = unew(cell_idx, 1, oct_idx)
+       multipole_loc(2) = unew(cell_idx, 2, oct_idx)
+       multipole_loc(3) = unew(cell_idx, 3, oct_idx)
+       multipole_loc(4) = unew(cell_idx, 4, oct_idx)
+
+    endif
+
+    multipole_loc(1) = block_reduce_sum(multipole_loc(1))
+    multipole_loc(2) = block_reduce_sum(multipole_loc(2))
+    multipole_loc(3) = block_reduce_sum(multipole_loc(3))
+    multipole_loc(4) = block_reduce_sum(multipole_loc(4))
+
+    if(tid == 0)then
+       info = atomicadd(multipole(1),multipole_loc(1))
+       info = atomicadd(multipole(2),multipole_loc(2))
+       info = atomicadd(multipole(3),multipole_loc(3))
+       info = atomicadd(multipole(4),multipole_loc(4))
+    endif
+
+  end subroutine multipole_tot_kernel
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine multipole_cic_kernel(unew, rho, grid, nbor, &
+       & head_idx, num_subgrids, dx_loc, vol_loc, box_size, periodic)
+    type(oct), device :: grid(*)
+    real(kind=dp), device :: unew(1:twotondim,1:nvar,*)
+    integer(kind=4), device :: nbor(1:subgridsize,*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_subgrids
+    real(kind=dp), intent(in), value :: dx_loc
+    real(kind=dp), intent(in), value :: vol_loc
+    real(kind=dp), intent(in), value :: box_size(1:3)
+    logical, intent(in), value :: periodic(1:3)
+
+    real(kind=dp), shared :: local_rho(0:2*nsubgrid+3,0:2*nsubgrid+3,0:2*nsubgrid+3)
+    real(kind=dp) :: monopole, dipole(3), x(3), dg(3), dd(3), vol(1:3, 1:8)
+    integer :: cell_idx, oct_idx, thread_idx, block_idx, subgrid_idx, work_idx
+    integer :: ind_nbor, ind, i, j, k, work_size, idim
+    integer :: i_subgrid_idx, j_subgrid_idx, k_subgrid_idx
+    integer :: ckey(3), ig(3), id(3), key(1:3, 1:8)
+    logical :: ok_leaf
+
+    block_idx = blockIdx%x - 1
+    thread_idx = threadIdx%x - 1
+    if (block_idx >= num_subgrids) return
+
+    ! Compute the subgrid idx and leading oct
+    subgrid_idx = head_idx + block_idx
+    oct_idx = (subgrid_idx - 1) * nsubgridtondim + 1
+
+    ! Compute subgrid lower left corner Cartesian key
+    ckey(1) = 2 * (grid(oct_idx)%ckey(1) / nsubgrid) * nsubgrid - 2 
+    ckey(2) = 2 * (grid(oct_idx)%ckey(2) / nsubgrid) * nsubgrid - 2
+    ckey(3) = 2 * (grid(oct_idx)%ckey(3) / nsubgrid) * nsubgrid - 2
+
+    ! We work on all 6x6x6 cells of the subgrid
+    work_size = 2*nsubgrid+4
+
+    ! Initialize local rho to zero
+    do work_idx = thread_idx, work_size**3 - 1, blockDim%x
+       call index_1Dto3D(work_idx, work_size, work_size, i_subgrid_idx, j_subgrid_idx, k_subgrid_idx)
+       local_rho(i_subgrid_idx, j_subgrid_idx, k_subgrid_idx) = 0d0
+    end do    
+    call syncthreads()
+
+    ! Deposit particle mass to local array rho
+    do work_idx = thread_idx, work_size**3 - 1, blockDim%x
+
+       ! Get neighbour index
+       ind_nbor = work_idx/8 + 1
+       oct_idx = nbor(ind_nbor, subgrid_idx)
+
+       ! Now that we have the index to the oct we need to figure out which cell within it to load
+       cell_idx = mod(work_idx, 8) + 1
+
+       ! Particle coordinates rescaled at current level relative to subgrid corner
+       monopole = unew(cell_idx, 1, oct_idx)
+       x(1) = unew(cell_idx, 2, oct_idx) / monopole - ckey(1) * dx_loc
+       x(2) = unew(cell_idx, 3, oct_idx) / monopole - ckey(2) * dx_loc
+       x(3) = unew(cell_idx, 4, oct_idx) / monopole - ckey(3) * dx_loc
+
+       ! In case of periodic boundaries
+       do idim = 1, ndim
+          if (r%periodic(idim)) then
+             if (x(idim) >  r%box_size(idim)*0.5) x(idim) = x(idim) - r%box_size(idim)
+             if (x(idim) < -r%box_size(idim)*0.5) x(idim) = x(idim) + r%box_size(idim)
+          endif
+       end do
+
+       ! CIC at level ilevel (dd: right cloud boundary; dg: left cloud boundary)
+       do idim = 1, ndim
+          dd(idim) = x(idim) / dx_loc + 0.5D0
+          id(idim) = int(dd(idim))
+          dd(idim) = dd(idim) - id(idim)
+          dg(idim) = 1.0D0 - dd(idim)
+          ig(idim) = id(idim) - 1
+       end do
+
+       ! Compute cloud volumes
+       vol = cic_weight(dg, dd)
+
+       ! Compute cells Cartesian key
+       key = cic_index(ig, id)
+
+       do ind = 1, twotondim
+          i = key(1, ind)
+          j = key(2, ind)
+          k = key(3, ind)
+          deposit = monopole * vol(ind) / vol_loc
+          info = atomicadd(local_rho(i, j, k), deposit)
+       end do
+
+    end do
+    call syncthreads()
+
+    ! Now we work only in the inner 2x2x2 subgrid
+    ! We're now excluding the ghost cells since this operation doesn't need them.
+    work_size = 2*nsubgrid
+
+    do work_idx = thread_idx, work_size**3 - 1, blockDim%x
+
+       ! Compute the subgrid_indices index, i.e. determine the oct to load
+       call index_1Dto3D(work_idx/8, work_size/2, work_size/2, i_subgrid_idx, j_subgrid_idx, k_subgrid_idx)
+       i_subgrid_idx = i_subgrid_idx + 1
+       j_subgrid_idx = j_subgrid_idx + 1
+       k_subgrid_idx = k_subgrid_idx + 1
+
+       ! Compute the oct index
+       ind_nbor = 1 + i_subgrid_idx + nsubgridp2 * j_subgrid_idx + nsubgridp2sq * k_subgrid_idx
+       oct_idx = nbor(ind_nbor, subgrid_idx)
+
+       ! Compute the cell index
+       cell_idx = mod(work_idx, 8) + 1
+
+       ! Compute the local shared array indices
+       call index_1Dto3D(cell_idx - 1, 2, 2, i, j, k)
+       i = i + 2 * i_subgrid_idx
+       j = j + 2 * j_subgrid_idx
+       k = k + 2 * k_subgrid_idx
+
+       rho(cell_idx, oct_idx) = local_rho(i, j, k)
+
+    end do
+
+  end subroutine multipole_cic_kernel
+  ! =========================================================================~
+
+end module rho_device
+
