@@ -1,0 +1,78 @@
+! =========================================================================
+!> @brief
+!> Find 3x3x3 nbor father cells of input oct
+!>
+attributes(device) function floor_div2(n)
+  integer :: floor_div2
+  integer, value :: n
+  if (n >= 0) then
+     floor_div2 = n / 2
+  else
+     floor_div2 = (n - 1) / 2
+  endif
+end function floor_div2
+! =========================================================================
+
+! =========================================================================
+!> @brief
+!> Find 3x3x3 nbor father cells of input oct
+!>
+attributes(device) subroutine nbor_father_cells(grid, father, nbor, oct_idx, igrid_nbor, icell_nbor)
+  use amr_parameters, only: dp, ndim, twotondim, threetondim
+  use oct_commons, only: oct
+  use gpu_utils
+  implicit none
+  type(oct), device :: grid(*)
+  integer(kind=4), device :: father(*)
+  integer(kind=4), device :: nbor(1:subgridsize,*)
+  integer(kind=4), value :: oct_idx
+  integer(kind=4), intent(out) :: igrid_nbor(1:threetondim)
+  integer(kind=4), intent(out) :: icell_nbor(1:threetondim)
+
+  integer :: father_idx, subgrid_idx
+  integer :: i, j, k, inbor, ii, jj, kk, in, jn, kn
+  integer :: ind_nbor, io, jo, ko, ic, jc, kc
+
+  ! Compute parent oct idx
+  father_idx = father(oct_idx)
+
+  ! Compute corresponding subgrid idx (works only for nsubgrid = 1)
+  subgrid_idx = father_idx
+
+  ! Compute parent cell coordinates inside oct
+  i = grid(oct_idx)%ckey(1) - 2 * grid(father_idx)%ckey(1)
+  j = grid(oct_idx)%ckey(2) - 2 * grid(father_idx)%ckey(2)
+  k = grid(oct_idx)%ckey(3) - 2 * grid(father_idx)%ckey(3)
+
+  ! Loop over 27 neighbors
+  inbor = 0
+  do kk = -1, +1
+     do jj = -1, +1
+        do ii = -1, +1
+           inbor = inbor + 1
+
+           ! Index of nbor cells
+           in = i + ii
+           jn = j + jj
+           kn = k + kk
+
+           ! Index of parent octs
+           io = floor_div2(in)
+           jo = floor_div2(jn)
+           ko = floor_div2(kn)
+
+           ! Cell coordinates within that parent
+           ic = in - 2 * io
+           jc = jn - 2 * jo
+           kc = kn - 2 * ko
+
+           ! Store results in output array
+           ind_nbor = 1 + (io + 1) + (jo + 1) * 3 + (ko + 1) * 9
+           igrid_nbor(inbor) = nbor(ind_nbor, subgrid_idx)
+           icell_nbor(inbor) = 1 + ic + jc * 2 + kc * 4
+        end do
+     end do
+  end do
+
+end subroutine nbor_father_cells
+! =========================================================================
