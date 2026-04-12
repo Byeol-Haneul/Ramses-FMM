@@ -1215,8 +1215,8 @@ subroutine split_part(s,p,ilevel)
 
      ! Loop over particles
      npart_coarse=0
-     do i=p%headp(ilevel),p%tailp(r%nlevelmax)
-        p%sortp(i)=i
+     do ipart=p%headp(ilevel),p%tailp(r%nlevelmax)
+        p%sortp(ipart)=ipart
         in_domain=.true.
         do idim=1,ndim
            if(.not. r%periodic(idim))then
@@ -1227,7 +1227,7 @@ subroutine split_part(s,p,ilevel)
            npart_coarse=npart_coarse+1
            p%levelp(ipart)=-p%levelp(ipart)
         else
-           p%sortp(i)=-p%sortp(i)
+           p%sortp(ipart)=-p%sortp(ipart)
         endif
      end do
      ! End loop over particles
