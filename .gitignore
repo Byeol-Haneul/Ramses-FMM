@@ -39,6 +39,8 @@ ramses_*
 *.out
 amr_test/
 namelist/fmm_tests/*/ic_part
+coeur_fmm/
+coeur_mg/
 
 # Ignore exectuables
 og
@@ -50,3 +52,4 @@ faster_fmm
 .*/**
 .ipynb_checkpoints/
 *.png
+analyze/compare_movies.ipynb

@@ -1,0 +1,116 @@
+This namelist performs a cooling halo simulation with dark matter and gas.
+Gas cooling and star formation are included.
+You need an ascii file for the initial conditions. You can download one from
+tigress by executing in the command line the following script:
+./utils/scripts/load_nfw_ic.sh
+To compile the code with MPI, type in the command line:
+make NDIM=3 MPI=1 UNITS=MERGER PATCH=../patch/init/halo HYDRO=1 GRAV=1 NPSCAL=2
+
+&RUN_PARAMS
+cosmo=.false.
+pic=.true.
+poisson=.true.
+hydro=.true.
+nrestart=0
+nsubcycle=1,1,2
+ncontrol=1
+verbose=.false.
+/
+
+&OUTPUT_PARAMS
+delta_tout=0.05
+tend=1.0
+bkp_time_hrs=1
+bkp_modulo=3
+/
+
+&INIT_PARAMS
+filetype='ascii'
+initfile(1)='/home/jl4415/mini-ramses/nfw/'
+ic_scale_m=0.85
+/
+
+&AMR_PARAMS
+levelmin=7
+levelmax=13
+ngridmax=2000000
+npartmax=4000000
+nexpand=1,
+boxlen=600.
+/
+
+&BOUNDARY_PARAMS
+bound_levelmin = 3
+box_size = 600.0
+box_xmin = 1
+box_ymin = 1
+box_zmin = 1
+box_xmax = -1
+box_ymax = -1
+box_zmax = -1
+nbound = 6
+periodic = .false., .false., .false.
+bound_dir   = 1, 1, 2, 2, 3, 3
+bound_shift = 1, -1, 1, -1, 1, -1
+bound_type  = 1, 1, 1, 1, 1, 1
+bound_xmin =  0, -1,  0,  0,  0,  0
+bound_xmax =  1,  0,  0,  0,  0,  0
+bound_ymin =  1,  1,  0, -1,  0,  0
+bound_ymax = -1, -1,  1,  0,  0,  0
+bound_zmin =  1,  1,  1,  1,  0, -1
+bound_zmax = -1, -1, -1, -1,  1,  0
+/
+
+&POISSON_PARAMS
+epsilon=1.d-6
+level_fmm_to_amr=1
+/
+
+&HALO_PARAMS
+v_200=150.
+concentration=10
+baryon_fraction=0.15
+lambda=0.04
+halo_eps=0.01
+halo_nmin=1d-6
+halo_tmin=1d6
+/
+
+&HYDRO_PARAMS
+gamma=1.6666667
+courant_factor=0.5
+slope_type=1
+riemann='hllc'
+/
+
+&COOLING_PARAMS
+cooling=.false.
+/
+
+&STAR_PARAMS
+star=.false.
+/
+
+&REFINE_PARAMS
+m_refine=10*8.,
+interpol_var=1,
+interpol_type=0,
+mass_sph=0.4
+/
+
+&MOVIE_PARAMS
+movie=.true.
+tendmov=1.02
+imovout=200
+nw_frame=512
+nh_frame=512
+levelmax_frame=13
+xcentre_frame=300.0,0.,0.,0.
+ycentre_frame=300.0,0.,0.,0.
+zcentre_frame=300.0,0.,0.,0.
+deltax_frame=150.0,0.
+deltay_frame=150.0,0.
+deltaz_frame=6.0,0.
+proj_axis='z'
+movie_vars_txt='dens','vx'
+/
