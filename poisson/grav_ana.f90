@@ -40,9 +40,9 @@ subroutine gravana(r,g,x,f,dx,ncell)
         f(i,2)=-g%multipole%q(1)*2d0*ry/rr*2
 #endif
 #if NDIM==3
-        f(i,1)=-g%multipole%q(1)*rx/rr*3
-        f(i,2)=-g%multipole%q(1)*ry/rr*3
-        f(i,3)=-g%multipole%q(1)*rz/rr*3
+        f(i,1)=-g%multipole%q(1)*rx/rr**3
+        f(i,2)=-g%multipole%q(1)*ry/rr**3
+        f(i,3)=-g%multipole%q(1)*rz/rr**3
 #endif
      end do
   end if
