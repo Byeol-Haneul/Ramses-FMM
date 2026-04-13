@@ -26,7 +26,9 @@ subroutine m_rho_fine(pst,ilevel,rtype)
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
 
   if(m%noct_tot(ilevel)==0)return
-  if(r%verbose)write(*,'(" Entering rho_fine for level ",I2)')ilevel
+  if(.not. r%poisson .and. .not. r%pic)return
+
+  if(r%verbose)write(*,'("   Entering rho_fine for level ",I2)')ilevel
 
   !---------------------------
   ! Reset multipole to zero
@@ -1213,9 +1215,8 @@ subroutine split_part(s,p,ilevel)
 
      ! Loop over particles
      npart_coarse=0
-     do i=p%headp(ilevel),p%tailp(r%nlevelmax)
-        ipart=i
-        p%sortp(i)=i
+     do ipart=p%headp(ilevel),p%tailp(r%nlevelmax)
+        p%sortp(ipart)=ipart
         in_domain=.true.
         do idim=1,ndim
            if(.not. r%periodic(idim))then
@@ -1226,7 +1227,7 @@ subroutine split_part(s,p,ilevel)
            npart_coarse=npart_coarse+1
            p%levelp(ipart)=-p%levelp(ipart)
         else
-           p%sortp(i)=-p%sortp(i)
+           p%sortp(ipart)=-p%sortp(ipart)
         endif
      end do
      ! End loop over particles

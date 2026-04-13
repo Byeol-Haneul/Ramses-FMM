@@ -89,9 +89,9 @@ subroutine gravana(r,g,x,f,dx,ncell)
         f(i,1:3) = -mass*rr_vec(1:3)/rr3 + (3.0d0*cr(1:3) - trace_c*rr_vec(1:3))/rr5 - &
              & 2.5d0*(3.0d0*scalar_q - trace_c*rr2)*rr_vec(1:3)/rr7
 #else
-        f(i,1)=-mass*rx/rr*3
-        f(i,2)=-mass*ry/rr*3
-        f(i,3)=-mass*rz/rr*3
+        f(i,1)=-mass*rx/rr**3
+        f(i,2)=-mass*ry/rr**3
+        f(i,3)=-mass*rz/rr**3
 #endif
 #endif
      end do

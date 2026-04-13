@@ -1,0 +1,133 @@
+! =========================================================================
+!> @brief
+!> Performs a prefix sum within a warp
+!>
+!> @param[in] scan : The variable to sum over the warp
+!> @param[in] scan : The sum is stopped at the input lane
+attributes(device) subroutine warp_scan(scan, lane)
+  implicit none
+  integer :: lane, scan
+
+  integer :: offset, num
+
+  offset = 1
+  do
+     if (offset .ge. warpsize) exit
+     num = __shfl_up(scan, offset)
+     if (offset < lane) scan = scan + num 
+     offset = offset * 2
+  end do
+
+end subroutine warp_scan
+! =========================================================================
+
+! =========================================================================
+!> @brief
+!> Performs a prefix sum within a block
+!>
+!> @param[in] data : The array to sum over the block
+!> @param[in] partial_sums : The total sum within each block
+!> @param[in] size: the size of the active range of array data
+!> @param[in] offset : The starting offset of the active range
+attributes(global) subroutine block_scan(data, offset, size, partial_sums, total_sum)
+  implicit none
+  integer(kind=4), device :: data(*)
+  integer(kind=4), device, optional :: partial_sums(*)
+  integer(kind=4), device, optional :: total_sum
+  integer(kind=4), value :: size
+  integer(kind=4), value :: offset
+
+  integer, shared :: sums(32)
+  integer :: scan, wscan
+  integer :: tid, bid, gid, wid, lane
+
+  tid = threadIdx%x
+  bid = blockIdx%x
+  gid = tid + (bid - 1) * blockDim%x
+
+  lane = mod(tid - 1, warpsize) + 1
+  wid = (tid - 1) / warpsize + 1
+
+  ! Data to scan and add
+  scan = 0
+  if (gid <= size) scan = data(gid + offset - 1)
+
+  ! Each warp performs its own scan
+  call warp_scan(scan, lane)
+
+  ! Last thread in each warp writes its warp sum to shared memory
+  if (lane == warpsize) sums(wid) = scan
+  call syncthreads()
+
+  ! First warp reads from shared memory the warp sums
+  if (tid <= (blockDim%x / warpsize)) then
+     wscan = sums(lane)
+  else
+     wscan = 0
+  endif
+
+  ! Final scan within first warp
+  if (wid == 1) then
+     call warp_scan(wscan, lane)
+     sums(lane) = wscan
+  endif
+  call syncthreads()
+
+  ! Uniform add across warps: add sum of all preceding warps
+  if (wid > 1) scan = scan + sums(wid - 1)
+
+  ! Store scan back into input data
+  if (gid <= size) data(gid + offset - 1) = scan
+
+  ! Optionally write the block inclusive sum (for the partial_sums scan)
+  if (present(partial_sums)) then
+     if (tid == blockDim%x) partial_sums(bid) = scan
+  end if
+
+  ! Optionally write the total inclusive sum
+  if (present(total_sum)) then
+     if (gid == size) total_sum = scan
+  end if
+
+end subroutine block_scan
+! =========================================================================
+
+! =========================================================================
+!> @brief
+!> Performs a uniform add over the block partial sums and modify the data
+!>
+!> @param[in] data : The array to sum over the block
+!> @param[in] cum_sums : The cumulative sum of each block
+!> @param[in] size: the size of the active range of array data
+!> @param[in] offset : The starting offset of the active range
+attributes(global) subroutine uniform_add(data, offset, size, partial_sums, total_sum)
+  implicit none
+  integer(kind=4), device :: data(*)
+  integer(kind=4), device :: partial_sums(*) ! Cumulative sum of each block
+  integer(kind=4), device, optional :: total_sum       ! total sum across all elements
+  integer(kind=4), value  :: size            ! number of elements to update in the tail
+  integer(kind=4), value  :: offset          ! element offset to the start of the tail
+
+  integer(kind=4), shared :: buf
+  integer(kind=4) :: tid, bid, gid
+
+  tid = threadIdx%x
+  bid = blockIdx%x
+
+  ! Array id
+  gid = tid + (bid - 1) * blockDim%x
+
+  ! Each block adds the cumulative sum
+  if (tid == 1) buf = partial_sums(bid)
+  call syncthreads()
+
+  ! Final prefix sum
+  if (gid <= size) data(gid + offset - 1) = data(gid + offset - 1) + buf
+
+  ! Total prefix sum
+  if (present(total_sum)) then
+     if (gid == size) total_sum = data(gid + offset - 1)
+  endif
+
+end subroutine uniform_add
+! =========================================================================

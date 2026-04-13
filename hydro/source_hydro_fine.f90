@@ -18,11 +18,11 @@ recursive subroutine r_source_hydro_fine(pst,ilevel,input_size)
   logical::ok
 
   ! Check if hydro source terms are required
-  ok = pst%s%r%entropy .and.  pst%s%r%dual_energy .GE. 0
+  ok = pst%s%r%entropy .and. pst%s%r%dual_energy .GE. 0
   ok = ok .or. nener>0
   ok = ok .or. pst%s%r%sgs_turb
-  if(.not. ok)return
-  
+  if (.not. ok) return
+
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_SOURCE_HYDRO_FINE,pst%iUpper+1,input_size,0,ilevel)
      call r_source_hydro_fine(pst%pLower,ilevel,input_size)
@@ -160,7 +160,7 @@ subroutine source_hydro_fine(s,ilevel)
            m%unew(ind,5+irad,igrid)=m%unew(ind,5+irad,igrid) &
                 & -(r%gamma_rad(irad)-1.0d0)*m%uold(ind,5+irad,igrid)*divu*g%dtnew(ilevel)
         end do
-#endif     
+#endif
         ! Correct total energy if internal energy is too small
         if(r%entropy.and.r%dual_energy.GE.0)then
            d=max(dble(m%unew(ind,1,igrid)),r%smallr)
@@ -223,16 +223,19 @@ subroutine source_hydro_fine(s,ilevel)
            m%unew(ind,r%iturb,igrid)=m%unew(ind,r%iturb,igrid) &
                 & -(2.0/3.0)*m%uold(ind,r%iturb,igrid)*divu*g%dtnew(ilevel)
 
-           if(g%nstep_coarse==0) then
-              ! Initialize subgrid turbulent energy with stationary solution
-              m%unew(ind,r%iturb,igrid)=m%uold(ind,1,igrid)*dx**2*phi_diss
+           if(g%nstep_coarse==0 .or. r%equilibrium_sgs) then
+              ! Set subgrid turbulent energy to equilibrium/stationary solution
+              ! Using C_s^4/2 so that sigma = C_s^2 * dx * |S| (traditional Smagorinsky)
+              m%unew(ind,r%iturb,igrid)=m%uold(ind,1,igrid)*dx**2*phi_diss &
+                   & *0.5d0*r%smagorinsky_lilly_constant**4
            else
               ! Implicit solution wrt to decay term only
               d_old=max(dble(m%uold(ind,1,igrid)),r%smallr)
               e_turb=m%uold(ind,r%iturb,igrid)
               sigma=sqrt(max(2.0*e_turb/d_old,dble(r%smallc)**2))
               m%unew(ind,r%iturb,igrid)=(m%unew(ind,r%iturb,igrid) &
-                   &  +d_old*dx*sigma*phi_diss*g%dtnew(ilevel)) &
+                   &  +d_old*dx*sigma*phi_diss*g%dtnew(ilevel) &
+                   &  *0.5d0*r%smagorinsky_lilly_constant**4) &
                    & /(1.0+sigma/dx*g%dtnew(ilevel))
            end if
 

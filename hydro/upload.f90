@@ -1,4 +1,8 @@
 module upload_module
+#ifdef _CUDA
+  use gpu_runner, only: gpu_upload
+  use nvtx
+#endif
 contains
 !#########################################################################
 !#########################################################################
@@ -19,7 +23,7 @@ subroutine m_upload_fine(pst,ilevel)
   if(pst%s%m%noct_tot(ilevel)==0)return
   if(pst%s%m%noct_tot(ilevel+1)==0)return
   if(pst%s%r%verbose)write(*,111)ilevel
-111 format(' Entering upload_fine for level',i2)
+111 format('   Entering upload_fine for level',i2)
 
   call r_upload_fine(pst,ilevel,1)
 
@@ -44,7 +48,17 @@ recursive subroutine r_upload_fine(pst,ilevel,input_size)
      call r_upload_fine(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
+#ifdef _CUDA
+     if(pst%s%m%data_on_device)then
+        call nvtxStartRange("GPU Upload", color=6)!teal
+        call gpu_upload(pst%s,ilevel)
+        call nvtxEndRange()
+     else
+        call upload_fine(pst%s,ilevel)
+     endif
+#else
      call upload_fine(pst%s,ilevel)
+#endif
   endif
 
 end subroutine r_upload_fine
@@ -96,6 +110,14 @@ subroutine upload_fine(s,ilevel)
            endif
         end do
      end do
+     ! Zero mflux for refined cells
+#ifdef TRCFLX
+     do ind=1,twotondim
+        if(m%grid(ioct)%refined(ind))then
+           m%mflux(ind,1:2*ndim+1,ioct)=0.0d0
+        endif
+     end do
+#endif
 #ifdef MHD
      do ivar=1,6
         do ind=1,twotondim
@@ -175,6 +197,31 @@ subroutine upload_fine(s,ilevel)
 #endif
 #endif
 
+     ! Average mflux for tracer particles
+#ifdef TRCFLX
+     ! Average old density (stored in mflux(:,1))
+     average=0.0d0
+     do ind=1,twotondim
+        average=average+m%mflux(ind,1,ioct)
+     end do
+     m%mflux(icell,1,igrid)=average/dble(twotondim)
+
+     ! Average face-centered time-integrated mass flux
+     do idim=1,ndim
+        ! Left face in parent cell
+        average=0.0d0
+        do ind=1,twotondim/2
+           average=average+m%mflux(hh(2*idim-1,ind),1+idim,ioct)
+        end do
+        m%mflux(icell,1+idim,igrid)=average/dble(twotondim/2)
+        ! Right face in parent cell
+        average=0.0d0
+        do ind=1,twotondim/2
+           average=average+m%mflux(hh(2*idim,ind),1+idim+ndim,ioct)
+        end do
+        m%mflux(icell,1+idim+ndim,igrid)=average/dble(twotondim/2)
+     end do
+#endif
      ! Average internal energy instead of total energy
      if(r%interpol_var==1)then
         average=0.0d0
@@ -248,6 +295,9 @@ subroutine init_flush_upload(mesh,igrid,hash_key)
         mesh%uold(ind,ivar,igrid)=0.0d0
      end do
   end do
+#ifdef TRCFLX
+  mesh%mflux(:,:,igrid)=0.0d0
+#endif
 #endif
 
 #ifdef MHD
@@ -282,6 +332,9 @@ subroutine pack_flush_upload(mesh,igrid,msg_size,msg_array)
         msg%realdp(ind,ivar)=mesh%uold(ind,ivar,igrid)
      end do
   end do
+#ifdef TRCFLX
+  msg%realdp_mflux=mesh%mflux(:,:,igrid)
+#endif
 #endif
 
 #ifdef MHD
@@ -325,8 +378,14 @@ subroutine unpack_flush_upload(mesh,igrid,msg_size,msg_array,hash_key)
         endif
      end do
   end do
+#ifdef TRCFLX
+  do ind=1,twotondim
+     if(mesh%grid(igrid)%refined(ind))then
+        mesh%mflux(ind,:,igrid)=mesh%mflux(ind,:,igrid)+msg%realdp_mflux(ind,:)
+     endif
+  end do
 #endif
-
+#endif
 #ifdef MHD
   do ivar=1,6
      do ind=1,twotondim

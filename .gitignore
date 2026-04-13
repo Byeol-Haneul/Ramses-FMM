@@ -38,6 +38,7 @@ ramses_*
 *.err
 *.out
 amr_test/
+halo_test/
 namelist/fmm_tests/*/ic_part
 coeur_fmm/
 coeur_mg/
