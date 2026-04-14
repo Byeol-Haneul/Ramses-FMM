@@ -28,6 +28,8 @@ time*.txt
 
 nfw/
 spheres/
+!analyze/spheres/
+!analyze/spheres/**
 ics_ramses/
 analyze/fig**/
 analyze/.ipynb_checkpoints/**
