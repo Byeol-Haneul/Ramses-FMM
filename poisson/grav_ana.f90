@@ -36,8 +36,8 @@ subroutine gravana(r,g,x,f,dx,ncell)
         f(i,1)=-g%multipole%q(1)*2d0*ACOS(-1d0)*rx/rr
 #endif
 #if NDIM==2
-        f(i,1)=-g%multipole%q(1)*2d0*rx/rr*2
-        f(i,2)=-g%multipole%q(1)*2d0*ry/rr*2
+        f(i,1)=-g%multipole%q(1)*2d0*rx/rr**2
+        f(i,2)=-g%multipole%q(1)*2d0*ry/rr**2
 #endif
 #if NDIM==3
         f(i,1)=-g%multipole%q(1)*rx/rr**3
