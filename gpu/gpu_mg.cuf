@@ -1,0 +1,220 @@
+module multigrid_device
+  use amr_parameters, only: dp, ndim, twondim, twotondim, nhilbert
+  use hydro_parameters, only: nvar
+  use oct_commons, only: oct
+  use gpu_utils, only: nsubgrid, nsubgridsq, nsubgridtondim, nsubgridp2, nsubgridp2sq, subgridsize
+  use cudafor
+  implicit none
+
+  !> @brief
+  !> Cell index to access neighbors.
+  integer, device, constant :: hhh(8,6) = reshape(&
+       & (/2, 1, 4, 3, 6, 5, 8, 7, &
+       &   2, 1, 4, 3, 6, 5, 8, 7, &
+       &   3, 4, 1, 2, 7, 8, 5, 6, &
+       &   3, 4, 1, 2, 7, 8, 5, 6, &
+       &   5, 6, 7, 8, 1, 2, 3, 4, &
+       &   5, 6, 7, 8, 1, 2, 3, 4/), (/8,6/))
+
+  !> Grid offset to access neighbors.
+  integer, device, constant :: iii(8,6) = reshape(&
+       & (/-1, 0,-1, 0,-1, 0,-1, 0, &
+       &    0, 1, 0, 1, 0, 1, 0, 1, &
+       &   -1,-1, 0, 0,-1,-1, 0, 0, &
+       &    0, 0, 1, 1, 0, 0, 1, 1, &
+       &   -1,-1,-1,-1, 0, 0, 0, 0, &
+       &    0, 0, 0, 0, 1, 1, 1, 1/), (/8,6/))
+
+  ! 3D CIC weights: aa=1/64, bb=3/64, cc=9/64, dd=27/64
+  real(kind=dp), device, constant :: bbb(8) = (/ &
+       & 1.0_dp/64.0_dp, 3.0_dp/64.0_dp, 3.0_dp/64.0_dp,  9.0_dp/64.0_dp, &
+       & 3.0_dp/64.0_dp, 9.0_dp/64.0_dp, 9.0_dp/64.0_dp, 27.0_dp/64.0_dp /)
+
+  ! Sampling positions in the 3x3x3 father cell cube (indices 1..27)
+  integer, device, constant :: ccc(8,8) = reshape( (/ &
+       &  1,  2,  4,  5, 10, 11, 13, 14,  &
+       &  3,  2,  6,  5, 12, 11, 15, 14,  &
+       &  7,  8,  4,  5, 16, 17, 13, 14,  &
+       &  9,  8,  6,  5, 18, 17, 15, 14,  &
+       & 19, 20, 22, 23, 10, 11, 13, 14,  &
+       & 21, 20, 24, 23, 12, 11, 15, 14,  &
+       & 25, 26, 22, 23, 16, 17, 13, 14,  &
+       & 27, 26, 24, 23, 18, 17, 15, 14/), (/8,8/) )
+
+contains
+
+  include 'gpu_hash.cuf'
+  include 'gpu_hilbert.cuf'
+  include 'gpu_scan.cuf'
+  include 'gpu_reduce.cuf'
+  include 'gpu_nbor.cuf'
+
+  ! =========================================================================
+  attributes(global) subroutine init_phi_kernel(grid, father, nbor, phi, phi_old, tfrac, head_idx, num_octs)
+    implicit none
+    type(oct), device :: grid(*)
+    integer, device :: father(*)
+    integer, device :: nbor(1:threetondim,*)
+    real(kind=dp), device :: phi(1:twotondim,*)
+    real(kind=dp), device :: phi_old(1:twotondim,*)
+    real(kind=dp), value  :: tfrac
+    integer, value :: head_idx
+    integer, value :: num_octs
+
+    integer(4) :: cell_idx, oct_idx, block_idx
+    integer(4) :: igrid_nbor(1:threetondim)
+    integer(4) :: icell_nbor(1:threetondim)
+    integer(4) :: ind_average, ind_father
+    integer(4) :: igrid_nbr, ind_nbr
+    integer(4) :: igrid_cen, ind_cen
+    real(kind=dp) :: acc, coeff, add
+
+    block_idx = blockIdx%x - 1
+
+    ! Map thread -> oct
+    oct_idx = block_idx * blockDim%y + threadIdx%y - 1
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Map thread -> fine cell (1..8)
+    cell_idx = threadIdx%x
+
+    ! Get 3x3x3 neighboring father cells of this oct
+    call nbor_father_cells(grid, father, nbor, oct_idx, igrid_nbor, icell_nbor)
+
+    ! Central father cell (index 14 in 1..27) for fallback
+    igrid_cen = igrid_nbor(threetondim/2 + 1)   ! 14
+    ind_cen   = icell_nbor(threetondim/2 + 1)   ! 14
+
+    ! CIC interpolation + time extrapolation (matches interpol_phi)
+    acc = 0.0_dp
+    do ind_average = 1, twotondim
+       ind_father = ccc(ind_average, cell_idx)   ! 1..27
+       coeff      = bbb(ind_average)
+
+       igrid_nbr  = igrid_nbor(ind_father)
+       ind_nbr    = icell_nbor(ind_father)
+
+       ! GPU-safe handling of missing neighbors
+       if (igrid_nbr == 0) then
+          igrid_nbr = igrid_cen
+          ind_nbr   = ind_cen
+       end if
+
+       add = coeff * ( phi(ind_nbr, igrid_nbr) + &
+            (phi(ind_nbr, igrid_nbr) - phi_old(ind_nbr, igrid_nbr)) * tfrac )
+       acc = acc + add
+    end do
+
+    phi(cell_idx, oct_idx) = acc
+
+  end subroutine init_phi_kernel
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine reset_mask_kernel(f, head_idx, num_octs, mask_val)
+    real(kind=dp), device :: f(1:twotondim,1:ndim,*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+    real(kind=dp), intent(in), value :: mask_val
+
+    integer :: cell_idx, oct_idx, block_idx
+
+    block_idx = blockIdx%x - 1
+
+    ! Compute the oct idx
+    oct_idx = block_idx * blockDim%y + threadIdx%y - 1
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Compute the cell idx
+    cell_idx = threadIdx%x
+
+    ! Initialize mask to input value
+    f(cell_idx, 3, oct_idx) = mask_val
+
+  end subroutine reset_mask_kernel
+  ! =========================================================================~
+
+  ! =========================================================================
+  attributes(global) subroutine reset_rhs_kernel(f, flag1, nbor, head_idx, num_octs)
+    integer(kind=4), device :: f(1:twotondim,1:ndim,*)
+    integer(kind=4), device :: flag2(1:twotondim,*)
+    integer(kind=4), device :: nbor(1:subgridsize,*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
+    integer :: cell_idx, oct_idx, block_idx, source_idx, subgrid_idx, num_idx
+    integer :: number_nbors, ind, icell, idir, ind_nbor
+    integer :: i, j, k, in, jn, kn
+
+    block_idx = blockIdx%x - 1
+
+    ! Compute the oct idx
+    oct_idx = block_idx * blockDim%y + threadIdx%y - 1
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Compute the cell idx
+    cell_idx = threadIdx%x
+
+    ! Compute subgrid idx
+    subgrid_idx = (oct_idx - 1) / nsubgridtondim + 1
+
+    ! Compute oct rank within subgrid
+    num_idx = oct_idx - (subgrid_idx - 1) * nsubgridtondim
+    num_idx = num_idx - 1
+    k = num_idx / nsubgridsq
+    num_idx = num_idx - k * nsubgridsq
+    j = num_idx / nsubgrid
+    i = num_idx - j * nsubgrid
+    i = i + 1; j = j + 1; k = k + 1
+
+    ! Compute true oct idx
+    ind_nbor = 1 + i + nsubgridp2 * j  + nsubgridp2sq * k
+    oct_idx = nbor(ind_nbor, subgrid_idx)
+
+    ! Compute original RHS 4 * pi * (rho - rho_bar)
+    f(cell_idx, 2, oct_idx) = fourpi * (rho(cell_idx, oct_idx) - offset)
+
+    ! Compute RHS in separate directions
+    do idim = 1, ndim
+       ! Loop over 2 neighbors
+       do inbor = 1, 2
+
+          ! Compute neighboring oct index
+          in = 0; jn = 0; kn = 0
+          if (idim == 1) then
+             in = iii(cell_idx, 2*(idim-1) + inbor)
+          else if (idim == 2) then
+             jn = iii(cell_idx, 2*(idim-1) + inbor)
+          else
+             kn = iii(cell_idx, 2*(idim-1) + inbor)
+          end if
+          ind = 1 + (i + in) + nsubgridp2 * (j + jn)  + nsubgridp2sq * (k + kn)
+          oct_nbr_idx = nbor(ind, subgrid_idx)
+
+          ! Compute neighboring cell index in parent octs
+          cell_nbr_idx = hhh(cell_idx, 2*(idim-1) + inbor)
+
+          ! Get phi and distance function
+          phi_nbr = phi(cell_nbr_idx, oct_nbr_idx)
+          dis_nbr = f(cell_nbr_idx, 3, oct_nbr_idx)
+
+          ! If close to boundary and cell is not masked,
+          ! then modify RHS using linear reconstruction
+          if (dis_nbr <= 0.0 .and. f(cell_idx, 3, oct_idx) > 0) then
+             nb_phi = phi_nbr
+             w = nb_mask / (nb_mask - f(cell_idx, 3, oct_idx))
+             phi_b = ((1.0d0 - w) * nb_phi + w * phi(cell_idx, oct_idx))
+             f(cell_idx, 2, oct_idx) = f(cell_idx, 2, oct_idx) - 2.0d0 * oneoverdx2 * phi_b
+          end if
+
+       end do
+    end do
+
+  end subroutine reset_rhs_kernel
+  ! =========================================================================~
+
+end module multigrid_device
+
