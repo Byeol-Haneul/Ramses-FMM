@@ -48,7 +48,7 @@ bound_zmax = -1, -1, -1, -1,  1,  0
 
 &OUTPUT_PARAMS
 delta_tout = 0.7
-tend = 5.6
+tend = 3.0
 /
 
 &HYDRO_PARAMS
@@ -81,8 +81,8 @@ level_fmm_to_amr=1
 
 &MOVIE_PARAMS
 movie=.true.
-tendmov=5.62
-imovout=1600
+tendmov=3.02
+imovout=1000
 nw_frame=512
 nh_frame=512
 levelmax_frame=16
