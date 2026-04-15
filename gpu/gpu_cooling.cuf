@@ -13,19 +13,20 @@ contains
   include 'gpu_reduce.cuf'
 
   ! =========================================================================
-  attributes(global) subroutine cooling_kernel(uold, head_idx, num_octs, gamma, dt &
+  attributes(global) subroutine cooling_kernel(uold, grid, head_idx, num_octs, gamma, dt, &
        & eos_type, eos_T2, eos_nH, eos_index, scale_T2, scale_nH)
+    type(oct), device :: grid(*)
     real(kind=dp), device :: uold(1:twotondim,1:nvar,*)
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
-    real(kind=dp), value :: gamma, dt
-    real(kind=dp), value :: eos_T2, eos_nH, eos_index
-    real(kind=dp), value :: scale_T2, scale_nH
+    real(kind=8), value :: gamma, dt
+    real(kind=8), value :: eos_T2, eos_nH, eos_index
+    real(kind=8), value :: scale_T2, scale_nH
     integer(kind=4), value :: eos_type
 
     integer :: cell_idx, oct_idx, block_idx
-    real(kind=dp) :: density, energy, kinetic, temperature, nH
-    real(kind=dp) :: velocity_x, velocity_y, velocity_z
+    real(kind=8) :: density, energy, kinetic, temperature, nH
+    real(kind=8) :: velocity_x, velocity_y, velocity_z, T2min
 
     block_idx = blockIdx%x - 1
 
@@ -68,8 +69,10 @@ contains
     ! Convert back to conservative variables
     energy = temperature / scale_T2 / (gamma - 1.0d0) + kinetic
 
-    ! Update unew in main memory
-    uold(cell_idx, 5, oct_idx) = density * energy
+    ! Update unew in main memory only for leaf cells
+    if (.not. grid(oct_idx)%refined(cell_idx)) then
+       uold(cell_idx, 5, oct_idx) = real(density * energy, kind=dp)
+    endif
 
   end subroutine cooling_kernel
   ! =========================================================================~
