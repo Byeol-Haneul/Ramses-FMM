@@ -623,7 +623,7 @@ contains
 
   ! =========================================================================
   !> @brief
-  !> GPU implementation of the HLLC Riemann Solver for the Euler system.
+  !> GPU implementation of the HLLC Riemann Solver.
   !>
   !> @param[in] left_state_p : The state on the left side of the interface in primitive variables
   !> @param[in] right_state_p : The state on the right side of the interface in primitive variables
@@ -635,7 +635,8 @@ contains
     type(primitive_t), intent(inout) :: left_state_p, right_state_p
     real(kind=dp), value :: gamma
     type(conserved_t) :: flux
-    ! Keep local floors compile-time evaluable for device code.
+    ! Both `smallr` and `smallc`/`smallp` are usually defined in amr_commons. 
+    ! Redefining them here so that they will be evaluated at compile time
     real(kind=dp), parameter :: smallr = 1.d-10
     real(kind=dp), parameter :: smallc_squared = (1.d-10)**2
     real(kind=dp) :: smallp, entho
@@ -646,7 +647,7 @@ contains
     real(kind=dp) :: rstarl, rstarr, etotstarl, etotstarr
     real(kind=dp) :: ro, uo, vo, wo, po, etoto
 
-    ! Verify that the density and pressure are reasonable and positive.
+    ! Verify that the density and pressure are reasonable and positive
     smallp = smallc_squared / gamma
     left_state_p%density   = max(left_state_p%density,   smallr)
     right_state_p%density  = max(right_state_p%density,  smallr)
@@ -672,9 +673,11 @@ contains
     etotl = el + ekinl
     etotr = er + ekinr
 
+    ! Compute the sound speeds
     sound_speed_l = sound_speed(left_state_p, gamma)
     sound_speed_r = sound_speed(right_state_p, gamma)
 
+    ! Compute the wave speeds
     speed_l = min(ul, ur) - max(sound_speed_l, sound_speed_r)
     speed_r = max(ul, ur) + max(sound_speed_l, sound_speed_r)
 
@@ -689,6 +692,7 @@ contains
     etotstarl = ((speed_l - ul) * etotl - pl * ul + pstar * ustar) / (speed_l - ustar)
     etotstarr = ((speed_r - ur) * etotr - pr * ur + pstar * ustar) / (speed_r - ustar)
 
+    ! Sample the solution at x/t=0
     if (speed_l > 0.0_dp) then
        ro = rl
        uo = ul
@@ -719,6 +723,7 @@ contains
        etoto = etotr
     endif
 
+    ! Compute the Godunov flux
     flux%density    = ro * uo
     flux%momentum_x = ro * uo * uo + po
     flux%momentum_y = ro * uo * vo
@@ -730,15 +735,15 @@ contains
 
   ! =========================================================================
   !> @brief
-  !> Select the GPU hydro Riemann solver and return its flux.
+  !> Dispatch GPU hydro Riemann solvers (LLF, HLL, HLLC).
   !>
   !> @param[in] left_state_p : The state on the left side of the interface in primitive variables
   !> @param[in] right_state_p : The state on the right side of the interface in primitive variables
   !> @param[in] gamma : The adiabatic index
-  !> @param[in] riemann : The selected Riemann solver id
+  !> @param[in] riemann : Solver id
   !>
   !> @return
-  !> flux : The conserved_t of the selected fluxes
+  !> flux : The conserved_t of the fluxes
   attributes(device) function riemann_fluxes(left_state_p, right_state_p, gamma, riemann) result(flux)
     type(primitive_t), intent(inout) :: left_state_p, right_state_p
     real(kind=dp), value :: gamma
@@ -752,7 +757,7 @@ contains
     else if (riemann .eq. solver_hllc) then
        flux = hllc_fluxes(left_state_p, right_state_p, gamma)
     else
-       ! Fall back to LLF so unsupported solver ids do not leave device fluxes undefined.
+       ! Unsupported: LLF
        flux = hll_fluxes(left_state_p, right_state_p, gamma, .true.)
     endif
 
