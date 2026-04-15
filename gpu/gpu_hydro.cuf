@@ -623,6 +623,149 @@ contains
 
   ! =========================================================================
   !> @brief
+  !> GPU implementation of the HLLC Riemann Solver.
+  !>
+  !> @param[in] left_state_p : The state on the left side of the interface in primitive variables
+  !> @param[in] right_state_p : The state on the right side of the interface in primitive variables
+  !> @param[in] gamma : The adiabatic index
+  !>
+  !> @return
+  !> flux : The conserved_t of the HLLC fluxes
+  attributes(device) function hllc_fluxes(left_state_p, right_state_p, gamma) result(flux)
+    type(primitive_t), intent(inout) :: left_state_p, right_state_p
+    real(kind=dp), value :: gamma
+    type(conserved_t) :: flux
+    ! Both `smallr` and `smallc`/`smallp` are usually defined in amr_commons. 
+    ! Redefining them here so that they will be evaluated at compile time
+    real(kind=dp), parameter :: smallr = 1.d-10
+    real(kind=dp), parameter :: smallc_squared = (1.d-10)**2
+    real(kind=dp) :: smallp, entho
+    real(kind=dp) :: rl, rr, pl, pr, ul, ur, vl, vr, wl, wr
+    real(kind=dp) :: el, er, ekinl, ekinr, etotl, etotr
+    real(kind=dp) :: sound_speed_l, sound_speed_r, speed_l, speed_r
+    real(kind=dp) :: rcl, rcr, ustar, pstar
+    real(kind=dp) :: rstarl, rstarr, etotstarl, etotstarr
+    real(kind=dp) :: ro, uo, vo, wo, po, etoto
+
+    ! Verify that the density and pressure are reasonable and positive
+    smallp = smallc_squared / gamma
+    left_state_p%density   = max(left_state_p%density,   smallr)
+    right_state_p%density  = max(right_state_p%density,  smallr)
+    left_state_p%pressure  = max(left_state_p%pressure,  smallp * left_state_p%density)
+    right_state_p%pressure = max(right_state_p%pressure, smallp * right_state_p%density)
+
+    rl = left_state_p%density
+    rr = right_state_p%density
+    ul = left_state_p%velocity_x
+    ur = right_state_p%velocity_x
+    vl = left_state_p%velocity_y
+    vr = right_state_p%velocity_y
+    wl = left_state_p%velocity_z
+    wr = right_state_p%velocity_z
+    pl = left_state_p%pressure
+    pr = right_state_p%pressure
+
+    entho = 1.0_dp / (gamma - 1.0_dp)
+    el = pl * entho
+    er = pr * entho
+    ekinl = 0.5_dp * rl * magnitude_squared(ul, vl, wl)
+    ekinr = 0.5_dp * rr * magnitude_squared(ur, vr, wr)
+    etotl = el + ekinl
+    etotr = er + ekinr
+
+    ! Compute the sound speeds
+    sound_speed_l = sound_speed(left_state_p, gamma)
+    sound_speed_r = sound_speed(right_state_p, gamma)
+
+    ! Compute the wave speeds
+    speed_l = min(ul, ur) - max(sound_speed_l, sound_speed_r)
+    speed_r = max(ul, ur) + max(sound_speed_l, sound_speed_r)
+
+    rcl = rl * (ul - speed_l)
+    rcr = rr * (speed_r - ur)
+
+    ustar = (rcr * ur + rcl * ul + (pl - pr)) / (rcr + rcl)
+    pstar = (rcr * pl + rcl * pr + rcl * rcr * (ul - ur)) / (rcr + rcl)
+
+    rstarl = rl * (speed_l - ul) / (speed_l - ustar)
+    rstarr = rr * (speed_r - ur) / (speed_r - ustar)
+    etotstarl = ((speed_l - ul) * etotl - pl * ul + pstar * ustar) / (speed_l - ustar)
+    etotstarr = ((speed_r - ur) * etotr - pr * ur + pstar * ustar) / (speed_r - ustar)
+
+    ! Sample the solution at x/t=0
+    if (speed_l > 0.0_dp) then
+       ro = rl
+       uo = ul
+       vo = vl
+       wo = wl
+       po = pl
+       etoto = etotl
+    else if (ustar > 0.0_dp) then
+       ro = rstarl
+       uo = ustar
+       vo = vl
+       wo = wl
+       po = pstar
+       etoto = etotstarl
+    else if (speed_r > 0.0_dp) then
+       ro = rstarr
+       uo = ustar
+       vo = vr
+       wo = wr
+       po = pstar
+       etoto = etotstarr
+    else
+       ro = rr
+       uo = ur
+       vo = vr
+       wo = wr
+       po = pr
+       etoto = etotr
+    endif
+
+    ! Compute the Godunov flux
+    flux%density    = ro * uo
+    flux%momentum_x = ro * uo * uo + po
+    flux%momentum_y = ro * uo * vo
+    flux%momentum_z = ro * uo * wo
+    flux%energy     = (etoto + po) * uo
+
+  end function hllc_fluxes
+  ! =========================================================================
+
+  ! =========================================================================
+  !> @brief
+  !> Dispatch GPU hydro Riemann solvers (LLF, HLL, HLLC).
+  !>
+  !> @param[in] left_state_p : The state on the left side of the interface in primitive variables
+  !> @param[in] right_state_p : The state on the right side of the interface in primitive variables
+  !> @param[in] gamma : The adiabatic index
+  !> @param[in] riemann : Solver id
+  !>
+  !> @return
+  !> flux : The conserved_t of the fluxes
+  attributes(device) function riemann_fluxes(left_state_p, right_state_p, gamma, riemann) result(flux)
+    type(primitive_t), intent(inout) :: left_state_p, right_state_p
+    real(kind=dp), value :: gamma
+    integer, value :: riemann
+    type(conserved_t) :: flux
+
+    if(riemann .eq. solver_llf)then
+       flux = hll_fluxes(left_state_p, right_state_p, gamma, .true.)
+    else if (riemann .eq. solver_hll) then
+       flux = hll_fluxes(left_state_p, right_state_p, gamma, .false.)
+    else if (riemann .eq. solver_hllc) then
+       flux = hllc_fluxes(left_state_p, right_state_p, gamma)
+    else
+       ! Unsupported: LLF
+       flux = hll_fluxes(left_state_p, right_state_p, gamma, .true.)
+    endif
+
+  end function riemann_fluxes
+  ! =========================================================================
+
+  ! =========================================================================
+  !> @brief
   !> Driver for the Riemann solvers. This subroutine handles arranging the interface states and reading/writing data from shared memory
   !>
   !> @param[in,out] left_interfaces_x : The left interfaces at the i+1/2 interfaces. The fluxes along the X interfaces are returned in this array
@@ -668,11 +811,7 @@ contains
           right_interface%pressure   = right_interfaces_x%pressure(i,j,k)
 
           ! Call the Riemann Solver
-          if(riemann .eq. solver_llf)then
-             flux = hll_fluxes(left_interface, right_interface, gamma, .true.)
-          else if (riemann .eq. solver_hll) then
-             flux = hll_fluxes(left_interface, right_interface, gamma, .false.)
-          endif
+          flux = riemann_fluxes(left_interface, right_interface, gamma, riemann)
 
           ! Unpack the fluxes into the interface state arrays
           left_interfaces_x%density   (i,j,k) = flux%density
@@ -699,11 +838,7 @@ contains
           right_interface%pressure   = right_interfaces_y%pressure(i,j,k)
 
           ! Call the Riemann Solver
-          if(riemann .eq. solver_llf)then
-             flux = hll_fluxes(left_interface, right_interface, gamma, .true.)
-          else if (riemann .eq. solver_hll) then
-             flux = hll_fluxes(left_interface, right_interface, gamma, .false.)
-          endif
+          flux = riemann_fluxes(left_interface, right_interface, gamma, riemann)
 
           ! Unpack the fluxes into the interface state arrays
           left_interfaces_y%density   (i,j,k) = flux%density
@@ -729,11 +864,7 @@ contains
           right_interface%pressure   = right_interfaces_z%pressure(i,j,k)
 
           ! Call the Riemann Solver
-          if(riemann .eq. solver_llf)then
-             flux = hll_fluxes(left_interface, right_interface, gamma, .true.)
-          else if (riemann .eq. solver_hll) then
-             flux = hll_fluxes(left_interface, right_interface, gamma, .false.)
-          endif
+          flux = riemann_fluxes(left_interface, right_interface, gamma, riemann)
 
           ! Unpack the fluxes into the interface state arrays
           left_interfaces_z%density   (i,j,k) = flux%density
