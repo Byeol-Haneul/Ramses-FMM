@@ -24,6 +24,12 @@ module gpu_runner
   real(kind=dp), device, allocatable, dimension(:,:,:) :: uold, unew
   integer(kind=4), device, allocatable, dimension(:,:) :: flag1, flag2
 
+  real(kind=dp), device, allocatable, dimension(:,:) :: phi
+  real(kind=dp), device, allocatable, dimension(:,:) :: rho
+  real(kind=dp), device, allocatable, dimension(:,:) :: nref
+  real(kind=dp), device, allocatable, dimension(:,:) :: phi_old
+  real(kind=dp), device, allocatable, dimension(:,:,:) :: f
+
   integer(kind=4), device, allocatable, dimension(:) :: swap_local
   integer(kind=4), device, allocatable, dimension(:) :: swap_global
 
@@ -231,7 +237,7 @@ contains
     integer, intent(in)::ilevel
     !
     integer(kind=4) :: head_idx, num_octs
-    integer :: threads_per_block, num_blocks
+    integer(kind=4) :: threads_per_block, num_blocks
 
     head_idx = sim%m%head(ilevel+1)
     num_octs = sim%m%noct(ilevel+1)
@@ -244,6 +250,42 @@ contains
     call nvtxEndRange()
 
   end subroutine gpu_upload
+
+  !> @brief
+  !> Cooling and polytrope routine
+  !>
+  !> @detail
+  !> @param[in] sim : The simulation object
+  !> @param[in] ilevel : The refinement level to update
+  !>
+  subroutine gpu_cooling(sim, ilevel)
+    use nvtx
+    use cooling_device, only: cooling_kernel
+    use ramses_commons, only: ramses_t
+    type(ramses_t), intent(inout) :: sim
+    integer, intent(in) :: ilevel
+
+    integer(kind=4) :: head_idx, num_octs
+    integer(kind=4) :: threadsX_per_block, threadsY_per_block, num_blocks
+    real(kind=8) :: scale_nH, scale_T2, scale_l, scale_d, scale_t, scale_v
+
+    ! Conversion factor from user units to cgs units
+    call units(sim%r,sim%g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
+
+    head_idx = sim%m%head(ilevel)
+    num_octs = sim%m%noct(ilevel)
+    threadsX_per_block = 8
+    threadsY_per_block = 16
+    num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
+    call nvtxStartRange("GPU Cooling", color=0)!green
+    call cooling_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(uold, grid, &
+         & head_idx, num_octs, &
+         & sim%r%gamma, sim%g%dtnew(ilevel), sim%r%eos_type, sim%r%eos_T2, sim%r%eos_nH, sim%r%eos_index, &
+         & scale_T2, scale_nH)
+    call GPU_Error_Check(__FILE__, __LINE__)
+    call nvtxEndRange()
+
+  end subroutine gpu_cooling
 
   !> @brief
   !> Perform the hydro integration on a GPU

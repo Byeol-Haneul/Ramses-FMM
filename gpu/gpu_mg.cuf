@@ -41,6 +41,15 @@ module multigrid_device
        & 25, 26, 22, 23, 16, 17, 13, 14,  &
        & 27, 26, 24, 23, 18, 17, 15, 14/), (/8,8/) )
 
+  ! Shift oct coordinates to get MG father octs
+  integer, device, constant :: shift_oct(3,8) = reshape( (/ &
+       &   -1, -1, -1, +1, -1, -1, -1, +1, -1, +1, +1, -1,&
+       &   -1, -1, +1, +1, -1, +1, -1, +1, +1, +1, +1, +1/), (/3,8/) )
+
+  ! Red-black ordering cell index
+  integer, device, constant :: ired  (4) = (/ 1, 4, 6, 7 /)
+  integer, device, constant :: iblack(4) = (/ 2, 3, 5, 8 /)
+
 contains
 
   include 'gpu_hash.cuf'
@@ -54,7 +63,7 @@ contains
     implicit none
     type(oct), device :: grid(*)
     integer, device :: father(*)
-    integer, device :: nbor(1:threetondim,*)
+    integer, device :: nbor(1:subgridsize,*)
     real(kind=dp), device :: phi(1:twotondim,*)
     real(kind=dp), device :: phi_old(1:twotondim,*)
     real(kind=dp), value  :: tfrac
@@ -83,11 +92,11 @@ contains
     call nbor_father_cells(grid, father, nbor, oct_idx, igrid_nbor, icell_nbor)
 
     ! Central father cell (index 14 in 1..27) for fallback
-    igrid_cen = igrid_nbor(threetondim/2 + 1)   ! 14
-    ind_cen   = icell_nbor(threetondim/2 + 1)   ! 14
+    igrid_cen = igrid_nbor(threetondim/2+1)
+    ind_cen   = icell_nbor(threetondim/2+1)
 
     ! CIC interpolation + time extrapolation (matches interpol_phi)
-    acc = 0.0_dp
+    acc = 0d0
     do ind_average = 1, twotondim
        ind_father = ccc(ind_average, cell_idx)   ! 1..27
        coeff      = bbb(ind_average)
@@ -95,15 +104,14 @@ contains
        igrid_nbr  = igrid_nbor(ind_father)
        ind_nbr    = icell_nbor(ind_father)
 
-       ! GPU-safe handling of missing neighbors
-       if (igrid_nbr == 0) then
+       if (igrid_nbr == 0) then ! Should never happen
           igrid_nbr = igrid_cen
           ind_nbr   = ind_cen
        end if
 
-       add = coeff * ( phi(ind_nbr, igrid_nbr) + &
-            (phi(ind_nbr, igrid_nbr) - phi_old(ind_nbr, igrid_nbr)) * tfrac )
+       add = coeff * ( phi(ind_nbr, igrid_nbr) + (phi(ind_nbr, igrid_nbr) - phi_old(ind_nbr, igrid_nbr)) * tfrac )
        acc = acc + add
+
     end do
 
     phi(cell_idx, oct_idx) = acc
@@ -137,16 +145,20 @@ contains
   ! =========================================================================~
 
   ! =========================================================================
-  attributes(global) subroutine reset_rhs_kernel(f, flag1, nbor, head_idx, num_octs)
-    integer(kind=4), device :: f(1:twotondim,1:ndim,*)
-    integer(kind=4), device :: flag2(1:twotondim,*)
+  attributes(global) subroutine reset_rhs_kernel(phi, rho, f, nbor, head_idx, num_octs, fourpi, offset, oneoverdx2)
+    real(kind=dp), device :: phi(1:twotondim,*)
+    real(kind=dp), device :: rho(1:twotondim,*)
+    real(kind=dp), device :: f(1:twotondim,1:ndim,*)
     integer(kind=4), device :: nbor(1:subgridsize,*)
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
+    real(dp), intent(in), value :: fourpi, offset, oneoverdx2
 
+    real(kind=dp) :: phi_nbr, dis_nbr, w, phi_b
     integer :: cell_idx, oct_idx, block_idx, source_idx, subgrid_idx, num_idx
     integer :: number_nbors, ind, icell, idir, ind_nbor
-    integer :: i, j, k, in, jn, kn
+    integer :: i, j, k, in, jn, kn, ind
+    integer :: oct_nbr_idx, cell_nbr_idx
 
     block_idx = blockIdx%x - 1
 
@@ -204,9 +216,8 @@ contains
           ! If close to boundary and cell is not masked,
           ! then modify RHS using linear reconstruction
           if (dis_nbr <= 0.0 .and. f(cell_idx, 3, oct_idx) > 0) then
-             nb_phi = phi_nbr
-             w = nb_mask / (nb_mask - f(cell_idx, 3, oct_idx))
-             phi_b = ((1.0d0 - w) * nb_phi + w * phi(cell_idx, oct_idx))
+             w = dis_nbr / (dis_nbr - f(cell_idx, 3, oct_idx))
+             phi_b = ((1.0d0 - w) * phi_nbr + w * phi(cell_idx, oct_idx))
              f(cell_idx, 2, oct_idx) = f(cell_idx, 2, oct_idx) - 2.0d0 * oneoverdx2 * phi_b
           end if
 
@@ -215,6 +226,636 @@ contains
 
   end subroutine reset_rhs_kernel
   ! =========================================================================~
+
+  ! =========================================================================
+  attributes(global) subroutine reset_father_kernel(father, head_idx, num_octs, father_val)
+    integer(kind=4), device :: father(*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+    integer(kind=4), intent(in), value :: father_val
+
+    integer :: oct_idx
+
+    ! Compute the oct idx
+    oct_idx = threadIdx%x - 1
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Initialize mask to input value
+    father(oct_idx) = father_val
+
+  end subroutine reset_father_kernel
+  ! =========================================================================~
+
+  ! =========================================================================
+  attributes(global) subroutine update_father_array(father, grid, hash_key, hash_val, hash_size, &
+       & ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, head_idx, num_octs, nbor_ind, cell_ind)
+    logical, device :: periodic(1:3)
+    type(oct), device :: grid(*)
+    integer(kind=4), device :: father(*)
+    integer(kind=4), device :: ckey_max(*)
+    integer(kind=4), device :: box_ckey_min(1:ndim,*)
+    integer(kind=4), device :: box_ckey_max(1:ndim,*)
+    integer(kind=8), device :: key_off(*)
+    integer(kind=8), device :: hash_key(*)
+    integer(kind=4), device :: hash_val(*)
+    integer(kind=4), intent(in), value :: hash_size
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+    integer(kind=4), intent(in), value :: nbor_ind
+    integer(kind=4), intent(in), value :: cell_ind
+
+    integer(kind=8) :: key, offset, ix, iy, iz, nx
+    integer :: thread_idx, block_idx, subgrid_idx, oct_idx, nbor_idx
+    integer :: ilevel, i, j, k, ind, idim
+    integer(kind=4), dimension(1:ndim) ::ckey
+
+    ! Compute thread and block idx
+    thread_idx = threadIdx%x - 1
+    block_idx = blockIdx%x - 1
+
+    ! Compute oct idx
+    oct_idx = thread_idx + block_idx * blockDim%x
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Compute cell index in parent oct
+    i = grid(oct_idx)%ckey(1) - 2 * (grid(oct_idx)%ckey(1) / 2)
+    j = grid(oct_idx)%ckey(2) - 2 * (grid(oct_idx)%ckey(2) / 2)
+    k = grid(oct_idx)%ckey(3) - 2 * (grid(oct_idx)%ckey(3) / 2)
+    cell_idx = 1 + i + 2*j + 4*k
+
+    ! Compute neighboring oct Cartesian key
+    ilevel = grid(oct_idx)%lev
+    ckey(1) = grid(oct_idx)%ckey(1) + shift_oct(1, nbor_ind)
+    ckey(2) = grid(oct_idx)%ckey(2) + shift_oct(2, nbor_ind)
+    ckey(3) = grid(oct_idx)%ckey(3) + shift_oct(3, nbor_ind)
+
+    ! Periodic boundary conditions
+    do idim = 1,ndim
+       if(periodic(idim))then
+          if(ckey(idim)<box_ckey_min(idim,ilevel))ckey(idim)=box_ckey_max(idim,ilevel)-1
+          if(ckey(idim)>=box_ckey_max(idim,ilevel))ckey(idim)=box_ckey_min(idim,ilevel)
+       endif
+    enddo
+
+    ! Compute father oct Cartesian key
+    ilevel = ilevel - 1
+    father_ckey(1) = ckey(1) / 2
+    father_ckey(2) = ckey(2) / 2
+    father_ckey(3) = ckey(3) / 2
+
+    ! Conpute key
+    ix = int(father_ckey(1), kind=8)
+    iy = int(father_ckey(2), kind=8)
+    iz = int(father_ckey(3), kind=8)
+    nx = int(ckey_max(ilevel), kind=8)
+    offset = key_off(ilevel)
+    key = offset + ix + iy * nx + iz * nx * nx
+
+    ! Get parent oct index in memory
+    father_idx = hash_get(hash_key, hash_val, hash_size, key)
+
+    ! Update father array with no race condition
+    if (cell_idx == cell_ind) then
+       father(oct_idx) = father_idx
+    endif
+
+  end subroutine update_father_array
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine init_prefix_sum_father(nbor, prefix_sum, head_idx, num_octs)
+    integer(kind=4), device :: father(*)
+    integer(kind=4), device :: prefix_sum(*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
+    integer :: oct_idx, thread_idx, block_idx, nbor_idx
+
+    ! Compute the thread and block idx
+    thread_idx = threadIdx%x - 1
+    block_idx = blockIdx%x - 1
+
+    ! Compute oct idx
+    oct_idx = thread_idx + block_idx * blockDim%x
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Get nbor idx
+    father_idx = father(oct_idx)
+
+    ! If nbor index is zero set prefix_sum to one
+    if(father_idx == 0)then
+       prefix_sum(oct_idx) = 1
+    else
+       prefix_sum(oct_idx) = 0
+    endif
+
+  end subroutine init_prefix_sum_father
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine compute_mg_swap_table(swap_local, prefix_sum, head_idx, num_octs)
+    integer(kind=4), device :: swap_local(*)
+    integer(kind=4), device :: prefix_sum(*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
+    integer :: subgrid_idx, thread_idx, block_idx, cache_idx
+    integer :: previous_sum, bit
+
+    ! Compute thread and block idx
+    thread_idx = threadIdx%x - 1
+    block_idx = blockIdx%x - 1
+
+    ! Compute new oct idx
+    oct_idx = thread_idx + block_idx * blockDim%x
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Get previous prefix sum
+    if (oct_idx > head_idx)then
+       previous_sum = prefix_sum(oct_idx - 1)
+    else
+       previous_sum = 0
+    endif
+
+    ! Compute original table value (0 or 1)
+    bit = prefix_sum(oct_idx) - previous_sum
+
+    ! Compute new index in the cache
+    if(bit == 1)then
+       cache_idx = previous_sum + 1
+       swap_local(cache_idx) = oct_idx
+    endif
+
+  end subroutine compute_mg_swap_table
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine make_mg_octs(grid_fine, grid_coarse, flag1, phi, f, swap_local, father, &
+       & hash_key, hash_val, hash_size, ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, &
+       & head_idx, num_octs, input_ind)
+    type(oct), device :: grid_fine(*)
+    type(oct), device :: grid_coarse(*)
+    real(kind=dp), device :: f(1:twotondim,1:ndim,*)
+    real(kind=dp), device :: phi(1:twotondim,*)
+    integer(kind=4), device :: flag1(1:twotondim,*)
+    integer(kind=4), device :: swap_local(*)
+    integer(kind=4), device :: father(*)
+    integer(kind=4), device :: ckey_max(*)
+    integer(kind=8), device :: key_off(*)
+    integer(kind=4), device :: box_ckey_min(1:ndim,*)
+    integer(kind=4), device :: box_ckey_max(1:ndim,*)
+    integer(kind=8), device :: hash_key(*)
+    integer(kind=4), device :: hash_val(*)
+    logical, device :: periodic(1:3)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: hash_size
+    integer(kind=4), intent(in), value :: num_octs
+    integer(kind=4), intent(in), value :: input_ind
+
+    integer(kind=8) :: hkey, parent_key, offset, ix, iy, iz, nx
+    integer :: oct_idx, subgrid_idx, thread_idx, block_idx, cache_idx, parent_idx, cell_idx
+    integer :: ilevel, idim
+    integer, dimension(1:ndim) :: ckey
+
+    ! Compute thread and block idx
+    thread_idx = threadIdx%x - 1
+    block_idx = blockIdx%x - 1
+
+    ! Compute new cache index
+    cache_idx = thread_idx + block_idx * blockDim%x
+    if (cache_idx >= num_octs) return
+
+    ! Get original subgrid index
+    oct_idx = swap_local(cache_idx + 1)
+
+    ! Get proper idx for cache grid
+    cache_idx = head_idx + cache_idx
+
+    ! Compute neighboring oct Cartesian key
+    ilevel = grid_fine(oct_idx)%lev
+    ckey(1) = grid_fine(oct_idx)%ckey(1) + shift_oct(1, input_ind)
+    ckey(2) = grid_fine(oct_idx)%ckey(2) + shift_oct(2, input_ind)
+    ckey(3) = grid_fine(oct_idx)%ckey(3) + shift_oct(3, input_ind)
+
+    ! Periodic boundary conditions
+    do idim = 1,ndim
+       if(periodic(idim))then
+          if(ckey(idim)<box_ckey_min(idim,ilevel))ckey(idim)=box_ckey_max(idim,ilevel)-1
+          if(ckey(idim)>=box_ckey_max(idim,ilevel))ckey(idim)=box_ckey_min(idim,ilevel)
+       endif
+    enddo
+
+    ! Compute father oct Cartesian key
+    ilevel = ilevel - 1
+    ckey(1) = ckey(1) / 2
+    ckey(2) = ckey(2) / 2
+    ckey(3) = ckey(3) / 2
+
+    ! Compute cache oct properties
+    grid_coarse(cache_idx)%lev = ilevel
+    do idim = 1, ndim
+       grid_coarse(cache_idx)%ckey(idim) = ckey(idim)
+    end do
+    grid_coarse(cache_idx)%refined(1:twotondim) = .true.
+    flag1(1:twotondim, cache_idx) = 0
+
+    ! Compute new oct Hilbert key
+    hkey = hilbert_key(grid_coarse(cache_idx)%ckey, grid_coarse(cache_idx)%lev - 1)
+    grid_coarse(cache_idx)%hkey(1) = hkey
+
+    ! Initial potential and force set to zero
+    do ind = 1, twotondim
+       phi(ind, cache_idx) = 0d0
+       f(ind, 1, cache_idx) = 0d0
+       f(ind, 2, cache_idx) = 0d0
+       f(ind, 3, cache_idx) = 0d0
+    end do
+
+  end subroutine make_mg_octs
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine restrict_mask(grid, father, f, head_idx, num_octs)
+    type(oct), device :: grid(*)
+    real(kind=dp), device :: f(1:twotondim,1:ndim,*)
+    integer(kind=4), device :: father(*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
+    integer :: tid, bid, cell_idx, oct_idx
+    integer :: ind, father_idx, i, j, k
+
+    ! Thread and block id
+    tid = threadIdx%x - 1
+    bid = blockIdx%x - 1
+
+    ! Compute the oct idx
+    oct_idx = tid + bid * blockDim%x
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Compute the parent cell idx
+    father_idx = father(oct_idx)
+    i = grid(oct_idx)%ckey(1) - 2 * grid(father_idx)%ckey(1)
+    j = grid(oct_idx)%ckey(2) - 2 * grid(father_idx)%ckey(2)
+    k = grid(oct_idx)%ckey(3) - 2 * grid(father_idx)%ckey(3)
+    cell_idx = 1 + i + 2*j + 4*k
+
+    ! Reset conservative variables
+    f(cell_idx, 3, father_idx) = 0_dp
+
+    ! Average children variables
+    do ind = 1, twotondim
+       ngpmask=(1d0+f(ind,3,oct_idx))/2d0
+       f(cell_idx, 3, father_idx) = f(cell_idx, 3, father_idx) + ngpmask / dble(twotondim)
+    end do
+
+  end subroutine restrict_mask
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine volume_to_mask(f, head_idx, num_octs)
+    real(kind=dp), device :: f(1:twotondim,1:ndim,*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
+    integer :: cell_idx, oct_idx, block_idx
+
+    block_idx = blockIdx%x - 1
+
+    ! Compute the oct idx
+    oct_idx = block_idx * blockDim%y + threadIdx%y - 1
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Compute the cell idx
+    cell_idx = threadIdx%x
+
+    ! Initialize mask to input value
+    f(cell_idx, 3, oct_idx) = 2d0 * f(cell_idx, 3, oct_idx) - 1d0
+
+  end subroutine volume_to_mask
+  ! =========================================================================~
+
+  ! =========================================================================
+  attributes(global) subroutine cmp_residual(phi, rho, f, nbor, head_idx, num_octs, fourpi, offset, oneoverdx2)
+    real(kind=dp), device :: phi(1:twotondim,*)
+    real(kind=dp), device :: rho(1:twotondim,*)
+    real(kind=dp), device :: f(1:twotondim,1:ndim,*)
+    integer(kind=4), device :: nbor(1:subgridsize,*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+    real(dp), intent(in), value :: fourpi, offset, oneoverdx2
+
+    real(kind=dp) :: phi_nbr, dis_nbr, w, phi_b
+    integer :: cell_idx, oct_idx, block_idx, source_idx, subgrid_idx, num_idx
+    integer :: number_nbors, ind, icell, idir, ind_nbor
+    integer :: i, j, k, in, jn, kn, ind
+    integer :: oct_nbr_idx, cell_nbr_idx
+
+    block_idx = blockIdx%x - 1
+
+    ! Compute the oct idx
+    oct_idx = block_idx * blockDim%y + threadIdx%y - 1
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Compute the cell idx
+    cell_idx = threadIdx%x
+
+    ! Compute subgrid idx
+    subgrid_idx = (oct_idx - 1) / nsubgridtondim + 1
+
+    ! Compute oct rank within subgrid
+    num_idx = oct_idx - (subgrid_idx - 1) * nsubgridtondim
+    num_idx = num_idx - 1
+    k = num_idx / nsubgridsq
+    num_idx = num_idx - k * nsubgridsq
+    j = num_idx / nsubgrid
+    i = num_idx - j * nsubgrid
+    i = i + 1; j = j + 1; k = k + 1
+
+    ! Compute true oct idx
+    ind_nbor = 1 + i + nsubgridp2 * j  + nsubgridp2sq * k
+    oct_idx = nbor(ind_nbor, subgrid_idx)
+
+    ! Cell potential and distance function
+    phi_c = phi(cell_idx, ict_idx)
+    dis_c = f(cell_idx, 3, oct_idx)
+
+    ! Initialize residual to zero
+    f(cell_idx, 1, oct_idx) = 0d0
+
+    if (dis_c > 0d0) then
+
+       nb_sum = 0d0
+
+       ! Loop over directions
+       do idim = 1, ndim
+
+          ! Loop over 2 neighbors
+          do inbor = 1, 2
+
+             ! Compute neighboring oct index
+             in = 0; jn = 0; kn = 0
+             if (idim == 1) then
+                in = iii(cell_idx, 2*(idim-1) + inbor)
+             else if (idim == 2) then
+                jn = iii(cell_idx, 2*(idim-1) + inbor)
+             else
+                kn = iii(cell_idx, 2*(idim-1) + inbor)
+             end if
+             ind = 1 + (i + in) + nsubgridp2 * (j + jn)  + nsubgridp2sq * (k + kn)
+             oct_nbr_idx = nbor(ind, subgrid_idx)
+
+             ! Compute neighboring cell index in parent octs
+             cell_nbr_idx = hhh(cell_idx, 2*(idim-1) + inbor)
+
+             ! Get phi and distance function
+             if (oct_nbr_idx > 0) then
+                phi_nbr = phi(cell_nbr_idx, oct_nbr_idx)
+                dis_nbr = f(cell_nbr_idx, 3, oct_nbr_idx)
+             else
+                phi_nbr = 0d0
+                dis_nbr = -1d0
+             endif
+
+             ! If close to boundary, use zero Dirichlet boundary conditions.
+             if (dis_nbr <= 0.0) then
+                nb_sum = nb_sum + phi_c * dis_nbr / dis_c 
+             else
+                nb_sum = nb_sum	+ phi_nbr
+             endif
+
+          end do
+       end do
+
+       f(cell_idx, 1, oct_idx) = - oneoverdx2 * (nb_sum - dble(twondim)*phi_c) + f(cell_idx, 2, oct_idx)
+
+    end if
+
+  end subroutine cmp_residual
+  ! =========================================================================~
+
+  ! =========================================================================
+  attributes(global) subroutine gauss_seidel(phi, rho, f, nbor, head_idx, num_octs, dx2, redstep, safe)
+    real(kind=dp), device :: phi(1:twotondim,*)
+    real(kind=dp), device :: f(1:twotondim,1:ndim,*)
+    integer(kind=4), device :: nbor(1:subgridsize,*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+    real(dp), intent(in), value :: dx2
+    logical, intent(in), value :: redstep, safe
+
+    real(kind=dp) :: phi_nbr, dis_nbr, w, phi_b
+    integer :: cell_idx, oct_idx, block_idx, source_idx, subgrid_idx, num_idx
+    integer :: number_nbors, ind, icell, idir, ind_nbor
+    integer :: i, j, k, in, jn, kn, ind
+    integer :: oct_nbr_idx, cell_nbr_idx
+
+    block_idx = blockIdx%x - 1
+
+    ! Compute the oct idx
+    oct_idx = block_idx * blockDim%y + threadIdx%y - 1
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Compute the cell idx
+    if (redstep) then
+       cell_idx = ired  (threadIdx%x)
+    else
+       cell_idx = iblack(threadIdx%x)
+    end if
+
+    ! Compute subgrid idx
+    subgrid_idx = (oct_idx - 1) / nsubgridtondim + 1
+
+    ! Compute oct rank within subgrid
+    num_idx = oct_idx - (subgrid_idx - 1) * nsubgridtondim
+    num_idx = num_idx - 1
+    k = num_idx / nsubgridsq
+    num_idx = num_idx - k * nsubgridsq
+    j = num_idx / nsubgrid
+    i = num_idx - j * nsubgrid
+    i = i + 1; j = j + 1; k = k + 1
+
+    ! Compute true oct idx
+    ind_nbor = 1 + i + nsubgridp2 * j  + nsubgridp2sq * k
+    oct_idx = nbor(ind_nbor, subgrid_idx)
+
+    ! Cell potential and distance function
+    phi_c = phi(cell_idx, ict_idx)
+    dis_c = f(cell_idx, 3, oct_idx)
+
+    if (dis_c > 0d0 .and. ((.not. safe) .or. dis_c >= 1d0)) then
+
+       nb_sum = 0d0
+       weight = 0d0
+
+       ! Loop over directions
+       do idim = 1, ndim
+
+          ! Loop over 2 neighbors
+          do inbor = 1, 2
+
+             ! Compute neighboring oct index
+             in = 0; jn = 0; kn = 0
+             if (idim == 1) then
+                in = iii(cell_idx, 2*(idim-1) + inbor)
+             else if (idim == 2) then
+                jn = iii(cell_idx, 2*(idim-1) + inbor)
+             else
+                kn = iii(cell_idx, 2*(idim-1) + inbor)
+             end if
+             ind = 1 + (i + in) + nsubgridp2 * (j + jn)  + nsubgridp2sq * (k + kn)
+             oct_nbr_idx = nbor(ind, subgrid_idx)
+
+             ! Compute neighboring cell index in parent octs
+             cell_nbr_idx = hhh(cell_idx, 2*(idim-1) + inbor)
+
+             ! Get phi and distance function
+             if (oct_nbr_idx > 0) then
+                phi_nbr = phi(cell_nbr_idx, oct_nbr_idx)
+                dis_nbr = f(cell_nbr_idx, 3, oct_nbr_idx)
+             else
+                phi_nbr = 0d0
+                dis_nbr = -1d0
+             endif
+
+             ! If close to boundary, use zero Dirichlet boundary conditions.
+             if (dis_nbr <= 0.0) then
+                weight = weight + dis_nbr / dis_c
+             else
+                nb_sum = nb_sum	+ phi_nbr
+             endif
+
+          end do
+       end do
+
+       phi(cell_idx, oct_idx) = (nb_sum - dx2 * f(cell_idx, 2, oct_idx)) / (dble(twondim) - weight)
+
+    end if
+
+  end subroutine gauss_seidel
+  ! =========================================================================~
+
+  ! =========================================================================
+  attributes(global) subroutine reset_phi_kernel(phi, head_idx, num_octs, phi_val)
+    real(kind=dp), device :: phi(1:twotondim,*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+    real(kind=dp), intent(in), value :: phi_val
+
+    integer :: cell_idx, oct_idx, block_idx
+
+    block_idx = blockIdx%x - 1
+
+    ! Compute the oct idx
+    oct_idx = block_idx * blockDim%y + threadIdx%y - 1
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Compute the cell idx
+    cell_idx = threadIdx%x
+
+    ! Initialize phi to input value
+    phi(cell_idx, oct_idx) = phi_val
+
+  end subroutine reset_phi_kernel
+  ! =========================================================================~
+
+  ! =========================================================================
+  attributes(global) subroutine restrict_residual(grid, father, f, head_idx, num_octs)
+    type(oct), device :: grid(*)
+    real(kind=dp), device :: f(1:twotondim,1:ndim,*)
+    integer(kind=4), device :: father(*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
+    integer :: tid, bid, cell_idx, oct_idx
+    integer :: ind, father_idx, i, j, k
+
+    ! Thread and block id
+    tid = threadIdx%x - 1
+    bid = blockIdx%x - 1
+
+    ! Compute the oct idx
+    oct_idx = tid + bid * blockDim%x
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Compute the parent cell idx
+    father_idx = father(oct_idx)
+    i = grid(oct_idx)%ckey(1) - 2 * grid(father_idx)%ckey(1)
+    j = grid(oct_idx)%ckey(2) - 2 * grid(father_idx)%ckey(2)
+    k = grid(oct_idx)%ckey(3) - 2 * grid(father_idx)%ckey(3)
+    cell_idx = 1 + i + 2*j + 4*k
+
+    ! Reset residual
+    f(cell_idx, 2, father_idx) = 0_dp
+
+    ! Average children variables
+    do ind = 1, twotondim
+       if (f(ind, 3, oct_idx) > 0d0 .and. f(cell_idx, 3, father_idx) > 0d0) then
+          f(cell_idx, 2, father_idx) = f(cell_idx, 2, father_idx) + f(ind, 1, oct_idx) / dble(twotondim)
+       end if
+    end do
+
+  end subroutine restrict_residual
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine interpolate_correct(grid, father, nbor, phi, head_idx, num_octs)
+    implicit none
+    type(oct), device :: grid(*)
+    integer, device :: father(*)
+    integer, device :: nbor(1:threetondim,*)
+    real(kind=dp), device :: phi(1:twotondim,*)
+    integer, value :: head_idx
+    integer, value :: num_octs
+
+    integer(4) :: cell_idx, oct_idx, block_idx
+    integer(4) :: igrid_nbor(1:threetondim)
+    integer(4) :: icell_nbor(1:threetondim)
+    integer(4) :: ind_average, ind_father
+    integer(4) :: igrid_nbr, ind_nbr
+    real(kind=dp) :: corr, coeff
+
+    block_idx = blockIdx%x - 1
+
+    ! Map thread -> oct
+    oct_idx = block_idx * blockDim%y + threadIdx%y - 1
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Map thread -> fine cell (1..8)
+    cell_idx = threadIdx%x
+
+    ! Get 3x3x3 neighboring father cells of this oct
+    call nbor_father_cells(grid, father, nbor, oct_idx, igrid_nbor, icell_nbor)
+
+    ! CIC interpolation
+    corr = 0d0
+    do ind_average = 1, twotondim
+       ind_father = ccc(ind_average, cell_idx)
+       coeff      = bbb(ind_average)
+
+       igrid_nbr  = igrid_nbor(ind_father)
+       ind_nbr    = icell_nbor(ind_father)
+
+       if ((igrid_nbr > 0) .and. (f(cell_idx, 3, oct_idx) > 0d0)) then
+          corr = corr + coeff * phi(ind_nbr, igrid_nbr)
+       end if
+    end do
+
+    phi(cell_idx, oct_idx) = phi(cell_idx, oct_idx) + corr
+
+  end subroutine interpolate_correct
+  ! =========================================================================
 
 end module multigrid_device
 
