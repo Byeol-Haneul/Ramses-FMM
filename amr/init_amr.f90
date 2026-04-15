@@ -239,13 +239,13 @@ subroutine init_amr(r,g,m,type)
 #endif
 
   ! Allocate the device arrays
+#ifdef GRAV
 #ifdef _CUDA
   if(type=='mg')then
-#ifdef GRAV
      allocate(phi_mg(1:twotondim,1:m%ngridmax+m%ncachemax))
      allocate(f_mg(1:twotondim,1:3,1:m%ngridmax+m%ncachemax))
-#endif
   endif
+#endif
 #endif
 
   ! Allocate cache-related arrays

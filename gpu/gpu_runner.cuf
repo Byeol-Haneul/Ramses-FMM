@@ -20,15 +20,19 @@ module gpu_runner
 
   integer(kind=4), device, allocatable, dimension(:) :: father
   integer(kind=4), device, allocatable, dimension(:,:) :: nbor
-
-  real(kind=dp), device, allocatable, dimension(:,:,:) :: uold, unew
   integer(kind=4), device, allocatable, dimension(:,:) :: flag1, flag2
 
+#ifdef HYDRO
+  real(kind=dp), device, allocatable, dimension(:,:,:) :: uold, unew
+#endif
+
+#ifdef GRAV
   real(kind=dp), device, allocatable, dimension(:,:) :: phi
   real(kind=dp), device, allocatable, dimension(:,:) :: rho
   real(kind=dp), device, allocatable, dimension(:,:) :: nref
   real(kind=dp), device, allocatable, dimension(:,:) :: phi_old
   real(kind=dp), device, allocatable, dimension(:,:,:) :: f
+#endif
 
   integer(kind=4), device, allocatable, dimension(:) :: swap_local
   integer(kind=4), device, allocatable, dimension(:) :: swap_global
