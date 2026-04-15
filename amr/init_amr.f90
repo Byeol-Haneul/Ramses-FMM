@@ -150,6 +150,36 @@ subroutine init_amr(r,g,m,type)
      swap_global=0
      prefix_sum=0
   endif
+  if(type=='mg')then
+#ifdef GRAV
+     allocate(grid_mg(1:m%ngridmax+m%ncachemax))
+     allocate(flag1_mg(1:twotondim,1:m%ngridmax+m%ncachemax))
+     allocate(flag2_mg(1:twotondim,1:m%ngridmax+m%ncachemax))
+     allocate(father_mg(1:m%ngridmax+m%ncachemax))
+     nborarrsize = (m%ngridmax + nsubgridtondim - 1) / nsubgridtondim
+     allocate(nbor_mg(1:subgridsize,1:nborarrsize))
+     flag1_mg=0
+     flag2_mg=0
+     father_mg=0
+     nbor_mg=0
+     ! Allocate hash table space
+     m%hash_size=2*(m%ngridmax + m%ncachemax)
+     allocate(hash_key_mg(1:m%hash_size))
+     allocate(hash_val_mg(1:m%hash_size))
+     hash_key_mg=0
+     hash_val_mg=0
+     ! Work buffers for GPU scan/sort/refine
+     allocate(swap_local_mg(1:m%ngridmax+m%ncachemax))
+     allocate(swap_global_mg(1:m%ngridmax+m%ncachemax))
+     allocate(prefix_sum_mg(1:m%ngridmax+m%ncachemax))
+     allocate(partial_sums_mg_0(1:max(1,(m%ngridmax+m%ncachemax)/256)))
+     allocate(partial_sums_mg_1(1:max(1,(m%ngridmax+m%ncachemax)/65536)))
+     allocate(partial_sums_mg_2(1:max(1,(m%ngridmax+m%ncachemax)/16777216)))
+     swap_local_mg=0
+     swap_global_mg=0
+     prefix_sum_mg=0
+#endif
+  endif
 #endif
 
   ! Allocate AMR specific arrays
@@ -184,10 +214,19 @@ subroutine init_amr(r,g,m,type)
   ! Allocate the device arrays
 #ifdef _CUDA
   if(type=='amr')then
+#ifdef HYDRO
      allocate(uold(1:twotondim,1:nvar,1:m%ngridmax+m%ncachemax))
      allocate(unew(1:twotondim,1:nvar,1:m%ngridmax+m%ncachemax))
      uold=0d0
      unew=0d0
+#endif
+#ifdef GRAV
+     allocate(rho(1:twotondim,1:m%ngridmax+m%ncachemax))
+     allocate(phi(1:twotondim,1:m%ngridmax+m%ncachemax))
+     allocate(nref(1:twotondim,1:m%ngridmax+m%ncachemax))
+     allocate(f(1:twotondim,1:3,1:m%ngridmax+m%ncachemax))
+     allocate(phi_old(1:twotondim,1:m%ngridmax+m%ncachemax))
+#endif
   endif
 #endif
 
@@ -197,6 +236,16 @@ subroutine init_amr(r,g,m,type)
      allocate(m%phi(1:twotondim,1:m%ngridmax+m%ncachemax))
      allocate(m%f(1:twotondim,1:3,1:m%ngridmax+m%ncachemax))
   endif
+#endif
+
+  ! Allocate the device arrays
+#ifdef GRAV
+#ifdef _CUDA
+  if(type=='mg')then
+     allocate(phi_mg(1:twotondim,1:m%ngridmax+m%ncachemax))
+     allocate(f_mg(1:twotondim,1:3,1:m%ngridmax+m%ncachemax))
+  endif
+#endif
 #endif
 
   ! Allocate cache-related arrays
