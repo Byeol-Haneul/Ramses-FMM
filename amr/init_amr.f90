@@ -102,11 +102,12 @@ subroutine init_amr(r,g,m,type)
   ! Store size in mesh object
   if(type=='amr')then
      m%ngridmax=r%ngridmax
+     m%ncachemax=r%ncachemax
   endif
   if(type=='mg')then
      m%ngridmax=r%ngridmax/7
+     m%ncachemax=MAX(r%ncachemax/7,10000)
   endif
-  m%ncachemax=r%ncachemax
 
   ! Allocate main oct array
   allocate(m%grid(1:m%ngridmax+m%ncachemax))
@@ -153,13 +154,8 @@ subroutine init_amr(r,g,m,type)
   if(type=='mg')then
 #ifdef GRAV
      allocate(grid_mg(1:m%ngridmax+m%ncachemax))
-     allocate(flag1_mg(1:twotondim,1:m%ngridmax+m%ncachemax))
-     allocate(flag2_mg(1:twotondim,1:m%ngridmax+m%ncachemax))
-     allocate(father_mg(1:m%ngridmax+m%ncachemax))
-     nborarrsize = (m%ngridmax + nsubgridtondim - 1) / nsubgridtondim
-     allocate(nbor_mg(1:subgridsize,1:nborarrsize))
-     flag1_mg=0
-     flag2_mg=0
+     allocate(father_mg(1:r%ngridmax+r%ngridmax/7+m%ncachemax))
+     allocate(nbor_mg(1:threetondim,1:m%ngridmax))
      father_mg=0
      nbor_mg=0
      ! Allocate hash table space
@@ -169,15 +165,6 @@ subroutine init_amr(r,g,m,type)
      hash_key_mg=0
      hash_val_mg=0
      ! Work buffers for GPU scan/sort/refine
-     allocate(swap_local_mg(1:m%ngridmax+m%ncachemax))
-     allocate(swap_global_mg(1:m%ngridmax+m%ncachemax))
-     allocate(prefix_sum_mg(1:m%ngridmax+m%ncachemax))
-     allocate(partial_sums_mg_0(1:max(1,(m%ngridmax+m%ncachemax)/256)))
-     allocate(partial_sums_mg_1(1:max(1,(m%ngridmax+m%ncachemax)/65536)))
-     allocate(partial_sums_mg_2(1:max(1,(m%ngridmax+m%ncachemax)/16777216)))
-     swap_local_mg=0
-     swap_global_mg=0
-     prefix_sum_mg=0
 #endif
   endif
 #endif
@@ -506,28 +493,29 @@ subroutine init_amr(r,g,m,type)
      m%tail_cache=0
      m%noct_cache=0
      m%ifree_cache=1
-  endif
-  ! Compute Cartesian key offset for GPU hash table
-  allocate(m%key_off(1:r%nlevelmax+1))
-  m%key_off(1)=1
-  do ilevel=2,r%nlevelmax+1
-     m%key_off(ilevel)=m%key_off(ilevel-1)+m%hkey_max(1,ilevel-1)
-  end do
-  ! Allocate and transfer bounding box to device
-  allocate(ckey_max(1:r%nlevelmax+1))
-  allocate(key_off(1:r%nlevelmax+1))
-  allocate(box_ckey_min(1:3,1:r%nlevelmax+1))
-  allocate(box_ckey_max(1:3,1:r%nlevelmax+1))
-  ckey_max=m%ckey_max
-  key_off=m%key_off
-  periodic=r%periodic
-  box_ckey_min=m%box_ckey_min
-  box_ckey_max=m%box_ckey_max
-  if(r%nbound>0)then
-     allocate(bound_ckey_min(1:3,1:r%nbound,1:r%nlevelmax+1))
-     allocate(bound_ckey_max(1:3,1:r%nbound,1:r%nlevelmax+1))
-     bound_ckey_min=m%bound_ckey_min
-     bound_ckey_max=m%bound_ckey_max
+     ! Compute Cartesian key offset for GPU hash table
+     allocate(m%key_off(1:r%nlevelmax+1))
+     m%key_off(1)=1
+     do ilevel=2,r%nlevelmax+1
+        m%key_off(ilevel)=m%key_off(ilevel-1)+m%hkey_max(1,ilevel-1)
+     end do
+     ! Allocate and transfer bounding box to device
+     allocate(ckey_max(1:r%nlevelmax+1))
+     allocate(key_off(1:r%nlevelmax+1))
+     allocate(box_ckey_min(1:3,1:r%nlevelmax+1))
+     allocate(box_ckey_max(1:3,1:r%nlevelmax+1))
+     ckey_max=m%ckey_max
+     key_off=m%key_off
+     periodic=r%periodic
+     box_size=r%box_size
+     box_ckey_min=m%box_ckey_min
+     box_ckey_max=m%box_ckey_max
+     if(r%nbound>0)then
+        allocate(bound_ckey_min(1:3,1:r%nbound,1:r%nlevelmax+1))
+        allocate(bound_ckey_max(1:3,1:r%nbound,1:r%nlevelmax+1))
+        bound_ckey_min=m%bound_ckey_min
+        bound_ckey_max=m%bound_ckey_max
+     endif
   endif
 #endif
 

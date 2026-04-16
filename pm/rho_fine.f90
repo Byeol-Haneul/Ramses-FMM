@@ -1,4 +1,7 @@
 module rho_fine_module
+#ifdef _CUDA
+  use gpu_runner, only: gpu_multipole_leaf, gpu_multipole_split, gpu_reset_rho, gpu_cic_multipole
+#endif
 contains
 !###############################################
 !###############################################
@@ -162,7 +165,15 @@ recursive subroutine r_multipole_leaf_cells(pst,ilevel,input_size)
      call r_multipole_leaf_cells(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
+#ifdef _CUDA
+     if(pst%s%m%data_on_device)then
+        call gpu_multipole_leaf(pst%s, ilevel)
+     else
+        call multipole_leaf_cells(pst%s%r,pst%s%g,pst%s%m,ilevel)
+     endif
+#else
      call multipole_leaf_cells(pst%s%r,pst%s%g,pst%s%m,ilevel)
+#endif
   endif
 
 end subroutine r_multipole_leaf_cells
@@ -268,7 +279,15 @@ recursive subroutine r_multipole_split_cells(pst,ilevel,input_size)
      call r_multipole_split_cells(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
+#ifdef _CUDA
+     if(pst%s%m%data_on_device)then
+        call gpu_multipole_split(pst%s, ilevel)
+     else
+        call multipole_split_cells(pst%s,ilevel)
+     endif
+#else
      call multipole_split_cells(pst%s,ilevel)
+#endif
   endif
 
 end subroutine r_multipole_split_cells
@@ -433,7 +452,15 @@ recursive subroutine r_reset_rho(pst,ilevel,input_size)
      call r_reset_rho(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
+#ifdef _CUDA
+     if(pst%s%m%data_on_device)then
+        call gpu_reset_rho(pst%s, ilevel)
+     else
+        call reset_rho(pst%s%r,pst%s%g,pst%s%m,ilevel)
+     endif
+#else
      call reset_rho(pst%s%r,pst%s%g,pst%s%m,ilevel)
+#endif
   endif
 
 end subroutine r_reset_rho
@@ -489,7 +516,15 @@ recursive subroutine r_cic_multipole(pst,ilevel,input_size)
      call r_cic_multipole(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
+#ifdef _CUDA
+     if(pst%s%m%data_on_device)then
+        call gpu_cic_multipole(pst%s, ilevel)
+     else
+        call cic_multipole(pst%s,ilevel)
+     endif
+#else
      call cic_multipole(pst%s,ilevel)
+#endif
   endif
 
 end subroutine r_cic_multipole

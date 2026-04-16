@@ -7,49 +7,53 @@ module gpu_runner
   integer, dimension(1:3), parameter::n_nbor = (/1,2,2/)
 
   !> Various parameters on the device
-  logical, device, dimension(1:3) :: periodic   
+  logical, device, dimension(1:3) :: periodic
+  real(kind=8), device, dimension(1:3) :: box_size
   integer(kind=4), device, allocatable, dimension(:) :: ckey_max
   integer(kind=8), device, allocatable, dimension(:) :: key_off
-  integer(kind=4), device, allocatable, dimension(:,:) :: box_ckey_min
-  integer(kind=4), device, allocatable, dimension(:,:) :: box_ckey_max
-  integer(kind=4), device, allocatable, dimension(:,:,:) :: bound_ckey_min
-  integer(kind=4), device, allocatable, dimension(:,:,:) :: bound_ckey_max
+  integer(kind=4), device, allocatable, dimension(:,:) :: box_ckey_min, box_ckey_max
+  integer(kind=4), device, allocatable, dimension(:,:,:) :: bound_ckey_min, bound_ckey_max
 
   !> Arrays to hold the grid on the device
   type(oct), device, allocatable, dimension(:) :: grid
-
   integer(kind=4), device, allocatable, dimension(:) :: father
   integer(kind=4), device, allocatable, dimension(:,:) :: nbor
   integer(kind=4), device, allocatable, dimension(:,:) :: flag1, flag2
 
+  !> Arrays to hold the hydro variables on the device
 #ifdef HYDRO
   real(kind=dp), device, allocatable, dimension(:,:,:) :: uold, unew
 #endif
 
+  !> Arrays to hold the gravity variables on the device
 #ifdef GRAV
-  real(kind=dp), device, allocatable, dimension(:,:) :: phi
-  real(kind=dp), device, allocatable, dimension(:,:) :: rho
-  real(kind=dp), device, allocatable, dimension(:,:) :: nref
-  real(kind=dp), device, allocatable, dimension(:,:) :: phi_old
+  real(kind=dp), device, allocatable, dimension(:,:) :: phi, rho, nref, phi_old
   real(kind=dp), device, allocatable, dimension(:,:,:) :: f
 #endif
-
-  integer(kind=4), device, allocatable, dimension(:) :: swap_local
-  integer(kind=4), device, allocatable, dimension(:) :: swap_global
 
   !> Arrays to hold the hash table on the device
   integer(kind=8), device, allocatable, dimension(:) :: hash_key
   integer(kind=4), device, allocatable, dimension(:) :: hash_val
 
   !> Object to hold the prefix sum data vector and workspace
+  integer(kind=4), device, allocatable, dimension(:) :: swap_local, swap_global
   integer(kind=4), device, allocatable, dimension(:) :: prefix_sum
-  integer(kind=4), device, allocatable, dimension(:) :: partial_sums_0
-  integer(kind=4), device, allocatable, dimension(:) :: partial_sums_1
-  integer(kind=4), device, allocatable, dimension(:) :: partial_sums_2
+  integer(kind=4), device, allocatable, dimension(:) :: partial_sums_0, partial_sums_1, partial_sums_2
 
   !> The Fortran array of hydro variables of ghost and halo octs on the host and on the device
   real(kind=dp), allocatable, dimension(:) :: uold_send_host, uold_recv_host
   real(kind=dp), device, allocatable, dimension(:) :: uold_send_device, uold_recv_device
+
+  !> Arrays to hold the multigrid variables on the device
+#ifdef GRAV
+  type(oct), device, allocatable, dimension(:) :: grid_mg
+  integer(kind=4), device, allocatable, dimension(:) :: father_mg
+  integer(kind=4), device, allocatable, dimension(:,:) :: nbor_mg
+  real(kind=dp), device, allocatable, dimension(:,:,:) :: f_mg
+  real(kind=dp), device, allocatable, dimension(:,:) :: phi_mg
+  integer(kind=8), device, allocatable, dimension(:) :: hash_key_mg
+  integer(kind=4), device, allocatable, dimension(:) :: hash_val_mg
+#endif
 
   !> The Fortran array of oct index of ghost and halo octs on the host and the device
   integer, allocatable, dimension(:) :: idx_send_host, idx_recv_host
@@ -955,6 +959,142 @@ contains
     endif
 
   end subroutine gpu_reset_hash
+
+  !> @brief
+  !> Set rho and nref arrays to zero on the device.
+  !>
+  !> @detail
+  !> This is useful for pure particle runs.
+  !>
+  subroutine gpu_reset_rho(sim, ilevel)
+    use rho_device, only: reset_rho
+    use ramses_commons, only: ramses_t
+    type(ramses_t), intent(inout) :: sim
+    integer, intent(in) :: ilevel
+
+    integer(kind=4) :: head_idx, num_octs
+    integer :: threadsX_per_block, threadsY_per_block, num_threads, num_blocks
+
+    head_idx = sim%m%head(ilevel)
+    num_octs = sim%m%noct(ilevel)
+    threadsX_per_block = 8
+    threadsY_per_block = 16
+    num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
+    if (num_octs > 0) then
+       call reset_rho<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(rho, nref, head_idx, num_octs)
+    endif
+
+  end subroutine gpu_reset_rho
+
+  !> @brief
+  !> Set multipole to cell center and mass in leaf cells and zero in split cells
+  !>
+  !> @detail
+  !> This is used to initialize the multipole upward pass.
+  !>
+  subroutine gpu_multipole_leaf(sim, ilevel)
+    use rho_device, only: multipole_leaf
+    use ramses_commons, only: ramses_t
+    type(ramses_t), intent(inout) :: sim
+    integer, intent(in) :: ilevel
+
+    integer(kind=4) :: head_idx, num_octs
+    integer :: threadsX_per_block, threadsY_per_block, num_threads, num_blocks
+    real(kind=dp) :: dx
+
+    dx = sim%r%boxlen/2**ilevel
+
+    head_idx = sim%m%head(ilevel)
+    num_octs = sim%m%noct(ilevel)
+    threadsX_per_block = 8
+    threadsY_per_block = 16
+    num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
+    if (num_octs > 0) then
+       call multipole_leaf<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(unew, uold, grid, &
+            & head_idx, num_octs, dx)
+    endif
+
+  end subroutine gpu_multipole_leaf
+
+  !> @brief
+  !> Compute multipole in split cells.
+  !>
+  !> @detail
+  !> Get multipole from children cells to perform the multipole upward pass.
+  !>
+  subroutine gpu_multipole_split(sim, ilevel)
+    use rho_device, only: multipole_upload, multipole_tot
+    use ramses_commons, only: ramses_t
+    type(ramses_t), intent(inout)::sim
+    integer, intent(in)::ilevel
+    !
+    integer(kind=4) :: head_idx, num_octs
+    integer(kind=4) :: num_blocks, num_threads
+    real(kind=8), device :: multipole_d(1:ndim+1)
+    real(kind=8) :: multipole_h(1:ndim+1)
+
+    head_idx = sim%m%head(ilevel+1)
+    num_octs = sim%m%noct(ilevel+1)
+    num_blocks = num_octs
+    num_threads = 128
+
+    if (num_octs > 0) then
+       call multipole_upload<<<num_blocks, num_threads>>>(grid, father, unew, head_idx, num_octs)
+    end if
+
+    if (ilevel == sim%r%levelmin) then
+
+       multipole_h = 0d0
+       multipole_d = multipole_h
+
+       head_idx = sim%m%head(ilevel)
+       num_octs = sim%m%noct(ilevel)
+       num_threads = 256
+       num_blocks = (num_octs * twotondim + num_threads - 1 ) / num_threads
+
+       if (num_octs > 0) then
+          call multipole_tot<<<num_blocks, num_threads>>>(unew, head_idx, num_octs, multipole_d)
+       end if
+
+       multipole_h = multipole_d
+       sim%g%multipole%q = sim%g%multipole%q + multipole_h
+
+    end if
+
+  end subroutine gpu_multipole_split
+
+  !> @brief
+  !> Deposit gas multipoles on the rho array using CIC
+  !>
+  !> @detail
+  !> Using CIC interpolation, deposit the mass of the gas pseudo-particles on the mesh.
+  !>
+  !> @param[in] sim : The simulation object
+  !> @param[in] ilevel : The refinement level to update
+  !>
+  subroutine gpu_cic_multipole(sim, ilevel)
+    use rho_device, only: multipole_cic
+    use ramses_commons, only: ramses_t
+    type(ramses_t), intent(inout)::sim
+    integer, intent(in)::ilevel
+    !
+    integer(kind=4) :: head_idx, num_subgrids
+    integer :: threads_per_block, num_blocks
+    real(kind=8) :: dx
+
+    if(sim%r%verbose.and.sim%g%myid==1)write(*,'("   Entering gpu_cic_multipole for level ",I2)')ilevel
+
+    dx = real(sim%r%boxlen/2**ilevel, kind=8)
+
+    head_idx = (sim%m%head(ilevel) - 1) / nsubgridtondim + 1
+    num_subgrids = sim%m%noct(ilevel) / nsubgridtondim
+    num_blocks = num_subgrids
+    threads_per_block = 64 ! Optimize later
+
+    call multipole_cic<<<num_blocks, threads_per_block>>>(unew, rho, grid, nbor, &
+         & head_idx, num_subgrids, dx, box_size, periodic)
+
+  end subroutine gpu_cic_multipole
 
   !###########################################################
   !###########################################################
