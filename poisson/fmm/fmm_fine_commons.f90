@@ -83,14 +83,14 @@ subroutine fmm(pst,ilev,icount)
   end if
 
   if (ilev < pst%s%r%nlevelmax) then
-    if (associated(pst%s%m_fmm_merged) .and. (pst%s%m_fmm_merged%noct_used > 0)) call r_cleanup_fmm_merge(pst)
+    if (associated(pst%s%m_fmm_merged)) call r_cleanup_fmm_merge(pst)
     double_level%ilevel=ilev+1
     double_level%ifine=ilev
     double_level%mode=FMM_BUILD_MERGED
     call r_build_fmm(pst,double_level,storage_size(double_level)/32)
     call merge_multipoles(pst,ilev+1)
   end if
-  use_merged = associated(pst%s%m_fmm_merged) .and. (pst%s%m_fmm_merged%noct_used > 0) .and. (ilev < pst%s%r%nlevelmax)
+  use_merged = associated(pst%s%m_fmm_merged) .and. (ilev < pst%s%r%nlevelmax)
 
    ! Downward pass for fmm grids. 
    input_size = storage_size(downward_levels)/32
@@ -98,9 +98,9 @@ subroutine fmm(pst,ilev,icount)
    
    if(pst%s%r%verbose) print *, "[M2L & L2L] LEVEL: ", ilev
    downward_levels%mode = FMM_TREE_SOURCE_STANDARD
-   do flev = pst%s%r%bound_levelmin+1, ilev-pst%s%r%level_fmm_to_amr
+   do flev = pst%s%r%bound_levelmin+1, ilev-1
       downward_levels%flev=flev
-      do jlev = max(pst%s%r%levelmin, flev+pst%s%r%level_fmm_to_amr-2), min(ilev, pst%s%r%nlevelmax)
+      do jlev = max(pst%s%r%levelmin, flev-1), min(ilev, pst%s%r%nlevelmax)
          downward_levels%jlev=jlev
          call r_fmm_downward(pst, downward_levels, input_size)
          if(pst%s%r%verbose) print *,'     <Downpass> (ilev, jlev, flev): ', ilev, jlev, flev
@@ -118,7 +118,6 @@ subroutine fmm(pst,ilev,icount)
    downward_levels%flev=ilev-pst%s%r%level_fmm_to_amr
 
    !! L2P and M2P from ilev - 1 is done through combined_direct force. 
-   !! ilev-2 should also be done via a similar function as combined_direct force 2. 
    if(pst%s%r%verbose) print *, "[L2P & M2P] LEVEL: ", ilev
    downward_levels%mode=FMM_TREE_SOURCE_STANDARD
    downward_levels%jlev=ilev
@@ -155,14 +154,14 @@ subroutine fmm(pst,ilev,icount)
       end if
    else
       downward_levels%mode=FMM_TREE_SOURCE_STANDARD
-      do jlev = max(pst%s%r%levelmin, ilev+1), pst%s%r%nlevelmax
+      do jlev = ilev+1, pst%s%r%nlevelmax
          downward_levels%jlev=jlev
          call r_fmm_amr_direct(pst, downward_levels, input_size)
          if(pst%s%r%verbose) print *,'     <Direct Force> (ilev, jlev)', ilev, jlev
       end do
    end if
 
-   if (associated(pst%s%m_fmm_merged) .and. (pst%s%m_fmm_merged%noct_used > 0)) call r_cleanup_fmm_merge(pst)
+   if (associated(pst%s%m_fmm_merged)) call r_cleanup_fmm_merge(pst)
 end subroutine fmm
 !###########################################################
 !###########################################################
