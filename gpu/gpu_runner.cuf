@@ -980,10 +980,11 @@ contains
     threadsX_per_block = 8
     threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
+#ifdef GRAV
     if (num_octs > 0) then
        call reset_rho<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(rho, nref, head_idx, num_octs)
     endif
-
+#endif
   end subroutine gpu_reset_rho
 
   !> @brief
@@ -1090,10 +1091,10 @@ contains
     num_subgrids = sim%m%noct(ilevel) / nsubgridtondim
     num_blocks = num_subgrids
     threads_per_block = 64 ! Optimize later
-
+#ifdef GRAV
     call multipole_cic<<<num_blocks, threads_per_block>>>(unew, rho, grid, nbor, &
          & head_idx, num_subgrids, dx, box_size, periodic)
-
+#endif
   end subroutine gpu_cic_multipole
 
   !###########################################################
