@@ -26,6 +26,7 @@ out*
 time*.txt
 **eight**
 
+runs/
 nfw/
 spheres/
 !analyze/spheres/
@@ -44,15 +45,20 @@ halo_test/
 namelist/fmm_tests/*/ic_part
 coeur_fmm/
 coeur_mg/
+tmp/
 
 # Ignore exectuables
 og
 mg_new
 fmm_hydro_amr
 faster_fmm
+fmm_spheres
+mg_spheres
 
 # Ignore contents of any dot-prefixed directory (e.g. .bitwise_*/)
 .*/**
 .ipynb_checkpoints/
 *.png
+*.gif
+*.mp4
 analyze/compare_movies.ipynb
