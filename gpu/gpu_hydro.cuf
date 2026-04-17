@@ -1649,6 +1649,136 @@ contains
   ! =========================================================================
 
   ! =========================================================================
+#ifdef GRAV
+  attributes(global) subroutine sync_hydro(uold, f, head_idx, num_octs, gamma, dt)
+    real(kind=dp), device :: f(1:twotondim,1:ndim,*)
+#else
+  attributes(global) subroutine sync_hydro(uold, constant_gravity, head_idx, num_octs, gamma, dt)
+    real(kind=8), device :: constant_gravity(1:3)
+#endif
+    real(kind=dp), device :: uold(1:twotondim,1:nvar,*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+    real(kind=dp), intent(in), value :: gamma
+    real(kind=8), intent(in), value :: dt
+
+    integer :: block_idx, cell_idx, oct_idx
+    type(primitive_t) :: prim
+    type(conserved_t) :: cons
+
+    block_idx = blockIdx%x - 1
+
+    ! Compute the oct idx
+    oct_idx = block_idx * blockDim%y + threadIdx%y - 1
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Compute the cell idx
+    cell_idx = threadIdx%x
+
+    ! Collect conservative variables
+    cons%density    = uold(cell_idx, 1, oct_idx)
+    cons%momentum_x = uold(cell_idx, 2, oct_idx)
+    cons%momentum_y = uold(cell_idx, 3, oct_idx)
+    cons%momentum_z = uold(cell_idx, 4, oct_idx)
+    cons%energy     = uold(cell_idx, 5, oct_idx)
+
+    ! Convert to primitive
+    prim = conserved_2_primitive(cons, gamma)
+
+    ! Update velocity
+#ifdef GRAV
+    prim%velocity_x = prim%velocity_x + f(cell_idx, 1, oct_idx) * dt
+    prim%velocity_y = prim%velocity_y + f(cell_idx, 2, oct_idx) * dt
+    prim%velocity_z = prim%velocity_z + f(cell_idx, 3, oct_idx) * dt
+#else
+    prim%velocity_x = prim%velocity_x + constant_gravity(1) * dt
+    prim%velocity_y = prim%velocity_y + constant_gravity(2) * dt
+    prim%velocity_z = prim%velocity_z + constant_gravity(3) * dt
+#endif
+
+    ! Convert back to conservative
+    cons = primitive_2_conserved(prim, gamma)
+
+    ! Save to main memory
+    uold(cell_idx, 1, oct_idx) = cons%density
+    uold(cell_idx, 2, oct_idx) = cons%momentum_x
+    uold(cell_idx, 3, oct_idx) = cons%momentum_y
+    uold(cell_idx, 4, oct_idx) = cons%momentum_z
+    uold(cell_idx, 5, oct_idx) = cons%energy
+
+  end subroutine sync_hydro
+  ! =========================================================================
+
+  ! =========================================================================
+#ifdef GRAV
+  attributes(global) subroutine grav_hydro(uold, unew, f, head_idx, num_octs, gamma, dt)
+    real(kind=dp), device :: f(1:twotondim,1:ndim,*)
+#else
+  attributes(global) subroutine grav_hydro(uold, unew, constant_gravity, head_idx, num_octs, gamma, dt)
+    real(kind=8), device :: constant_gravity(1:3)
+#endif
+    real(kind=dp), device :: uold(1:twotondim,1:nvar,*)
+    real(kind=dp), device :: unew(1:twotondim,1:nvar,*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+    real(kind=dp), intent(in), value :: gamma
+    real(kind=8), intent(in), value :: dt
+
+    integer :: block_idx, cell_idx, oct_idx
+    real(kind=8) :: rho_old, rho_new
+    type(primitive_t) :: prim
+    type(conserved_t) :: cons
+
+    block_idx = blockIdx%x - 1
+
+    ! Compute the oct idx
+    oct_idx = block_idx * blockDim%y + threadIdx%y - 1
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Compute the cell idx
+    cell_idx = threadIdx%x
+
+    ! Collect conservative variables
+    cons%density    = unew(cell_idx, 1, oct_idx)
+    cons%momentum_x = unew(cell_idx, 2, oct_idx)
+    cons%momentum_y = unew(cell_idx, 3, oct_idx)
+    cons%momentum_z = unew(cell_idx, 4, oct_idx)
+    cons%energy     = unew(cell_idx, 5, oct_idx)
+
+    ! Convert to primitive
+    prim = conserved_2_primitive(cons, gamma)
+
+    ! Old and new densities
+    rho_old = uold(cell_idx, 1, oct_idx)
+    rho_new = unew(cell_idx, 1, oct_idx)
+
+    ! Update velocity
+#ifdef GRAV
+    prim%velocity_x = prim%velocity_x + f(cell_idx, 1, oct_idx) * dt * rho_old / rho_new
+    prim%velocity_y = prim%velocity_y + f(cell_idx, 2, oct_idx) * dt * rho_old / rho_new
+    prim%velocity_z = prim%velocity_z + f(cell_idx, 3, oct_idx) * dt * rho_old / rho_new
+#else
+    prim%velocity_x = prim%velocity_x + constant_gravity(1) * dt * rho_old / rho_new
+    prim%velocity_y = prim%velocity_y + constant_gravity(2) * dt * rho_old / rho_new
+    prim%velocity_z = prim%velocity_z + constant_gravity(3) * dt * rho_old / rho_new
+#endif
+
+    ! Convert back to conservative
+    cons = primitive_2_conserved(prim, gamma)
+
+    ! Save to main memory
+    unew(cell_idx, 1, oct_idx) = cons%density
+    unew(cell_idx, 2, oct_idx) = cons%momentum_x
+    unew(cell_idx, 3, oct_idx) = cons%momentum_y
+    unew(cell_idx, 4, oct_idx) = cons%momentum_z
+    unew(cell_idx, 5, oct_idx) = cons%energy
+
+  end subroutine grav_hydro
+  ! =========================================================================
+
+  ! =========================================================================
   attributes(global) subroutine cmpdt_kernel(grid, uold, head_idx, num_octs, mass, ekin, eint, emag, dt, dx, gamma, courant_factor)
     type(oct), device :: grid(*)
     real(kind=dp), device :: uold(1:twotondim,1:nvar,*)

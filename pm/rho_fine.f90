@@ -182,7 +182,7 @@ end subroutine r_multipole_leaf_cells
 !###########################################################
 !###########################################################
 subroutine multipole_leaf_cells(r,g,m,ilevel)
-  use amr_parameters, only: ndim, twotondim
+  use amr_parameters, only: ndim, twotondim, dp
   use amr_commons, only: run_t, global_t, mesh_t
   use cache_commons
   implicit none
@@ -235,7 +235,7 @@ subroutine multipole_leaf_cells(r,g,m,ilevel)
            end do
 #ifdef HYDRO
            ! Add gas mass
-           mmm=max(m%uold(ind,1,igrid),r%smallr)*vol_loc
+           mmm=max(m%uold(ind,1,igrid),real(r%smallr,kind=dp))*vol_loc
            m%unew(ind,1,igrid)=m%unew(ind,1,igrid)+mmm
            do idim=1,ndim
               m%unew(ind,idim+1,igrid)=m%unew(ind,idim+1,igrid)+mmm*xx(idim)

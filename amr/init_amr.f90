@@ -508,6 +508,7 @@ subroutine init_amr(r,g,m,type)
      key_off=m%key_off
      periodic=r%periodic
      box_size=r%box_size
+     constant_gravity=r%constant_gravity
      box_ckey_min=m%box_ckey_min
      box_ckey_max=m%box_ckey_max
      if(r%nbound>0)then

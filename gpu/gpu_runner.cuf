@@ -9,6 +9,7 @@ module gpu_runner
   !> Various parameters on the device
   logical, device, dimension(1:3) :: periodic
   real(kind=8), device, dimension(1:3) :: box_size
+  real(kind=8), device, dimension(1:3) :: constant_gravity
   integer(kind=4), device, allocatable, dimension(:) :: ckey_max
   integer(kind=8), device, allocatable, dimension(:) :: key_off
   integer(kind=4), device, allocatable, dimension(:,:) :: box_ckey_min, box_ckey_max
@@ -180,6 +181,81 @@ contains
     call nvtxEndRange()
 
   end subroutine gpu_set_unew
+
+  !> @brief
+  !> Synchronization (corrector) step of old hydro variables (uold) due to gravity
+  !>
+  !> @detail
+  !> @param[in] sim : The simulation object
+  !> @param[in] ilevel : The refinement level to update
+  !>
+  subroutine gpu_sync_hydro(sim, ilevel, dt)
+    use nvtx
+    use hydro_device, only: sync_hydro
+    use ramses_commons, only: ramses_t
+    type(ramses_t), intent(inout)::sim
+    integer, intent(in)::ilevel
+    real(kind=8) :: dt
+
+    integer(kind=4) :: head_idx, num_octs
+    integer :: threadsX_per_block, threadsY_per_block, num_blocks
+    real(kind=dp) :: gamma
+
+    gamma = real(sim%r%gamma, kind=dp)
+
+    head_idx = sim%m%head(ilevel)
+    num_octs = sim%m%noct(ilevel)
+    threadsX_per_block = 8
+    threadsY_per_block = 16
+    num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
+
+#ifdef GRAV
+    call sync_hydro<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(uold, f, &
+         & head_idx, num_octs, gamma, dt)
+#else
+    call sync_hydro<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(uold, constant_gravity, &
+         & head_idx, num_octs, gamma, dt)
+#endif
+
+  end subroutine gpu_sync_hydro
+
+  !> @brief
+  !> Predictor step of new hydro variables (unew) due to gravity
+  !>
+  !> @detail
+  !> @param[in] sim : The simulation object
+  !> @param[in] ilevel : The refinement level to update
+  !>
+  subroutine gpu_grav_hydro(sim, ilevel)
+    use nvtx
+    use hydro_device, only: grav_hydro
+    use ramses_commons, only: ramses_t
+    type(ramses_t), intent(inout)::sim
+    integer, intent(in)::ilevel
+
+    integer(kind=4) :: head_idx, num_octs
+    integer :: threadsX_per_block, threadsY_per_block, num_blocks
+    real(kind=8) :: dt
+    real(kind=dp) :: gamma
+
+    dt = 0.5 * sim%g%dtnew(ilevel)
+    gamma = real(sim%r%gamma, kind=dp)
+
+    head_idx = sim%m%head(ilevel)
+    num_octs = sim%m%noct(ilevel)
+    threadsX_per_block = 8
+    threadsY_per_block = 16
+    num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
+
+#ifdef GRAV
+    call grav_hydro<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(uold, unew, f, &
+         & head_idx, num_octs, gamma, dt)
+#else
+    call grav_hydro<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(uold, unew, constant_gravity, &
+         & head_idx, num_octs, gamma, dt)
+#endif
+
+  end subroutine gpu_grav_hydro
 
   !> @brief
   !> Perform the hydro integration on a GPU
