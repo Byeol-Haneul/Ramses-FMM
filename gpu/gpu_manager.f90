@@ -29,7 +29,9 @@ recursive subroutine r_set_grid_device(pst)
      call nvtxStartRange("Copy entire mesh from host to device", color=5)!red
      grid = pst%s%m%grid
      flag1 = pst%s%m%flag1
+#ifdef HYDRO
      uold = pst%s%m%uold
+#endif
      call GPU_Error_Check(__FILE__, __LINE__)
      call nvtxEndRange()
 
@@ -85,7 +87,13 @@ recursive subroutine r_transfer_grid_host(pst)
      call nvtxStartRange("Copy entire mesh from device to host", color=5)!red
      pst%s%m%grid = grid
      pst%s%m%flag1 = flag1
+#ifdef HYDRO
      pst%s%m%uold = uold
+#endif
+#ifdef GRAV
+     pst%s%m%f = f
+     pst%s%m%phi = phi
+#endif
      call GPU_Error_Check(__FILE__, __LINE__)
      call nvtxEndRange()
 
