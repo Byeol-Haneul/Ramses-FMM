@@ -301,14 +301,17 @@ contains
   !> @param[in] gamma : The adiabatic index
   !> @param[out] local_subgrid : The local subgrid in shared memory to write the primitive variables to
   !>
-  attributes(device) subroutine subgrid_conserved_2_primitive(grid, uold, nbor, &
-       & head_idx, block_idx, thread_idx, gamma, local_subgrid)
+  attributes(device) subroutine subgrid_conserved_2_primitive(grid, uold, f, constant_gravity, nbor, &
+       & head_idx, block_idx, thread_idx, gamma, dt, local_subgrid)
     type(oct), device :: grid(*)
+    real(kind=8), device :: constant_gravity(3)
+    real(kind=dp), device :: f(1:twotondim,1:ndim,*)
     real(kind=dp), device :: uold(1:twotondim,1:nvar,*)
     integer(kind=4), device :: nbor(1:subgridsize,*)
     integer(kind=4), value :: head_idx
     integer(kind=4), value :: block_idx, thread_idx
     real(kind=dp), value :: gamma
+    real(kind=dp), value :: dt
     type(subgrid_6x6x6cell_primitive), intent(inout) :: local_subgrid
 
     type(conserved_t) :: conserved ! object to hold the conserved variables
@@ -350,6 +353,17 @@ contains
 
        ! Convert to primitive variables
        primitive = conserved_2_primitive(conserved, gamma)
+
+       ! Gravity predictor step
+#ifdef GRAV
+       primitive%velocity_x = primitive%velocity_x + f(cell_idx, 1, source_idx) * 0.5 * dt 
+       primitive%velocity_y = primitive%velocity_y + f(cell_idx, 2, source_idx) * 0.5 * dt 
+       primitive%velocity_z = primitive%velocity_z + f(cell_idx, 3, source_idx) * 0.5 * dt 
+#else
+       primitive%velocity_x = primitive%velocity_x + constant_gravity(1) * 0.5 * dt 
+       primitive%velocity_y = primitive%velocity_y + constant_gravity(2) * 0.5 * dt 
+       primitive%velocity_z = primitive%velocity_z + constant_gravity(3) * 0.5 * dt 
+#endif
 
        ! Write primitives cells to shared memory
        local_subgrid%density   (i, j, k) = primitive%density
@@ -1333,12 +1347,14 @@ contains
   ! =========================================================================
 
   ! =========================================================================
-  attributes(global) subroutine hydro_integrator_kernel(grid, uold, unew, father, nbor, &
+  attributes(global) subroutine hydro_integrator_kernel(grid, uold, unew, f, father, nbor, &
        & head_idx, num_subgrids, ngridmax, ilevel, levelmin, levelmax, &
-       & gamma, dtdx, slope, riemann)
+       & gamma, dt, dx, slope, riemann, constant_gravity)
     type(oct), device :: grid(*)
     integer, device :: father(*)
     integer, device :: nbor(1:subgridsize,*)
+    real(kind=8), device :: constant_gravity(1:3)
+    real(kind=dp), device :: f(1:twotondim,1:ndim,*)
     real(kind=dp), device :: uold(1:twotondim,1:nvar,*)
     real(kind=dp), device :: unew(1:twotondim,1:nvar,*)
     integer(kind=4), intent(in), value :: head_idx
@@ -1346,7 +1362,8 @@ contains
     integer, intent(in), value :: ngridmax
     integer, intent(in), value :: ilevel, levelmin, levelmax
     real(kind=dp), intent(in), value :: gamma
-    real(kind=dp), intent(in), value :: dtdx
+    real(kind=dp), intent(in), value :: dt
+    real(kind=dp), intent(in), value :: dx
     integer, intent(in), value :: slope
     integer, intent(in), value :: riemann
 
@@ -1354,8 +1371,11 @@ contains
     type(subgrid_2x3x2cell_primitive), shared :: left_interfaces_y, right_interfaces_y
     type(subgrid_2x2x3cell_primitive), shared :: left_interfaces_z, right_interfaces_z
     type(subgrid_6x6x6cell_primitive), shared :: local_subgrid
+    real(kind=dp) :: dtdx
     integer :: block_idx  ! The index of this block, corresponds to the subgrid to load
     integer :: thread_idx ! The index of this thread within the block
+
+    dtdx = dt/dx
 
     ! compute the various indices. Note the conversion to zero based indexing
     block_idx = blockIdx%x - 1
@@ -1367,7 +1387,8 @@ contains
     ! =======================================================================
     ! Convert from conserved to primitive variables
     ! =======================================================================
-    call subgrid_conserved_2_primitive(grid, uold, nbor, head_idx, block_idx, thread_idx, gamma, local_subgrid)
+    call subgrid_conserved_2_primitive(grid, uold, f, constant_gravity, nbor, &
+         & head_idx, block_idx, thread_idx, gamma, dt, local_subgrid)
 
     ! =======================================================================
     ! Perform tracing step and compute the interface states
@@ -1649,13 +1670,9 @@ contains
   ! =========================================================================
 
   ! =========================================================================
-#ifdef GRAV
-  attributes(global) subroutine sync_hydro(uold, f, head_idx, num_octs, gamma, dt)
-    real(kind=dp), device :: f(1:twotondim,1:ndim,*)
-#else
-  attributes(global) subroutine sync_hydro(uold, constant_gravity, head_idx, num_octs, gamma, dt)
+  attributes(global) subroutine sync_hydro(uold, f, constant_gravity, head_idx, num_octs, gamma, dt)
     real(kind=8), device :: constant_gravity(1:3)
-#endif
+    real(kind=dp), device :: f(1:twotondim,1:ndim,*)
     real(kind=dp), device :: uold(1:twotondim,1:nvar,*)
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
@@ -1711,13 +1728,9 @@ contains
   ! =========================================================================
 
   ! =========================================================================
-#ifdef GRAV
-  attributes(global) subroutine grav_hydro(uold, unew, f, head_idx, num_octs, gamma, dt)
-    real(kind=dp), device :: f(1:twotondim,1:ndim,*)
-#else
-  attributes(global) subroutine grav_hydro(uold, unew, constant_gravity, head_idx, num_octs, gamma, dt)
+  attributes(global) subroutine grav_hydro(uold, unew, f, constant_gravity, head_idx, num_octs, gamma, dt)
     real(kind=8), device :: constant_gravity(1:3)
-#endif
+    real(kind=dp), device :: f(1:twotondim,1:ndim,*)
     real(kind=dp), device :: uold(1:twotondim,1:nvar,*)
     real(kind=dp), device :: unew(1:twotondim,1:nvar,*)
     integer(kind=4), intent(in), value :: head_idx

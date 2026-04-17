@@ -67,7 +67,7 @@ end subroutine r_synchro_hydro_fine
 !################################################################
 !################################################################
 subroutine synchro_hydro_fine(r,m,ilevel,dteff)
-  use amr_parameters, only: ndim, twotondim
+  use amr_parameters, only: ndim, twotondim, dp
   use amr_commons, only: run_t, mesh_t
   implicit none
   type(run_t)::r
@@ -97,7 +97,7 @@ subroutine synchro_hydro_fine(r,m,ilevel,dteff)
 #ifdef GRAV
         do idim=1,ndim
            m%uold(ind,idim+1,igrid)=m%uold(ind,idim+1,igrid)+&
-                & max(m%uold(ind,1,igrid),r%smallr)*m%f(ind,idim,igrid)*dteff
+                & max(m%uold(ind,1,igrid),real(r%smallr,kind=dp))*m%f(ind,idim,igrid)*dteff
         end do
 #else
         do idim=1,ndim

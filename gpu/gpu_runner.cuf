@@ -22,15 +22,11 @@ module gpu_runner
   integer(kind=4), device, allocatable, dimension(:,:) :: flag1, flag2
 
   !> Arrays to hold the hydro variables on the device
-#ifdef HYDRO
   real(kind=dp), device, allocatable, dimension(:,:,:) :: uold, unew
-#endif
 
   !> Arrays to hold the gravity variables on the device
-#ifdef GRAV
   real(kind=dp), device, allocatable, dimension(:,:) :: phi, rho, nref, phi_old
   real(kind=dp), device, allocatable, dimension(:,:,:) :: f
-#endif
 
   !> Arrays to hold the hash table on the device
   integer(kind=8), device, allocatable, dimension(:) :: hash_key
@@ -46,7 +42,6 @@ module gpu_runner
   real(kind=dp), device, allocatable, dimension(:) :: uold_send_device, uold_recv_device
 
   !> Arrays to hold the multigrid variables on the device
-#ifdef GRAV
   type(oct), device, allocatable, dimension(:) :: grid_mg
   integer(kind=4), device, allocatable, dimension(:) :: father_mg
   integer(kind=4), device, allocatable, dimension(:,:) :: nbor_mg
@@ -54,7 +49,6 @@ module gpu_runner
   real(kind=dp), device, allocatable, dimension(:,:) :: phi_mg
   integer(kind=8), device, allocatable, dimension(:) :: hash_key_mg
   integer(kind=4), device, allocatable, dimension(:) :: hash_val_mg
-#endif
 
   !> The Fortran array of oct index of ghost and halo octs on the host and the device
   integer, allocatable, dimension(:) :: idx_send_host, idx_recv_host
@@ -209,13 +203,8 @@ contains
     threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
 
-#ifdef GRAV
-    call sync_hydro<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(uold, f, &
+    call sync_hydro<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(uold, f, constant_gravity, &
          & head_idx, num_octs, gamma, dt)
-#else
-    call sync_hydro<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(uold, constant_gravity, &
-         & head_idx, num_octs, gamma, dt)
-#endif
 
   end subroutine gpu_sync_hydro
 
@@ -247,13 +236,8 @@ contains
     threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
 
-#ifdef GRAV
-    call grav_hydro<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(uold, unew, f, &
+    call grav_hydro<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(uold, unew, f, constant_gravity, &
          & head_idx, num_octs, gamma, dt)
-#else
-    call grav_hydro<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(uold, unew, constant_gravity, &
-         & head_idx, num_octs, gamma, dt)
-#endif
 
   end subroutine gpu_grav_hydro
 
@@ -280,25 +264,26 @@ contains
 
     if(sim%r%verbose.and.sim%g%myid==1)write(*,'("   Entering gpu_godunov for level ",I2)')ilevel
 
-    head_idx = (sim%m%head(ilevel) - 1) / nsubgridtondim + 1
-    num_subgrids = sim%m%noct(ilevel) / nsubgridtondim
     dt = sim%g%dtnew(ilevel)
     dx = sim%r%boxlen/2**ilevel
     gamma = sim%r%gamma
+    ngridmax = sim%m%ngridmax
+    slope = sim%r%slope_type
+    riemann = sim%r%riemann
+
+    head_idx = (sim%m%head(ilevel) - 1) / nsubgridtondim + 1
+    num_subgrids = sim%m%noct(ilevel) / nsubgridtondim
     num_blocks = num_subgrids
     if(nsubgrid == 1)then
        threads_per_block = 64
     else
        threads_per_block = 256
     endif
-    ngridmax = sim%m%ngridmax
-    slope = sim%r%slope_type
-    riemann = sim%r%riemann
 
     call nvtxStartRange("GPU Godunov", color=0)!green
-    call hydro_integrator_kernel<<<num_blocks, threads_per_block>>>(grid, uold, unew, father, nbor, &
+    call hydro_integrator_kernel<<<num_blocks, threads_per_block>>>(grid, uold, unew, f, father, nbor, &
          & head_idx, num_subgrids, ngridmax, ilevel, sim%r%levelmin, sim%r%nlevelmax, &
-         & gamma, dt/dx, slope, riemann)
+         & gamma, dt, dx, slope, riemann, constant_gravity)
     call GPU_Error_Check(__FILE__, __LINE__)
     call nvtxEndRange()
 
@@ -1056,11 +1041,11 @@ contains
     threadsX_per_block = 8
     threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
-#ifdef GRAV
+
     if (num_octs > 0) then
        call reset_rho<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(rho, nref, head_idx, num_octs)
     endif
-#endif
+
   end subroutine gpu_reset_rho
 
   !> @brief
@@ -1167,10 +1152,10 @@ contains
     num_subgrids = sim%m%noct(ilevel) / nsubgridtondim
     num_blocks = num_subgrids
     threads_per_block = 64 ! Optimize later
-#ifdef GRAV
+
     call multipole_cic<<<num_blocks, threads_per_block>>>(unew, rho, grid, nbor, &
          & head_idx, num_subgrids, dx, box_size, periodic)
-#endif
+
   end subroutine gpu_cic_multipole
 
   !###########################################################
