@@ -19,11 +19,11 @@ subroutine m_init_flow_fine(pst,ilevel)
   logical::ok_file1,ok_file2,ok_file
 
   associate(s=>pst%s)
-  
+
   if(s%m%noct_tot(ilevel)==0)return
   if(s%r%verbose)write(*,111)ilevel
 111 format(' Entering init_flow_fine for level ',I2)
-  
+
   !--------------------------------------
   ! Compute initial conditions from files
   !--------------------------------------

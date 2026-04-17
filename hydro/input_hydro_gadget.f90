@@ -57,8 +57,6 @@ subroutine input_hydro_gadget(s,ilevel)
 
   associate(r=>s%r,g=>s%g,m=>s%m,p=>s%gas,mdl=>s%mdl)
 
-  if(m%noct_tot(ilevel)==0)return
-
 #ifdef HYDRO
   !------------------------------------
   ! Reset conservative variables unew
