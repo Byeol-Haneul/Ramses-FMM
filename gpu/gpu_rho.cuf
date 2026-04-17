@@ -278,7 +278,8 @@ contains
     real(kind=8), intent(in), value :: dx_loc
 
     real(kind=dp), shared :: local_rho(0:2*nsubgrid+3,0:2*nsubgrid+3,0:2*nsubgrid+3)
-    real(kind=dp) :: vol_loc, deposit, monopole, dipole(3), x(3), dg(3), dd(3), vol(1:8)
+    real(kind=dp) :: deposit
+    real(kind=8) :: vol_loc, monopole, dipole(3), x(3), dg(3), dd(3), vol(1:8)
     integer :: cell_idx, oct_idx, thread_idx, block_idx, subgrid_idx, work_idx
     integer :: ind_nbor, ind, i, j, k, work_size, idim, info
     integer :: i_subgrid_idx, j_subgrid_idx, k_subgrid_idx
