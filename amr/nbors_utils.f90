@@ -328,7 +328,7 @@ subroutine get_grid(s,hash_key,child,flush_cache,fetch_cache,lock,use_ghost)
   integer(kind=8),dimension(0:ndim)::hash_child, hash_ref
   integer::i,ind,idim,ivar,iskip,ilevel,info,ibound
   integer::grid_cpu,ntile_response,icounter,child_grid
-  integer::send_request_id,response_id  
+  integer::send_request_id,response_id
   logical::failed_request,in_rank,in_domain,do_ghost
   integer::null_val=-1
   integer::child_ref

@@ -398,6 +398,9 @@ contains
     type(primitive_t) :: slopes_x, slopes_y, slopes_z ! The limited slopes in the x, y, and z directions
     type(primitive_t) :: source_term ! The sources terms
 
+    real(kind=dp), parameter :: smallr = 1d-10
+    real(kind=dp), parameter :: smallc_squared = (1d-10)**2
+    real(kind=dp), parameter :: smallp = smallr * smallc_squared
     integer :: work_idx   ! Loop index for unit of work
     integer :: i, j, k    ! Cell indices
     integer :: work_size
@@ -477,6 +480,9 @@ contains
           right_interfaces_x%velocity_y(i-2, j-2, k-2) = cell%velocity_y - slopes_x%velocity_y
           right_interfaces_x%velocity_z(i-2, j-2, k-2) = cell%velocity_z - slopes_x%velocity_z
           right_interfaces_x%pressure  (i-2, j-2, k-2) = cell%pressure   - slopes_x%pressure
+          ! Fallback to first order
+          if (right_interfaces_x%density (i-2, j-2, k-2) < smallr) right_interfaces_x%density (i-2, j-2, k-2) = local_subgrid%density (i, j, k)
+          if (right_interfaces_x%pressure(i-2, j-2, k-2) < smallp) right_interfaces_x%pressure(i-2, j-2, k-2) = local_subgrid%pressure(i, j, k)
        end if
 
        ! The left state at i+1/2
@@ -486,6 +492,9 @@ contains
           left_interfaces_x%velocity_y(i-1, j-2, k-2) = cell%velocity_y + slopes_x%velocity_y
           left_interfaces_x%velocity_z(i-1, j-2, k-2) = cell%velocity_z + slopes_x%velocity_z
           left_interfaces_x%pressure  (i-1, j-2, k-2) = cell%pressure   + slopes_x%pressure
+          ! Fallback to first order
+          if (left_interfaces_x%density (i-1, j-2, k-2) < smallr) left_interfaces_x%density (i-1, j-2, k-2) = local_subgrid%density (i, j, k)
+          if (left_interfaces_x%pressure(i-1, j-2, k-2) < smallp) left_interfaces_x%pressure(i-1, j-2, k-2) = local_subgrid%pressure(i, j, k)
        end if
 
        ! The right state at j-1/2
@@ -495,6 +504,9 @@ contains
           right_interfaces_y%velocity_y(i-2, j-2, k-2) = cell%velocity_y - slopes_y%velocity_y
           right_interfaces_y%velocity_z(i-2, j-2, k-2) = cell%velocity_z - slopes_y%velocity_z
           right_interfaces_y%pressure  (i-2, j-2, k-2) = cell%pressure   - slopes_y%pressure
+          ! Fallback to first order
+          if (right_interfaces_y%density (i-2, j-2, k-2) < smallr) right_interfaces_y%density (i-2, j-2, k-2) = local_subgrid%density (i, j, k)
+          if (right_interfaces_y%pressure(i-2, j-2, k-2) < smallp) right_interfaces_y%pressure(i-2, j-2, k-2) = local_subgrid%pressure(i, j, k)
        end if
 
        ! The left state at j+1/2
@@ -504,6 +516,9 @@ contains
           left_interfaces_y%velocity_y(i-2, j-1, k-2) = cell%velocity_y + slopes_y%velocity_y
           left_interfaces_y%velocity_z(i-2, j-1, k-2) = cell%velocity_z + slopes_y%velocity_z
           left_interfaces_y%pressure  (i-2, j-1, k-2) = cell%pressure   + slopes_y%pressure
+          ! Fallback to first order
+          if (left_interfaces_y%density (i-2, j-1, k-2) < smallr) left_interfaces_y%density (i-2, j-1, k-2) = local_subgrid%density (i, j, k)
+          if (left_interfaces_y%pressure(i-2, j-1, k-2) < smallp) left_interfaces_y%pressure(i-2, j-1, k-2) = local_subgrid%pressure(i, j, k)
        end if
 
        ! The right state at k-1/2
@@ -513,6 +528,9 @@ contains
           right_interfaces_z%velocity_y(i-2, j-2, k-2) = cell%velocity_y - slopes_z%velocity_y
           right_interfaces_z%velocity_z(i-2, j-2, k-2) = cell%velocity_z - slopes_z%velocity_z
           right_interfaces_z%pressure  (i-2, j-2, k-2) = cell%pressure   - slopes_z%pressure
+          ! Fallback to first order
+          if (right_interfaces_z%density (i-2, j-2, k-2) < smallr) right_interfaces_z%density (i-2, j-2, k-2) = local_subgrid%density (i, j, k)
+          if (right_interfaces_z%pressure(i-2, j-2, k-2) < smallp) right_interfaces_z%pressure(i-2, j-2, k-2) = local_subgrid%pressure(i, j, k)
        end if
 
        ! The left state at k+1/2
@@ -522,6 +540,9 @@ contains
           left_interfaces_z%velocity_y(i-2, j-2, k-1) = cell%velocity_y + slopes_z%velocity_y
           left_interfaces_z%velocity_z(i-2, j-2, k-1) = cell%velocity_z + slopes_z%velocity_z
           left_interfaces_z%pressure  (i-2, j-2, k-1) = cell%pressure   + slopes_z%pressure
+          ! Fallback to first order
+          if (left_interfaces_z%density (i-2, j-2, k-1) < smallr) left_interfaces_z%density (i-2, j-2, k-1) = local_subgrid%density (i, j, k)
+          if (left_interfaces_z%pressure(i-2, j-2, k-1) < smallp) left_interfaces_z%pressure(i-2, j-2, k-1) = local_subgrid%pressure(i, j, k)
        end if
     end do
 
@@ -567,8 +588,8 @@ contains
     logical, value :: llf
     type(conserved_t) :: flux
     ! Both `smallr` and `smallc`/`smallp` are usually defined in amr_commons. I'm redefining them here so that they will be evaluated at compile time
-    real(kind=dp), parameter :: smallr = 1.d-10 
-    real(kind=dp), parameter :: smallc_squared = (1.d-10)**2
+    real(kind=dp), parameter :: smallr = 1d-10
+    real(kind=dp), parameter :: smallc_squared = (1d-10)**2
     type(conserved_t) :: left_state_c, right_state_c, left_fluxes, right_fluxes
     real(kind=dp) :: smallp
     real(kind=dp) :: sound_speed_l, sound_speed_r, speed_l, speed_r, speed_max
@@ -637,8 +658,8 @@ contains
     type(conserved_t) :: flux
     ! Both `smallr` and `smallc`/`smallp` are usually defined in amr_commons. 
     ! Redefining them here so that they will be evaluated at compile time
-    real(kind=dp), parameter :: smallr = 1.d-10
-    real(kind=dp), parameter :: smallc_squared = (1.d-10)**2
+    real(kind=dp), parameter :: smallr = 1d-10
+    real(kind=dp), parameter :: smallc_squared = (1d-10)**2
     real(kind=dp) :: smallp, entho
     real(kind=dp) :: rl, rr, pl, pr, ul, ur, vl, vr, wl, wr
     real(kind=dp) :: el, er, ekinl, ekinr, etotl, etotr

@@ -2,6 +2,7 @@ module rho_device
   use amr_parameters, only: dp, ndim, twondim, twotondim, nhilbert
   use hydro_parameters, only: nvar
   use oct_commons, only: oct
+  use gpu_utils
   use cudafor
   implicit none
 
@@ -41,7 +42,17 @@ contains
   ! =========================================================================
 
   ! =========================================================================
-  attributes(global) subroutine reset_rho_kernel(rho, nref, head_idx, num_octs)
+  attributes(device) subroutine index_1Dto3D(index, nx, ny, xid, yid, zid)
+    integer, value :: index, nx, ny
+    integer, intent(out) :: xid, yid, zid
+    zid = index/(nx*ny)
+    yid = (index - zid*nx*ny)/nx
+    xid = index - zid*nx*ny - yid*nx
+  end subroutine index_1Dto3D
+  ! ==========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine reset_rho(rho, nref, head_idx, num_octs)
     real(kind=dp), device :: rho(1:twotondim,*)
     real(kind=dp), device :: nref(1:twotondim,*)
     integer(kind=4), intent(in), value :: head_idx
@@ -62,11 +73,11 @@ contains
     rho (cell_idx, oct_idx) = 0
     nref(cell_idx, oct_idx) = 0
 
-  end subroutine reset_rho_kernel
+  end subroutine reset_rho
   ! =========================================================================~
 
   ! =========================================================================
-  attributes(global) subroutine reset_multipole_kernel(unew, head_idx, num_octs)
+  attributes(global) subroutine reset_multipole(unew, head_idx, num_octs)
     real(kind=dp), device :: unew(1:twotondim,1:nvar,*)
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
@@ -84,25 +95,24 @@ contains
     cell_idx = threadIdx%x
 
     ! Reset values used for multipoles
-    do ivar = 1, ndim + 1
-       unew(cell_idx, ivar, oct_idx) = 0
-    end do
+    unew(cell_idx, 1, oct_idx) = 0
+    unew(cell_idx, 2, oct_idx) = 0
+    unew(cell_idx, 3, oct_idx) = 0
+    unew(cell_idx, 4, oct_idx) = 0
 
-  end subroutine reset_multipole_kernel
+  end subroutine reset_multipole
   ! =========================================================================~
 
   ! =========================================================================
-  attributes(global) subroutine multipole_leaf_kernel(unew, uold, grid, head_idx, num_octs, &
-       & dx_loc, vol_loc)
+  attributes(global) subroutine multipole_leaf(unew, uold, grid, head_idx, num_octs, dx_loc)
     real(kind=dp), device :: unew(1:twotondim,1:nvar,*)
     real(kind=dp), device :: uold(1:twotondim,1:nvar,*)
     type(oct), device :: grid(*)
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
     real(kind=dp), intent(in), value :: dx_loc
-    real(kind=dp), intent(in), value :: vol_loc
 
-    real(kind=dp) :: monopole, dipole(3), x(3)
+    real(kind=dp) :: vol_loc, monopole, dipole(3), x(3)
     integer :: cell_idx, oct_idx, block_idx
     integer :: ind, i, j, k
     logical :: ok_leaf
@@ -123,18 +133,21 @@ contains
     i = ind - j * 2
 
     ! Leaf cell
-    ok_leaf = grid(oct_idx)%refined(cell_idx)
+    ok_leaf = .not. grid(oct_idx)%refined(cell_idx)
 
     ! Cell coordinates
     x(1) = (2*grid(oct_idx)%ckey(1) + i + 0.5d0) * dx_loc
     x(2) = (2*grid(oct_idx)%ckey(2) + j + 0.5d0) * dx_loc
     x(3) = (2*grid(oct_idx)%ckey(3) + k + 0.5d0) * dx_loc
 
+    ! Cell volume
+    vol_loc = dx_loc**3
+
     ! Multipoles
     monopole = uold(cell_idx, 1, oct_idx) * vol_loc
-    dipole(1) = mass * x(1)
-    dipole(2) = mass * x(2)
-    dipole(3) = mass * x(3)
+    dipole(1) = monopole * x(1)
+    dipole(2) = monopole * x(2)
+    dipole(3) = monopole * x(3)
 
     ! Store in unew if leaf cell
     if (ok_leaf) then
@@ -142,13 +155,18 @@ contains
        unew(cell_idx, 2, oct_idx) = dipole(1)
        unew(cell_idx, 3, oct_idx) = dipole(2)
        unew(cell_idx, 4, oct_idx) = dipole(3)
+    else
+       unew(cell_idx, 1, oct_idx) = 0d0
+       unew(cell_idx, 2, oct_idx) = 0d0
+       unew(cell_idx, 3, oct_idx) = 0d0
+       unew(cell_idx, 4, oct_idx) = 0d0
     end if
 
-  end subroutine multipole_leaf_kernel
+  end subroutine multipole_leaf
   ! =========================================================================~
 
   ! =========================================================================
-  attributes(global) subroutine multipole_upload_kernel(grid, father, unew, head_idx, num_octs)
+  attributes(global) subroutine multipole_upload(grid, father, unew, head_idx, num_octs)
     type(oct), device :: grid(*)
     real(kind=dp), device :: unew(1:twotondim,1:nvar,*)
     integer(kind=4), device :: father(*)
@@ -188,12 +206,11 @@ contains
        unew(cell_idx, 4, father_idx) = unew(cell_idx, 4, father_idx) + unew(ind, 4, oct_idx)
     end do
 
-  end subroutine multipole_upload_kernel
+  end subroutine multipole_upload
   ! =========================================================================
 
   ! =========================================================================
-  attributes(global) subroutine multipole_tot_kernel(grid, unew, head_idx, num_octs, multipole)
-    type(oct), device :: grid(*)
+  attributes(global) subroutine multipole_tot(unew, head_idx, num_octs, multipole)
     real(kind=dp), device :: unew(1:twotondim,1:nvar,*)
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
@@ -215,7 +232,7 @@ contains
     ! If not in block
     if (oct_idx >= num_octs) then
 
-       multipole_loc(1:ndim+1) = 0d0
+       multipole_loc = 0d0
 
     else
 
@@ -244,26 +261,26 @@ contains
        info = atomicadd(multipole(4),multipole_loc(4))
     endif
 
-  end subroutine multipole_tot_kernel
+  end subroutine multipole_tot
   ! =========================================================================
 
   ! =========================================================================
-  attributes(global) subroutine multipole_cic_kernel(unew, rho, grid, nbor, &
-       & head_idx, num_subgrids, dx_loc, vol_loc, box_size, periodic)
+  attributes(global) subroutine multipole_cic(unew, rho, grid, nbor, &
+       & head_idx, num_subgrids, dx_loc, box_size, periodic)
+    logical, device :: periodic(1:3)
+    real(kind=8), device :: box_size(1:3)
     type(oct), device :: grid(*)
+    real(kind=dp), device :: rho(1:twotondim,*)
     real(kind=dp), device :: unew(1:twotondim,1:nvar,*)
     integer(kind=4), device :: nbor(1:subgridsize,*)
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_subgrids
-    real(kind=dp), intent(in), value :: dx_loc
-    real(kind=dp), intent(in), value :: vol_loc
-    real(kind=dp), intent(in), value :: box_size(1:3)
-    logical, intent(in), value :: periodic(1:3)
+    real(kind=8), intent(in), value :: dx_loc
 
     real(kind=dp), shared :: local_rho(0:2*nsubgrid+3,0:2*nsubgrid+3,0:2*nsubgrid+3)
-    real(kind=dp) :: monopole, dipole(3), x(3), dg(3), dd(3), vol(1:3, 1:8)
+    real(kind=dp) :: vol_loc, deposit, monopole, dipole(3), x(3), dg(3), dd(3), vol(1:8)
     integer :: cell_idx, oct_idx, thread_idx, block_idx, subgrid_idx, work_idx
-    integer :: ind_nbor, ind, i, j, k, work_size, idim
+    integer :: ind_nbor, ind, i, j, k, work_size, idim, info
     integer :: i_subgrid_idx, j_subgrid_idx, k_subgrid_idx
     integer :: ckey(3), ig(3), id(3), key(1:3, 1:8)
     logical :: ok_leaf
@@ -280,6 +297,9 @@ contains
     ckey(1) = 2 * (grid(oct_idx)%ckey(1) / nsubgrid) * nsubgrid - 2 
     ckey(2) = 2 * (grid(oct_idx)%ckey(2) / nsubgrid) * nsubgrid - 2
     ckey(3) = 2 * (grid(oct_idx)%ckey(3) / nsubgrid) * nsubgrid - 2
+
+    ! Volume of the cells
+    vol_loc = dx_loc**ndim
 
     ! We work on all 6x6x6 cells of the subgrid
     work_size = 2*nsubgrid+4
@@ -309,9 +329,9 @@ contains
 
        ! In case of periodic boundaries
        do idim = 1, ndim
-          if (r%periodic(idim)) then
-             if (x(idim) >  r%box_size(idim)*0.5) x(idim) = x(idim) - r%box_size(idim)
-             if (x(idim) < -r%box_size(idim)*0.5) x(idim) = x(idim) + r%box_size(idim)
+          if (periodic(idim)) then
+             if (x(idim) >  box_size(idim)*0.5) x(idim) = x(idim) - box_size(idim)
+             if (x(idim) < -box_size(idim)*0.5) x(idim) = x(idim) + box_size(idim)
           endif
        end do
 
@@ -370,7 +390,7 @@ contains
 
     end do
 
-  end subroutine multipole_cic_kernel
+  end subroutine multipole_cic
   ! =========================================================================~
 
 end module rho_device

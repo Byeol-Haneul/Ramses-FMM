@@ -1036,7 +1036,7 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
 
   dx_loc=r%boxlen/2**ilevel
   vol_loc=dx_loc**ndim
-  if (p%type/=TRAC_TYPE) return
+
   ! Tracer hydro cache (uold, mflux)
   call open_cache(mdl, m, pack_size=storage_size(dummy_hydro_mflux)/32, &
        pack=pack_fetch_kick_trac, unpack=unpack_fetch_kick_trac)
@@ -1250,6 +1250,7 @@ subroutine tsc_trace_gas_part(s,p,ilevel,action_part)
   if (p%type/=TRAC_TYPE) return
 
   dx_loc=r%boxlen/2**ilevel
+
   call open_cache(mdl, m, pack_size=storage_size(dummy_hydro_mflux)/32, &
        pack=pack_fetch_kick_trac, unpack=unpack_fetch_kick_trac)
   do ipart=p%headp(ilevel),p%tailp(ilevel)
@@ -1395,6 +1396,7 @@ subroutine pcs_trace_gas_part(s,p,ilevel,action_part)
   if (p%type/=TRAC_TYPE) return
 
   dx_loc=r%boxlen/2**ilevel
+
   call open_cache(mdl, m, pack_size=storage_size(dummy_hydro_mflux)/32, &
        pack=pack_fetch_kick_trac, unpack=unpack_fetch_kick_trac)
   do ipart=p%headp(ilevel),p%tailp(ilevel)
@@ -1557,6 +1559,7 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
    if (p%type/=TRAC_TYPE) return
  
    dx_loc=r%boxlen/2**ilevel
+
    dt_level=g%dtnew(ilevel)
    use_sgs = r%sgs_turb .and. (r%iturb>0)
  
@@ -1725,6 +1728,7 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
    if (p%type/=TRAC_TYPE) return
  
    dx_loc=r%boxlen/2**ilevel
+
    dt_level=g%dtnew(ilevel)
    use_sgs = r%sgs_turb .and. (r%iturb>0)
  
@@ -1897,6 +1901,7 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
    if (p%type/=TRAC_TYPE) return
  
    dx_loc=r%boxlen/2**ilevel
+
    tol_corner=0.05d0
  
    if(action_part==action_kick_only)then
@@ -2538,7 +2543,7 @@ subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
 
   dx_loc=r%boxlen/2**ilevel
   vol_loc=dx_loc**ndim
-  if (p%type/=DUST_TYPE) return
+
   coeff=9.0d0*pi*r%gamma/128.0d0
   ! Dust hydro+gravity cache
   call open_cache(mdl, m, pack_size=storage_size(dummy_large_realdp)/32, &
@@ -2716,8 +2721,10 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
   if (p%type/=DUST_TYPE) return
 
   dx_loc=r%boxlen/2**ilevel
+
   pi=4.0d0*atan(1.0d0)
   coeff=9.0d0*pi*r%gamma/128.0d0
+
   call open_cache(mdl, m, pack_size=storage_size(dummy_large_realdp)/32, &
        pack=pack_fetch_kick_dust, unpack=unpack_fetch_kick_dust)
 #if NDIM==3
@@ -2860,8 +2867,8 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
   if(action_part==action_kick_drift)then
      do ipart=p%headp(ilevel),p%tailp(ilevel)
         do idim=1,ndim
-           if(p%xp(ipart,idim)<0.0d0)p%xp(ipart,idim)=p%xp(ipart,idim)+r%boxlen
-           if(p%xp(ipart,idim)>=r%boxlen)p%xp(ipart,idim)=p%xp(ipart,idim)-r%boxlen
+           if(p%xp(ipart,idim)<0.0d0)p%xp(ipart,idim)=p%xp(ipart,idim)+r%box_size(idim)
+           if(p%xp(ipart,idim)>=r%box_size(idim))p%xp(ipart,idim)=p%xp(ipart,idim)-r%box_size(idim)
         end do
      end do
   end if
@@ -2908,8 +2915,10 @@ subroutine pcs_kick_drift_dust(s,p,ilevel,action_part)
   if (p%type/=DUST_TYPE) return
 
   dx_loc=r%boxlen/2**ilevel
+
   pi=4.0d0*atan(1.0d0)
   coeff=9.0d0*pi*r%gamma/128.0d0
+
   call open_cache(mdl, m, pack_size=storage_size(dummy_large_realdp)/32, &
        pack=pack_fetch_kick_dust, unpack=unpack_fetch_kick_dust)
 #if NDIM==3
@@ -3065,8 +3074,8 @@ subroutine pcs_kick_drift_dust(s,p,ilevel,action_part)
   if(action_part==action_kick_drift)then
      do ipart=p%headp(ilevel),p%tailp(ilevel)
         do idim=1,ndim
-           if(p%xp(ipart,idim)<0.0d0)p%xp(ipart,idim)=p%xp(ipart,idim)+r%boxlen
-           if(p%xp(ipart,idim)>=r%boxlen)p%xp(ipart,idim)=p%xp(ipart,idim)-r%boxlen
+           if(p%xp(ipart,idim)<0.0d0)p%xp(ipart,idim)=p%xp(ipart,idim)+r%box_size(idim)
+           if(p%xp(ipart,idim)>=r%box_size(idim))p%xp(ipart,idim)=p%xp(ipart,idim)-r%box_size(idim)
         end do
      end do
   end if

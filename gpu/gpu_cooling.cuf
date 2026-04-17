@@ -27,6 +27,7 @@ contains
     integer :: cell_idx, oct_idx, block_idx
     real(kind=8) :: density, energy, kinetic, temperature, nH
     real(kind=8) :: velocity_x, velocity_y, velocity_z, T2min
+    logical :: ok_leaf
 
     block_idx = blockIdx%x - 1
 
@@ -69,8 +70,11 @@ contains
     ! Convert back to conservative variables
     energy = temperature / scale_T2 / (gamma - 1.0d0) + kinetic
 
+    ! Leaf cell
+    ok_leaf = .not. grid(oct_idx)%refined(cell_idx)
+
     ! Update unew in main memory only for leaf cells
-    if (.not. grid(oct_idx)%refined(cell_idx)) then
+    if (ok_leaf) then
        uold(cell_idx, 5, oct_idx) = real(density * energy, kind=dp)
     endif
 

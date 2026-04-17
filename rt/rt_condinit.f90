@@ -17,7 +17,7 @@ subroutine rt_condinit(r,g,x,q,dx,nn,ilevel)
   !================================================================
   ! This routine generates initial conditions for RAMSES.
   ! Positions are in user (aka code) units:
-  ! x(i,1:ndim) are in [0,boxlen]**ndim.
+  ! x(i,1:ndim) are in [0,box_size]**ndim.
   ! Q is the RT variable vector in code units.
   !================================================================
   ! Call built-in initial condition generator
