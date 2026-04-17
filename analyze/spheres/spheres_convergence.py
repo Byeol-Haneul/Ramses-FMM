@@ -52,6 +52,9 @@ class ConvergenceRow:
     h: float
     mean_l2_abs: float
     mean_l2_rel: float
+    rho_phi_dv_sum: float
+    rho_phi_dv_abs_sum: float
+    rho_phi_dv_rms: float
 
 
 def _uniform_sphere_mass(radius: float, density: float = RHO) -> float:
@@ -83,6 +86,14 @@ def analytic_double_sphere_phi(x: np.ndarray, y: np.ndarray, z: np.ndarray) -> n
     return phi_uniform_sphere(r1, SPHERE1_RADIUS, m1) + phi_uniform_sphere(r2, SPHERE2_RADIUS, m2)
 
 
+def analytic_double_sphere_rho(x: np.ndarray, y: np.ndarray, z: np.ndarray) -> np.ndarray:
+    _, _, _, r1 = _sphere_offsets(x, y, z, SPHERE1_CENTER)
+    _, _, _, r2 = _sphere_offsets(x, y, z, SPHERE2_CENTER)
+    rho1 = np.where(r1 <= SPHERE1_RADIUS, RHO, 0.0)
+    rho2 = np.where(r2 <= SPHERE2_RADIUS, RHO, 0.0)
+    return rho1 + rho2
+
+
 def load_grav(run_dir: Path, nout: int, prefix: str):
     c = ram.rd_cell(str(nout), path=str(run_dir), prefix=prefix)
     info = ram.rd_info(str(nout), path=str(run_dir))
@@ -97,6 +108,9 @@ def compute_row(case: str, level: int, run_dir: Path, nout: int, prefix: str) ->
     z = np.asarray(c.x[2], dtype=np.float64)
     phi_sim = np.asarray(c.g[0], dtype=np.float64)
     phi_ana = analytic_double_sphere_phi(x, y, z)
+    rho_ana = analytic_double_sphere_rho(x, y, z)
+    dx = np.asarray(c.dx, dtype=np.float64)
+    dvol = dx ** int(c.ndim)
 
     err = phi_sim - phi_ana
     mean_l2_abs = float(np.sqrt(np.mean(err**2)))
@@ -106,7 +120,12 @@ def compute_row(case: str, level: int, run_dir: Path, nout: int, prefix: str) ->
     finite_rel = rel[np.isfinite(rel)]
     mean_l2_rel = float(np.sqrt(np.mean(finite_rel**2))) if finite_rel.size else float("nan")
 
-    h = float(np.min(np.asarray(c.dx, dtype=np.float64)))
+    weighted = rho_ana * err * dvol
+    rho_phi_dv_sum = float(np.sum(weighted))
+    rho_phi_dv_abs_sum = float(np.sum(np.abs(weighted)))
+    rho_phi_dv_rms = float(np.sqrt(np.mean(weighted**2)))
+
+    h = float(np.min(dx))
 
     return ConvergenceRow(
         case=case,
@@ -116,6 +135,9 @@ def compute_row(case: str, level: int, run_dir: Path, nout: int, prefix: str) ->
         h=h,
         mean_l2_abs=mean_l2_abs,
         mean_l2_rel=mean_l2_rel,
+        rho_phi_dv_sum=rho_phi_dv_sum,
+        rho_phi_dv_abs_sum=rho_phi_dv_abs_sum,
+        rho_phi_dv_rms=rho_phi_dv_rms,
     )
 
 
@@ -164,8 +186,11 @@ def write_csv(rows: list[ConvergenceRow], csv_path: Path) -> None:
                 "h",
                 "mean_l2_abs",
                 "mean_l2_rel",
+                "rho_phi_dv_sum",
+                "rho_phi_dv_abs_sum",
+                "rho_phi_dv_rms",
                 "log10_h",
-                "log10_mean_l2_abs",
+                "log10_rho_phi_dv_abs_sum",
             ]
         )
         for row in rows:
@@ -178,8 +203,11 @@ def write_csv(rows: list[ConvergenceRow], csv_path: Path) -> None:
                     f"{row.h:.16e}",
                     f"{row.mean_l2_abs:.16e}",
                     f"{row.mean_l2_rel:.16e}",
+                    f"{row.rho_phi_dv_sum:.16e}",
+                    f"{row.rho_phi_dv_abs_sum:.16e}",
+                    f"{row.rho_phi_dv_rms:.16e}",
                     f"{math.log10(row.h):.16e}",
-                    f"{math.log10(row.mean_l2_abs):.16e}",
+                    f"{math.log10(row.rho_phi_dv_abs_sum):.16e}",
                 ]
             )
 
@@ -194,7 +222,7 @@ def plot_convergence(rows: list[ConvergenceRow], plot_path: Path) -> dict[str, f
     for idx, case in enumerate(cases):
         subset = sorted((r for r in rows if r.case == case), key=lambda r: r.level)
         logh = np.log10(np.array([r.h for r in subset], dtype=np.float64))
-        loge = np.log10(np.array([r.mean_l2_abs for r in subset], dtype=np.float64))
+        loge = np.log10(np.array([r.rho_phi_dv_abs_sum for r in subset], dtype=np.float64))
         color = cmap(idx % 10)
 
         slope = None
@@ -213,8 +241,8 @@ def plot_convergence(rows: list[ConvergenceRow], plot_path: Path) -> dict[str, f
         slopes[case] = None if slope is None else float(slope)
 
     ax.set_xlabel("log10(h)")
-    ax.set_ylabel("log10(mean L2 error in phi)")
-    ax.set_title("Uniform Spheres Convergence: MG vs FMM")
+    ax.set_ylabel("log10(sum |rho_ana*(phi-phi_ana)*dV|)")
+    ax.set_title("Uniform Spheres Convergence (rho-weighted): MG vs FMM")
     ax.grid(True, alpha=0.3)
     ax.legend()
 
@@ -228,7 +256,7 @@ def plot_convergence(rows: list[ConvergenceRow], plot_path: Path) -> dict[str, f
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Compute log(h) vs log(mean L2 phi error) for one or more uniform-spheres runs."
+        description="Compute convergence using rho_ana*(phi-phi_ana)*dV for one or more uniform-spheres runs."
     )
     parser.add_argument(
         "--case",
@@ -288,8 +316,8 @@ def main() -> None:
             rows.append(compute_row(case_name, level, run_dir, nout=args.nout, prefix=args.prefix))
 
     rows.sort(key=lambda r: (r.case, r.level))
-    if any((row.h <= 0.0 or row.mean_l2_abs <= 0.0) for row in rows):
-        raise ValueError("Found non-positive h or L2 error; cannot compute log10 values.")
+    if any((row.h <= 0.0 or row.rho_phi_dv_abs_sum <= 0.0) for row in rows):
+        raise ValueError("Found non-positive h or rho-weighted absolute-sum error; cannot compute log10 values.")
 
     csv_path = (REPO_ROOT / args.csv).resolve() if not args.csv.is_absolute() else args.csv
     plot_path = (REPO_ROOT / args.plot).resolve() if not args.plot.is_absolute() else args.plot
@@ -303,7 +331,10 @@ def main() -> None:
             f"  case={row.case:>4s} level={row.level:2d} "
             f"h={row.h:.6e} mean_l2_abs={row.mean_l2_abs:.6e} "
             f"mean_l2_rel={row.mean_l2_rel:.6e} "
-            f"log10(h)={math.log10(row.h):.6f} log10(err)={math.log10(row.mean_l2_abs):.6f}"
+            f"rho_phi_dv_sum={row.rho_phi_dv_sum:.6e} "
+            f"rho_phi_dv_abs_sum={row.rho_phi_dv_abs_sum:.6e} "
+            f"log10(h)={math.log10(row.h):.6f} "
+            f"log10(err)={math.log10(row.rho_phi_dv_abs_sum):.6f}"
         )
 
     for case, slope in slopes.items():

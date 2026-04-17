@@ -1,20 +1,34 @@
-#!/usr/bin/env bash
+#!/bin/bash
 #SBATCH --job-name=spheres-compare
 #SBATCH --output=slurm-%x-%j.out
 #SBATCH --error=slurm-%x-%j.err
-#SBATCH --time=04:00:00
+#SBATCH --time=00:30:00
 #SBATCH --nodes=1
-#SBATCH --ntasks-per-node=1
+#SBATCH --mem-per-cpu=7500M
+#SBATCH --ntasks-per-node=96
+#SBATCH --mail-user=jl4415@princeton.edu
+#SBATCH --mail-type=END,FAIL
+
+module purge
+module load openmpi/gcc/4.1.2
+
+cd /home/jl4415/mini-ramses || exit 1
+
+export SLURM_CPU_BIND=cores
+export OMP_PLACES=cores
+export OMP_PROC_BIND=close
+export OMPI_MCA_pml=ob1
+export OMPI_MCA_btl=self,vader,tcp
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+REPO_ROOT="${REPO_ROOT:-${SLURM_SUBMIT_DIR:-$PWD}}"
+SCRIPT_DIR="${REPO_ROOT}/analyze/spheres"
 
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 SOLVER="${SOLVER:-both}"            # both | fmm | mg
-FMM_EXEC="${FMM_EXEC:-${REPO_ROOT}/fmm_binary3d}"
-MG_EXEC="${MG_EXEC:-${REPO_ROOT}/mg_binary3d}"
+FMM_EXEC="${FMM_EXEC:-${REPO_ROOT}/fmm_spheres}"
+MG_EXEC="${MG_EXEC:-${REPO_ROOT}/mg_spheres}"
 LEVEL_START="${LEVEL_START:-6}"
 LEVEL_END="${LEVEL_END:-10}"
 NPROCS="${NPROCS:-${SLURM_NTASKS:-1}}"
@@ -32,8 +46,8 @@ Usage: $(basename "$0") [options]
 
 Options:
   --solver MODE        Solver mode: both|fmm|mg (default: both)
-  --fmm-exec PATH      FMM executable (default: ${REPO_ROOT}/fmm_binary3d)
-  --mg-exec PATH       MG executable (default: ${REPO_ROOT}/mg_binary3d)
+  --fmm-exec PATH      FMM executable (default: ${REPO_ROOT}/fmm_spheres)
+  --mg-exec PATH       MG executable (default: ${REPO_ROOT}/mg_spheres)
   --level-start N      First level (default: 6)
   --level-end N        Last level (default: 10)
   --nprocs N           MPI ranks (default: SLURM_NTASKS or 1)
@@ -181,13 +195,13 @@ run_case() {
   done
 }
 
-if [[ "$SOLVER" == "both" || "$SOLVER" == "fmm" ]]; then
-  run_case "fmm" "$FMM_EXEC"
-fi
+#if [[ "$SOLVER" == "both" || "$SOLVER" == "fmm" ]]; then
+#  run_case "fmm" "$FMM_EXEC"
+#fi
 
-if [[ "$SOLVER" == "both" || "$SOLVER" == "mg" ]]; then
-  run_case "mg" "$MG_EXEC"
-fi
+#if [[ "$SOLVER" == "both" || "$SOLVER" == "mg" ]]; then
+#  run_case "mg" "$MG_EXEC"
+#fi
 
 if [[ "$DO_ANALYZE" == "1" ]]; then
   ANALYZE_CMD=(
