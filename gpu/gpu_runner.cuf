@@ -407,7 +407,8 @@ contains
     threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
     if (num_octs > 0) then
-       call refine_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(grid, flag1, uold, &
+       call refine_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(grid, flag1, &
+            & uold, f, phi, phi_old, &
             & ifree, head_idx, num_octs)
     endif
 
@@ -576,14 +577,28 @@ contains
     num_threads = 128
     num_blocks = (num_octs + num_threads - 1) / num_threads
 
-    ! Out-of-place sort of grid, flag1 and uold using swap table
+    ! Out-of-place sort of grid, flag1, uold and grav variables using swap table
     if (num_octs > 0) then
        call sort_gather_grid<<<num_blocks, num_threads>>>(flag2, grid, swap_global, head_idx, num_octs)
        call sort_scatter_grid<<<num_blocks, num_threads>>>(grid, flag2, head_idx, num_octs)
        call sort_gather_flag<<<num_blocks, num_threads>>>(flag2, flag1, swap_global, head_idx, num_octs)
        call sort_scatter_flag<<<num_blocks, num_threads>>>(flag1, flag2, head_idx, num_octs)
+#ifdef HYDRO
        call sort_gather_hydro<<<num_blocks, num_threads>>>(unew, uold, swap_global, head_idx, num_octs)
        call sort_scatter_hydro<<<num_blocks, num_threads>>>(uold, unew, head_idx, num_octs)
+#endif
+#ifdef GRAV
+       call sort_gather_force<<<num_blocks, num_threads>>>(nref, f, 1, swap_global, head_idx, num_octs)
+       call sort_scatter_force<<<num_blocks, num_threads>>>(f, nref, 1, head_idx, num_octs)
+       call sort_gather_force<<<num_blocks, num_threads>>>(nref, f, 2, swap_global, head_idx, num_octs)
+       call sort_scatter_force<<<num_blocks, num_threads>>>(f, nref, 2, head_idx, num_octs)
+       call sort_gather_force<<<num_blocks, num_threads>>>(nref, f, 3, swap_global, head_idx, num_octs)
+       call sort_scatter_force<<<num_blocks, num_threads>>>(f, nref, 3, head_idx, num_octs)
+       call sort_gather_phi<<<num_blocks, num_threads>>>(nref, phi, swap_global, head_idx, num_octs)
+       call sort_scatter_phi<<<num_blocks, num_threads>>>(phi, nref, head_idx, num_octs)
+       call sort_gather_phi<<<num_blocks, num_threads>>>(nref, phi_old, swap_global, head_idx, num_octs)
+       call sort_scatter_phi<<<num_blocks, num_threads>>>(phi_old, nref, head_idx, num_octs)
+#endif
     endif
 
     ! Update hash table
@@ -654,7 +669,8 @@ contains
                 call compute_cache_swap_table<<<num_blocks, num_threads>>>(swap_local, prefix_sum, head_idx, num_subgrids)
 
                 ! Make new ghost octs in cache
-                call make_cache_octs<<<num_blocks_2, num_threads_2>>>(grid, flag1, uold, swap_local, father, nbor, &
+                call make_cache_octs<<<num_blocks_2, num_threads_2>>>(grid, flag1, &
+                     & uold, f, phi, phi_old, swap_local, father, nbor, &
                      & hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, &
                      & head_cache, new_noct, ind)
 
@@ -1071,6 +1087,7 @@ contains
     threadsX_per_block = 8
     threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
+
     if (num_octs > 0) then
        call multipole_leaf<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(unew, uold, grid, &
             & head_idx, num_octs, dx)
