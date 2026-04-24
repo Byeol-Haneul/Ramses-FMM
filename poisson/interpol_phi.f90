@@ -1,4 +1,7 @@
 module interpol_phi_module
+#ifdef _CUDA
+  use gpu_runner, only: gpu_save_phi_old
+#endif
 contains
 !###########################################################
 !###########################################################
@@ -75,7 +78,11 @@ recursive subroutine r_save_phi_old(pst,ilevel,input_size)
      call r_save_phi_old(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
+#ifdef __CUDA
+     call gpu_save_phi_old(pst%s, ilevel)
+#else
      call save_phi_old(pst%s%m,ilevel)
+#endif
   endif
 
 end subroutine r_save_phi_old

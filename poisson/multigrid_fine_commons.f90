@@ -4,6 +4,9 @@ module multigrid_fine_commons
         r_interpolate_and_correct, r_reset_correction, r_restrict_mask, r_restrict_residual, r_set_scan_flag,&
         double_level_t, level_count_t, gs_step_t
 #endif
+#ifdef __CUDA
+  use gpu_runner, only: gpu_init_phi, gpu_make_mask, gpu_make_rhs, gpu_build_mg
+#endif
 contains
 
 ! ------------------------------------------------------------------------
@@ -372,12 +375,16 @@ recursive subroutine r_build_mg(pst,input,input_size)
      call r_build_mg(pst%pLower,input,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
+#ifdef __CUDA
+     call gpu_build_mg(pst%s,input%ilevel,input%ifine)
+#else
      if(input%ifine==input%ilevel)then
         call build_mg(pst%s,pst%s%m,input%ifine)
      else
         call build_mg(pst%s,pst%s%m_mg,input%ifine)
      end if
   endif
+#endif
 
 end subroutine r_build_mg
 
@@ -678,7 +685,11 @@ recursive subroutine r_make_mask(pst,ilevel,input_size)
      call r_make_mask(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
+#ifdef __CUDA
+     call gpu_make_mask(pst%s,ilevel)
+#else
      call make_mask(pst%s%m,ilevel)
+#endif
   endif
 
 end subroutine r_make_mask
@@ -739,7 +750,11 @@ recursive subroutine r_make_bc_rhs(pst,input,input_size)
      call r_make_bc_rhs(pst%pLower,input,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
+#ifdef __CUDA
+     call gpu_make_rhs(pst%s,input%ilevel)
+#else
      call make_bc_rhs(pst%s,input%ilevel,input%icount)
+#endif
   endif
 
 end subroutine r_make_bc_rhs
