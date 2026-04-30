@@ -3291,6 +3291,7 @@ end subroutine compute_lorentz_analytic
 !#########################################################################
 !#########################################################################
 !#########################################################################
+
 ! Weight computation subroutines for CIC and TSC interpolation
 !#########################################################################
 subroutine cic_weights_and_derivs(x, w1d, dw1d, il_out, ir_out, vol_out)
@@ -3310,7 +3311,7 @@ subroutine cic_weights_and_derivs(x, w1d, dw1d, il_out, ir_out, vol_out)
   real(kind=8),intent(out),optional::vol_out(1:twotondim)
   integer::idim,ind,ix,iy,iz
   real(kind=8)::xd
-
+#if NDIM==3
   do idim=1,ndim
      xd = x(idim) + 0.5d0
      if(present(ir_out)) ir_out(idim) = int(xd)
@@ -3333,6 +3334,7 @@ subroutine cic_weights_and_derivs(x, w1d, dw1d, il_out, ir_out, vol_out)
         end do
      end do
   end if
+#endif
 end subroutine cic_weights_and_derivs
 
 subroutine tsc_weights_and_derivs(x, w1d, dw1d, il_out, ic_out, ir_out, vol_out)
@@ -3352,7 +3354,7 @@ subroutine tsc_weights_and_derivs(x, w1d, dw1d, il_out, ic_out, ir_out, vol_out)
   real(kind=8),intent(out),optional::vol_out(1:threetondim)
   integer::idim,il,ic,ir,ind,ix,iy,iz
   real(kind=8)::xd,xl,xc,xr
-
+#if NDIM==3
   do idim=1,ndim
      xd = x(idim)
      il = int(xd)-1
@@ -3386,6 +3388,7 @@ subroutine tsc_weights_and_derivs(x, w1d, dw1d, il_out, ic_out, ir_out, vol_out)
         end do
      end do
   end if
+#endif
 end subroutine tsc_weights_and_derivs
 
 !#########################################################################
@@ -3401,7 +3404,7 @@ subroutine compute_gradient_cic_scalar(w1d, dw1d, field, grad_out)
   real(kind=8),intent(in)::field(1:twotondim)
   real(kind=8),intent(out)::grad_out(1:ndim)
   integer::ix,iy,iz,ind
-
+#if NDIM==3
   grad_out = 0.d0
   ind = 0
   do iz=1,2
@@ -3414,6 +3417,7 @@ subroutine compute_gradient_cic_scalar(w1d, dw1d, field, grad_out)
         end do
      end do
   end do
+#endif
 end subroutine compute_gradient_cic_scalar
 
 subroutine compute_gradient_cic(w1d, dw1d, field, grad_out)
@@ -3427,7 +3431,7 @@ subroutine compute_gradient_cic(w1d, dw1d, field, grad_out)
   real(kind=8),intent(in)::field(1:ndim,1:twotondim)
   real(kind=8),intent(out)::grad_out(1:ndim)
   integer::ix,iy,iz,ind
-
+#if NDIM==3
   grad_out = 0.d0
   ind = 0
   do iz=1,2
@@ -3440,6 +3444,7 @@ subroutine compute_gradient_cic(w1d, dw1d, field, grad_out)
         end do
      end do
   end do
+#endif
 end subroutine compute_gradient_cic
 
 subroutine compute_gradient_tsc_scalar(w1d, dw1d, field, grad_out)
@@ -3452,7 +3457,7 @@ subroutine compute_gradient_tsc_scalar(w1d, dw1d, field, grad_out)
   real(kind=8),intent(in)::field(1:threetondim)
   real(kind=8),intent(out)::grad_out(1:ndim)
   integer::ix,iy,iz,ind
-
+#if NDIM==3
   grad_out = 0.d0
   ind = 0
   do iz=1,3
@@ -3465,6 +3470,7 @@ subroutine compute_gradient_tsc_scalar(w1d, dw1d, field, grad_out)
         end do
      end do
   end do
+#endif
 end subroutine compute_gradient_tsc_scalar
 
 subroutine compute_gradient_tsc(w1d, dw1d, field, grad_out)
@@ -3477,7 +3483,7 @@ subroutine compute_gradient_tsc(w1d, dw1d, field, grad_out)
   real(kind=8),intent(in)::field(1:ndim,1:threetondim)
   real(kind=8),intent(out)::grad_out(1:ndim)
   integer::ix,iy,iz,ind
-
+#if NDIM==3
   grad_out = 0.d0
   ind = 0
   do iz=1,3
@@ -3490,6 +3496,7 @@ subroutine compute_gradient_tsc(w1d, dw1d, field, grad_out)
         end do
      end do
   end do
+#endif
 end subroutine compute_gradient_tsc
 
 !#########################################################################
@@ -3504,7 +3511,7 @@ subroutine wrap_cell_coords(st,x_cell,levelp1)
   integer,intent(in)::levelp1
   integer::jd
   real(kind=8)::range
-
+#if NDIM==3
   do jd=1,ndim
      if(st%r%periodic(jd))then
         range=dble(st%m%box_ckey_max(jd,levelp1)-st%m%box_ckey_min(jd,levelp1))
@@ -3513,6 +3520,7 @@ subroutine wrap_cell_coords(st,x_cell,levelp1)
         if(x_cell(jd)>=dble(st%m%box_ckey_max(jd,levelp1)))x_cell(jd)=x_cell(jd)-range
      endif
   end do
+#endif
 end subroutine wrap_cell_coords
 
 real(dp) function tracer_cell_kappa(dens_in,eturb_in,dx_in,smallr_in) result(kappa_val)
@@ -3520,7 +3528,7 @@ real(dp) function tracer_cell_kappa(dens_in,eturb_in,dx_in,smallr_in) result(kap
   implicit none
   real(dp),intent(in)::dens_in,eturb_in,dx_in,smallr_in
   real(dp)::rho_eff,sigma_sq
-
+#if NDIM==3
   rho_eff = max(dens_in,smallr_in)
   sigma_sq = max(2.0_dp*max(eturb_in,0.0_dp)/rho_eff,0.0_dp)
   if(sigma_sq>0.0_dp)then
@@ -3528,6 +3536,7 @@ real(dp) function tracer_cell_kappa(dens_in,eturb_in,dx_in,smallr_in) result(kap
   else
      kappa_val = 0.0_dp
   end if
+#endif
 end function tracer_cell_kappa
 
 subroutine sample_tracer_gaussian(vec)
@@ -3538,13 +3547,14 @@ subroutine sample_tracer_gaussian(vec)
   real(kind=8)::u_rand,tmp
   real(kind=8), external :: RngStream_RandUni
   external :: gaussdev
-
+#if NDIM==3
   vec=0.0d0
   do jd=1,ndim
      u_rand = RngStream_RandUni(tracer_rng)
      call gaussdev(u_rand,tmp)
      vec(jd)=tmp
   end do
+#endif
 end subroutine sample_tracer_gaussian
 
 subroutine sample_tracer_uniform(vec)
@@ -3554,13 +3564,14 @@ subroutine sample_tracer_uniform(vec)
   integer :: jd
   real(kind=8)::u_rand
   real(kind=8), external :: RngStream_RandUni
-
+#if NDIM==3
   vec=0.0d0
   do jd=1,ndim
      u_rand = RngStream_RandUni(tracer_rng)
      ! Uniform distribution [-sqrt(3), sqrt(3)] with variance 1
      vec(jd) = (2.0d0*u_rand - 1.0d0) * sqrt(3.0d0)
   end do
+#endif
 end subroutine sample_tracer_uniform
 
 subroutine sample_tracer_piecewise_skew_uniform(vec, gamma1_vec)
@@ -3575,7 +3586,7 @@ subroutine sample_tracer_piecewise_skew_uniform(vec, gamma1_vec)
   integer :: jd
   real(kind=8)::u_rand,gamma1,k,a,b,p_left,apb
   real(kind=8), external :: RngStream_RandUni
-
+#if NDIM==3
   vec=0.0d0
   do jd=1,ndim
      gamma1 = gamma1_vec(jd)
@@ -3593,6 +3604,7 @@ subroutine sample_tracer_piecewise_skew_uniform(vec, gamma1_vec)
         vec(jd) = b * (u_rand * apb - b) / a
      endif
   end do
+#endif
 end subroutine sample_tracer_piecewise_skew_uniform
 
 real(kind=8) function mc_kernel_skewness(pr, pl) result(gamma1)
@@ -3602,7 +3614,7 @@ real(kind=8) function mc_kernel_skewness(pr, pl) result(gamma1)
   implicit none
   real(kind=8),intent(in)::pr, pl
   real(kind=8)::mu3, variance
-
+#if NDIM==3
   mu3 = (pr - pl) * (1.0d0 - 3.0d0*pl + 4.0d0*pl**2 - 2.0d0*pl**3 &
        & - 3.0d0*pr - 8.0d0*pl*pr + 2.0d0*pl**2*pr &
        & + 4.0d0*pr**2 + 2.0d0*pl*pr**2 - 2.0d0*pr**3)
@@ -3612,6 +3624,7 @@ real(kind=8) function mc_kernel_skewness(pr, pl) result(gamma1)
   else
      gamma1 = 0.0d0
   endif
+#endif
 end function mc_kernel_skewness
 
 subroutine gather_cic_state(st,x_cell,level_in,dx_cell,use_sgs_in,vel_out,kappa_out)
@@ -3635,7 +3648,7 @@ subroutine gather_cic_state(st,x_cell,level_in,dx_cell,use_sgs_in,vel_out,kappa_
   real(kind=8)::rho,kappa_sum
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer::ind,icell,jd,igrid
-
+#if NDIM==3
   vel_out=0.d0
   momentum=0.d0
   rho=0.d0
@@ -3677,6 +3690,7 @@ subroutine gather_cic_state(st,x_cell,level_in,dx_cell,use_sgs_in,vel_out,kappa_
   else
      kappa_out=0.d0
   end if
+#endif
 end subroutine gather_cic_state
 
 subroutine gather_tsc_state(st,x_cell,level_in,dx_cell,use_sgs_in,vel_out,kappa_out)
@@ -3701,7 +3715,7 @@ subroutine gather_tsc_state(st,x_cell,level_in,dx_cell,use_sgs_in,vel_out,kappa_
   real(kind=8)::rho,kappa_sum
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer::ind,icell,jd,igrid
-
+#if NDIM==3
   vel_out=0.d0
   momentum=0.d0
   rho=0.d0
@@ -3743,6 +3757,7 @@ subroutine gather_tsc_state(st,x_cell,level_in,dx_cell,use_sgs_in,vel_out,kappa_
   else
      kappa_out=0.d0
   end if
+#endif
 end subroutine gather_tsc_state
 
 !#########################################################################
