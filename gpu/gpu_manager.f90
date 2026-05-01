@@ -67,6 +67,11 @@ recursive subroutine r_set_grid_device(pst)
         if (allocated(cell_part_count)) deallocate(cell_part_count)
         if (allocated(cell_part_head))  deallocate(cell_part_head)
         if (allocated(cell_part_idx))   deallocate(cell_part_idx)
+        ! Out-of-place gather/scatter scratch for split/sort kernels (§4.1, §13).
+        ! See the typed-scratch table in gpu/gpu_runner.cuf next to the decl.
+        if (allocated(xp_swap))  deallocate(xp_swap)
+        if (allocated(mp_swap))  deallocate(mp_swap)
+        if (allocated(idp_swap)) deallocate(idp_swap)
 
         allocate(xp(1:pst%s%p%npart_max, 1:ndim))
         allocate(vp(1:pst%s%p%npart_max, 1:ndim))
@@ -80,6 +85,10 @@ recursive subroutine r_set_grid_device(pst)
         allocate(cell_part_count(1:pst%s%m%ngridmax+pst%s%m%ncachemax))
         allocate(cell_part_head (1:pst%s%m%ngridmax+pst%s%m%ncachemax))
         allocate(cell_part_idx  (1:pst%s%p%npart_max))
+        ! Gather/scatter scratch — no host->device copy (kernel-overwritten).
+        allocate(xp_swap (1:pst%s%p%npart_max, 1:ndim))
+        allocate(mp_swap (1:pst%s%p%npart_max))
+        allocate(idp_swap(1:pst%s%p%npart_max))
 
         ! Mandatory host -> device copies
         xp     = pst%s%p%xp

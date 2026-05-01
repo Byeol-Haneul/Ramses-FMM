@@ -684,6 +684,11 @@ recursive subroutine r_cic_part(pst,input_array,input_size)
 
   integer::rID
   integer::ilevel,rtype
+#ifdef _CUDA
+  ! Print the GPU TSC/PCS->CIC fallback warning once per rank (Eric's decision,
+  ! GPU_PM_STATE.md / gpu_part_prompt.md §15.15).
+  logical,save::warned_dm_dep_gpu=.false.
+#endif
 
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_CIC_PART,pst%iUpper+1,input_size,0,input_array)
@@ -694,11 +699,19 @@ recursive subroutine r_cic_part(pst,input_array,input_size)
      rtype=input_array(2)
 #ifdef _CUDA
      if(pst%s%m%data_on_device)then
-        ! Phase-1 GPU dispatch: DM CIC only. Other particle types fall through to host.
-        if(pst%s%r%part .and. pst%s%r%part_mass_deposition_scheme==1)then
+        ! Phase-1 GPU dispatch for DM:
+        !   * scheme==1 (CIC): use the GPU CIC path.
+        !   * scheme==2 (TSC) or 3 (PCS): GPU TSC/PCS is unavailable in phase 1.
+        !     Eric's decision (gpu_part_prompt.md §15.15): warn and use the GPU
+        !     CIC path. Falling back to host TSC/PCS would read stale host
+        !     xp/mp because particles live on device.
+        if(pst%s%r%part)then
+           if(pst%s%r%part_mass_deposition_scheme/=1 .and. .not.warned_dm_dep_gpu)then
+              write(*,'(A,I0,A)')' WARNING: r_cic_part: GPU TSC/PCS DM mass deposition (scheme ', &
+                   & pst%s%r%part_mass_deposition_scheme,') unavailable in phase 1; using GPU CIC path instead.'
+              warned_dm_dep_gpu=.true.
+           endif
            call gpu_cic_part(pst%s, ilevel, rtype)
-        else if(pst%s%r%part)then
-           call cic_part(pst%s,pst%s%p   ,ilevel,rtype)
         endif
         if(pst%s%r%star)call cic_part(pst%s,pst%s%star,ilevel,rtype)
         if(pst%s%r%sink)call cic_part(pst%s,pst%s%sink,ilevel,rtype)

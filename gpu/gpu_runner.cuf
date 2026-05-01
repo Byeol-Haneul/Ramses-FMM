@@ -93,6 +93,27 @@ module gpu_runner
   integer(kind=4), device, allocatable, dimension(:) :: cell_part_head
   integer(kind=4), device, allocatable, dimension(:) :: cell_part_idx
 
+  !> Out-of-place gather/scatter scratch for gpu_split_part / gpu_sort_part.
+  !> Host split_part (pm/rho_fine.f90:1411-1491) physically swaps every
+  !> particle field whose host counterpart is allocated. The GPU port replaces
+  !> the host's in-place cyclic swap with the existing scan + swap_global
+  !> pipeline (mirroring gpu_refine's grid sort, gpu/gpu_runner.cuf:614-633),
+  !> which needs one scratch slot of the same type and shape as each field
+  !> being permuted. §13 forbids reusing nref / flag2 (owned by gravity /
+  !> hydro sorts), so we allocate dedicated typed scratch keyed by the field
+  !> type seen in part_t (pm/pm_commons.f90:18-37):
+  !>   real(dp) (npart_max, ndim) — covers xp, vp, fp, jp        -> xp_swap
+  !>   real(dp) (npart_max)       — covers mp, zp, tp, tm, size_p, charge -> mp_swap
+  !>   integer(i8b) (npart_max)   — covers idp, idm              -> idp_swap
+  !>   integer(kind=4) (npart_max) — covers levelp, idt          -> reuse workp
+  !> workp is host-side scratch in split_part (its contents are not physically
+  !> swapped — see the cyclic-swap loop), so on device it is free to serve as
+  !> int4 gather/scatter scratch for levelp / idt. Allocation/dealloc in
+  !> gpu/gpu_manager.f90:r_set_grid_device alongside the other particle arrays.
+  real(kind=dp),   device, allocatable, dimension(:,:) :: xp_swap
+  real(kind=dp),   device, allocatable, dimension(:)   :: mp_swap
+  integer(i8b),    device, allocatable, dimension(:)   :: idp_swap
+
 contains
 
   include 'gpu_scan.cuf'

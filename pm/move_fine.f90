@@ -64,6 +64,11 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
   integer::ilevel
   integer::action_part
   integer::rID
+#ifdef _CUDA
+  ! Print the GPU TSC/PCS->CIC fallback warning once per rank (Eric's decision,
+  ! GPU_PM_STATE.md / gpu_part_prompt.md §15.15).
+  logical,save::warned_dm_kick_gpu=.false.
+#endif
 
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_KICK_DRIFT_PART,pst%iUpper+1,input_size,output_size,input_array)
@@ -74,14 +79,22 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
      action_part=input_array(2)
 #ifdef _CUDA
      if(pst%s%m%data_on_device)then
-        ! Phase-1 GPU dispatch: DM only with CIC interpolation. Other particle
-        ! types must round-trip through host until they land on device — see
-        ! gpu_part_prompt.md §4.4 / §5.
-        if(pst%s%r%part .and. pst%s%r%part_force_interpolation_scheme==1)then
+        ! Phase-1 GPU dispatch for DM:
+        !   * scheme==1 (CIC): use the GPU CIC kick-drift path.
+        !   * scheme==2 (TSC) or 3 (PCS): GPU TSC/PCS is unavailable in phase 1.
+        !     Eric's decision (gpu_part_prompt.md §15.15): warn and use the GPU
+        !     CIC kick-drift path. Falling back to host TSC/PCS would read
+        !     stale host xp/vp/fp because particles live on device.
+        ! Other particle types (star/sink/tree/trac/dust) are not on device yet
+        ! — see gpu_part_prompt.md §4.4 / §5. Stars/sinks/tree round-trip
+        ! through host CIC; tracers/dust still abort.
+        if(pst%s%r%part)then
+           if(pst%s%r%part_force_interpolation_scheme/=1 .and. .not.warned_dm_kick_gpu)then
+              write(*,'(A,I0,A)')' WARNING: r_kick_drift_part: GPU TSC/PCS DM force interpolation (scheme ', &
+                   & pst%s%r%part_force_interpolation_scheme,') unavailable in phase 1; using GPU CIC kick-drift path instead.'
+              warned_dm_kick_gpu=.true.
+           endif
            call gpu_kick_drift_part(pst%s, ilevel, action_part)
-        else if(pst%s%r%part)then
-           write(*,*)'r_kick_drift_part: GPU path supports only CIC for DM in phase 1.'
-           call abort
         endif
         if(pst%s%r%star)call cic_kick_drift_part(pst%s,pst%s%star,ilevel,action_part)
         if(pst%s%r%sink)call cic_kick_drift_part(pst%s,pst%s%sink,ilevel,action_part)

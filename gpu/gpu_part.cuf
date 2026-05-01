@@ -23,13 +23,22 @@
     call nvtxStartRange("gpu_split_part (stub)", color=4) ! purple
     ! TODO §4.1: per-particle bucket kernel + 0/1 stable scan + sort_gather_part /
     !            sort_scatter_part for every device array that mirrors a host
-    !            field physically swapped by split_part (pm/rho_fine.f90:1413-1494):
+    !            field physically swapped by split_part (pm/rho_fine.f90:1411-1491):
     !              mandatory: xp, vp, mp, levelp, idp
     !              optional (only when allocated on device, mirroring host):
     !                fp, jp, zp, tp, tm, size_p, charge, idm, idt
     !            sortp/workp are not physically swapped (workp is host-side
     !            scratch for the cyclic-swap algorithm; sortp gets re-permuted
     !            after the call — see gpu_sort_part).
+    !
+    ! Scratch plan (resolved 2026-05-01, see modelA.md and §13):
+    !   real(dp) (npart_max, ndim) — xp_swap  -> covers xp / vp / fp / jp
+    !   real(dp) (npart_max)       — mp_swap  -> covers mp / zp / tp / tm /
+    !                                            size_p / charge
+    !   integer(i8b) (npart_max)   — idp_swap -> covers idp / idm
+    !   integer(kind=4) (npart_max) — workp   -> covers levelp / idt
+    ! Allocated in gpu/gpu_manager.f90:r_set_grid_device. Do NOT reuse nref or
+    ! flag2 (gravity / hydro scratch — §13).
     call nvtxEndRange()
 
   end subroutine gpu_split_part
