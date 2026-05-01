@@ -87,7 +87,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   !--------------------------------
   ! Merging tree particle formation
   !--------------------------------
-  if(r%tree.and.ilevel==r%levelmin)then
+  if(r%tree.and.ilevel==r%levelmin.and.mod(g%nstep_coarse, 3)==0)then
      call m_timer(pst,'tree - formation','start')
      call m_tree_formation(pst)
   endif
