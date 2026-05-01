@@ -35,6 +35,53 @@ recursive subroutine r_set_grid_device(pst)
      call GPU_Error_Check(__FILE__, __LINE__)
      call nvtxEndRange()
 
+#ifdef _CUDA
+     ! Allocate and copy particle arrays (DM only in phase 1; gpu_part_prompt.md §3, §9).
+     ! pst%s%p is value-typed (not a pointer) — gate on npart_max.
+     if (pst%s%p%npart_max > 0) then
+        call nvtxStartRange("Copy particles from host to device", color=5)!red
+        if (allocated(xp))      deallocate(xp)
+        if (allocated(vp))      deallocate(vp)
+        if (allocated(fp))      deallocate(fp)
+        if (allocated(mp))      deallocate(mp)
+        if (allocated(levelp))  deallocate(levelp)
+        if (allocated(sortp))   deallocate(sortp)
+        if (allocated(workp))   deallocate(workp)
+        if (allocated(idp))     deallocate(idp)
+        if (allocated(hkey_part))   deallocate(hkey_part)
+        if (allocated(bucket_part)) deallocate(bucket_part)
+        if (allocated(cell_part_count)) deallocate(cell_part_count)
+        if (allocated(cell_part_head))  deallocate(cell_part_head)
+        if (allocated(cell_part_idx))   deallocate(cell_part_idx)
+
+        allocate(xp(1:pst%s%p%npart_max, 1:ndim))
+        allocate(vp(1:pst%s%p%npart_max, 1:ndim))
+        allocate(fp(1:pst%s%p%npart_max, 1:ndim))
+        allocate(mp(1:pst%s%p%npart_max))
+        allocate(levelp(1:pst%s%p%npart_max))
+        allocate(sortp(1:pst%s%p%npart_max))
+        allocate(workp(1:pst%s%p%npart_max))
+        allocate(idp(1:pst%s%p%npart_max))
+        allocate(hkey_part(1:pst%s%p%npart_max))
+        allocate(bucket_part(1:pst%s%p%npart_max))
+        allocate(cell_part_count(1:pst%s%m%ngridmax+pst%s%m%ncachemax))
+        allocate(cell_part_head (1:pst%s%m%ngridmax+pst%s%m%ncachemax))
+        allocate(cell_part_idx  (1:pst%s%p%npart_max))
+
+        ! Host -> device (only the fields populated by phase-1 host code)
+        if (allocated(pst%s%p%xp))     xp     = pst%s%p%xp
+        if (allocated(pst%s%p%vp))     vp     = pst%s%p%vp
+        if (allocated(pst%s%p%fp))     fp     = pst%s%p%fp
+        if (allocated(pst%s%p%mp))     mp     = pst%s%p%mp
+        if (allocated(pst%s%p%levelp)) levelp = pst%s%p%levelp
+        if (allocated(pst%s%p%sortp))  sortp  = pst%s%p%sortp
+        if (allocated(pst%s%p%workp))  workp  = pst%s%p%workp
+        if (allocated(pst%s%p%idp))    idp    = pst%s%p%idp
+        call GPU_Error_Check(__FILE__, __LINE__)
+        call nvtxEndRange()
+     endif
+#endif
+
      ! Insert entire grid in the device hash table
      call nvtxStartRange("Insert grid in hash table", color=5)!red
      head_idx = 1
@@ -97,9 +144,43 @@ recursive subroutine r_transfer_grid_host(pst)
      call GPU_Error_Check(__FILE__, __LINE__)
      call nvtxEndRange()
 
+#ifdef _CUDA
+     call gpu_to_host_part(pst)
+#endif
+
   endif
 
 end subroutine r_transfer_grid_host
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
+#ifdef _CUDA
+!> Copy device particle arrays back to host. Required so PART_DUMP / I/O paths
+!> that read pst%s%p%xp etc. see the post-kernel state. See §0.5 / §10.
+!> No-op when no particle arrays were allocated on device (npart_max==0).
+subroutine gpu_to_host_part(pst)
+  use ramses_commons, only: pst_t
+  implicit none
+  type(pst_t)::pst
+
+  if (pst%s%p%npart_max <= 0) return
+  if (.not. allocated(xp)) return
+
+  call nvtxStartRange("Copy particles from device to host", color=5)!red
+  if (allocated(pst%s%p%xp))     pst%s%p%xp     = xp
+  if (allocated(pst%s%p%vp))     pst%s%p%vp     = vp
+  if (allocated(pst%s%p%fp))     pst%s%p%fp     = fp
+  if (allocated(pst%s%p%mp))     pst%s%p%mp     = mp
+  if (allocated(pst%s%p%levelp)) pst%s%p%levelp = levelp
+  if (allocated(pst%s%p%sortp))  pst%s%p%sortp  = sortp
+  if (allocated(pst%s%p%workp))  pst%s%p%workp  = workp
+  if (allocated(pst%s%p%idp))    pst%s%p%idp    = idp
+  call GPU_Error_Check(__FILE__, __LINE__)
+  call nvtxEndRange()
+
+end subroutine gpu_to_host_part
+#endif
 !###########################################################
 !###########################################################
 !###########################################################

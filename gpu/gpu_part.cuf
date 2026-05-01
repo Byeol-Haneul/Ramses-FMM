@@ -1,0 +1,88 @@
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!> Particle GPU kernels and host-callable dispatchers.
+!>
+!> Phase 1 (§9 infrastructure commit): all four entry points are stubs that
+!> wrap an NVTX range and return without launching kernels. Real kernel logic
+!> lands in subsequent commits, one entry point per PR (split → sort → cic →
+!> kick_drift). See gpu_part_prompt.md §4 / §9.
+!>
+!> This file is `include`d from `module gpu_runner` (next to gpu_scan.cuf), so
+!> it shares the module-level device particle arrays declared in gpu_runner.cuf.
+
+  !> Stub: bucket-sort particles by leaf vs split at level `ilevel`.
+  !> See §4.1 for the real algorithm (DO FIRST).
+  subroutine gpu_split_part(sim, ilevel)
+    use nvtx
+    use ramses_commons, only: ramses_t
+    type(ramses_t), intent(inout) :: sim
+    integer, intent(in) :: ilevel
+
+    call nvtxStartRange("gpu_split_part (stub)", color=4) ! purple
+    ! TODO §4.1: per-particle bucket kernel + 0/1 stable scan
+    !            + sort_gather_part / sort_scatter_part for xp/vp/fp/mp/levelp/idp/sortp.
+    call nvtxEndRange()
+
+  end subroutine gpu_split_part
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+  !> Stub: Hilbert-sort particles within level `ilevel` (writes sortp only).
+  !> See §4.2 for the real algorithm — LSD radix sort over Hilbert keys.
+  subroutine gpu_sort_part(sim, ilevel)
+    use nvtx
+    use ramses_commons, only: ramses_t
+    type(ramses_t), intent(inout) :: sim
+    integer, intent(in) :: ilevel
+
+    call nvtxStartRange("gpu_sort_part (stub)", color=4) ! purple
+    ! TODO §4.2: Hilbert key kernel + ndim*ilevel passes of bit-radix scan.
+    call nvtxEndRange()
+
+  end subroutine gpu_sort_part
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+  !> Stub: CIC mass deposition into rho at level `ilevel+1`.
+  !> See §4.3 for the real algorithm — cell-block 27-neighbor scheme,
+  !> mirroring `multipole_cic` in gpu_rho.cuf.
+  subroutine gpu_cic_part(sim, ilevel, rtype)
+    use nvtx
+    use ramses_commons, only: ramses_t
+    type(ramses_t), intent(inout) :: sim
+    integer, intent(in) :: ilevel
+    integer, intent(in) :: rtype
+
+    call nvtxStartRange("gpu_cic_part (stub)", color=4) ! purple
+    ! TODO §4.3: per-cell particle index build + cell-block 6^3 shared-mem
+    !            atomicadd into local_rho, then flush inner 2^3 to global rho.
+    !            rho is left zero by reset_rho until this lands; downstream
+    !            multipole / phi / f are therefore wrong by design (§9 pass).
+    call nvtxEndRange()
+
+  end subroutine gpu_cic_part
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+  !> Stub: CIC kick-drift / kick-only on DM particles at level `ilevel`.
+  !> See §4.4 for the real algorithm — symmetric counterpart of `gpu_cic_part`,
+  !> reads f from device and updates xp/vp/fp.
+  subroutine gpu_kick_drift_part(sim, ilevel, action_part)
+    use nvtx
+    use ramses_commons, only: ramses_t
+    type(ramses_t), intent(inout) :: sim
+    integer, intent(in) :: ilevel
+    integer, intent(in) :: action_part
+
+    call nvtxStartRange("gpu_kick_drift_part (stub)", color=4) ! purple
+    ! TODO §4.4: load 6^3 f tile, evaluate CIC weights, write fp/vp/xp,
+    !            apply periodic wrap. Both action_kick_only (=1) and
+    !            action_kick_drift (=2) must be supported.
+    call nvtxEndRange()
+
+  end subroutine gpu_kick_drift_part

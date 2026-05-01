@@ -1,5 +1,5 @@
 module gpu_runner
-  use amr_parameters, only: ndim, twotondim, dp
+  use amr_parameters, only: ndim, twotondim, dp, i8b
   use oct_commons, only: oct
   use gpu_utils
   use cudafor
@@ -63,9 +63,28 @@ module gpu_runner
   !> The total number of halo and ghost octs
   integer(kind=4) :: num_send, num_recv
 
+  !> Particle arrays on device (phase 1: DM only, populated from pst%s%p)
+  !> See gpu_part_prompt.md §3. Allocated/copied in gpu_manager:r_set_grid_device.
+  real(kind=dp),   device, allocatable, dimension(:,:) :: xp, vp, fp
+  real(kind=dp),   device, allocatable, dimension(:)   :: mp
+  integer(kind=4), device, allocatable, dimension(:)   :: levelp
+  integer(kind=4), device, allocatable, dimension(:)   :: sortp
+  integer(kind=4), device, allocatable, dimension(:)   :: workp
+  integer(i8b),    device, allocatable, dimension(:)   :: idp
+
+  !> Per-particle scratch (built fresh by future split/sort kernels)
+  integer(kind=8), device, allocatable, dimension(:) :: hkey_part
+  integer(kind=4), device, allocatable, dimension(:) :: bucket_part
+
+  !> Per-cell index for the cell-block CIC/kick-drift kernels (§4.3)
+  integer(kind=4), device, allocatable, dimension(:) :: cell_part_count
+  integer(kind=4), device, allocatable, dimension(:) :: cell_part_head
+  integer(kind=4), device, allocatable, dimension(:) :: cell_part_idx
+
 contains
 
   include 'gpu_scan.cuf'
+  include 'gpu_part.cuf'
 
   !> @brief
   !> Compute the new time step on a GPU

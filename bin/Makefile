@@ -218,7 +218,7 @@ MODOBJ += init_neq_chem.o clfind_commons.o turb_commons.o mdl_commons.o mdl.o \
 	 cross_sections_module.o rt_spectra.o  \
 	 ramses_commons.o call_back.o cache_commons.o cache.o gadgetreadfile.o \
 	 boundaries.o output_hydro.o output_poisson.o output_part.o output_rt.o output_amr.o movie.o \
-	 sort.o nbors_utils.o hydro_flag.o marshal.o
+	 sort.o nbors_utils.o hydro_flag.o marshal.o pm_dump.o
 ifeq ($(COMPILER),NVHPC)
 MODOBJ += gpu_utils.o gpu_hydro.o gpu_cooling.o gpu_rho.o gpu_mg.o gpu_refine.o gpu_flag.o gpu_runner.o gpu_manager.o
 endif

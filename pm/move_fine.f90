@@ -1,5 +1,9 @@
 module move_fine_module
   use rho_fine_module, only: cic_weight, cic_index, tsc_weight, tsc_index, pcs_weight, pcs_index
+#ifdef _CUDA
+  use gpu_runner, only: gpu_kick_drift_part
+  use gpu_manager, only: gpu_to_host_part
+#endif
   use rng
   implicit none
   ! Module-level tracer RNG state
@@ -13,6 +17,9 @@ contains
 subroutine m_kick_drift_part(pst,ilevel,action_part)
   use amr_parameters, only: ndim, twotondim
   use ramses_commons, only: pst_t
+#ifdef PART_DUMP
+  use pm_dump, only: dump_part_state
+#endif
   implicit none
   type(pst_t)::pst
   integer::ilevel
@@ -29,6 +36,14 @@ subroutine m_kick_drift_part(pst,ilevel,action_part)
   input_array(1)=ilevel
   input_array(2)=action_part
   call r_kick_drift_part(pst,input_array,2,dummy,0)
+
+#ifdef PART_DUMP
+  if (action_part == 1) then
+     call dump_part_state(pst%s%p, pst%s%r, "kickonly",  ilevel)
+  else
+     call dump_part_state(pst%s%p, pst%s%r, "kickdrift", ilevel)
+  end if
+#endif
 
 end subroutine m_kick_drift_part
 !################################################################
@@ -57,6 +72,28 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
   else
      ilevel=input_array(1)
      action_part=input_array(2)
+#ifdef _CUDA
+     if(pst%s%m%data_on_device)then
+        ! Phase-1 GPU dispatch: DM only with CIC interpolation. Other particle
+        ! types must round-trip through host until they land on device — see
+        ! gpu_part_prompt.md §4.4 / §5.
+        if(pst%s%r%part .and. pst%s%r%part_force_interpolation_scheme==1)then
+           call gpu_kick_drift_part(pst%s, ilevel, action_part)
+        else if(pst%s%r%part)then
+           write(*,*)'r_kick_drift_part: GPU path supports only CIC for DM in phase 1.'
+           call abort
+        endif
+        if(pst%s%r%star)call cic_kick_drift_part(pst%s,pst%s%star,ilevel,action_part)
+        if(pst%s%r%sink)call cic_kick_drift_part(pst%s,pst%s%sink,ilevel,action_part)
+        if(pst%s%r%tree)call cic_kick_drift_part(pst%s,pst%s%tree,ilevel,action_part)
+        if(pst%s%r%trac.or.pst%s%r%dust)then
+           write(*,*)'r_kick_drift_part: tracers/dust on the GPU path are not supported in phase 1.'
+           call abort
+        endif
+        call gpu_to_host_part(pst)
+        return
+     endif
+#endif
      ! Force interpolation for various components (DM particles, star, sink, tree)
      ! based on their respective deposition schemes (CIC 1, TSC 2 or PCS 3)
      if(pst%s%r%part)then
