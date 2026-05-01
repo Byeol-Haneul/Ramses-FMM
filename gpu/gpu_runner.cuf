@@ -63,14 +63,26 @@ module gpu_runner
   !> The total number of halo and ghost octs
   integer(kind=4) :: num_send, num_recv
 
-  !> Particle arrays on device (phase 1: DM only, populated from pst%s%p)
+  !> Particle arrays on device (phase 1: DM only, populated from pst%s%p).
   !> See gpu_part_prompt.md §3. Allocated/copied in gpu_manager:r_set_grid_device.
-  real(kind=dp),   device, allocatable, dimension(:,:) :: xp, vp, fp
+  !> Mandatory (always swapped by split_part) — must be allocated whenever
+  !> npart_max > 0:
+  real(kind=dp),   device, allocatable, dimension(:,:) :: xp, vp
   real(kind=dp),   device, allocatable, dimension(:)   :: mp
   integer(kind=4), device, allocatable, dimension(:)   :: levelp
   integer(kind=4), device, allocatable, dimension(:)   :: sortp
   integer(kind=4), device, allocatable, dimension(:)   :: workp
   integer(i8b),    device, allocatable, dimension(:)   :: idp
+  !> Optional DM particle fields. split_part (pm/rho_fine.f90:1413-1494)
+  !> physically swaps each one only if its host counterpart is allocated.
+  !> Mirror that gate device-side: allocate iff allocated(pst%s%p%X).
+  !> NB: device array `size_p` mirrors host `pst%s%p%size`; renamed to avoid
+  !> shadowing the Fortran intrinsic `size()` in modules that `use gpu_runner`.
+  real(kind=dp),   device, allocatable, dimension(:,:) :: fp
+  real(kind=dp),   device, allocatable, dimension(:,:) :: jp
+  real(kind=dp),   device, allocatable, dimension(:)   :: zp, tp, tm, size_p, charge
+  integer(i8b),    device, allocatable, dimension(:)   :: idm
+  integer(kind=4), device, allocatable, dimension(:)   :: idt
 
   !> Per-particle scratch (built fresh by future split/sort kernels)
   integer(kind=8), device, allocatable, dimension(:) :: hkey_part

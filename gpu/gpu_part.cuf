@@ -21,8 +21,15 @@
     integer, intent(in) :: ilevel
 
     call nvtxStartRange("gpu_split_part (stub)", color=4) ! purple
-    ! TODO §4.1: per-particle bucket kernel + 0/1 stable scan
-    !            + sort_gather_part / sort_scatter_part for xp/vp/fp/mp/levelp/idp/sortp.
+    ! TODO §4.1: per-particle bucket kernel + 0/1 stable scan + sort_gather_part /
+    !            sort_scatter_part for every device array that mirrors a host
+    !            field physically swapped by split_part (pm/rho_fine.f90:1413-1494):
+    !              mandatory: xp, vp, mp, levelp, idp
+    !              optional (only when allocated on device, mirroring host):
+    !                fp, jp, zp, tp, tm, size_p, charge, idm, idt
+    !            sortp/workp are not physically swapped (workp is host-side
+    !            scratch for the cyclic-swap algorithm; sortp gets re-permuted
+    !            after the call — see gpu_sort_part).
     call nvtxEndRange()
 
   end subroutine gpu_split_part

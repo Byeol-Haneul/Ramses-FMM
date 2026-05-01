@@ -38,16 +38,30 @@ recursive subroutine r_set_grid_device(pst)
 #ifdef _CUDA
      ! Allocate and copy particle arrays (DM only in phase 1; gpu_part_prompt.md §3, §9).
      ! pst%s%p is value-typed (not a pointer) — gate on npart_max.
+     ! Optional fields (zp/tp/tm/jp/idm/idt/size_p/charge) mirror the host
+     ! `allocated(p%X)` gate used by split_part (pm/rho_fine.f90:1413-1494):
+     ! allocate device storage iff the host counterpart is allocated.
      if (pst%s%p%npart_max > 0) then
         call nvtxStartRange("Copy particles from host to device", color=5)!red
+        ! Mandatory arrays (always allocated when npart_max > 0)
         if (allocated(xp))      deallocate(xp)
         if (allocated(vp))      deallocate(vp)
-        if (allocated(fp))      deallocate(fp)
         if (allocated(mp))      deallocate(mp)
         if (allocated(levelp))  deallocate(levelp)
         if (allocated(sortp))   deallocate(sortp)
         if (allocated(workp))   deallocate(workp)
         if (allocated(idp))     deallocate(idp)
+        ! Optional DM fields (allocated only when host has them)
+        if (allocated(fp))      deallocate(fp)
+        if (allocated(jp))      deallocate(jp)
+        if (allocated(zp))      deallocate(zp)
+        if (allocated(tp))      deallocate(tp)
+        if (allocated(tm))      deallocate(tm)
+        if (allocated(size_p))  deallocate(size_p)
+        if (allocated(charge))  deallocate(charge)
+        if (allocated(idm))     deallocate(idm)
+        if (allocated(idt))     deallocate(idt)
+        ! Per-particle / per-cell scratch
         if (allocated(hkey_part))   deallocate(hkey_part)
         if (allocated(bucket_part)) deallocate(bucket_part)
         if (allocated(cell_part_count)) deallocate(cell_part_count)
@@ -56,7 +70,6 @@ recursive subroutine r_set_grid_device(pst)
 
         allocate(xp(1:pst%s%p%npart_max, 1:ndim))
         allocate(vp(1:pst%s%p%npart_max, 1:ndim))
-        allocate(fp(1:pst%s%p%npart_max, 1:ndim))
         allocate(mp(1:pst%s%p%npart_max))
         allocate(levelp(1:pst%s%p%npart_max))
         allocate(sortp(1:pst%s%p%npart_max))
@@ -68,15 +81,52 @@ recursive subroutine r_set_grid_device(pst)
         allocate(cell_part_head (1:pst%s%m%ngridmax+pst%s%m%ncachemax))
         allocate(cell_part_idx  (1:pst%s%p%npart_max))
 
-        ! Host -> device (only the fields populated by phase-1 host code)
-        if (allocated(pst%s%p%xp))     xp     = pst%s%p%xp
-        if (allocated(pst%s%p%vp))     vp     = pst%s%p%vp
-        if (allocated(pst%s%p%fp))     fp     = pst%s%p%fp
-        if (allocated(pst%s%p%mp))     mp     = pst%s%p%mp
-        if (allocated(pst%s%p%levelp)) levelp = pst%s%p%levelp
-        if (allocated(pst%s%p%sortp))  sortp  = pst%s%p%sortp
-        if (allocated(pst%s%p%workp))  workp  = pst%s%p%workp
-        if (allocated(pst%s%p%idp))    idp    = pst%s%p%idp
+        ! Mandatory host -> device copies
+        xp     = pst%s%p%xp
+        vp     = pst%s%p%vp
+        mp     = pst%s%p%mp
+        levelp = pst%s%p%levelp
+        sortp  = pst%s%p%sortp
+        workp  = pst%s%p%workp
+        idp    = pst%s%p%idp
+
+        ! Optional fields: allocate-and-copy only if host has them.
+        if (allocated(pst%s%p%fp)) then
+           allocate(fp(1:pst%s%p%npart_max, 1:ndim))
+           fp = pst%s%p%fp
+        endif
+        if (allocated(pst%s%p%jp)) then
+           allocate(jp(1:pst%s%p%npart_max, 1:ndim))
+           jp = pst%s%p%jp
+        endif
+        if (allocated(pst%s%p%zp)) then
+           allocate(zp(1:pst%s%p%npart_max))
+           zp = pst%s%p%zp
+        endif
+        if (allocated(pst%s%p%tp)) then
+           allocate(tp(1:pst%s%p%npart_max))
+           tp = pst%s%p%tp
+        endif
+        if (allocated(pst%s%p%tm)) then
+           allocate(tm(1:pst%s%p%npart_max))
+           tm = pst%s%p%tm
+        endif
+        if (allocated(pst%s%p%size)) then
+           allocate(size_p(1:pst%s%p%npart_max))
+           size_p = pst%s%p%size
+        endif
+        if (allocated(pst%s%p%charge)) then
+           allocate(charge(1:pst%s%p%npart_max))
+           charge = pst%s%p%charge
+        endif
+        if (allocated(pst%s%p%idm)) then
+           allocate(idm(1:pst%s%p%npart_max))
+           idm = pst%s%p%idm
+        endif
+        if (allocated(pst%s%p%idt)) then
+           allocate(idt(1:pst%s%p%npart_max))
+           idt = pst%s%p%idt
+        endif
         call GPU_Error_Check(__FILE__, __LINE__)
         call nvtxEndRange()
      endif
@@ -168,14 +218,24 @@ subroutine gpu_to_host_part(pst)
   if (.not. allocated(xp)) return
 
   call nvtxStartRange("Copy particles from device to host", color=5)!red
-  if (allocated(pst%s%p%xp))     pst%s%p%xp     = xp
-  if (allocated(pst%s%p%vp))     pst%s%p%vp     = vp
-  if (allocated(pst%s%p%fp))     pst%s%p%fp     = fp
-  if (allocated(pst%s%p%mp))     pst%s%p%mp     = mp
-  if (allocated(pst%s%p%levelp)) pst%s%p%levelp = levelp
-  if (allocated(pst%s%p%sortp))  pst%s%p%sortp  = sortp
-  if (allocated(pst%s%p%workp))  pst%s%p%workp  = workp
-  if (allocated(pst%s%p%idp))    pst%s%p%idp    = idp
+  ! Mandatory mirrors
+  pst%s%p%xp     = xp
+  pst%s%p%vp     = vp
+  pst%s%p%mp     = mp
+  pst%s%p%levelp = levelp
+  pst%s%p%sortp  = sortp
+  pst%s%p%workp  = workp
+  pst%s%p%idp    = idp
+  ! Optional mirrors — copy iff both sides are allocated.
+  if (allocated(fp)     .and. allocated(pst%s%p%fp))     pst%s%p%fp     = fp
+  if (allocated(jp)     .and. allocated(pst%s%p%jp))     pst%s%p%jp     = jp
+  if (allocated(zp)     .and. allocated(pst%s%p%zp))     pst%s%p%zp     = zp
+  if (allocated(tp)     .and. allocated(pst%s%p%tp))     pst%s%p%tp     = tp
+  if (allocated(tm)     .and. allocated(pst%s%p%tm))     pst%s%p%tm     = tm
+  if (allocated(size_p) .and. allocated(pst%s%p%size))   pst%s%p%size   = size_p
+  if (allocated(charge) .and. allocated(pst%s%p%charge)) pst%s%p%charge = charge
+  if (allocated(idm)    .and. allocated(pst%s%p%idm))    pst%s%p%idm    = idm
+  if (allocated(idt)    .and. allocated(pst%s%p%idt))    pst%s%p%idt    = idt
   call GPU_Error_Check(__FILE__, __LINE__)
   call nvtxEndRange()
 
