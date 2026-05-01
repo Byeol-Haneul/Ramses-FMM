@@ -1,5 +1,5 @@
-module multigrid_device
-  use amr_parameters, only: dp, ndim, twondim, twotondim, nhilbert
+module mg_device
+  use amr_parameters, only: dp, ndim, twondim, twotondim, threetondim, nhilbert
   use hydro_parameters, only: nvar
   use oct_commons, only: oct
   use gpu_utils, only: nsubgrid, nsubgridsq, nsubgridtondim, nsubgridp2, nsubgridp2sq, subgridsize
@@ -8,7 +8,7 @@ module multigrid_device
 
   !> @brief
   !> Cell index to access neighbors.
-  integer, device, constant :: hhh(8,6) = reshape(&
+  integer, parameter :: hhh(8,6) = reshape(&
        & (/2, 1, 4, 3, 6, 5, 8, 7, &
        &   2, 1, 4, 3, 6, 5, 8, 7, &
        &   3, 4, 1, 2, 7, 8, 5, 6, &
@@ -17,7 +17,7 @@ module multigrid_device
        &   5, 6, 7, 8, 1, 2, 3, 4/), (/8,6/))
 
   !> Grid offset to access neighbors.
-  integer, device, constant :: iii(8,6) = reshape(&
+  integer, parameter :: iii(8,6) = reshape(&
        & (/-1, 0,-1, 0,-1, 0,-1, 0, &
        &    0, 1, 0, 1, 0, 1, 0, 1, &
        &   -1,-1, 0, 0,-1,-1, 0, 0, &
@@ -26,12 +26,12 @@ module multigrid_device
        &    0, 0, 0, 0, 1, 1, 1, 1/), (/8,6/))
 
   ! 3D CIC weights: aa=1/64, bb=3/64, cc=9/64, dd=27/64
-  real(kind=dp), device, constant :: bbb(8) = (/ &
+  real(kind=dp), parameter :: bbb(8) = (/ &
        & 1.0_dp/64.0_dp, 3.0_dp/64.0_dp, 3.0_dp/64.0_dp,  9.0_dp/64.0_dp, &
        & 3.0_dp/64.0_dp, 9.0_dp/64.0_dp, 9.0_dp/64.0_dp, 27.0_dp/64.0_dp /)
 
   ! Sampling positions in the 3x3x3 father cell cube (indices 1..27)
-  integer, device, constant :: ccc(8,8) = reshape( (/ &
+  integer, parameter :: ccc(8,8) = reshape( (/ &
        &  1,  2,  4,  5, 10, 11, 13, 14,  &
        &  3,  2,  6,  5, 12, 11, 15, 14,  &
        &  7,  8,  4,  5, 16, 17, 13, 14,  &
@@ -42,13 +42,13 @@ module multigrid_device
        & 27, 26, 24, 23, 18, 17, 15, 14/), (/8,8/) )
 
   ! Shift oct coordinates to get MG father octs
-  integer, device, constant :: shift_oct(3,8) = reshape( (/ &
+  integer, parameter :: shift_oct(3,8) = reshape( (/ &
        &   -1, -1, -1, +1, -1, -1, -1, +1, -1, +1, +1, -1,&
        &   -1, -1, +1, +1, -1, +1, -1, +1, +1, +1, +1, +1/), (/3,8/) )
 
   ! Red-black ordering cell index
-  integer, device, constant :: ired  (4) = (/ 1, 4, 6, 7 /)
-  integer, device, constant :: iblack(4) = (/ 2, 3, 5, 8 /)
+  integer, constant :: ired  (4) = (/ 1, 4, 6, 7 /)
+  integer, constant :: iblack(4) = (/ 2, 3, 5, 8 /)
 
 contains
 
@@ -59,14 +59,39 @@ contains
   include 'gpu_nbor.cuf'
 
   ! =========================================================================
-  attributes(global) subroutine init_phi_kernel(grid, father, nbor, phi, phi_old, tfrac, head_idx, num_octs)
+  attributes(global) subroutine save_phi_old(phi_old, phi, head_idx, num_octs)
+    real(kind=dp), device :: phi_old(1:twotondim,*)
+    real(kind=dp), device :: phi(1:twotondim,*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
+    integer :: cell_idx, oct_idx, block_idx
+
+    block_idx = blockIdx%x - 1
+
+    ! Compute the oct idx
+    oct_idx = block_idx * blockDim%y + threadIdx%y - 1
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Compute the cell idx
+    cell_idx = threadIdx%x
+
+    ! Initialize mask to input value
+    phi_old(cell_idx, oct_idx) = phi(cell_idx, oct_idx)
+
+  end subroutine save_phi_old
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine make_initial_phi(grid, father, nbor, phi, phi_old, tfrac, head_idx, num_octs)
     implicit none
     type(oct), device :: grid(*)
     integer, device :: father(*)
     integer, device :: nbor(1:subgridsize,*)
     real(kind=dp), device :: phi(1:twotondim,*)
     real(kind=dp), device :: phi_old(1:twotondim,*)
-    real(kind=dp), value  :: tfrac
+    real(kind=8), value  :: tfrac
     integer, value :: head_idx
     integer, value :: num_octs
 
@@ -116,7 +141,7 @@ contains
 
     phi(cell_idx, oct_idx) = acc
 
-  end subroutine init_phi_kernel
+  end subroutine make_initial_phi
   ! =========================================================================
 
   ! =========================================================================
@@ -142,7 +167,7 @@ contains
     f(cell_idx, 3, oct_idx) = mask_val
 
   end subroutine reset_mask_kernel
-  ! =========================================================================~
+  ! =========================================================================
 
   ! =========================================================================
   attributes(global) subroutine reset_rhs_kernel(phi, rho, f, nbor, head_idx, num_octs, fourpi, offset, oneoverdx2)
@@ -156,8 +181,8 @@ contains
 
     real(kind=dp) :: phi_nbr, dis_nbr, w, phi_b
     integer :: cell_idx, oct_idx, block_idx, source_idx, subgrid_idx, num_idx
-    integer :: number_nbors, ind, icell, idir, ind_nbor
-    integer :: i, j, k, in, jn, kn, ind
+    integer :: number_nbors, ind, idim, inbor, icell, idir, ind_nbor
+    integer :: i, j, k, in, jn, kn
     integer :: oct_nbr_idx, cell_nbr_idx
 
     block_idx = blockIdx%x - 1
@@ -225,7 +250,7 @@ contains
     end do
 
   end subroutine reset_rhs_kernel
-  ! =========================================================================~
+  ! =========================================================================
 
   ! =========================================================================
   attributes(global) subroutine reset_father_kernel(father, head_idx, num_octs, father_val)
@@ -245,7 +270,7 @@ contains
     father(oct_idx) = father_val
 
   end subroutine reset_father_kernel
-  ! =========================================================================~
+  ! =========================================================================
 
   ! =========================================================================
   attributes(global) subroutine update_father_array(father, grid, hash_key, hash_val, hash_size, &
@@ -266,9 +291,9 @@ contains
     integer(kind=4), intent(in), value :: cell_ind
 
     integer(kind=8) :: key, offset, ix, iy, iz, nx
-    integer :: thread_idx, block_idx, subgrid_idx, oct_idx, nbor_idx
+    integer :: thread_idx, block_idx, subgrid_idx, oct_idx, nbor_idx, cell_idx, father_idx
     integer :: ilevel, i, j, k, ind, idim
-    integer(kind=4), dimension(1:ndim) ::ckey
+    integer(kind=4), dimension(1:ndim) ::ckey, father_ckey
 
     ! Compute thread and block idx
     thread_idx = threadIdx%x - 1
@@ -305,7 +330,7 @@ contains
     father_ckey(2) = ckey(2) / 2
     father_ckey(3) = ckey(3) / 2
 
-    ! Conpute key
+    ! Compute key
     ix = int(father_ckey(1), kind=8)
     iy = int(father_ckey(2), kind=8)
     iz = int(father_ckey(3), kind=8)
@@ -325,13 +350,13 @@ contains
   ! =========================================================================
 
   ! =========================================================================
-  attributes(global) subroutine init_prefix_sum_father(nbor, prefix_sum, head_idx, num_octs)
+  attributes(global) subroutine init_prefix_sum_father(father, prefix_sum, head_idx, num_octs)
     integer(kind=4), device :: father(*)
     integer(kind=4), device :: prefix_sum(*)
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
 
-    integer :: oct_idx, thread_idx, block_idx, nbor_idx
+    integer :: oct_idx, thread_idx, block_idx, nbor_idx, father_idx
 
     ! Compute the thread and block idx
     thread_idx = threadIdx%x - 1
@@ -362,7 +387,7 @@ contains
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
 
-    integer :: subgrid_idx, thread_idx, block_idx, cache_idx
+    integer :: oct_idx, thread_idx, block_idx, cache_idx
     integer :: previous_sum, bit
 
     ! Compute thread and block idx
@@ -418,7 +443,7 @@ contains
 
     integer(kind=8) :: hkey, parent_key, offset, ix, iy, iz, nx
     integer :: oct_idx, subgrid_idx, thread_idx, block_idx, cache_idx, parent_idx, cell_idx
-    integer :: ilevel, idim
+    integer :: ilevel, idim, ind
     integer, dimension(1:ndim) :: ckey
 
     ! Compute thread and block idx
@@ -486,6 +511,7 @@ contains
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
 
+    real(kind=dp) :: ngpmask
     integer :: tid, bid, cell_idx, oct_idx
     integer :: ind, father_idx, i, j, k
 
@@ -539,7 +565,7 @@ contains
     f(cell_idx, 3, oct_idx) = 2d0 * f(cell_idx, 3, oct_idx) - 1d0
 
   end subroutine volume_to_mask
-  ! =========================================================================~
+  ! =========================================================================
 
   ! =========================================================================
   attributes(global) subroutine cmp_residual(phi, rho, f, nbor, head_idx, num_octs, fourpi, offset, oneoverdx2)
@@ -551,10 +577,10 @@ contains
     integer(kind=4), intent(in), value :: num_octs
     real(dp), intent(in), value :: fourpi, offset, oneoverdx2
 
-    real(kind=dp) :: phi_nbr, dis_nbr, w, phi_b
+    real(kind=dp) :: phi_nbr, dis_nbr, w, phi_b, phi_c, dis_c, nb_sum
     integer :: cell_idx, oct_idx, block_idx, source_idx, subgrid_idx, num_idx
     integer :: number_nbors, ind, icell, idir, ind_nbor
-    integer :: i, j, k, in, jn, kn, ind
+    integer :: i, j, k, in, jn, kn, idim, inbor
     integer :: oct_nbr_idx, cell_nbr_idx
 
     block_idx = blockIdx%x - 1
@@ -584,7 +610,7 @@ contains
     oct_idx = nbor(ind_nbor, subgrid_idx)
 
     ! Cell potential and distance function
-    phi_c = phi(cell_idx, ict_idx)
+    phi_c = phi(cell_idx, oct_idx)
     dis_c = f(cell_idx, 3, oct_idx)
 
     ! Initialize residual to zero
@@ -639,11 +665,12 @@ contains
     end if
 
   end subroutine cmp_residual
-  ! =========================================================================~
+  ! =========================================================================
 
   ! =========================================================================
   attributes(global) subroutine gauss_seidel(phi, rho, f, nbor, head_idx, num_octs, dx2, redstep, safe)
     real(kind=dp), device :: phi(1:twotondim,*)
+    real(kind=dp), device :: rho(1:twotondim,*)
     real(kind=dp), device :: f(1:twotondim,1:ndim,*)
     integer(kind=4), device :: nbor(1:subgridsize,*)
     integer(kind=4), intent(in), value :: head_idx
@@ -651,10 +678,10 @@ contains
     real(dp), intent(in), value :: dx2
     logical, intent(in), value :: redstep, safe
 
-    real(kind=dp) :: phi_nbr, dis_nbr, w, phi_b
+    real(kind=dp) :: phi_nbr, dis_nbr, w, phi_b, phi_c, dis_c, nb_sum, weight
     integer :: cell_idx, oct_idx, block_idx, source_idx, subgrid_idx, num_idx
     integer :: number_nbors, ind, icell, idir, ind_nbor
-    integer :: i, j, k, in, jn, kn, ind
+    integer :: i, j, k, in, jn, kn, idim, inbor
     integer :: oct_nbr_idx, cell_nbr_idx
 
     block_idx = blockIdx%x - 1
@@ -688,7 +715,7 @@ contains
     oct_idx = nbor(ind_nbor, subgrid_idx)
 
     ! Cell potential and distance function
-    phi_c = phi(cell_idx, ict_idx)
+    phi_c = phi(cell_idx, oct_idx)
     dis_c = f(cell_idx, 3, oct_idx)
 
     if (dis_c > 0d0 .and. ((.not. safe) .or. dis_c >= 1d0)) then
@@ -741,7 +768,7 @@ contains
     end if
 
   end subroutine gauss_seidel
-  ! =========================================================================~
+  ! =========================================================================
 
   ! =========================================================================
   attributes(global) subroutine reset_phi_kernel(phi, head_idx, num_octs, phi_val)
@@ -766,7 +793,7 @@ contains
     phi(cell_idx, oct_idx) = phi_val
 
   end subroutine reset_phi_kernel
-  ! =========================================================================~
+  ! =========================================================================
 
   ! =========================================================================
   attributes(global) subroutine restrict_residual(grid, father, f, head_idx, num_octs)
@@ -809,12 +836,13 @@ contains
   ! =========================================================================
 
   ! =========================================================================
-  attributes(global) subroutine interpolate_correct(grid, father, nbor, phi, head_idx, num_octs)
+  attributes(global) subroutine interpolate_correct(grid, father, nbor, phi, f, head_idx, num_octs)
     implicit none
     type(oct), device :: grid(*)
     integer, device :: father(*)
     integer, device :: nbor(1:threetondim,*)
     real(kind=dp), device :: phi(1:twotondim,*)
+    real(kind=dp), device :: f(1:twotondim,1:ndim,*)
     integer, value :: head_idx
     integer, value :: num_octs
 
@@ -857,5 +885,5 @@ contains
   end subroutine interpolate_correct
   ! =========================================================================
 
-end module multigrid_device
+end module mg_device
 

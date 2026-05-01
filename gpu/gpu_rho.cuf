@@ -77,33 +77,6 @@ contains
   ! =========================================================================~
 
   ! =========================================================================
-  attributes(global) subroutine reset_multipole(unew, head_idx, num_octs)
-    real(kind=dp), device :: unew(1:twotondim,1:nvar,*)
-    integer(kind=4), intent(in), value :: head_idx
-    integer(kind=4), intent(in), value :: num_octs
-
-    integer :: cell_idx, oct_idx, block_idx
-
-    block_idx = blockIdx%x - 1
-
-    ! Compute the oct idx
-    oct_idx = block_idx * blockDim%y + threadIdx%y - 1
-    if (oct_idx >= num_octs) return
-    oct_idx = head_idx + oct_idx
-
-    ! Compute the cell idx
-    cell_idx = threadIdx%x
-
-    ! Reset values used for multipoles
-    unew(cell_idx, 1, oct_idx) = 0
-    unew(cell_idx, 2, oct_idx) = 0
-    unew(cell_idx, 3, oct_idx) = 0
-    unew(cell_idx, 4, oct_idx) = 0
-
-  end subroutine reset_multipole
-  ! =========================================================================~
-
-  ! =========================================================================
   attributes(global) subroutine multipole_leaf(unew, uold, grid, head_idx, num_octs, dx_loc)
     real(kind=dp), device :: unew(1:twotondim,1:nvar,*)
     real(kind=dp), device :: uold(1:twotondim,1:nvar,*)

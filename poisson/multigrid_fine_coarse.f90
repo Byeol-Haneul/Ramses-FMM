@@ -126,7 +126,7 @@ subroutine restrict_mask(s,m,ifinelevel,allmasked)
   mask_max=-1.0
   do igrid=m_mg%head(ifinelevel-1),m_mg%tail(ifinelevel-1)
      do ind=1,twotondim
-        mask_max=MAX(mask_max,m_mg%f(ind,3,igrid))
+        mask_max=MAX(mask_max,real(m_mg%f(ind,3,igrid),kind=8))
      end do
   end do
   allmasked=(mask_max<=0d0)

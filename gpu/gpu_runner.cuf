@@ -9,6 +9,7 @@ module gpu_runner
   !> Various parameters on the device
   logical, device, dimension(1:3) :: periodic
   real(kind=8), device, dimension(1:3) :: box_size
+  real(kind=8), device, dimension(1:3) :: constant_gravity
   integer(kind=4), device, allocatable, dimension(:) :: ckey_max
   integer(kind=8), device, allocatable, dimension(:) :: key_off
   integer(kind=4), device, allocatable, dimension(:,:) :: box_ckey_min, box_ckey_max
@@ -21,15 +22,11 @@ module gpu_runner
   integer(kind=4), device, allocatable, dimension(:,:) :: flag1, flag2
 
   !> Arrays to hold the hydro variables on the device
-#ifdef HYDRO
   real(kind=dp), device, allocatable, dimension(:,:,:) :: uold, unew
-#endif
 
   !> Arrays to hold the gravity variables on the device
-#ifdef GRAV
   real(kind=dp), device, allocatable, dimension(:,:) :: phi, rho, nref, phi_old
   real(kind=dp), device, allocatable, dimension(:,:,:) :: f
-#endif
 
   !> Arrays to hold the hash table on the device
   integer(kind=8), device, allocatable, dimension(:) :: hash_key
@@ -45,7 +42,6 @@ module gpu_runner
   real(kind=dp), device, allocatable, dimension(:) :: uold_send_device, uold_recv_device
 
   !> Arrays to hold the multigrid variables on the device
-#ifdef GRAV
   type(oct), device, allocatable, dimension(:) :: grid_mg
   integer(kind=4), device, allocatable, dimension(:) :: father_mg
   integer(kind=4), device, allocatable, dimension(:,:) :: nbor_mg
@@ -53,7 +49,6 @@ module gpu_runner
   real(kind=dp), device, allocatable, dimension(:,:) :: phi_mg
   integer(kind=8), device, allocatable, dimension(:) :: hash_key_mg
   integer(kind=4), device, allocatable, dimension(:) :: hash_val_mg
-#endif
 
   !> The Fortran array of oct index of ghost and halo octs on the host and the device
   integer, allocatable, dimension(:) :: idx_send_host, idx_recv_host
@@ -182,6 +177,71 @@ contains
   end subroutine gpu_set_unew
 
   !> @brief
+  !> Synchronization (corrector) step of old hydro variables (uold) due to gravity
+  !>
+  !> @detail
+  !> @param[in] sim : The simulation object
+  !> @param[in] ilevel : The refinement level to update
+  !>
+  subroutine gpu_sync_hydro(sim, ilevel, dt)
+    use nvtx
+    use hydro_device, only: sync_hydro
+    use ramses_commons, only: ramses_t
+    type(ramses_t), intent(inout)::sim
+    integer, intent(in)::ilevel
+    real(kind=8) :: dt
+
+    integer(kind=4) :: head_idx, num_octs
+    integer :: threadsX_per_block, threadsY_per_block, num_blocks
+    real(kind=dp) :: gamma
+
+    gamma = real(sim%r%gamma, kind=dp)
+
+    head_idx = sim%m%head(ilevel)
+    num_octs = sim%m%noct(ilevel)
+    threadsX_per_block = 8
+    threadsY_per_block = 16
+    num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
+
+    call sync_hydro<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(uold, f, constant_gravity, &
+         & head_idx, num_octs, gamma, dt)
+
+  end subroutine gpu_sync_hydro
+
+  !> @brief
+  !> Predictor step of new hydro variables (unew) due to gravity
+  !>
+  !> @detail
+  !> @param[in] sim : The simulation object
+  !> @param[in] ilevel : The refinement level to update
+  !>
+  subroutine gpu_grav_hydro(sim, ilevel)
+    use nvtx
+    use hydro_device, only: grav_hydro
+    use ramses_commons, only: ramses_t
+    type(ramses_t), intent(inout)::sim
+    integer, intent(in)::ilevel
+
+    integer(kind=4) :: head_idx, num_octs
+    integer :: threadsX_per_block, threadsY_per_block, num_blocks
+    real(kind=8) :: dt
+    real(kind=dp) :: gamma
+
+    dt = 0.5 * sim%g%dtnew(ilevel)
+    gamma = real(sim%r%gamma, kind=dp)
+
+    head_idx = sim%m%head(ilevel)
+    num_octs = sim%m%noct(ilevel)
+    threadsX_per_block = 8
+    threadsY_per_block = 16
+    num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
+
+    call grav_hydro<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(uold, unew, f, constant_gravity, &
+         & head_idx, num_octs, gamma, dt)
+
+  end subroutine gpu_grav_hydro
+
+  !> @brief
   !> Perform the hydro integration on a GPU
   !>
   !> @detail
@@ -204,25 +264,26 @@ contains
 
     if(sim%r%verbose.and.sim%g%myid==1)write(*,'("   Entering gpu_godunov for level ",I2)')ilevel
 
-    head_idx = (sim%m%head(ilevel) - 1) / nsubgridtondim + 1
-    num_subgrids = sim%m%noct(ilevel) / nsubgridtondim
     dt = sim%g%dtnew(ilevel)
     dx = sim%r%boxlen/2**ilevel
     gamma = sim%r%gamma
+    ngridmax = sim%m%ngridmax
+    slope = sim%r%slope_type
+    riemann = sim%r%riemann
+
+    head_idx = (sim%m%head(ilevel) - 1) / nsubgridtondim + 1
+    num_subgrids = sim%m%noct(ilevel) / nsubgridtondim
     num_blocks = num_subgrids
     if(nsubgrid == 1)then
        threads_per_block = 64
     else
        threads_per_block = 256
     endif
-    ngridmax = sim%m%ngridmax
-    slope = sim%r%slope_type
-    riemann = sim%r%riemann
 
     call nvtxStartRange("GPU Godunov", color=0)!green
-    call hydro_integrator_kernel<<<num_blocks, threads_per_block>>>(grid, uold, unew, father, nbor, &
+    call hydro_integrator_kernel<<<num_blocks, threads_per_block>>>(grid, uold, unew, f, father, nbor, &
          & head_idx, num_subgrids, ngridmax, ilevel, sim%r%levelmin, sim%r%nlevelmax, &
-         & gamma, dt/dx, slope, riemann)
+         & gamma, dt, dx, slope, riemann, constant_gravity)
     call GPU_Error_Check(__FILE__, __LINE__)
     call nvtxEndRange()
 
@@ -296,10 +357,11 @@ contains
   end subroutine gpu_cooling
 
   !> @brief
-  !> Perform the hydro integration on a GPU
+  !> This routine deals with AMR refinements and de-refinements on the GPU.
   !>
   !> @detail
-  !> Perform the hydro integration on the GPU with the following steps
+  !> It also update the hash table, nbor and father arrays and deals
+  !> with the cache.
   !>
   !> @param[in] sim : The simulation object
   !> @param[in] ilevel : The refinement level to update
@@ -346,7 +408,8 @@ contains
     threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
     if (num_octs > 0) then
-       call refine_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(grid, flag1, uold, &
+       call refine_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(grid, flag1, &
+            & uold, f, phi, phi_old, &
             & ifree, head_idx, num_octs)
     endif
 
@@ -515,14 +578,28 @@ contains
     num_threads = 128
     num_blocks = (num_octs + num_threads - 1) / num_threads
 
-    ! Out-of-place sort of grid, flag1 and uold using swap table
+    ! Out-of-place sort of grid, flag1, uold and grav variables using swap table
     if (num_octs > 0) then
        call sort_gather_grid<<<num_blocks, num_threads>>>(flag2, grid, swap_global, head_idx, num_octs)
        call sort_scatter_grid<<<num_blocks, num_threads>>>(grid, flag2, head_idx, num_octs)
        call sort_gather_flag<<<num_blocks, num_threads>>>(flag2, flag1, swap_global, head_idx, num_octs)
        call sort_scatter_flag<<<num_blocks, num_threads>>>(flag1, flag2, head_idx, num_octs)
+#ifdef HYDRO
        call sort_gather_hydro<<<num_blocks, num_threads>>>(unew, uold, swap_global, head_idx, num_octs)
        call sort_scatter_hydro<<<num_blocks, num_threads>>>(uold, unew, head_idx, num_octs)
+#endif
+#ifdef GRAV
+       call sort_gather_force<<<num_blocks, num_threads>>>(nref, f, 1, swap_global, head_idx, num_octs)
+       call sort_scatter_force<<<num_blocks, num_threads>>>(f, nref, 1, head_idx, num_octs)
+       call sort_gather_force<<<num_blocks, num_threads>>>(nref, f, 2, swap_global, head_idx, num_octs)
+       call sort_scatter_force<<<num_blocks, num_threads>>>(f, nref, 2, head_idx, num_octs)
+       call sort_gather_force<<<num_blocks, num_threads>>>(nref, f, 3, swap_global, head_idx, num_octs)
+       call sort_scatter_force<<<num_blocks, num_threads>>>(f, nref, 3, head_idx, num_octs)
+       call sort_gather_phi<<<num_blocks, num_threads>>>(nref, phi, swap_global, head_idx, num_octs)
+       call sort_scatter_phi<<<num_blocks, num_threads>>>(phi, nref, head_idx, num_octs)
+       call sort_gather_phi<<<num_blocks, num_threads>>>(nref, phi_old, swap_global, head_idx, num_octs)
+       call sort_scatter_phi<<<num_blocks, num_threads>>>(phi_old, nref, head_idx, num_octs)
+#endif
     endif
 
     ! Update hash table
@@ -578,7 +655,7 @@ contains
              head_cache = sim%r%ngridmax + sim%m%ifree_cache
              new_ifree = sim%m%ifree_cache + new_noct
              num_threads_2 = 128
-             num_blocks_2 = (new_noct + num_threads - 1) / num_threads
+             num_blocks_2 = (new_noct + num_threads_2 - 1) / num_threads_2
 
              if (new_noct > 0) then
 
@@ -593,7 +670,8 @@ contains
                 call compute_cache_swap_table<<<num_blocks, num_threads>>>(swap_local, prefix_sum, head_idx, num_subgrids)
 
                 ! Make new ghost octs in cache
-                call make_cache_octs<<<num_blocks_2, num_threads_2>>>(grid, flag1, uold, swap_local, father, nbor, &
+                call make_cache_octs<<<num_blocks_2, num_threads_2>>>(grid, flag1, &
+                     & uold, f, phi, phi_old, swap_local, father, nbor, &
                      & hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, &
                      & head_cache, new_noct, ind)
 
@@ -980,11 +1058,11 @@ contains
     threadsX_per_block = 8
     threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
-#ifdef GRAV
+
     if (num_octs > 0) then
        call reset_rho<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(rho, nref, head_idx, num_octs)
     endif
-#endif
+
   end subroutine gpu_reset_rho
 
   !> @brief
@@ -1010,6 +1088,7 @@ contains
     threadsX_per_block = 8
     threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
+
     if (num_octs > 0) then
        call multipole_leaf<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(unew, uold, grid, &
             & head_idx, num_octs, dx)
@@ -1091,15 +1170,277 @@ contains
     num_subgrids = sim%m%noct(ilevel) / nsubgridtondim
     num_blocks = num_subgrids
     threads_per_block = 64 ! Optimize later
-#ifdef GRAV
+
     call multipole_cic<<<num_blocks, threads_per_block>>>(unew, rho, grid, nbor, &
          & head_idx, num_subgrids, dx, box_size, periodic)
-#endif
+
   end subroutine gpu_cic_multipole
 
-  !###########################################################
-  !###########################################################
-  !###########################################################
-  !###########################################################
+  !> @brief
+  !> Save old potential in array phi_old.
+  !>
+  !> @detail
+  !> This is useful for potential time extrapolation.
+  !>
+  subroutine gpu_save_phi_old(sim, ilevel)
+    use mg_device, only: save_phi_old
+    use ramses_commons, only: ramses_t
+    type(ramses_t), intent(inout) :: sim
+    integer, intent(in) :: ilevel
 
+    integer(kind=4) :: head_idx, num_octs
+    integer :: threadsX_per_block, threadsY_per_block, num_threads, num_blocks
+
+    head_idx = sim%m%head(ilevel)
+    num_octs = sim%m%noct(ilevel)
+    threadsX_per_block = 8
+    threadsY_per_block = 16
+    num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
+
+    if (num_octs > 0) then
+       call save_phi_old<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(phi_old, phi, head_idx, num_octs)
+    endif
+
+  end subroutine gpu_save_phi_old
+
+#ifdef TOTO
+  !> @brief
+  !> Initialize potential using interoplation from coarse level.
+  !>
+  !> @detail
+  !> This is done for both main octs and cache octs to provide boundary conditions.
+  !> When icount=2, the potential is extrapolated in time to match the time of the
+  !> fine level using phi and phi_old.
+  !>
+  subroutine gpu_init_phi(sim, ilevel, icount)
+    use mg_device, only: make_initial_phi
+    use ramses_commons, only: ramses_t
+    type(ramses_t), intent(inout) :: sim
+    integer, intent(in) :: ilevel
+    integer, intent(in) :: icount
+
+    integer(kind=4) :: head_idx, num_octs
+    integer :: threadsX_per_block, threadsY_per_block, num_threads, num_blocks
+    real(kind=8) :: tfrac
+
+    ! Compute fraction of time steps for interpolation
+    if (sim%g%dtold(ilevel-1)>0.0)then
+       tfrac=sim%g%dtnew(ilevel)/sim%g%dtold(ilevel-1)*(icount-1)
+    else
+       tfrac=0.0
+    end if
+
+    head_idx = sim%m%head(ilevel)
+    num_octs = sim%m%noct(ilevel)
+    threadsX_per_block = 8
+    threadsY_per_block = 16
+    num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
+
+    if (num_octs > 0) then
+       call make_initial_phi<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(grid, father, &
+            & nbor, phi, phi_old, tfrac, phi, head_idx, num_octs)
+    endif
+
+    head_idx = sim%m%head_cache(ilevel)
+    num_octs = sim%m%noct_cache(ilevel)
+    threadsX_per_block = 8
+    threadsY_per_block = 16
+    num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
+
+    if (num_octs > 0) then
+       call make_initial_phi<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(grid, father, &
+            & nbor, phi, phi_old, tfrac, phi, head_idx, num_octs)
+    endif
+
+  end subroutine gpu_init_phi
+
+  !> @brief
+  !> Set mask at fine leel for boundary conditions.
+  !>
+  !> @detail
+  !> mask=1 means inside the domain, mask=0 means outside.
+  !> So we set 1 in main octs and 0 in cache octs.
+  !>
+  subroutine gpu_make_mask(sim, ilevel)
+    use mg_device, only: save_phi_old
+    use ramses_commons, only: ramses_t
+    type(ramses_t), intent(inout) :: sim
+    integer, intent(in) :: ilevel
+
+    integer(kind=4) :: head_idx, num_octs
+    integer :: threadsX_per_block, threadsY_per_block, num_threads, num_blocks
+
+    head_idx = sim%m%head(ilevel)
+    num_octs = sim%m%noct(ilevel)
+    threadsX_per_block = 8
+    threadsY_per_block = 16
+    num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
+
+    if (num_octs > 0) then
+       call reset_mask_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(f, head_idx, num_octs, 1d0)
+    endif
+
+    head_idx = sim%m%head_cache(ilevel)
+    num_octs = sim%m%noct_cache(ilevel)
+    threadsX_per_block = 8
+    threadsY_per_block = 16
+    num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
+
+    if (num_octs > 0) then
+       call reset_mask_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(f, head_idx, num_octs, 0d0)
+    endif
+
+  end subroutine gpu_make_mask
+
+  !> @brief
+  !> Modify the Poisson equation RHS to account for the boundary conditions.
+  !>
+  !> @detail
+  !> Close to the domain boundary, modify the charge to account for the value of
+  !> the potential at the boundary. The new problem is now phi=0 at the boundary.
+  !>
+  subroutine gpu_make_rhs(sim, ilevel)
+    use mg_device, only: reset_rhs_kernel
+    use ramses_commons, only: ramses_t
+    type(ramses_t), intent(inout) :: sim
+    integer, intent(in) :: ilevel
+
+    integer(kind=4) :: head_idx, num_octs
+    integer :: threadsX_per_block, threadsY_per_block, num_threads, num_blocks
+    real(kind=8) :: fourpi, offset, dx, oneoverdx2
+
+    fourpi = 4.D0*ACOS(-1.0D0)
+    dx  = sim%r%boxlen/2**ilevel
+    oneoverdx2 = 1.0d0/(dx*dx)
+    offset = sim%g%rho_tot
+    if(any(.not. sim%r%periodic(1:ndim)))offset = 0d0
+
+    head_idx = sim%m%head(ilevel)
+    num_octs = sim%m%noct(ilevel)
+    threadsX_per_block = 8
+    threadsY_per_block = 16
+    num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
+
+    if (num_octs > 0) then
+       call reset_rhs_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(phi, rho, f, nbor, &
+            & head_idx, num_octs, fourpi, offset, oneoverdx2)
+    endif
+
+  end subroutine gpu_make_rhs
+
+  !> @brief
+  !> This routine builds the MG hierarchy on top of the current level.
+  !>
+  !> @detail
+  !> It uses father-son connectivity to trigger the formation of parent grids
+  !> starting from fine level ifine. If ifine == ilevel, then this is the finest
+  !> MG level that corresponds to the AMR level.
+  !>
+  !> @param[in] sim : The simulation object
+  !> @param[in] ilevel : The refinement level to update
+  !>
+  subroutine gpu_build_mg(sim, ilevel, ifine))
+    use nvtx
+    use refine_device
+    use ramses_commons, only: ramses_t
+    use cache_commons
+    use cache
+    type(ramses_t), intent(inout) :: sim
+    integer, intent(in) :: ilevel
+    integer, intent(in) :: ifine
+    !
+    integer(kind=4) :: head_idx, num_octs, num_subgrids
+    integer(kind=4) :: head_cache, info
+    integer(kind=4) :: num_blocks, num_threads, num_blocks_2, num_threads_2
+    integer(kind=4) :: threadsX_per_block, threadsY_per_block
+    integer(kind=4) :: new_ifree, old_ifree, new_head, new_tail, new_noct
+    integer(kind=4) :: ilev, ind, ibit, ibucket, skip_bit, noct_level
+
+    integer(kind=4), device :: ifree
+
+    if (ifine == ilevel) then
+       head_idx = sim%m%head(ilevel)
+       num_octs = sim%m%noct(ilevel)
+    else
+       head_idx = sim%m_mg%head(ifine)
+       num_octs = sim%m_mg%noct(ifine)
+    endif
+
+    if (num_octs == 0) return
+
+    num_threads = 128
+    num_blocks = (num_octs + num_threads - 1) / num_threads
+
+    sim%m_mg%head(ifine+1) = sim_mg%m_mg%tail(ifine) + 1
+    head_mg = sim%m_mg%head(ifine+1)
+
+    ! Loop over oct coloring (parent oct cell index)
+    do cell_ind = 1, twotondim
+
+       ! Loop over neighboring octs
+       do nbor_ind = 1, twotondim
+
+          ! Set father MG array to 0
+          call reset_father_kernel<<<num_blocks, num_threads>>>(father_mg, new_head, num_octs, 0)
+
+          ! Find if parent neighboring oct exist
+          if (ifine == ilevel) then
+             call update_father_array<<<num_blocks, num_threads>>>(father_mg, grid, &
+                  & hash_key_mg, hash_val_mg, sim%m_mg%hash_size, &
+                  & ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, &
+                  & head_idx, num_octs, nbor_ind, cell_ind)
+          else
+             call update_father_array<<<num_blocks, num_threads>>>(father_mg, grid_mg, &
+                  & hash_key_mg, hash_val_mg, sim%m_mg%hash_size, &
+                  & ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, &
+                  & head_idx, num_octs, nbor_ind, cell_ind)
+          endif
+
+          ! Init prefix sum (count non existing parent neigboring oct index)
+          call init_prefix_sum_father<<<num_blocks, num_threads>>>(father_mg, prefix_sum, head_idx, num_octs)
+
+          ! Compute prefix sums
+          call gpu_scan(head_idx, num_octs, new_noct)
+
+          ! Compute new head index
+          new_head = head_mg + new_noct
+          num_threads_2 = 128
+          num_blocks_2 = (new_noct + num_threads_2 - 1) / num_threads_2
+
+          if (new_noct > 0) then
+
+             ! Check we have enough memory
+             if (new_head > sim%m_mg%ngridmax) then
+                write(*,*)'No more grid memory, increase ngridmax for MG'
+                write(*,*)'New multigrid octs:', new_noct
+                stop
+             endif
+
+             ! Compute MG father swap table
+             call compute_cache_swap_table<<<num_blocks, num_threads>>>(swap_local, prefix_sum, head_idx, num_octs)
+
+             ! Make new MG octs
+             call make_cache_octs<<<num_blocks_2, num_threads_2>>>(grid_mg, &
+                  & uold, f, phi, phi_old, swap_local, father, nbor, &
+                  & hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, &
+                  & head_mg, new_noct, ind)
+
+             ! Insert new octs in hash table
+             call insert_hash_kernel<<<num_blocks_2, num_threads_2>>>(grid_mg, hash_key, hash_val, sim%m%hash_size, &
+                  & ckey_max, key_off, head_mg, new_noct)
+
+          end if
+
+          ! Store new first free cache oct
+          head_mg = new_head
+
+       end do
+    end do
+
+  end subroutine gpu_build_mg
+  !###########################################################
+  !###########################################################
+  !###########################################################
+  !###########################################################
+#endif
 end module gpu_runner

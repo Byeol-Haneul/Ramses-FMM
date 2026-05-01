@@ -195,6 +195,11 @@ subroutine init_amr(r,g,m,type)
      allocate(m%nref(1:twotondim,1:m%ngridmax+m%ncachemax))
      allocate(m%f(1:twotondim,1:3,1:m%ngridmax+m%ncachemax))
      allocate(m%phi_old(1:twotondim,1:m%ngridmax+m%ncachemax))
+     m%f=0d0
+     m%rho=0d0
+     m%phi=0d0
+     m%nref=0d0
+     m%phi_old=0d0
 #endif
   endif
 
@@ -213,6 +218,11 @@ subroutine init_amr(r,g,m,type)
      allocate(nref(1:twotondim,1:m%ngridmax+m%ncachemax))
      allocate(f(1:twotondim,1:3,1:m%ngridmax+m%ncachemax))
      allocate(phi_old(1:twotondim,1:m%ngridmax+m%ncachemax))
+     f=0d0
+     rho=0d0
+     phi=0d0
+     nref=0d0
+     rho_old=0d0
 #endif
   endif
 #endif
@@ -508,6 +518,7 @@ subroutine init_amr(r,g,m,type)
      key_off=m%key_off
      periodic=r%periodic
      box_size=r%box_size
+     constant_gravity=r%constant_gravity
      box_ckey_min=m%box_ckey_min
      box_ckey_max=m%box_ckey_max
      if(r%nbound>0)then

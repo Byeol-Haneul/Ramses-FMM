@@ -301,14 +301,17 @@ contains
   !> @param[in] gamma : The adiabatic index
   !> @param[out] local_subgrid : The local subgrid in shared memory to write the primitive variables to
   !>
-  attributes(device) subroutine subgrid_conserved_2_primitive(grid, uold, nbor, &
-       & head_idx, block_idx, thread_idx, gamma, local_subgrid)
+  attributes(device) subroutine subgrid_conserved_2_primitive(grid, uold, f, constant_gravity, nbor, &
+       & head_idx, block_idx, thread_idx, gamma, dt, local_subgrid)
     type(oct), device :: grid(*)
+    real(kind=8), device :: constant_gravity(3)
+    real(kind=dp), device :: f(1:twotondim,1:ndim,*)
     real(kind=dp), device :: uold(1:twotondim,1:nvar,*)
     integer(kind=4), device :: nbor(1:subgridsize,*)
     integer(kind=4), value :: head_idx
     integer(kind=4), value :: block_idx, thread_idx
     real(kind=dp), value :: gamma
+    real(kind=dp), value :: dt
     type(subgrid_6x6x6cell_primitive), intent(inout) :: local_subgrid
 
     type(conserved_t) :: conserved ! object to hold the conserved variables
@@ -350,6 +353,17 @@ contains
 
        ! Convert to primitive variables
        primitive = conserved_2_primitive(conserved, gamma)
+
+       ! Gravity predictor step
+#ifdef GRAV
+       primitive%velocity_x = primitive%velocity_x + f(cell_idx, 1, source_idx) * 0.5 * dt 
+       primitive%velocity_y = primitive%velocity_y + f(cell_idx, 2, source_idx) * 0.5 * dt 
+       primitive%velocity_z = primitive%velocity_z + f(cell_idx, 3, source_idx) * 0.5 * dt 
+#else
+       primitive%velocity_x = primitive%velocity_x + constant_gravity(1) * 0.5 * dt 
+       primitive%velocity_y = primitive%velocity_y + constant_gravity(2) * 0.5 * dt 
+       primitive%velocity_z = primitive%velocity_z + constant_gravity(3) * 0.5 * dt 
+#endif
 
        ! Write primitives cells to shared memory
        local_subgrid%density   (i, j, k) = primitive%density
@@ -1333,12 +1347,14 @@ contains
   ! =========================================================================
 
   ! =========================================================================
-  attributes(global) subroutine hydro_integrator_kernel(grid, uold, unew, father, nbor, &
+  attributes(global) subroutine hydro_integrator_kernel(grid, uold, unew, f, father, nbor, &
        & head_idx, num_subgrids, ngridmax, ilevel, levelmin, levelmax, &
-       & gamma, dtdx, slope, riemann)
+       & gamma, dt, dx, slope, riemann, constant_gravity)
     type(oct), device :: grid(*)
     integer, device :: father(*)
     integer, device :: nbor(1:subgridsize,*)
+    real(kind=8), device :: constant_gravity(1:3)
+    real(kind=dp), device :: f(1:twotondim,1:ndim,*)
     real(kind=dp), device :: uold(1:twotondim,1:nvar,*)
     real(kind=dp), device :: unew(1:twotondim,1:nvar,*)
     integer(kind=4), intent(in), value :: head_idx
@@ -1346,7 +1362,8 @@ contains
     integer, intent(in), value :: ngridmax
     integer, intent(in), value :: ilevel, levelmin, levelmax
     real(kind=dp), intent(in), value :: gamma
-    real(kind=dp), intent(in), value :: dtdx
+    real(kind=dp), intent(in), value :: dt
+    real(kind=dp), intent(in), value :: dx
     integer, intent(in), value :: slope
     integer, intent(in), value :: riemann
 
@@ -1354,8 +1371,11 @@ contains
     type(subgrid_2x3x2cell_primitive), shared :: left_interfaces_y, right_interfaces_y
     type(subgrid_2x2x3cell_primitive), shared :: left_interfaces_z, right_interfaces_z
     type(subgrid_6x6x6cell_primitive), shared :: local_subgrid
+    real(kind=dp) :: dtdx
     integer :: block_idx  ! The index of this block, corresponds to the subgrid to load
     integer :: thread_idx ! The index of this thread within the block
+
+    dtdx = dt/dx
 
     ! compute the various indices. Note the conversion to zero based indexing
     block_idx = blockIdx%x - 1
@@ -1367,7 +1387,8 @@ contains
     ! =======================================================================
     ! Convert from conserved to primitive variables
     ! =======================================================================
-    call subgrid_conserved_2_primitive(grid, uold, nbor, head_idx, block_idx, thread_idx, gamma, local_subgrid)
+    call subgrid_conserved_2_primitive(grid, uold, f, constant_gravity, nbor, &
+         & head_idx, block_idx, thread_idx, gamma, dt, local_subgrid)
 
     ! =======================================================================
     ! Perform tracing step and compute the interface states
@@ -1646,6 +1667,128 @@ contains
     unew(cell_idx, 5, oct_idx) = uold(cell_idx, 5, oct_idx)
 
   end subroutine set_unew_kernel
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine sync_hydro(uold, f, constant_gravity, head_idx, num_octs, gamma, dt)
+    real(kind=8), device :: constant_gravity(1:3)
+    real(kind=dp), device :: f(1:twotondim,1:ndim,*)
+    real(kind=dp), device :: uold(1:twotondim,1:nvar,*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+    real(kind=dp), intent(in), value :: gamma
+    real(kind=8), intent(in), value :: dt
+
+    integer :: block_idx, cell_idx, oct_idx
+    type(primitive_t) :: prim
+    type(conserved_t) :: cons
+
+    block_idx = blockIdx%x - 1
+
+    ! Compute the oct idx
+    oct_idx = block_idx * blockDim%y + threadIdx%y - 1
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Compute the cell idx
+    cell_idx = threadIdx%x
+
+    ! Collect conservative variables
+    cons%density    = uold(cell_idx, 1, oct_idx)
+    cons%momentum_x = uold(cell_idx, 2, oct_idx)
+    cons%momentum_y = uold(cell_idx, 3, oct_idx)
+    cons%momentum_z = uold(cell_idx, 4, oct_idx)
+    cons%energy     = uold(cell_idx, 5, oct_idx)
+
+    ! Convert to primitive
+    prim = conserved_2_primitive(cons, gamma)
+
+    ! Update velocity
+#ifdef GRAV
+    prim%velocity_x = prim%velocity_x + f(cell_idx, 1, oct_idx) * dt
+    prim%velocity_y = prim%velocity_y + f(cell_idx, 2, oct_idx) * dt
+    prim%velocity_z = prim%velocity_z + f(cell_idx, 3, oct_idx) * dt
+#else
+    prim%velocity_x = prim%velocity_x + constant_gravity(1) * dt
+    prim%velocity_y = prim%velocity_y + constant_gravity(2) * dt
+    prim%velocity_z = prim%velocity_z + constant_gravity(3) * dt
+#endif
+
+    ! Convert back to conservative
+    cons = primitive_2_conserved(prim, gamma)
+
+    ! Save to main memory
+    uold(cell_idx, 1, oct_idx) = cons%density
+    uold(cell_idx, 2, oct_idx) = cons%momentum_x
+    uold(cell_idx, 3, oct_idx) = cons%momentum_y
+    uold(cell_idx, 4, oct_idx) = cons%momentum_z
+    uold(cell_idx, 5, oct_idx) = cons%energy
+
+  end subroutine sync_hydro
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine grav_hydro(uold, unew, f, constant_gravity, head_idx, num_octs, gamma, dt)
+    real(kind=8), device :: constant_gravity(1:3)
+    real(kind=dp), device :: f(1:twotondim,1:ndim,*)
+    real(kind=dp), device :: uold(1:twotondim,1:nvar,*)
+    real(kind=dp), device :: unew(1:twotondim,1:nvar,*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+    real(kind=dp), intent(in), value :: gamma
+    real(kind=8), intent(in), value :: dt
+
+    integer :: block_idx, cell_idx, oct_idx
+    real(kind=8) :: rho_old, rho_new
+    type(primitive_t) :: prim
+    type(conserved_t) :: cons
+
+    block_idx = blockIdx%x - 1
+
+    ! Compute the oct idx
+    oct_idx = block_idx * blockDim%y + threadIdx%y - 1
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Compute the cell idx
+    cell_idx = threadIdx%x
+
+    ! Collect conservative variables
+    cons%density    = unew(cell_idx, 1, oct_idx)
+    cons%momentum_x = unew(cell_idx, 2, oct_idx)
+    cons%momentum_y = unew(cell_idx, 3, oct_idx)
+    cons%momentum_z = unew(cell_idx, 4, oct_idx)
+    cons%energy     = unew(cell_idx, 5, oct_idx)
+
+    ! Convert to primitive
+    prim = conserved_2_primitive(cons, gamma)
+
+    ! Old and new densities
+    rho_old = uold(cell_idx, 1, oct_idx)
+    rho_new = unew(cell_idx, 1, oct_idx)
+
+    ! Update velocity
+#ifdef GRAV
+    prim%velocity_x = prim%velocity_x + f(cell_idx, 1, oct_idx) * dt * rho_old / rho_new
+    prim%velocity_y = prim%velocity_y + f(cell_idx, 2, oct_idx) * dt * rho_old / rho_new
+    prim%velocity_z = prim%velocity_z + f(cell_idx, 3, oct_idx) * dt * rho_old / rho_new
+#else
+    prim%velocity_x = prim%velocity_x + constant_gravity(1) * dt * rho_old / rho_new
+    prim%velocity_y = prim%velocity_y + constant_gravity(2) * dt * rho_old / rho_new
+    prim%velocity_z = prim%velocity_z + constant_gravity(3) * dt * rho_old / rho_new
+#endif
+
+    ! Convert back to conservative
+    cons = primitive_2_conserved(prim, gamma)
+
+    ! Save to main memory
+    unew(cell_idx, 1, oct_idx) = cons%density
+    unew(cell_idx, 2, oct_idx) = cons%momentum_x
+    unew(cell_idx, 3, oct_idx) = cons%momentum_y
+    unew(cell_idx, 4, oct_idx) = cons%momentum_z
+    unew(cell_idx, 5, oct_idx) = cons%energy
+
+  end subroutine grav_hydro
   ! =========================================================================
 
   ! =========================================================================

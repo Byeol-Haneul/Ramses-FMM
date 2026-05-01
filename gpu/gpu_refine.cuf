@@ -12,9 +12,12 @@ contains
   include 'gpu_scan.cuf'
 
   ! =========================================================================
-  attributes(device) subroutine make_new_oct(grid, flag1, uold, ifree, oct_idx, cell_idx)
+  attributes(device) subroutine make_new_oct(grid, flag1, uold, f, phi, phi_old, ifree, oct_idx, cell_idx)
     use amr_parameters, only: ndim
     type(oct), device :: grid(*)
+    real(kind=dp), device :: f(1:twotondim,1:ndim,*)
+    real(kind=dp), device :: phi(1:twotondim,*)
+    real(kind=dp), device :: phi_old(1:twotondim,*)
     real(kind=dp), device :: uold(1:twotondim,1:nvar,*)
     integer(kind=4), device :: flag1(1:twotondim,*)
     integer, device :: ifree
@@ -27,17 +30,13 @@ contains
     ! Compute cell coordinates
     i = MOD((cell_idx-1)  , 2)
     j = MOD((cell_idx-1)/2, 2)
-#if NDIM>2
     k = MOD((cell_idx-1)/4, 2)
-#endif
 
     ! Compute child level and Cartesian key
     ilevel =    grid(oct_idx)%lev + 1
     ckey(1) = 2*grid(oct_idx)%ckey(1) + i
     ckey(2) = 2*grid(oct_idx)%ckey(2) + j
-#if NDIM>2
     ckey(3) = 2*grid(oct_idx)%ckey(3) + k
-#endif
 
     ! Get index from free memory
     child_idx = atomicadd(ifree, 1)
@@ -46,9 +45,7 @@ contains
     grid(child_idx)%lev = ilevel
     grid(child_idx)%ckey(1) = ckey(1)
     grid(child_idx)%ckey(2) = ckey(2)
-#if NDIM>2
     grid(child_idx)%ckey(3) = ckey(3)
-#endif
     grid(child_idx)%refined(1:twotondim) = .false.
     flag1(1:twotondim,child_idx) = 0
 
@@ -56,6 +53,7 @@ contains
     hkey = hilbert_key(ckey, ilevel - 1)
     grid(child_idx)%hkey(1) = hkey
 
+#ifdef HYDRO
     ! Straight injection for hydro variables
     do ind = 1, twotondim
        uold(ind,1,child_idx) = uold(cell_idx,1,oct_idx)
@@ -64,14 +62,29 @@ contains
        uold(ind,4,child_idx) = uold(cell_idx,4,oct_idx)
        uold(ind,5,child_idx) = uold(cell_idx,5,oct_idx)
     end do
+#endif
+
+#ifdef GRAV
+      ! Straight injection for gravity variables
+    do ind = 1, twotondim
+       f(ind,1,child_idx) = f(cell_idx,1,oct_idx)
+       f(ind,2,child_idx) = f(cell_idx,2,oct_idx)
+       f(ind,3,child_idx) = f(cell_idx,3,oct_idx)
+       phi(ind,child_idx) = phi(cell_idx,oct_idx)
+       phi_old(ind,child_idx) = phi_old(cell_idx,oct_idx)
+    end do
+#endif
 
   end subroutine make_new_oct
   ! =========================================================================
 
   ! =========================================================================
-  attributes(global) subroutine refine_kernel(grid, flag1, uold, ifree, head_idx, num_octs)
+  attributes(global) subroutine refine_kernel(grid, flag1, uold, f, phi, phi_old, ifree, head_idx, num_octs)
     type(oct), device :: grid(*)
     integer, device :: flag1(1:twotondim,*)
+    real(kind=dp), device :: f(1:twotondim,1:ndim,*)
+    real(kind=dp), device :: phi(1:twotondim,*)
+    real(kind=dp), device :: phi_old(1:twotondim,*)
     real(kind=dp), device :: uold(1:twotondim,1:nvar,*)
     integer, device :: ifree
     integer(kind=4), intent(in), value :: head_idx
@@ -96,7 +109,7 @@ contains
 
     ! Create new oct
     if (flagged .and. .not. refined) then
-       call make_new_oct(grid, flag1, uold, ifree, oct_idx, cell_idx)
+       call make_new_oct(grid, flag1, uold, f, phi, phi_old, ifree, oct_idx, cell_idx)
        grid(oct_idx)%refined(cell_idx) = .true.
     endif
 
@@ -135,19 +148,13 @@ contains
     ! Get oct Cartesian key
     ckey(1) = grid(oct_idx)%ckey(1)
     ckey(2) = grid(oct_idx)%ckey(2)
-#if NDIM>2
     ckey(3) = grid(oct_idx)%ckey(3)
-#endif
 
     ! Compute oct hash table key
     ilevel = grid(oct_idx)%lev
     ix = int(ckey(1), kind=8)
     iy = int(ckey(2), kind=8)
-#if NDIM>2
     iz = int(ckey(3), kind=8)
-#else
-    iz = 0
-#endif
     nx = int(ckey_max(ilevel), kind=8)
     offset = key_off(ilevel)
     key = offset + ix + iy * nx + iz * nx * nx
@@ -156,11 +163,7 @@ contains
     ilevel = grid(oct_idx)%lev - 1
     ix = int(ckey(1) / 2, kind=8)
     iy = int(ckey(2) / 2, kind=8)
-#if NDIM>2
     iz = int(ckey(3) / 2, kind=8)
-#else
-    iz = 0
-#endif
     nx = int(ckey_max(ilevel), kind=8)
     offset = key_off(ilevel)
     parent_key = offset + ix + iy * nx + iz * nx * nx
@@ -171,11 +174,7 @@ contains
     ! Get parent cell idx
     i = ckey(1) - 2*ix
     j = ckey(2) - 2*iy
-#if NDIM>2
     k = ckey(3) - 2*iz
-#else
-    k = 0
-#endif
     cell_idx = 1 + i + 2*j + 4*k
 
     flagged = (flag1(cell_idx, parent_idx) == 1)
@@ -226,11 +225,7 @@ contains
        ! Compute key and value
        ix = int(grid(oct_idx)%ckey(1), kind=8)
        iy = int(grid(oct_idx)%ckey(2), kind=8)
-#if NDIM>2
        iz = int(grid(oct_idx)%ckey(3), kind=8)
-#else
-       iz = 0
-#endif
        nx = int(ckey_max(ilevel), kind=8)
        offset = key_off(ilevel)
 
@@ -277,11 +272,7 @@ contains
        ! Compute key and value
        ix = int(grid(oct_idx)%ckey(1), kind=8)
        iy = int(grid(oct_idx)%ckey(2), kind=8)
-#if NDIM>2
        iz = int(grid(oct_idx)%ckey(3), kind=8)
-#else
-       iz = 0
-#endif
        nx = int(ckey_max(ilevel), kind=8)
        offset = key_off(ilevel)
 
@@ -323,11 +314,7 @@ contains
     ilevel = grid(oct_idx)%lev
     ix = int(grid(oct_idx)%ckey(1), kind=8)
     iy = int(grid(oct_idx)%ckey(2), kind=8)
-#if NDIM>2
     iz = int(grid(oct_idx)%ckey(3), kind=8)
-#else
-    iz = 0
-#endif
     nx = int(ckey_max(ilevel), kind=8)
     offset = key_off(ilevel)
 
@@ -692,6 +679,112 @@ contains
   ! =========================================================================
 
   ! =========================================================================
+  attributes(global) subroutine sort_gather_force(nref, f, idim, swap_global, head_idx, num_octs)
+    real(kind=dp), device :: nref(1:twotondim,*)
+    real(kind=dp), device :: f(1:twotondim,1:ndim,*)
+    integer(kind=4), device :: swap_global(*)
+    integer(kind=4), intent(in), value :: idim
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
+    integer :: oct_idx, thread_idx, block_idx, old_oct_idx
+
+    ! Compute the thread and block idx
+    thread_idx = threadIdx%x - 1
+    block_idx = blockIdx%x - 1
+
+    ! Compute the new oct idx
+    oct_idx = thread_idx + block_idx * blockDim%x
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Update the global swap table
+    old_oct_idx = swap_global(oct_idx)
+
+    ! Gather force into nref
+    nref(:, oct_idx) = f(:, idim, old_oct_idx)
+
+  end subroutine sort_gather_force
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine sort_scatter_force(f, nref, idim, head_idx, num_octs)
+    real(kind=dp), device :: f(1:twotondim,1:ndim,*)
+    real(kind=dp), device :: nref(1:twotondim,*)
+    integer(kind=4), intent(in), value :: idim
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
+    integer :: oct_idx, thread_idx, block_idx
+
+    ! Compute the thread and block idx
+    thread_idx = threadIdx%x - 1
+    block_idx = blockIdx%x - 1
+
+    ! Compute the new oct idx
+    oct_idx = thread_idx + block_idx * blockDim%x
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Scatter nref to force
+    f(:, idim, oct_idx) = nref(:, oct_idx)
+
+  end subroutine sort_scatter_force
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine sort_gather_phi(nref, phi, swap_global, head_idx, num_octs)
+    real(kind=dp), device :: nref(1:twotondim,*)
+    real(kind=dp), device :: phi(1:twotondim,*)
+    integer(kind=4), device :: swap_global(*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
+    integer :: oct_idx, thread_idx, block_idx, old_oct_idx
+
+    ! Compute the thread and block idx
+    thread_idx = threadIdx%x - 1
+    block_idx = blockIdx%x - 1
+
+    ! Compute the new oct idx
+    oct_idx = thread_idx + block_idx * blockDim%x
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Update the global swap table
+    old_oct_idx = swap_global(oct_idx)
+
+    ! Gather phi into nref
+    nref(:, oct_idx) = phi(:, old_oct_idx)
+
+  end subroutine sort_gather_phi
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine sort_scatter_phi(phi, nref, head_idx, num_octs)
+    real(kind=dp), device :: phi(1:twotondim,*)
+    real(kind=dp), device :: nref(1:twotondim,*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
+    integer :: oct_idx, thread_idx, block_idx
+
+    ! Compute the thread and block idx
+    thread_idx = threadIdx%x - 1
+    block_idx = blockIdx%x - 1
+
+    ! Compute the new oct idx
+    oct_idx = thread_idx + block_idx * blockDim%x
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Scatter nref to phi
+    phi(:, oct_idx) = nref(:, oct_idx)
+
+  end subroutine sort_scatter_phi
+  ! =========================================================================
+
+  ! =========================================================================
   attributes(global) subroutine update_father_array(grid, father, hash_key, hash_val, hash_size, &
        & ckey_max, key_off, head_idx, num_octs)
     type(oct), device :: grid(*)
@@ -721,11 +814,7 @@ contains
     ilevel = grid(oct_idx)%lev - 1
     ix = int(grid(oct_idx)%ckey(1) / 2, kind=8)
     iy = int(grid(oct_idx)%ckey(2) / 2, kind=8)
-#if NDIM>2
     iz = int(grid(oct_idx)%ckey(3) / 2, kind=8)
-#else
-    iz = 0_8
-#endif
     nx = int(ckey_max(ilevel), kind=8)
     offset = key_off(ilevel)
     parent_key = offset + ix + iy * nx + iz * nx * nx
@@ -771,10 +860,8 @@ contains
 
     ! Compute offsets to get nbor oct
     ind = input_ind - 1
-#if NDIM>2
     k = ind / nsubgridp2sq
     ind = ind - k * nsubgridp2sq
-#endif
     j = ind / nsubgridp2
     i = ind - j * nsubgridp2
 
@@ -782,11 +869,7 @@ contains
     ilevel = grid(oct_idx)%lev
     ckey(1) = (grid(oct_idx)%ckey(1) / nsubgrid) * nsubgrid + i - 1
     ckey(2) = (grid(oct_idx)%ckey(2) / nsubgrid) * nsubgrid + j - 1
-#if NDIM>2
     ckey(3) = (grid(oct_idx)%ckey(3) / nsubgrid) * nsubgrid + k - 1
-#else
-    ckey(3) = 0
-#endif
 
     ! Periodic boundary conditions
     do idim = 1,ndim
@@ -799,11 +882,7 @@ contains
     ! Conpute key
     ix = int(ckey(1), kind=8)
     iy = int(ckey(2), kind=8)
-#if NDIM>2
     iz = int(ckey(3), kind=8)
-#else
-    iz = 0_8
-#endif
     nx = int(ckey_max(ilevel), kind=8)
     offset = key_off(ilevel)
     key = offset + ix + iy * nx + iz * nx * nx
@@ -886,10 +965,13 @@ contains
   ! =========================================================================
 
   ! =========================================================================
-  attributes(global) subroutine make_cache_octs(grid, flag1, uold, swap_local, father, nbor, &
+  attributes(global) subroutine make_cache_octs(grid, flag1, uold, f, phi, phi_old, swap_local, father, nbor, &
        & hash_key, hash_val, hash_size, ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, &
        & head_idx, num_octs, input_ind)
     type(oct), device :: grid(*)
+    real(kind=dp), device :: f(1:twotondim,1:ndim,*)
+    real(kind=dp), device :: phi(1:twotondim,*)
+    real(kind=dp), device :: phi_old(1:twotondim,*)
     real(kind=dp), device :: uold(1:twotondim,1:nvar,*)
     integer(kind=4), device :: flag1(1:twotondim,*)
     integer(kind=4), device :: swap_local(*)
@@ -934,10 +1016,8 @@ contains
 
     ! Compute offsets to get nbor oct
     ind = input_ind - 1
-#if NDIM>2
     k = ind / nsubgridp2sq
     ind = ind - k * nsubgridp2sq
-#endif
     j = ind / nsubgridp2
     i = ind - j * nsubgridp2
 
@@ -945,11 +1025,7 @@ contains
     ilevel = grid(oct_idx)%lev
     ckey(1) = (grid(oct_idx)%ckey(1) / nsubgrid) * nsubgrid + i - 1
     ckey(2) = (grid(oct_idx)%ckey(2) / nsubgrid) * nsubgrid + j - 1
-#if NDIM>2
     ckey(3) = (grid(oct_idx)%ckey(3) / nsubgrid) * nsubgrid + k - 1
-#else
-    ckey(3) = 0
-#endif
 
     ! Periodic boundary conditions
     do idim = 1,ndim
@@ -975,11 +1051,7 @@ contains
     ilevel = grid(cache_idx)%lev - 1
     ix = int(grid(cache_idx)%ckey(1) / 2, kind=8)
     iy = int(grid(cache_idx)%ckey(2) / 2, kind=8)
-#if NDIM>2
     iz = int(grid(cache_idx)%ckey(3) / 2, kind=8)
-#else
-    iz = 0_8
-#endif
     nx = int(ckey_max(ilevel), kind=8)
     offset = key_off(ilevel)
     parent_key = offset + ix + iy * nx + iz * nx * nx
@@ -991,21 +1063,30 @@ contains
     ! Get parent cell index
     i = grid(cache_idx)%ckey(1) - 2*ix
     j = grid(cache_idx)%ckey(2) - 2*iy
-#if NDIM>2
     k = grid(cache_idx)%ckey(3) - 2*iz
-#else
-    k = 0
-#endif
     cell_idx = 1 + i + 2*j + 4*k
 
+#ifdef HYDRO
     ! Straight injection for hydro variables
     do ind = 1, twotondim
-       uold(ind, 1, cache_idx) = uold(cell_idx, 1, parent_idx)
-       uold(ind, 2, cache_idx) = uold(cell_idx, 2, parent_idx)
-       uold(ind, 3, cache_idx) = uold(cell_idx, 3, parent_idx)
-       uold(ind, 4, cache_idx) = uold(cell_idx, 4, parent_idx)
-       uold(ind, 5, cache_idx) = uold(cell_idx, 5, parent_idx)
+       uold(ind,1,cache_idx) = uold(cell_idx,1,parent_idx)
+       uold(ind,2,cache_idx) = uold(cell_idx,2,parent_idx)
+       uold(ind,3,cache_idx) = uold(cell_idx,3,parent_idx)
+       uold(ind,4,cache_idx) = uold(cell_idx,4,parent_idx)
+       uold(ind,5,cache_idx) = uold(cell_idx,5,parent_idx)
     end do
+#endif
+
+#ifdef GRAV
+    ! Straight injection for gravity variables
+    do ind = 1, twotondim
+       f(ind,1,cache_idx) = f(cell_idx,1,parent_idx)
+       f(ind,2,cache_idx) = f(cell_idx,2,parent_idx)
+       f(ind,3,cache_idx) = f(cell_idx,3,parent_idx)
+       phi(ind,cache_idx) = phi(cell_idx,parent_idx)
+       phi_old(ind,cache_idx) = phi_old(cell_idx,parent_idx)
+    end do
+#endif
 
   end subroutine make_cache_octs
   ! =========================================================================
