@@ -79,11 +79,11 @@ end subroutine bucket_part_boundary
 attributes(global) subroutine bucket_part_general(xp, bucket_part, &
      grid, hash_key_d, hash_val_d, hash_size_d, ckey_max_d, key_off_d, &
      skip1, skip2, skip3, dx_loc, ilevel, head_idx, num_parts, leading)
-  ! hash_get lives in module refine_device (gpu_refine.cuf includes
-  ! gpu_hash.cuf into refine_device's `contains`). Bring its
-  ! attributes(device) interface into kernel scope so nvfortran does not
-  ! infer a host call.
-  use refine_device, only: hash_get
+  ! hash_get is a module procedure of gpu_runner (gpu_hash.cuf is
+  ! `include`d at the top of gpu_runner.cuf alongside gpu_scan.cuf /
+  ! gpu_part.cuf), so it is visible here without an explicit `use`.
+  ! That makes the device call intra-compilation-unit, satisfying the
+  ! build's `-gpu=...,nordc` constraint (no relocatable device code).
   integer(kind=4), intent(in), value :: leading
   real(kind=dp), device :: xp(*)
   integer(kind=4), device :: bucket_part(*)
