@@ -79,6 +79,11 @@ end subroutine bucket_part_boundary
 attributes(global) subroutine bucket_part_general(xp, bucket_part, &
      grid, hash_key_d, hash_val_d, hash_size_d, ckey_max_d, key_off_d, &
      skip1, skip2, skip3, dx_loc, ilevel, head_idx, num_parts, leading)
+  ! hash_get lives in module refine_device (gpu_refine.cuf includes
+  ! gpu_hash.cuf into refine_device's `contains`). Bring its
+  ! attributes(device) interface into kernel scope so nvfortran does not
+  ! infer a host call.
+  use refine_device, only: hash_get
   integer(kind=4), intent(in), value :: leading
   real(kind=dp), device :: xp(*)
   integer(kind=4), device :: bucket_part(*)
@@ -266,11 +271,14 @@ attributes(global) subroutine sort_scatter_part_real_1d(dst, buf, head_idx, num_
   dst(idx) = buf(idx)
 end subroutine sort_scatter_part_real_1d
 
-!> Rank-1 i8b gather/scatter (idp/idm).
+!> Rank-1 particle-id gather/scatter (idp/idm).
+!> Kind = `i8b` (parameter from amr_parameters: 4 by default, 8 with -DLONGINT)
+!> — must match the module-level allocations of idp/idm/idp_swap, NOT the
+!> literal `kind=8` (which fails when LONGINT is undefined).
 attributes(global) subroutine sort_gather_part_i8_1d(buf, src, swap_global_d, &
      head_idx, num_parts)
-  integer(kind=8), device :: buf(*)
-  integer(kind=8), device :: src(*)
+  integer(i8b),    device :: buf(*)
+  integer(i8b),    device :: src(*)
   integer(kind=4), device :: swap_global_d(*)
   integer(kind=4), intent(in), value :: head_idx
   integer(kind=4), intent(in), value :: num_parts
@@ -286,8 +294,8 @@ attributes(global) subroutine sort_gather_part_i8_1d(buf, src, swap_global_d, &
 end subroutine sort_gather_part_i8_1d
 
 attributes(global) subroutine sort_scatter_part_i8_1d(dst, buf, head_idx, num_parts)
-  integer(kind=8), device :: dst(*)
-  integer(kind=8), device :: buf(*)
+  integer(i8b),    device :: dst(*)
+  integer(i8b),    device :: buf(*)
   integer(kind=4), intent(in), value :: head_idx
   integer(kind=4), intent(in), value :: num_parts
 
@@ -489,7 +497,7 @@ subroutine gpu_split_part(sim, ilevel)
           skip1, skip2, skip3, dx_loc, ilevel, head_idx, num_parts, &
           sim%p%npart_max)
   endif
-  call GPU_Error_Check(__FILE__, __LINE__)
+  call GPU_Error_Check("gpu/gpu_part.cuf", 0)
 
   ! 3. Stable bucket sort using the existing scan + swap pipeline.
   ! 3a. swap_global := identity over the slice.
@@ -513,7 +521,7 @@ subroutine gpu_split_part(sim, ilevel)
   ! 3e. swap_global := swap_local (final permutation).
   call update_global_swap_table<<<num_blocks, num_threads>>>(swap_global, &
        swap_local, head_idx, num_parts)
-  call GPU_Error_Check(__FILE__, __LINE__)
+  call GPU_Error_Check("gpu/gpu_part.cuf", 0)
 
   ! 4. Out-of-place gather/scatter for every host-physically-swapped field.
   !    Mandatory: xp, vp, mp, levelp, idp.
@@ -598,7 +606,7 @@ subroutine gpu_split_part(sim, ilevel)
      call sort_scatter_part_i4_1d<<<num_blocks, num_threads>>>(idt, workp, &
           head_idx, num_parts)
   endif
-  call GPU_Error_Check(__FILE__, __LINE__)
+  call GPU_Error_Check("gpu/gpu_part.cuf", 0)
 
   ! 5. Update host metadata (matches host split_part lines 1396-1400).
   sim%p%tailp(ilevel) = sim%p%headp(ilevel) + n_coarse - 1
