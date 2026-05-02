@@ -133,19 +133,20 @@ attributes(global) subroutine bucket_part_general(xp, bucket_part, &
   endif
 
   ! Compute in-cell index inside the parent (igrid) oct.
+  ! NB: cannot use `#if NDIM==N` here — gpu_part.cuf is `include`d into
+  ! gpu_runner.cuf via the Fortran `include` statement, which happens AFTER
+  ! the CPP pass has finished on gpu_runner.cuf, so any CPP directives in
+  ! this file would be passed through to nvfortran as raw text. Use a
+  ! runtime expression keyed on the `ndim` parameter constant — the dead
+  ! arms are eliminated at compile time. icell = 1 + sum(ii(idim) * 2^(idim-1)).
   do idim = 1, ndim
      x(idim) = (xp(ipart + (idim-1)*leading) + skip(idim)) * inv_dx_loc
      ii(idim) = int(x(idim) - 2*ix(idim))
   end do
-#if NDIM==1
-  icell = 1 + ii(1)
-#endif
-#if NDIM==2
-  icell = 1 + ii(1) + 2*ii(2)
-#endif
-#if NDIM==3
-  icell = 1 + ii(1) + 2*ii(2) + 4*ii(3)
-#endif
+  icell = 1
+  do idim = 1, ndim
+     icell = icell + ii(idim) * (2**(idim-1))
+  end do
 
   if (.not. grid(igrid)%refined(icell)) then
      bucket_part(ipart) = 0    ! coarse: leaf cell
@@ -475,17 +476,14 @@ subroutine gpu_split_part(sim, ilevel)
           box_size, periodic, head_idx, num_parts, sim%p%npart_max)
   else
      dx_loc = sim%r%boxlen / 2d0**ilevel
-     skip1 = sim%m%skip(1)
-#if NDIM>=2
-     skip2 = sim%m%skip(2)
-#else
+     ! Use parameter-keyed runtime ifs (not #if NDIM>=N) — see note inside
+     ! bucket_part_general for why CPP cannot run on this file's body.
+     skip1 = 0d0
      skip2 = 0d0
-#endif
-#if NDIM>=3
-     skip3 = sim%m%skip(3)
-#else
      skip3 = 0d0
-#endif
+     if (ndim >= 1) skip1 = sim%m%skip(1)
+     if (ndim >= 2) skip2 = sim%m%skip(2)
+     if (ndim >= 3) skip3 = sim%m%skip(3)
      call bucket_part_general<<<num_blocks, num_threads>>>(xp, bucket_part, &
           grid, hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, &
           skip1, skip2, skip3, dx_loc, ilevel, head_idx, num_parts, &
