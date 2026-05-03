@@ -222,7 +222,7 @@ subroutine init_amr(r,g,m,type)
      rho=0d0
      phi=0d0
      nref=0d0
-     rho_old=0d0
+     phi_old=0d0
 #endif
   endif
 #endif
