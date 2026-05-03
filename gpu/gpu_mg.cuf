@@ -443,11 +443,11 @@ contains
   ! =========================================================================
 
   ! =========================================================================
-  attributes(global) subroutine make_mg_octs(grid_fine, grid_coarse, phi, f, swap_local, &
+  attributes(global) subroutine make_mg_octs(grid, grid_mg, phi, f, swap_local, &
        & ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, &
        & head_idx, num_octs, input_ind)
-    type(oct), device :: grid_fine(*)
-    type(oct), device :: grid_coarse(*)
+    type(oct), device :: grid(*)
+    type(oct), device :: grid_mg(*)
     real(kind=dp), device :: f(1:twotondim,1:ndim,*)
     real(kind=dp), device :: phi(1:twotondim,*)
     integer(kind=4), device :: swap_local(*)
@@ -480,10 +480,10 @@ contains
     cache_idx = head_idx + cache_idx
 
     ! Compute neighboring oct Cartesian key
-    ilevel = grid_fine(oct_idx)%lev
-    ckey(1) = grid_fine(oct_idx)%ckey(1) + shift_oct(1, input_ind)
-    ckey(2) = grid_fine(oct_idx)%ckey(2) + shift_oct(2, input_ind)
-    ckey(3) = grid_fine(oct_idx)%ckey(3) + shift_oct(3, input_ind)
+    ilevel = grid(oct_idx)%lev
+    ckey(1) = grid(oct_idx)%ckey(1) + shift_oct(1, input_ind)
+    ckey(2) = grid(oct_idx)%ckey(2) + shift_oct(2, input_ind)
+    ckey(3) = grid(oct_idx)%ckey(3) + shift_oct(3, input_ind)
 
     ! Periodic boundary conditions
     do idim = 1,ndim
@@ -500,15 +500,15 @@ contains
     ckey(3) = ckey(3) / 2
 
     ! Compute cache oct properties
-    grid_coarse(cache_idx)%lev = ilevel
+    grid_mg(cache_idx)%lev = ilevel
     do idim = 1, ndim
-       grid_coarse(cache_idx)%ckey(idim) = ckey(idim)
+       grid_mg(cache_idx)%ckey(idim) = ckey(idim)
     end do
-    grid_coarse(cache_idx)%refined(1:twotondim) = .true.
+    grid_mg(cache_idx)%refined(1:twotondim) = .true.
 
     ! Compute new oct Hilbert key
-    hkey = hilbert_key(grid_coarse(cache_idx)%ckey, grid_coarse(cache_idx)%lev - 1)
-    grid_coarse(cache_idx)%hkey(1) = hkey
+    hkey = hilbert_key(grid_mg(cache_idx)%ckey, grid_mg(cache_idx)%lev - 1)
+    grid_mg(cache_idx)%hkey(1) = hkey
 
     ! Initial potential and force set to zero
     do ind = 1, twotondim
@@ -522,9 +522,8 @@ contains
   ! =========================================================================
 
   ! =========================================================================
-  attributes(global) subroutine restrict_mask(grid, grid_mg, father, f, f_mg, head_idx, head_father, num_octs)
+  attributes(global) subroutine restrict_mask(grid, father, f, f_mg, head_idx, head_father, num_octs)
     type(oct), device :: grid(*)
-    type(oct), device :: grid_mg(*)
     real(kind=dp), device :: f(1:twotondim,1:ndim,*)
     real(kind=dp), device :: f_mg(1:twotondim,1:ndim,*)
     integer(kind=4), device :: father(*)
@@ -540,17 +539,19 @@ contains
     tid = threadIdx%x - 1
     bid = blockIdx%x - 1
 
-    ! Compute the oct idx
+    ! Compute oct idx
     oct_idx = tid + bid * blockDim%x
     if (oct_idx >= num_octs) return
     mg_idx = head_father + oct_idx
     oct_idx = head_idx + oct_idx
 
-    ! Compute the parent cell idx
+    ! Compute parent oct idx
     father_idx = father(mg_idx)
-    i = grid(oct_idx)%ckey(1) - 2 * grid_mg(father_idx)%ckey(1)
-    j = grid(oct_idx)%ckey(2) - 2 * grid_mg(father_idx)%ckey(2)
-    k = grid(oct_idx)%ckey(3) - 2 * grid_mg(father_idx)%ckey(3)
+
+    ! Compute parent cell idx
+    i = grid(oct_idx)%ckey(1) - 2 * (grid(oct_idx)%ckey(1) / 2)
+    j = grid(oct_idx)%ckey(2) - 2 * (grid(oct_idx)%ckey(2) / 2)
+    k = grid(oct_idx)%ckey(3) - 2 * (grid(oct_idx)%ckey(3) / 2)
     cell_idx = 1 + i + 2*j + 4*k
 
     ! Reset conservative variables
@@ -837,10 +838,9 @@ contains
   ! =========================================================================
 
   ! =========================================================================
-  attributes(global) subroutine restrict_residual(grid, grid_mg, father, f, f_mg, &
+  attributes(global) subroutine restrict_residual(grid, father, f, f_mg, &
        & head_idx, head_father, num_octs)
     type(oct), device :: grid(*)
-    type(oct), device :: grid_mg(*)
     real(kind=dp), device :: f(1:twotondim,1:ndim,*)
     real(kind=dp), device :: f_mg(1:twotondim,1:ndim,*)
     integer(kind=4), device :: father(*)
@@ -861,11 +861,13 @@ contains
     mg_idx = head_father + oct_idx
     oct_idx = head_idx + oct_idx
 
-    ! Compute the parent cell idx
+    ! Compute the parent oct idx
     father_idx = father(mg_idx)
-    i = grid(oct_idx)%ckey(1) - 2 * grid_mg(father_idx)%ckey(1)
-    j = grid(oct_idx)%ckey(2) - 2 * grid_mg(father_idx)%ckey(2)
-    k = grid(oct_idx)%ckey(3) - 2 * grid_mg(father_idx)%ckey(3)
+
+    ! Compute the parent cell idx
+    i = grid(oct_idx)%ckey(1) - 2 * (grid(oct_idx)%ckey(1) / 2)
+    j = grid(oct_idx)%ckey(2) - 2 * (grid(oct_idx)%ckey(2) / 2)
+    k = grid(oct_idx)%ckey(3) - 2 * (grid(oct_idx)%ckey(3) / 2)
     cell_idx = 1 + i + 2*j + 4*k
 
     ! Reset residual
@@ -882,11 +884,10 @@ contains
   ! =========================================================================
 
   ! =========================================================================
-  attributes(global) subroutine interpolate_correct(grid, grid_mg, father, nbor, phi, phi_mg, f, &
+  attributes(global) subroutine interpolate_correct(grid, father, nbor, phi, phi_mg, f, &
        & head_idx, head_father, num_octs)
     implicit none
     type(oct), device :: grid(*)
-    type(oct), device :: grid_mg(*)
     integer, device :: father(*)
     integer, device :: nbor(1:threetondim,*)
     real(kind=dp), device :: phi(1:twotondim,*)
@@ -915,7 +916,7 @@ contains
     cell_idx = threadIdx%x
 
     ! Get 3x3x3 neighboring father cells of this oct
-    call nbor_father_cells_mg(grid, grid_mg, father, nbor, oct_idx, mg_idx, igrid_nbor, icell_nbor)
+    call nbor_father_cells_mg(grid, father, nbor, oct_idx, mg_idx, igrid_nbor, icell_nbor)
 
     ! CIC interpolation
     corr = 0d0

@@ -1506,10 +1506,10 @@ contains
 
     ! Restrict mask from fine to coarse grid
     if (ifine == ilevel) then
-       call restrict_mask<<<num_blocks, num_threads>>>(grid, grid_mg, father_mg, f, f_mg, &
+       call restrict_mask<<<num_blocks, num_threads>>>(grid, father_mg, f, f_mg, &
             & head_idx, head_father, num_octs)
     else
-       call restrict_mask<<<num_blocks, num_threads>>>(grid_mg, grid_mg, father_mg, f_mg, f_mg, &
+       call restrict_mask<<<num_blocks, num_threads>>>(grid_mg, father_mg, f_mg, f_mg, &
             & head_idx, head_father, num_octs)
     endif
 
@@ -1696,10 +1696,10 @@ contains
 
     ! Restrict mask from fine to coarse grid
     if (ifine == ilevel) then
-       call restrict_residual<<<num_blocks, num_threads>>>(grid, grid_mg, father_mg, f, f_mg, &
+       call restrict_residual<<<num_blocks, num_threads>>>(grid, father_mg, f, f_mg, &
             & head_idx, head_father, num_octs)
     else
-       call restrict_residual<<<num_blocks, num_threads>>>(grid_mg, grid_mg, father_mg, f_mg, f_mg, &
+       call restrict_residual<<<num_blocks, num_threads>>>(grid_mg, father_mg, f_mg, f_mg, &
             & head_idx, head_father, num_octs)
     endif
 
@@ -1742,10 +1742,10 @@ contains
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
 
     if (ifine == ilevel) then
-       call interpolate_correct<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(grid, grid_mg, &
+       call interpolate_correct<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(grid, &
             & father_mg, nbor_mg, phi, phi_mg, f, head_idx, head_father, num_octs)
     else
-       call interpolate_correct<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(grid_mg, grid_mg, &
+       call interpolate_correct<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(grid_mg, &
             & father_mg, nbor_mg, phi_mg, phi_mg, f_mg, head_idx, head_father, num_octs)
     endif
 

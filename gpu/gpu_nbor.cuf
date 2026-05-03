@@ -52,9 +52,9 @@ attributes(device) subroutine nbor_father_cells(grid, father, nbor, oct_idx, igr
   k_subgrid = k_subgrid + 1
 
   ! Compute parent cell coordinates inside oct
-  i = grid(oct_idx)%ckey(1) - 2 * grid(father_idx)%ckey(1)
-  j = grid(oct_idx)%ckey(2) - 2 * grid(father_idx)%ckey(2)
-  k = grid(oct_idx)%ckey(3) - 2 * grid(father_idx)%ckey(3)
+  i = grid(oct_idx)%ckey(1) - 2 * (grid(oct_idx)%ckey(1) / 2)
+  j = grid(oct_idx)%ckey(2) - 2 * (grid(oct_idx)%ckey(2) / 2)
+  k = grid(oct_idx)%ckey(3) - 2 * (grid(oct_idx)%ckey(3) / 2)
 
   ! Loop over 27 neighbors
   inbor = 0
@@ -93,14 +93,12 @@ end subroutine nbor_father_cells
 !> @brief
 !> Find 3x3x3 nbor father cells of input oct
 !>
-attributes(device) subroutine nbor_father_cells_mg(grid, grid_mg, father, nbor, oct_idx, mg_idx, &
-     & igrid_nbor, icell_nbor)
+attributes(device) subroutine nbor_father_cells_mg(grid, father, nbor, oct_idx, mg_idx, igrid_nbor, icell_nbor)
   use amr_parameters, only: dp, ndim, twotondim, threetondim
   use oct_commons, only: oct
   use gpu_utils
   implicit none
   type(oct), device :: grid(*)
-  type(oct), device :: grid_mg(*)
   integer(kind=4), device :: father(*)
   integer(kind=4), device :: nbor(1:subgridsize,*)
   integer(kind=4), value :: oct_idx
@@ -131,9 +129,9 @@ attributes(device) subroutine nbor_father_cells_mg(grid, grid_mg, father, nbor, 
   k_subgrid = k_subgrid + 1
 
   ! Compute parent cell coordinates inside oct
-  i = grid(oct_idx)%ckey(1) - 2 * grid_mg(father_idx)%ckey(1)
-  j = grid(oct_idx)%ckey(2) - 2 * grid_mg(father_idx)%ckey(2)
-  k = grid(oct_idx)%ckey(3) - 2 * grid_mg(father_idx)%ckey(3)
+  i = grid(oct_idx)%ckey(1) - 2 * (grid(oct_idx)%ckey(1) / 2)
+  j = grid(oct_idx)%ckey(2) - 2 * (grid(oct_idx)%ckey(2) / 2)
+  k = grid(oct_idx)%ckey(3) - 2 * (grid(oct_idx)%ckey(3) / 2)
 
   ! Loop over 27 neighbors
   inbor = 0
