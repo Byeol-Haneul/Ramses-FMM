@@ -37,13 +37,22 @@ recursive subroutine r_set_grid_device(pst)
 
 #ifdef _CUDA
      ! Allocate and copy particle arrays (DM only in phase 1; gpu_part_prompt.md §3, §9).
-     ! pst%s%p is value-typed (not a pointer) — gate on npart_max.
+     ! Sizing rule: each device mirror is sized to the corresponding host
+     ! array's capacity (size(pst%s%p%X, ...)), NOT to pst%s%p%npart_max.
+     ! Reason: pst%s%p%npart_max is overwritten by m_input_part →
+     ! r_npart_max (pm/input_part.f90:43) to the per-rank MAX(p%npart) —
+     ! the *actual* particle count, not the array capacity. The host
+     ! arrays themselves stay sized to r%npartmax (init_part.f90:62-74)
+     ! for the run, so allocating the device to that capacity makes the
+     ! whole-array H→D / D→H copies shape-safe and leaves headroom for
+     ! particle creation (star formation, accretion) without having to
+     ! reallocate the device arrays mid-run.
      ! Optional fields (zp/tp/tm/jp/idm/idt/size_p/charge) mirror the host
      ! `allocated(p%X)` gate used by split_part (pm/rho_fine.f90:1413-1494):
      ! allocate device storage iff the host counterpart is allocated.
-     if (pst%s%p%npart_max > 0) then
+     if (pst%s%r%part .and. allocated(pst%s%p%xp)) then
         call nvtxStartRange("Copy particles from host to device", color=5)!red
-        ! Mandatory arrays (always allocated when npart_max > 0)
+        ! Mandatory arrays (always allocated when host xp is allocated)
         if (allocated(xp))      deallocate(xp)
         if (allocated(vp))      deallocate(vp)
         if (allocated(mp))      deallocate(mp)
@@ -73,24 +82,29 @@ recursive subroutine r_set_grid_device(pst)
         if (allocated(mp_swap))  deallocate(mp_swap)
         if (allocated(idp_swap)) deallocate(idp_swap)
 
-        allocate(xp(1:pst%s%p%npart_max, 1:ndim))
-        allocate(vp(1:pst%s%p%npart_max, 1:ndim))
-        allocate(mp(1:pst%s%p%npart_max))
-        allocate(levelp(1:pst%s%p%npart_max))
-        allocate(sortp(1:pst%s%p%npart_max))
-        allocate(workp(1:pst%s%p%npart_max))
-        allocate(idp(1:pst%s%p%npart_max))
-        allocate(hkey_part(1:pst%s%p%npart_max))
-        allocate(bucket_part(1:pst%s%p%npart_max))
+        ! Allocate device mirrors to the host arrays' capacity. The leading
+        ! dim of every rank-2 host particle array (xp/vp/fp/jp) is the same
+        ! r%npartmax; we use size(pst%s%p%xp, 1) as the canonical anchor and
+        ! tie the per-particle scratch to it.
+        allocate(xp(1:size(pst%s%p%xp, 1), 1:ndim))
+        allocate(vp(1:size(pst%s%p%vp, 1), 1:ndim))
+        allocate(mp(1:size(pst%s%p%mp)))
+        allocate(levelp(1:size(pst%s%p%levelp)))
+        allocate(sortp(1:size(pst%s%p%sortp)))
+        allocate(workp(1:size(pst%s%p%workp)))
+        allocate(idp(1:size(pst%s%p%idp)))
+        allocate(hkey_part  (1:size(pst%s%p%xp, 1)))
+        allocate(bucket_part(1:size(pst%s%p%xp, 1)))
         allocate(cell_part_count(1:pst%s%m%ngridmax+pst%s%m%ncachemax))
         allocate(cell_part_head (1:pst%s%m%ngridmax+pst%s%m%ncachemax))
-        allocate(cell_part_idx  (1:pst%s%p%npart_max))
+        allocate(cell_part_idx  (1:size(pst%s%p%xp, 1)))
         ! Gather/scatter scratch — no host->device copy (kernel-overwritten).
-        allocate(xp_swap (1:pst%s%p%npart_max, 1:ndim))
-        allocate(mp_swap (1:pst%s%p%npart_max))
-        allocate(idp_swap(1:pst%s%p%npart_max))
+        ! Same shape rule as their typed targets (xp/vp/fp/jp; mp/zp/tp/tm/...; idp/idm).
+        allocate(xp_swap (1:size(pst%s%p%xp, 1), 1:ndim))
+        allocate(mp_swap (1:size(pst%s%p%mp)))
+        allocate(idp_swap(1:size(pst%s%p%idp)))
 
-        ! Mandatory host -> device copies
+        ! Mandatory host -> device copies (shapes match by construction above)
         xp     = pst%s%p%xp
         vp     = pst%s%p%vp
         mp     = pst%s%p%mp
@@ -100,40 +114,41 @@ recursive subroutine r_set_grid_device(pst)
         idp    = pst%s%p%idp
 
         ! Optional fields: allocate-and-copy only if host has them.
+        ! Each device mirror sized to its host counterpart's capacity.
         if (allocated(pst%s%p%fp)) then
-           allocate(fp(1:pst%s%p%npart_max, 1:ndim))
+           allocate(fp(1:size(pst%s%p%fp, 1), 1:ndim))
            fp = pst%s%p%fp
         endif
         if (allocated(pst%s%p%jp)) then
-           allocate(jp(1:pst%s%p%npart_max, 1:ndim))
+           allocate(jp(1:size(pst%s%p%jp, 1), 1:ndim))
            jp = pst%s%p%jp
         endif
         if (allocated(pst%s%p%zp)) then
-           allocate(zp(1:pst%s%p%npart_max))
+           allocate(zp(1:size(pst%s%p%zp)))
            zp = pst%s%p%zp
         endif
         if (allocated(pst%s%p%tp)) then
-           allocate(tp(1:pst%s%p%npart_max))
+           allocate(tp(1:size(pst%s%p%tp)))
            tp = pst%s%p%tp
         endif
         if (allocated(pst%s%p%tm)) then
-           allocate(tm(1:pst%s%p%npart_max))
+           allocate(tm(1:size(pst%s%p%tm)))
            tm = pst%s%p%tm
         endif
         if (allocated(pst%s%p%size)) then
-           allocate(size_p(1:pst%s%p%npart_max))
+           allocate(size_p(1:size(pst%s%p%size)))
            size_p = pst%s%p%size
         endif
         if (allocated(pst%s%p%charge)) then
-           allocate(charge(1:pst%s%p%npart_max))
+           allocate(charge(1:size(pst%s%p%charge)))
            charge = pst%s%p%charge
         endif
         if (allocated(pst%s%p%idm)) then
-           allocate(idm(1:pst%s%p%npart_max))
+           allocate(idm(1:size(pst%s%p%idm)))
            idm = pst%s%p%idm
         endif
         if (allocated(pst%s%p%idt)) then
-           allocate(idt(1:pst%s%p%npart_max))
+           allocate(idt(1:size(pst%s%p%idt)))
            idt = pst%s%p%idt
         endif
         call GPU_Error_Check(__FILE__, __LINE__)
@@ -217,17 +232,23 @@ end subroutine r_transfer_grid_host
 #ifdef _CUDA
 !> Copy device particle arrays back to host. Required so PART_DUMP / I/O paths
 !> that read pst%s%p%xp etc. see the post-kernel state. See §0.5 / §10.
-!> No-op when no particle arrays were allocated on device (npart_max==0).
+!> No-op when device particle mirrors were never allocated.
+!>
+!> The gate on `allocated(xp)` is sufficient: r_set_grid_device above only
+!> allocates the device mirrors when the host arrays are allocated AND
+!> sizes them to match the host capacity, so a whole-array assignment is
+!> always shape-safe here. We deliberately do NOT gate on
+!> pst%s%p%npart_max — that field is the actual particle count after
+!> r_npart_max (pm/input_part.f90:43) overwrites it, NOT the array size.
 subroutine gpu_to_host_part(pst)
   use ramses_commons, only: pst_t
   implicit none
   type(pst_t)::pst
 
-  if (pst%s%p%npart_max <= 0) return
   if (.not. allocated(xp)) return
 
   call nvtxStartRange("Copy particles from device to host", color=5)!red
-  ! Mandatory mirrors
+  ! Mandatory mirrors (shapes match by construction in r_set_grid_device)
   pst%s%p%xp     = xp
   pst%s%p%vp     = vp
   pst%s%p%mp     = mp

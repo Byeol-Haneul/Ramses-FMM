@@ -114,22 +114,26 @@ module gpu_runner
   real(kind=dp),   device, allocatable, dimension(:)   :: mp_swap
   integer(i8b),    device, allocatable, dimension(:)   :: idp_swap
 
-  ! gpu_hash.cuf is `include`d below to make hash_get / hash_set / etc.
-  ! intra-compilation-unit callable from particle kernels (required by the
-  ! build's `-gpu=...,nordc` constraint). Mark them private so they do not
-  ! collide with refine_device::hash_get etc. in routines that
-  ! `use refine_device` (no `only:`) — see gpu_refine, gpu_build_mg below.
+  ! gpu_hash.cuf and gpu_hilbert.cuf are `include`d below to make hash_get
+  ! and hilbert_key callable from particle kernels in the same compilation
+  ! unit (required by the build's `-gpu=...,nordc` constraint — no
+  ! relocatable device code, so device callees must live in the caller's
+  ! module). Mark them private so they do not collide with the same names
+  ! in module refine_device for routines that `use refine_device` (no
+  ! `only:`) — see gpu_refine, gpu_build_mg below.
   private :: mix64, fnv64, fnv32, hash_set, hash_get, hash_update, hash_free
+  private :: hilbert_key
 
 contains
 
-  ! Note: gpu_hash.cuf must be include'd into the same module as any kernel
-  ! that calls hash_get. The build uses `-gpu=...,nordc` (no relocatable
-  ! device code), which forbids device-side calls across compilation units.
-  ! `module refine_device` (gpu_refine.cuf) already include's gpu_hash.cuf;
-  ! we re-include it here so that the particle bucket kernel in gpu_part.cuf
-  ! can call hash_get without crossing into refine_device.
+  ! Note: gpu_hash.cuf and gpu_hilbert.cuf must be include'd into the same
+  ! module as any kernel that calls hash_get / hilbert_key. The build uses
+  ! `-gpu=...,nordc` (no relocatable device code), which forbids device-side
+  ! calls across compilation units. `module refine_device` (gpu_refine.cuf)
+  ! already include's both; we re-include them here so that the particle
+  ! kernels in gpu_part.cuf can call them without crossing into refine_device.
   include 'gpu_hash.cuf'
+  include 'gpu_hilbert.cuf'
   include 'gpu_scan.cuf'
   include 'gpu_part.cuf'
 
