@@ -45,6 +45,7 @@ contains
 
     character(len=1024) :: path
     integer :: u, npart, nlevels
+    integer :: ih0, ih1, it0, it1
 
     call resolve_dir()
     npart   = p%npart
@@ -56,8 +57,23 @@ contains
     write(u) ndim
     write(u) nlevels
     write(u) npart
-    if (allocated(p%headp)) write(u) p%headp(0:nlevels)
-    if (allocated(p%tailp)) write(u) p%tailp(0:nlevels)
+    ! headp/tailp are allocated with lower bound levelmin or levelmin-1, not 0.
+    if (allocated(p%headp)) then
+      ih0 = lbound(p%headp, 1)
+      ih1 = ubound(p%headp, 1)
+      write(u) ih0, ih1
+      write(u) p%headp(ih0:ih1)
+    else
+      write(u) 0, -1
+    end if
+    if (allocated(p%tailp)) then
+      it0 = lbound(p%tailp, 1)
+      it1 = ubound(p%tailp, 1)
+      write(u) it0, it1
+      write(u) p%tailp(it0:it1)
+    else
+      write(u) 0, -1
+    end if
     if (allocated(p%idp))    write(u) p%idp(1:npart)
     if (allocated(p%levelp)) write(u) p%levelp(1:npart)
     if (allocated(p%sortp))  write(u) p%sortp(1:npart)
