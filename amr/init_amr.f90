@@ -102,7 +102,7 @@ subroutine init_amr(r,g,m,type)
   ! Store size in mesh object
   if(type=='amr')then
      m%ngridmax=r%ngridmax
-     m%ncachemax=r%ncachemax
+     m%ncachemax=MAX(r%ncachemax,10000)
   endif
   if(type=='mg')then
      m%ngridmax=r%ngridmax/7
@@ -135,7 +135,7 @@ subroutine init_amr(r,g,m,type)
      father=0
      nbor=0
      ! Allocate hash table space
-     m%hash_size=2*(m%ngridmax + m%ncachemax)
+     m%hash_size=2*(m%ngridmax+m%ncachemax)
      allocate(hash_key(1:m%hash_size))
      allocate(hash_val(1:m%hash_size))
      hash_key=0
@@ -159,12 +159,11 @@ subroutine init_amr(r,g,m,type)
      father_mg=0
      nbor_mg=0
      ! Allocate hash table space
-     m%hash_size=2*(m%ngridmax + m%ncachemax)
+     m%hash_size=2*(m%ngridmax+m%ncachemax)
      allocate(hash_key_mg(1:m%hash_size))
      allocate(hash_val_mg(1:m%hash_size))
      hash_key_mg=0
      hash_val_mg=0
-     ! Work buffers for GPU scan/sort/refine
 #endif
   endif
 #endif
@@ -222,7 +221,7 @@ subroutine init_amr(r,g,m,type)
      rho=0d0
      phi=0d0
      nref=0d0
-     rho_old=0d0
+     phi_old=0d0
 #endif
   endif
 #endif

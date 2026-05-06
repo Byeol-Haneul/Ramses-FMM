@@ -3334,6 +3334,9 @@ subroutine cic_weights_and_derivs(x, w1d, dw1d, il_out, ir_out, vol_out)
         end do
      end do
   end if
+#else
+  w1d=0
+  dw1d=0
 #endif
 end subroutine cic_weights_and_derivs
 
@@ -3388,6 +3391,9 @@ subroutine tsc_weights_and_derivs(x, w1d, dw1d, il_out, ic_out, ir_out, vol_out)
         end do
      end do
   end if
+#else
+  w1d=0
+  dw1d=0
 #endif
 end subroutine tsc_weights_and_derivs
 
@@ -3404,8 +3410,8 @@ subroutine compute_gradient_cic_scalar(w1d, dw1d, field, grad_out)
   real(kind=8),intent(in)::field(1:twotondim)
   real(kind=8),intent(out)::grad_out(1:ndim)
   integer::ix,iy,iz,ind
-#if NDIM==3
   grad_out = 0.d0
+#if NDIM==3
   ind = 0
   do iz=1,2
      do iy=1,2
@@ -3431,8 +3437,8 @@ subroutine compute_gradient_cic(w1d, dw1d, field, grad_out)
   real(kind=8),intent(in)::field(1:ndim,1:twotondim)
   real(kind=8),intent(out)::grad_out(1:ndim)
   integer::ix,iy,iz,ind
-#if NDIM==3
   grad_out = 0.d0
+#if NDIM==3
   ind = 0
   do iz=1,2
      do iy=1,2
@@ -3457,8 +3463,8 @@ subroutine compute_gradient_tsc_scalar(w1d, dw1d, field, grad_out)
   real(kind=8),intent(in)::field(1:threetondim)
   real(kind=8),intent(out)::grad_out(1:ndim)
   integer::ix,iy,iz,ind
-#if NDIM==3
   grad_out = 0.d0
+#if NDIM==3
   ind = 0
   do iz=1,3
      do iy=1,3
@@ -3483,8 +3489,8 @@ subroutine compute_gradient_tsc(w1d, dw1d, field, grad_out)
   real(kind=8),intent(in)::field(1:ndim,1:threetondim)
   real(kind=8),intent(out)::grad_out(1:ndim)
   integer::ix,iy,iz,ind
-#if NDIM==3
   grad_out = 0.d0
+#if NDIM==3
   ind = 0
   do iz=1,3
      do iy=1,3
@@ -3536,6 +3542,8 @@ real(dp) function tracer_cell_kappa(dens_in,eturb_in,dx_in,smallr_in) result(kap
   else
      kappa_val = 0.0_dp
   end if
+#else
+  kappa_val = 0.0_dp
 #endif
 end function tracer_cell_kappa
 
@@ -3547,8 +3555,8 @@ subroutine sample_tracer_gaussian(vec)
   real(kind=8)::u_rand,tmp
   real(kind=8), external :: RngStream_RandUni
   external :: gaussdev
-#if NDIM==3
   vec=0.0d0
+#if NDIM==3
   do jd=1,ndim
      u_rand = RngStream_RandUni(tracer_rng)
      call gaussdev(u_rand,tmp)
@@ -3564,8 +3572,8 @@ subroutine sample_tracer_uniform(vec)
   integer :: jd
   real(kind=8)::u_rand
   real(kind=8), external :: RngStream_RandUni
-#if NDIM==3
   vec=0.0d0
+#if NDIM==3
   do jd=1,ndim
      u_rand = RngStream_RandUni(tracer_rng)
      ! Uniform distribution [-sqrt(3), sqrt(3)] with variance 1
@@ -3586,8 +3594,8 @@ subroutine sample_tracer_piecewise_skew_uniform(vec, gamma1_vec)
   integer :: jd
   real(kind=8)::u_rand,gamma1,k,a,b,p_left,apb
   real(kind=8), external :: RngStream_RandUni
-#if NDIM==3
   vec=0.0d0
+#if NDIM==3
   do jd=1,ndim
      gamma1 = gamma1_vec(jd)
      ! Compute two-piece uniform parameters from skewness
@@ -3624,6 +3632,8 @@ real(kind=8) function mc_kernel_skewness(pr, pl) result(gamma1)
   else
      gamma1 = 0.0d0
   endif
+#else
+  gamma1 = 0.0d0
 #endif
 end function mc_kernel_skewness
 
@@ -3648,12 +3658,12 @@ subroutine gather_cic_state(st,x_cell,level_in,dx_cell,use_sgs_in,vel_out,kappa_
   real(kind=8)::rho,kappa_sum
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer::ind,icell,jd,igrid
-#if NDIM==3
   vel_out=0.d0
   momentum=0.d0
   rho=0.d0
   kappa_sum=0.d0
-
+  kappa_out=0.d0
+#if NDIM==3
   ! Build CIC weights, indices, and volume weights
   call cic_weights_and_derivs(x_cell, w1d, dw1d, il, ir, vol)
   do jd=1,ndim
@@ -3715,12 +3725,12 @@ subroutine gather_tsc_state(st,x_cell,level_in,dx_cell,use_sgs_in,vel_out,kappa_
   real(kind=8)::rho,kappa_sum
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer::ind,icell,jd,igrid
-#if NDIM==3
   vel_out=0.d0
   momentum=0.d0
   rho=0.d0
   kappa_sum=0.d0
-
+  kappa_out=0.d0
+#if NDIM==3
   ! Build TSC weights, indices, and volume weights
   call tsc_weights_and_derivs(x_cell, w1d, dw1d, il, ic, ir, vol)
   do jd=1,ndim
