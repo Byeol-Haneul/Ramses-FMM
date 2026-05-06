@@ -525,6 +525,8 @@ subroutine find_conj_pair(i,j,k,ii,jj,kk)
     call dfftw_destroy_plan(plan)
 
     deallocate(fftfield)
+#else
+    real_field(:)=0
 #endif
   end subroutine FFT_1D
   !=====================================================================================
@@ -561,6 +563,8 @@ subroutine find_conj_pair(i,j,k,ii,jj,kk)
     call dfftw_destroy_plan(plan)
 
     deallocate(fftfield)
+#else
+    real_field=0
 #endif
   end subroutine FFT_2D
   !=====================================================================================
@@ -597,6 +601,8 @@ subroutine find_conj_pair(i,j,k,ii,jj,kk)
     call dfftw_destroy_plan(plan)
 
     deallocate(fftfield)
+#else
+    real_field=0
 #endif
   end subroutine FFT_3D
   !=====================================================================================
