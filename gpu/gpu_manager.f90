@@ -270,6 +270,40 @@ subroutine gpu_to_host_part(pst)
   call nvtxEndRange()
 
 end subroutine gpu_to_host_part
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
+!> Copy device mesh fields (rho, nref) back to host. Required so that
+!> dump_mesh_state (PART_DUMP harness) sees post-CIC values; in production
+!> builds rho/nref live device-only after r_cic_part runs and are consumed
+!> by the GPU multigrid solver, gpu_kick_drift_part, etc.
+!>
+!> Per modelC.md / gpu_part_prompt.md §0.5: "if the CUDA branch returns
+!> without a device → host copy, GPU dumps reflect stale host state ...
+!> Large bogus diffs in levelp/xp/vp can be sync noise, not kernel logic
+!> errors." Same applies to mesh dumps once gpu_cic_part writes device rho.
+!>
+!> Caller responsibility: invoke from the appropriate `#ifdef _CUDA` branch
+!> AFTER gpu_cic_part returns. r_cic_part guards the call with
+!> `#ifdef PART_DUMP` so production runs pay no D->H bandwidth.
+!>
+!> Both rho and nref live behind `#ifdef GRAV` (gpu/gpu_runner.cuf:28); no-op
+!> for non-GRAV builds. The `allocated()` checks make this safe to call even
+!> before r_set_grid_device has populated the device mirrors.
+subroutine gpu_to_host_mesh(pst)
+  use ramses_commons, only: pst_t
+  implicit none
+  type(pst_t)::pst
+
+  call nvtxStartRange("Copy mesh from device to host", color=5)!red
+#ifdef GRAV
+  if (allocated(rho))  pst%s%m%rho  = rho
+  if (allocated(nref)) pst%s%m%nref = nref
+  call GPU_Error_Check(__FILE__, __LINE__)
+#endif
+  call nvtxEndRange()
+end subroutine gpu_to_host_mesh
 #endif
 !###########################################################
 !###########################################################
