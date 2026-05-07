@@ -1,12 +1,15 @@
 module multigrid_fine_commons
+
 #ifdef GRAV
   use multigrid_fine_coarse, only: r_cmp_residual_mg, r_cmp_residual_norm2, r_gauss_seidel_mg,&
         r_interpolate_and_correct, r_reset_correction, r_restrict_mask, r_restrict_residual, r_set_scan_flag,&
         double_level_t, level_count_t, gs_step_t
 #endif
-#ifdef __CUDA
-  use gpu_runner, only: gpu_init_phi, gpu_make_mask, gpu_make_rhs, gpu_build_mg
+
+#ifdef _CUDA
+  use gpu_runner, only: gpu_init_phi, gpu_make_mask, gpu_make_rhs, gpu_build_mg, gpu_clean_mg
 #endif
+
 contains
 
 ! ------------------------------------------------------------------------
@@ -63,6 +66,8 @@ subroutine multigrid(pst,ilevel,icount)
   if(pst%s%m%noct_tot(ilevel)==0)return
 
   if(pst%s%r%verbose) print '(A,I2)','Entering multigrid at level ',ilevel
+
+  call m_timer('MG - init','start')
 
   ! ---------------------------------------------------------------------
   ! Prepare first guess, mask and BCs at finest level
@@ -136,6 +141,8 @@ subroutine multigrid(pst,ilevel,icount)
      gs_step%ifine=ilevel
      gs_step%safe=pst%s%g%safe_mode(ilevel)
 
+     call m_timer('MG - Gauss-Seidel','start')
+
      ! Pre-smoothing
      do i=1,ngs_fine
         gs_step%redstep=.true.   ! Red step
@@ -143,6 +150,8 @@ subroutine multigrid(pst,ilevel,icount)
         gs_step%redstep=.false.  ! Black step
         call r_gauss_seidel_mg(pst,gs_step,storage_size(gs_step)/32)
      end do
+
+     call m_timer('MG - Residual','start')
 
      ! Compute new residual
      double_level%ilevel=ilevel
@@ -162,13 +171,19 @@ subroutine multigrid(pst,ilevel,icount)
         ! Reset correction from upper level before solve
         call r_reset_correction(pst,ilevel-1,1)
 
+        call m_timer('MG - Recursive','start')
+
         ! Multigrid-solve the upper level
         call recursive_multigrid(pst,ilevel-1,pst%s%g%safe_mode(ilevel))
+
+        call m_timer('MG - Interpol/Correct','start')
 
         ! Interpolate coarse solution and correct fine solution
         call r_interpolate_and_correct(pst,double_level,storage_size(double_level)/32)
 
      end if
+
+     call m_timer('MG - Gauss-Seidel','start')
 
      ! Post-smoothing
      do i=1,ngs_fine
@@ -177,6 +192,8 @@ subroutine multigrid(pst,ilevel,icount)
         gs_step%redstep=.false.  ! Black step
         call r_gauss_seidel_mg(pst,gs_step,storage_size(gs_step)/32)
      end do
+
+     call m_timer('MG - Residual','start')
 
      ! Update fine residual
      double_level%ilevel=ilevel
@@ -375,7 +392,7 @@ recursive subroutine r_build_mg(pst,input,input_size)
      call r_build_mg(pst%pLower,input,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-#ifdef __CUDA
+#ifdef _CUDA
      call gpu_build_mg(pst%s,input%ilevel,input%ifine)
 #else
      if(input%ifine==input%ilevel)then
@@ -636,7 +653,11 @@ recursive subroutine r_cleanup_mg(pst)
      call r_cleanup_mg(pst%pLower)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
+#ifdef _CUDA
+     call gpu_clean_mg(pst%s)
+#else
      call cleanup_mg(pst%s%m_mg)
+#endif
   endif
 
 end subroutine r_cleanup_mg
@@ -685,7 +706,7 @@ recursive subroutine r_make_mask(pst,ilevel,input_size)
      call r_make_mask(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-#ifdef __CUDA
+#ifdef _CUDA
      call gpu_make_mask(pst%s,ilevel)
 #else
      call make_mask(pst%s%m,ilevel)
@@ -750,7 +771,7 @@ recursive subroutine r_make_bc_rhs(pst,input,input_size)
      call r_make_bc_rhs(pst%pLower,input,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-#ifdef __CUDA
+#ifdef _CUDA
      call gpu_make_rhs(pst%s,input%ilevel)
 #else
      call make_bc_rhs(pst%s,input%ilevel,input%icount)

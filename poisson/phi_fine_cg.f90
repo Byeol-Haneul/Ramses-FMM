@@ -540,7 +540,7 @@ recursive subroutine r_make_initial_phi(pst,input,input_size)
      call r_make_initial_phi(pst%pLower,input,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-#ifdef __CUDA
+#ifdef _CUDA
      call gpu_init_phi(pst%s,input%ilevel,input%icount)
 #else
      call make_initial_phi(pst%s,input%ilevel,input%icount)

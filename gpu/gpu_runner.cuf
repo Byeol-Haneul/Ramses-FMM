@@ -1,5 +1,6 @@
 module gpu_runner
   use amr_parameters, only: ndim, twotondim, threetondim, dp
+  use hydro_parameters, only: nvar
   use oct_commons, only: oct
   use gpu_utils
   use cudafor
@@ -37,10 +38,6 @@ module gpu_runner
   integer(kind=4), device, allocatable, dimension(:) :: prefix_sum
   integer(kind=4), device, allocatable, dimension(:) :: partial_sums_0, partial_sums_1, partial_sums_2
 
-  !> The Fortran array of hydro variables of ghost and halo octs on the host and on the device
-  real(kind=dp), allocatable, dimension(:) :: uold_send_host, uold_recv_host
-  real(kind=dp), device, allocatable, dimension(:) :: uold_send_device, uold_recv_device
-
   !> Arrays to hold the multigrid variables on the device
   type(oct), device, allocatable, dimension(:) :: grid_mg
   integer(kind=4), device, allocatable, dimension(:) :: father_mg
@@ -49,6 +46,10 @@ module gpu_runner
   real(kind=dp), device, allocatable, dimension(:,:) :: phi_mg
   integer(kind=8), device, allocatable, dimension(:) :: hash_key_mg
   integer(kind=4), device, allocatable, dimension(:) :: hash_val_mg
+
+  !> The Fortran array of hydro variables of ghost and halo octs on the host and on the device
+  real(kind=dp), allocatable, dimension(:) :: uold_send_host, uold_recv_host
+  real(kind=dp), device, allocatable, dimension(:) :: uold_send_device, uold_recv_device
 
   !> The Fortran array of oct index of ghost and halo octs on the host and the device
   integer, allocatable, dimension(:) :: idx_send_host, idx_recv_host
@@ -299,24 +300,23 @@ contains
   !> @param[in] ilevel : The refinement level to update
   !>
   subroutine gpu_upload(sim, ilevel)
-    use nvtx
     use hydro_device, only: upload_kernel
     use ramses_commons, only: ramses_t
     type(ramses_t), intent(inout)::sim
     integer, intent(in)::ilevel
     !
     integer(kind=4) :: head_idx, num_octs
-    integer(kind=4) :: threads_per_block, num_blocks
+    integer(kind=4) :: num_threads, num_blocks
 
     head_idx = sim%m%head(ilevel+1)
     num_octs = sim%m%noct(ilevel+1)
-    num_blocks = num_octs
-    threads_per_block = 128
 
-    call nvtxStartRange("GPU Upload", color=0)!green
-    call upload_kernel<<<num_blocks, threads_per_block>>>(grid, father, uold, head_idx, num_octs)
-    call GPU_Error_Check(__FILE__, __LINE__)
-    call nvtxEndRange()
+    if (num_octs == 0) return
+
+    num_threads = 256
+    num_blocks = (num_octs + num_threads - 1) / num_threads
+
+    call upload_kernel<<<num_blocks, num_threads>>>(grid, father, uold, head_idx, num_octs)
 
   end subroutine gpu_upload
 
@@ -787,7 +787,7 @@ contains
   subroutine gpu_user_flag(sim, ilevel, nflag)
     use nvtx
     use hydro_device, only: hydro_flag_kernel
-    use flag_device, only: count_flag1_kernel
+    use flag_device, only: count_flag1_kernel, poisson_flag_kernel
     use ramses_commons, only: ramses_t
     type(ramses_t), intent(inout) :: sim
     integer, intent(in) :: ilevel
@@ -796,14 +796,31 @@ contains
     integer(kind=4) :: head_idx, num_octs
     integer :: threadsX_per_block, threadsY_per_block, num_threads, num_blocks
     real(kind=dp) :: gamma, err_grad_d, err_grad_p, floor_d, floor_p
+    real(kind=dp) :: m_refine, jeans_refine, mass_sph, dx, factG
     integer(kind=8) :: nflag_h
     integer(kind=8), device :: nflag_d
 
+    dx = sim%r%boxlen/2**ilevel
+    factG = 1
+    if (sim%r%cosmo) factG = 3d0 / 8d0 /ACOS(-1d0) * sim%g%omega_m * sim%g%aexp
     gamma = sim%r%gamma
     err_grad_d = sim%r%err_grad_d
     err_grad_p = sim%r%err_grad_p
     floor_d = sim%r%floor_d
     floor_p = sim%r%floor_p
+    mass_sph = sim%r%mass_sph
+    m_refine = sim%r%m_refine(ilevel)
+    jeans_refine = sim%r%jeans_refine(ilevel)
+
+    head_idx = sim%m%head(ilevel)
+    num_octs = sim%m%noct(ilevel)
+    threadsX_per_block = 8
+    threadsY_per_block = 16
+    num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
+    if(num_octs > 0)then
+       call poisson_flag_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(flag1, nref, uold, &
+            & head_idx, num_octs, gamma, mass_sph, m_refine, jeans_refine, factG, dx)
+    endif
 
     head_idx = sim%m%head(ilevel)
     num_octs = sim%m%noct(ilevel)
@@ -1059,9 +1076,9 @@ contains
     threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
 
-    if (num_octs > 0) then
-       call reset_rho<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(rho, nref, head_idx, num_octs)
-    endif
+    if (num_octs == 0) return
+
+    call reset_rho<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(rho, nref, head_idx, num_octs)
 
   end subroutine gpu_reset_rho
 
@@ -1079,9 +1096,9 @@ contains
 
     integer(kind=4) :: head_idx, num_octs
     integer :: threadsX_per_block, threadsY_per_block, num_threads, num_blocks
-    real(kind=dp) :: dx
+    real(kind=8) :: dx
 
-    dx = sim%r%boxlen/2**ilevel
+    dx = real(sim%r%boxlen/2**ilevel, kind=8)
 
     head_idx = sim%m%head(ilevel)
     num_octs = sim%m%noct(ilevel)
@@ -1089,10 +1106,10 @@ contains
     threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
 
-    if (num_octs > 0) then
-       call multipole_leaf<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(unew, uold, grid, &
-            & head_idx, num_octs, dx)
-    endif
+    if (num_octs == 0) return
+
+    call multipole_leaf<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(unew, uold, grid, &
+         & head_idx, num_octs, dx)
 
   end subroutine gpu_multipole_leaf
 
@@ -1105,40 +1122,22 @@ contains
   subroutine gpu_multipole_split(sim, ilevel)
     use rho_device, only: multipole_upload, multipole_tot
     use ramses_commons, only: ramses_t
+    implicit none
     type(ramses_t), intent(inout)::sim
     integer, intent(in)::ilevel
     !
     integer(kind=4) :: head_idx, num_octs
     integer(kind=4) :: num_blocks, num_threads
-    real(kind=8), device :: multipole_d(1:ndim+1)
-    real(kind=8) :: multipole_h(1:ndim+1)
+    real(kind=8), device :: multipole_d(ndim+1)
+    real(kind=8) :: multipole_h(ndim+1)
 
     head_idx = sim%m%head(ilevel+1)
     num_octs = sim%m%noct(ilevel+1)
-    num_blocks = num_octs
-    num_threads = 128
+    num_threads = 256
+    num_blocks = (num_octs + num_threads - 1) / num_threads
 
     if (num_octs > 0) then
        call multipole_upload<<<num_blocks, num_threads>>>(grid, father, unew, head_idx, num_octs)
-    end if
-
-    if (ilevel == sim%r%levelmin) then
-
-       multipole_h = 0d0
-       multipole_d = multipole_h
-
-       head_idx = sim%m%head(ilevel)
-       num_octs = sim%m%noct(ilevel)
-       num_threads = 256
-       num_blocks = (num_octs * twotondim + num_threads - 1 ) / num_threads
-
-       if (num_octs > 0) then
-          call multipole_tot<<<num_blocks, num_threads>>>(unew, head_idx, num_octs, multipole_d)
-       end if
-
-       multipole_h = multipole_d
-       sim%g%multipole%q = sim%g%multipole%q + multipole_h
-
     end if
 
   end subroutine gpu_multipole_split
@@ -1159,20 +1158,40 @@ contains
     integer, intent(in)::ilevel
     !
     integer(kind=4) :: head_idx, num_subgrids
-    integer :: threads_per_block, num_blocks
+    integer(kind=4) :: num_blocks, num_threads, num_octs
+    real(kind=8), device :: multipole_d(ndim+1)
+    real(kind=8) :: multipole_h(ndim+1)
     real(kind=8) :: dx
-
-    if(sim%r%verbose.and.sim%g%myid==1)write(*,'("   Entering gpu_cic_multipole for level ",I2)')ilevel
 
     dx = real(sim%r%boxlen/2**ilevel, kind=8)
 
     head_idx = (sim%m%head(ilevel) - 1) / nsubgridtondim + 1
     num_subgrids = sim%m%noct(ilevel) / nsubgridtondim
     num_blocks = num_subgrids
-    threads_per_block = 64 ! Optimize later
+    num_threads = 64
 
-    call multipole_cic<<<num_blocks, threads_per_block>>>(unew, rho, grid, nbor, &
-         & head_idx, num_subgrids, dx, box_size, periodic)
+    if (num_subgrids > 0) then
+       call multipole_cic<<<num_blocks, num_threads>>>(unew, rho, grid, nbor, &
+            & head_idx, num_subgrids, dx, box_size, periodic, sim%r%ngridmax)
+    endif
+
+    if (ilevel == sim%r%levelmin) then
+
+       multipole_d = 0d0
+
+       head_idx = sim%m%head(ilevel)
+       num_octs = sim%m%noct(ilevel)
+       num_threads = 256
+       num_blocks = (num_octs * twotondim + num_threads - 1 ) / num_threads
+
+       if (num_octs > 0) then
+          call multipole_tot<<<num_blocks, num_threads>>>(unew, head_idx, num_octs, multipole_d)
+       end if
+
+       multipole_h = multipole_d
+       sim%g%multipole%q = sim%g%multipole%q + multipole_h
+
+    end if
 
   end subroutine gpu_cic_multipole
 
@@ -1197,9 +1216,10 @@ contains
     threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
 
-    if (num_octs > 0) then
-       call save_phi_old<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(phi_old, phi, head_idx, num_octs)
-    endif
+    if (num_octs == 0) return
+
+    call save_phi_old<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(phi_old, phi, &
+         & head_idx, num_octs)
 
   end subroutine gpu_save_phi_old
 
@@ -1324,10 +1344,10 @@ contains
     threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
 
-    if (num_octs > 0) then
-       call reset_rhs_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(phi, rho, f, nbor, &
-            & head_idx, num_octs, fourpi, offset, oneoverdx2)
-    endif
+    if (num_octs == 0) return
+
+    call reset_rhs_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(phi, rho, f, nbor, &
+         & head_idx, num_octs, fourpi, offset, oneoverdx2)
 
   end subroutine gpu_make_rhs
 
@@ -1370,8 +1390,8 @@ contains
     num_threads = 128
     num_blocks = (num_octs + num_threads - 1) / num_threads
 
-    sim%m_mg%head(ifine+1) = sim%m_mg%tail(ifine) + 1
-    head_mg = sim%m_mg%head(ifine+1)
+    sim%m_mg%head(ifine-1) = sim%m_mg%tail(ifine) + 1
+    head_mg = sim%m_mg%head(ifine-1)
 
     ! Loop over oct coloring (parent oct cell index)
     do cell_ind = 1, twotondim
@@ -1437,8 +1457,8 @@ contains
        end do
     end do
 
-    sim%m_mg%tail(ifine+1) = head_mg - 1
-    sim%m_mg%noct(ifine+1) = sim%m_mg%tail(ifine+1) - sim%m_mg%head(ifine+1) + 1
+    sim%m_mg%tail(ifine-1) = head_mg - 1
+    sim%m_mg%noct(ifine-1) = sim%m_mg%tail(ifine-1) - sim%m_mg%head(ifine-1) + 1
 
     ! Compute final father array
     if (ifine == ilevel) then
@@ -1454,10 +1474,12 @@ contains
     endif
 
     ! Compute final nbor array
-    head_idx = sim%m_mg%head(ifine+1)
-    num_octs = sim%m_mg%noct(ifine+1)
+    head_idx = sim%m_mg%head(ifine-1)
+    num_octs = sim%m_mg%noct(ifine-1)
     num_threads = 128
     num_blocks = (num_octs + num_threads - 1) / num_threads
+
+    if (num_octs == 0) return
 
     do ind = 1, threetondim
        call update_nbor_array<<<num_blocks, num_threads>>>(nbor_mg, grid_mg, hash_key_mg, hash_val_mg, &
@@ -1465,6 +1487,39 @@ contains
     end do
 
   end subroutine gpu_build_mg
+
+  !> @brief
+  !> This routine cleans up the MG hierarchy.
+  !>
+  !> @detail
+  !> It wipes out clean the hash table and the MG levels for level ilevel.
+  !>
+  !> @param[in] sim : The simulation object
+  !> @param[in] ilevel : The refinement level to update
+  !>
+  subroutine gpu_clean_mg(sim)
+    use refine_device, only: free_hash_kernel
+    use ramses_commons, only: ramses_t
+    implicit none
+    type(ramses_t), intent(inout) :: sim
+    !
+    integer(kind=4) :: head_idx, num_octs, num_blocks, num_threads
+
+    head_idx = 1
+    num_octs = sim%m_mg%tail(sim%r%bound_levelmin)
+    num_threads = 128
+    num_blocks = (num_octs + num_threads - 1) / num_threads
+
+    if (num_octs > 0) then
+       call free_hash_kernel<<<num_blocks, num_threads>>>(grid_mg, hash_key_mg, hash_val_mg, sim%m_mg%hash_size, &
+            & ckey_max, key_off, head_idx, num_octs)
+    endif
+
+    sim%m_mg%head=1
+    sim%m_mg%tail=0
+    sim%m_mg%noct=0
+
+  end subroutine gpu_clean_mg
 
   !> @brief
   !> This routine restrict the mask from a fine level to a coarser level.
@@ -1501,7 +1556,7 @@ contains
 
     if (num_octs == 0) return
 
-    num_threads = 128
+    num_threads = 256
     num_blocks = (num_octs + num_threads - 1) / num_threads
 
     ! Restrict mask from fine to coarse grid
@@ -1691,7 +1746,7 @@ contains
 
     if (num_octs == 0) return
 
-    num_threads = 128
+    num_threads = 256
     num_blocks = (num_octs + num_threads - 1) / num_threads
 
     ! Restrict mask from fine to coarse grid
@@ -1774,6 +1829,7 @@ contains
     real(kind=8) :: dx2
 
     dx2  = (sim%r%boxlen/2**ilevel)**2
+    norm = 0d0
 
     head_idx = sim%m%head(ilevel)
     num_octs = sim%m%noct(ilevel)

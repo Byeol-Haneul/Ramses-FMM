@@ -47,8 +47,8 @@ module mg_device
        &   -1, -1, +1, +1, -1, +1, -1, +1, +1, +1, +1, +1/), (/3,8/) )
 
   ! Red-black ordering cell index
-  integer, constant :: ired  (4) = (/ 1, 4, 6, 7 /)
-  integer, constant :: iblack(4) = (/ 2, 3, 5, 8 /)
+  integer, parameter :: ired  (4) = (/ 1, 4, 6, 7 /)
+  integer, parameter :: iblack(4) = (/ 2, 3, 5, 8 /)
 
 contains
 
