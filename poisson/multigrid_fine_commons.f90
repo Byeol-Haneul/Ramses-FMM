@@ -400,8 +400,8 @@ recursive subroutine r_build_mg(pst,input,input_size)
      else
         call build_mg(pst%s,pst%s%m_mg,input%ifine)
      end if
-  endif
 #endif
+  endif
 
 end subroutine r_build_mg
 

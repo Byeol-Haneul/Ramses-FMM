@@ -1,5 +1,10 @@
 module multigrid_fine_coarse
 
+#ifdef _CUDA
+  use gpu_runner, only: gpu_restrict_mask, gpu_cmp_residual, gpu_gauss_seidel, &
+       & gpu_restrict_residual, gpu_interpolate_correct, gpu_reset_corr, gpu_residual_norm
+#endif
+
   type :: level_count_t
      integer::ilevel,icount
   end type level_count_t
@@ -12,10 +17,6 @@ module multigrid_fine_coarse
      integer::ilevel,ifine
      logical::safe,redstep
   end type gs_step_t
-
-#ifdef _CUDA
-  use gpu_runner, only: gpu_restrict_mask, gpu_cmp_residual, gpu_gauss_seidel, gpu_restrict_residual, gpu_interpolate_correct
-#endif
 
 contains
 
@@ -237,7 +238,7 @@ recursive subroutine r_cmp_residual_mg(pst,input,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
 #ifdef _CUDA
-     call gpu_cmp_residual(pst, input%ilevel, input%ifine)
+     call gpu_cmp_residual(pst%s, input%ilevel, input%ifine)
 #else
      if(input%ifine==input%ilevel)then
         call cmp_residual_mg(pst%s,pst%s%m,input%ifine)
