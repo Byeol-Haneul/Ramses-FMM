@@ -1211,20 +1211,371 @@ end subroutine gpu_cic_part
 !##############################################################################
 !##############################################################################
 !##############################################################################
-  !> Stub: CIC kick-drift / kick-only on DM particles at level `ilevel`.
-  !> See §4.4 for the real algorithm — symmetric counterpart of `gpu_cic_part`,
-  !> reads f from device and updates xp/vp/fp.
-  subroutine gpu_kick_drift_part(sim, ilevel, action_part)
-    use nvtx
-    use ramses_commons, only: ramses_t
-    type(ramses_t), intent(inout) :: sim
-    integer, intent(in) :: ilevel
-    integer, intent(in) :: action_part
+! §4.4 — gpu_kick_drift_part
+!
+! Symmetric counterpart of gpu_cic_part (§4.3). Reads device `f` (3-force) at
+! the 27 neighbor cells of each particle's host cell at level (ilevel+1),
+! interpolates with the SAME CIC weight formulation as the §4.3 deposit, and
+! updates vp / xp / fp / levelp per `action_part`.
+!
+! Mirrors host `cic_kick_drift_part` (`pm/move_fine.f90:191-467`). Phase-1 scope
+! (locked, gpu_part_prompt.md §15.3): DM only (`pst%s%p`, PART_TYPE), periodic
+! BC, no analytical-gravity branch (host lines 236-276), no sink-descent
+! branch (host lines 402-429), no `phip` (not allocated for DM), no static
+! particles. Particles for which any of the 8 nonzero-weight cells is missing
+! on this rank get `ff = 0` (single-rank, periodic ICs always resolve all 8).
+!
+! Slice: `[headp(ilevel) : tailp(ilevel)]` — matches host kick-drift exactly,
+! NOT the §4.3 cic slice `[headp(ilevel) : tailp(nlevelmax)]`. The cic-part
+! kernel deposits density at finer levels too; kick-drift only touches
+! particles whose level == ilevel (the level the AMR step is currently
+! processing).
+!
+! Weight equivalence: the §4.3 formulation
+!     wx(0) = max(0, 0.5 - f), wx(1) = 1 - |f - 0.5|, wx(2) = max(0, f - 0.5)
+! is algebraically identical to the host's `dl/dr` formulation
+!     dr_unrounded = x + 0.5;  ir = int(dr_unrounded); dr = dr_unrounded - ir
+!     dl = 1 - dr; il = ir - 1
+! when restricted to the two non-zero cells per axis. The 27-cell "uniform"
+! evaluation just keeps the third (zero-weight) cell in the loop for
+! warp-uniform control flow (gpu_part_prompt.md §15.2). See modelA.md §4.3
+! decision log for the equivalence proof.
 
-    call nvtxStartRange("gpu_kick_drift_part (stub)", color=4) ! purple
-    ! TODO §4.4: load 6^3 f tile, evaluate CIC weights, write fp/vp/xp,
-    !            apply periodic wrap. Both action_kick_only (=1) and
-    !            action_kick_drift (=2) must be supported.
-    call nvtxEndRange()
+!> Per-particle CIC force-gather + kick / drift. One thread per particle in
+!> the slice [head_idx, head_idx + num_parts - 1]. For each particle:
+!>   1. compute host_ckey at level (ilevel+1), 3-axis CIC weights, gather ff
+!>      from device f over the 27 neighbor cells (19 of them have w == 0);
+!>   2. cache ff into device fp(ipart, :) (host pm/move_fine.f90:387-389);
+!>   3. apply kick / drift / kick-only update on vp / xp;
+!>   4. (kick-drift only) periodic wrap on xp.
+!> Bit-equivalent to host `cic_kick_drift_part` for periodic DM with all 8
+!> CIC cells resolvable on the local rank.
+attributes(global) subroutine kick_drift_part_kernel(xp, vp, fp, levelp, &
+     f_d, &
+     hash_key_d, hash_val_d, hash_size_d, ckey_max_d, key_off_d, &
+     box_ckey_min_d, box_ckey_max_d, periodic_d, box_size_d, &
+     skip1, skip2, skip3, dx_loc, &
+     dt_kick, dtnew_d, dtold_d, &
+     action_part, has_fp, ilevel, head_idx, num_parts, leading)
+  integer(kind=4), intent(in), value :: leading
+  real(kind=dp),   device :: xp(*)
+  real(kind=dp),   device :: vp(*)
+  real(kind=dp),   device :: fp(*)
+  integer(kind=4), device :: levelp(*)
+  real(kind=dp),   device :: f_d(1:twotondim, 1:ndim, *)
+  integer(kind=8), device :: hash_key_d(*)
+  integer(kind=4), device :: hash_val_d(*)
+  integer(kind=4), intent(in), value :: hash_size_d
+  integer(kind=4), device :: ckey_max_d(*)
+  integer(kind=8), device :: key_off_d(*)
+  integer(kind=4), device :: box_ckey_min_d(1:3, *)
+  integer(kind=4), device :: box_ckey_max_d(1:3, *)
+  logical,         device :: periodic_d(1:3)
+  real(kind=8),    device :: box_size_d(1:3)
+  real(kind=8), intent(in), value :: skip1, skip2, skip3
+  real(kind=8), intent(in), value :: dx_loc
+  real(kind=8), intent(in), value :: dt_kick    ! g%dtnew(ilevel) for kick_drift; unused for kick_only
+  real(kind=8),    device :: dtnew_d(*)
+  real(kind=8),    device :: dtold_d(*)
+  integer(kind=4), intent(in), value :: action_part
+  logical,         intent(in), value :: has_fp
+  integer(kind=4), intent(in), value :: ilevel
+  integer(kind=4), intent(in), value :: head_idx
+  integer(kind=4), intent(in), value :: num_parts
 
-  end subroutine gpu_kick_drift_part
+  integer :: thread_idx, block_idx, idx, ipart
+  integer :: i, j, k, idim, igrid_target, cell_idx_target
+  integer(kind=4) :: host_ckey(1:3), target_ckey(1:3), father_ckey(1:3), ii(1:3)
+  integer(kind=4) :: box_min(1:3), box_max(1:3), box_span
+  integer(kind=8) :: nx8, offset8, key
+  real(kind=8) :: skip(1:3), x(1:3), f(1:3), ff(1:3)
+  real(kind=8) :: wx(0:2), wy(0:2), wz(0:2), w
+  real(kind=8) :: vp_local(1:3), xp_local(1:3)
+  real(kind=8) :: dt_local, half
+  real(kind=8) :: bs(1:3)
+  integer(kind=4) :: lev
+  logical :: in_domain, ok_full
+
+  thread_idx = threadIdx%x - 1
+  block_idx  = blockIdx%x  - 1
+  idx = thread_idx + block_idx * blockDim%x
+  if (idx >= num_parts) return
+  ipart = head_idx + idx
+
+  skip(1) = skip1
+  skip(2) = skip2
+  skip(3) = skip3
+
+  ! Position in level-(ilevel+1) cell coords. Same encoding as §4.3.
+  host_ckey(1:3) = 0
+  f(1:3) = 0d0
+  do idim = 1, ndim
+     x(idim) = (xp(ipart + (idim-1)*leading) + skip(idim)) / dx_loc
+     host_ckey(idim) = floor(x(idim))
+     f(idim) = x(idim) - host_ckey(idim)
+  end do
+
+  ! Per-axis CIC weights (matches §4.3 cic_part_kernel). Algebraically equal
+  ! to host's `dl, dr` for the two non-zero cells.
+  wx(0) = max(0d0, 0.5d0 - f(1))
+  wx(1) = 1d0 - abs(f(1) - 0.5d0)
+  wx(2) = max(0d0, f(1) - 0.5d0)
+  wy(0) = max(0d0, 0.5d0 - f(2))
+  wy(1) = 1d0 - abs(f(2) - 0.5d0)
+  wy(2) = max(0d0, f(2) - 0.5d0)
+  wz(0) = max(0d0, 0.5d0 - f(3))
+  wz(1) = 1d0 - abs(f(3) - 0.5d0)
+  wz(2) = max(0d0, f(3) - 0.5d0)
+  if (ndim < 3) then
+     wz(0) = 0d0; wz(1) = 1d0; wz(2) = 0d0
+  endif
+  if (ndim < 2) then
+     wy(0) = 0d0; wy(1) = 1d0; wy(2) = 0d0
+  endif
+
+  ! Box bounds at level (ilevel+1) for periodic wrap on neighbor cells.
+  box_min(1:3) = 0
+  box_max(1:3) = 1
+  do idim = 1, ndim
+     box_min(idim) = box_ckey_min_d(idim, ilevel+1)
+     box_max(idim) = box_ckey_max_d(idim, ilevel+1)
+  end do
+
+  ! Gather force from the 27 neighbor cells. Track ok_full so a particle that
+  ! hits a missing cell on this rank gets ff = 0 (host fallback to coarser
+  ! level is not implemented in phase 1 — periodic single-rank ICs always
+  ! resolve all 8 non-zero cells).
+  ff(1:3) = 0d0
+  ok_full = .true.
+  do k = 0, 2
+     do j = 0, 2
+        do i = 0, 2
+           w = wx(i) * wy(j) * wz(k)
+           ! Skip the algebraically-zero cells: cheaper than 27 hash_get calls
+           ! and avoids spurious ok_full=.false. when the zero-weight cell is
+           ! genuinely missing from the rank. For non-zero-weight cells the
+           ! work is uniform across the 8 (in 3D), still warp-friendly.
+           if (w == 0d0) cycle
+
+           target_ckey(1) = host_ckey(1) + (i - 1)
+           target_ckey(2) = host_ckey(2) + (j - 1)
+           target_ckey(3) = host_ckey(3) + (k - 1)
+
+           in_domain = .true.
+           do idim = 1, ndim
+              if (periodic_d(idim)) then
+                 box_span = box_max(idim) - box_min(idim)
+                 if (target_ckey(idim) <  box_min(idim)) target_ckey(idim) = target_ckey(idim) + box_span
+                 if (target_ckey(idim) >= box_max(idim)) target_ckey(idim) = target_ckey(idim) - box_span
+              else
+                 if (target_ckey(idim) <  box_min(idim)) in_domain = .false.
+                 if (target_ckey(idim) >= box_max(idim)) in_domain = .false.
+              endif
+           end do
+           if (.not. in_domain) then
+              ok_full = .false.
+              cycle
+           endif
+
+           ! Father oct + cell-within-father at level (ilevel+1). Same as §4.3.
+           father_ckey(1) = target_ckey(1) / 2
+           father_ckey(2) = target_ckey(2) / 2
+           father_ckey(3) = target_ckey(3) / 2
+           ii(1) = target_ckey(1) - 2 * father_ckey(1)
+           ii(2) = target_ckey(2) - 2 * father_ckey(2)
+           ii(3) = target_ckey(3) - 2 * father_ckey(3)
+           cell_idx_target = 1 + ii(1) + 2*ii(2) + 4*ii(3)
+
+           nx8 = int(ckey_max_d(ilevel), kind=8)
+           offset8 = key_off_d(ilevel)
+           key = offset8 + int(father_ckey(1), kind=8) &
+                        + int(father_ckey(2), kind=8) * nx8 &
+                        + int(father_ckey(3), kind=8) * nx8 * nx8
+           igrid_target = hash_get(hash_key_d, hash_val_d, hash_size_d, key)
+           if (igrid_target == 0) then
+              ok_full = .false.
+              cycle
+           endif
+
+           do idim = 1, ndim
+              ff(idim) = ff(idim) + w * f_d(cell_idx_target, idim, igrid_target)
+           end do
+        end do
+     end do
+  end do
+  if (.not. ok_full) ff(1:3) = 0d0
+
+  ! Cache ff onto particle (host pm/move_fine.f90:387-389). DM has fp
+  ! allocated; has_fp guards against future call sites where it isn't.
+  if (has_fp) then
+     do idim = 1, ndim
+        fp(ipart + (idim-1)*leading) = ff(idim)
+     end do
+  endif
+
+  ! Load current vp / xp into registers.
+  do idim = 1, ndim
+     vp_local(idim) = vp(ipart + (idim-1)*leading)
+     xp_local(idim) = xp(ipart + (idim-1)*leading)
+  end do
+  half = 0.5d0
+
+  ! Action codes match pm_parameters.f90:5-6 verbatim:
+  !   action_kick_only  = 1
+  !   action_kick_drift = 2
+  ! Kernel uses literals to avoid pulling pm_parameters into module gpu_runner.
+  if (action_part == 2) then  ! action_kick_drift
+     ! Match host pm/move_fine.f90:394-401.
+     do idim = 1, ndim
+        vp_local(idim) = vp_local(idim) + ff(idim) * half * dt_kick
+     end do
+     do idim = 1, ndim
+        xp_local(idim) = xp_local(idim) + vp_local(idim) * dt_kick
+     end do
+
+     ! Periodic wrap on xp (host lines 454-463). Single-step — Model C
+     ! ecfdd151: input-side uses iterated wrap, kick-drift keeps single step.
+     bs(1:3) = 0d0
+     do idim = 1, ndim
+        bs(idim) = box_size_d(idim)
+     end do
+     do idim = 1, ndim
+        if (periodic_d(idim)) then
+           if (xp_local(idim) <  0d0)        xp_local(idim) = xp_local(idim) + bs(idim)
+           if (xp_local(idim) >= bs(idim))   xp_local(idim) = xp_local(idim) - bs(idim)
+        endif
+     end do
+  else if (action_part == 1) then  ! action_kick_only
+     ! Host pm/move_fine.f90:431-446: dteff depends on the particle's current
+     ! levelp; if it lags behind ilevel, use dtold (previous step) for that
+     ! level; otherwise dtnew. After the kick, levelp is reset to ilevel.
+     lev = levelp(ipart)
+     if (lev >= ilevel) then
+        dt_local = dtnew_d(lev)
+     else
+        dt_local = dtold_d(lev)
+     endif
+     levelp(ipart) = ilevel
+     do idim = 1, ndim
+        vp_local(idim) = vp_local(idim) + ff(idim) * half * dt_local
+     end do
+  endif
+
+  ! Store updated vp / xp.
+  do idim = 1, ndim
+     vp(ipart + (idim-1)*leading) = vp_local(idim)
+  end do
+  if (action_part == 2) then  ! action_kick_drift
+     do idim = 1, ndim
+        xp(ipart + (idim-1)*leading) = xp_local(idim)
+     end do
+  endif
+end subroutine kick_drift_part_kernel
+
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!> §4.4 host dispatcher — DM kick-drift / kick-only at level ilevel using the
+!> device-resident force `f` (written by the GPU multigrid solver and
+!> consumed here without a host round-trip). Matches host
+!> `cic_kick_drift_part` for the main-loop branch (`headp(ilevel)..
+!> tailp(ilevel)`); analytical-gravity (levelmin-1) and sink-descent paths
+!> are out of scope for phase 1.
+!>
+!> Per-call sequence:
+!>   1. Empty-slice / unallocated-xp / unallocated-f guards.
+!>   2. Stage `g%dtnew(:)` and `g%dtold(:)` onto small device scratch arrays.
+!>   3. kick_drift_part_kernel<<<>>> over the level slice.
+!>   4. (caller wires gpu_to_host_part for harness validity, see §0.5)
+!>
+!> action_part values come from pm_parameters.f90:5-6 — `action_kick_only=1`,
+!> `action_kick_drift=2`. Other values are no-ops (defensive).
+subroutine gpu_kick_drift_part(sim, ilevel, action_part)
+  use nvtx
+  use ramses_commons, only: ramses_t
+  use amr_parameters, only: MAXLEVEL
+  use pm_parameters, only: action_kick_only, action_kick_drift
+  type(ramses_t), intent(inout) :: sim
+  integer, intent(in) :: ilevel
+  integer, intent(in) :: action_part
+
+  integer(kind=4) :: head_idx, num_parts, leading
+  integer :: num_threads, num_blocks
+  real(kind=8) :: dx_loc, skip1, skip2, skip3, dt_kick
+  logical :: has_fp_flag
+  real(kind=8), device, allocatable :: dtnew_d(:), dtold_d(:)
+
+  call nvtxStartRange("gpu_kick_drift_part", color=4) ! purple
+
+  if (action_part /= action_kick_only .and. action_part /= action_kick_drift) then
+     call nvtxEndRange()
+     return
+  endif
+
+  if (.not. allocated(xp)) then
+     call nvtxEndRange()
+     return
+  endif
+
+#ifdef GRAV
+  if (.not. allocated(f)) then
+     ! No device force field — nothing to interpolate from. Bail.
+     call nvtxEndRange()
+     return
+  endif
+#else
+  ! No gravity build → no force → no kick-drift work to do.
+  call nvtxEndRange()
+  return
+#endif
+
+  head_idx  = sim%p%headp(ilevel)
+  num_parts = sim%p%tailp(ilevel) - head_idx + 1
+  if (num_parts <= 0) then
+     call nvtxEndRange()
+     return
+  endif
+
+  leading = size(xp, 1)
+  num_threads = 128
+  num_blocks  = (num_parts + num_threads - 1) / num_threads
+
+  dx_loc = sim%r%boxlen / 2d0**ilevel
+
+  skip1 = 0d0
+  skip2 = 0d0
+  skip3 = 0d0
+  if (ndim >= 1) skip1 = sim%m%skip(1)
+  if (ndim >= 2) skip2 = sim%m%skip(2)
+  if (ndim >= 3) skip3 = sim%m%skip(3)
+
+  dt_kick = sim%g%dtnew(ilevel)
+
+  has_fp_flag = allocated(fp)
+
+  ! Stage dtnew/dtold onto the device. MAXLEVEL=65 -> 1 KB total, allocated
+  ! per call, deallocated at exit. Both arrays are needed by the kick_only
+  ! branch (host conditions on levelp(ipart) <> ilevel); kick_drift uses
+  ! only the scalar dt_kick but we stage both unconditionally for kernel
+  ! signature symmetry.
+  allocate(dtnew_d(1:MAXLEVEL))
+  allocate(dtold_d(1:MAXLEVEL))
+  dtnew_d = sim%g%dtnew
+  dtold_d = sim%g%dtold
+
+#ifdef GRAV
+  call kick_drift_part_kernel<<<num_blocks, num_threads>>>(xp, vp, fp, levelp, &
+       f, &
+       hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, &
+       box_ckey_min, box_ckey_max, periodic, box_size, &
+       skip1, skip2, skip3, dx_loc, &
+       dt_kick, dtnew_d, dtold_d, &
+       action_part, has_fp_flag, ilevel, head_idx, num_parts, leading)
+  call GPU_Error_Check("gpu/gpu_part.cuf", 0)
+#endif
+
+  deallocate(dtnew_d, dtold_d)
+
+  call nvtxEndRange()
+end subroutine gpu_kick_drift_part
