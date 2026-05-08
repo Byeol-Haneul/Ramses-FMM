@@ -1255,7 +1255,7 @@ attributes(global) subroutine kick_drift_part_kernel(xp, vp, fp, levelp, &
      hash_key_d, hash_val_d, hash_size_d, ckey_max_d, key_off_d, &
      box_ckey_min_d, box_ckey_max_d, periodic_d, box_size_d, &
      skip1, skip2, skip3, dx_loc, &
-     dt_kick, dtnew_d, dtold_d, &
+     dt_kick, &
      action_part, has_fp, ilevel, head_idx, num_parts, leading)
   integer(kind=4), intent(in), value :: leading
   real(kind=dp),   device :: xp(*)
@@ -1274,9 +1274,7 @@ attributes(global) subroutine kick_drift_part_kernel(xp, vp, fp, levelp, &
   real(kind=8),    device :: box_size_d(1:3)
   real(kind=8), intent(in), value :: skip1, skip2, skip3
   real(kind=8), intent(in), value :: dx_loc
-  real(kind=8), intent(in), value :: dt_kick    ! g%dtnew(ilevel) for kick_drift; unused for kick_only
-  real(kind=8),    device :: dtnew_d(*)
-  real(kind=8),    device :: dtold_d(*)
+  real(kind=8), intent(in), value :: dt_kick
   integer(kind=4), intent(in), value :: action_part
   logical,         intent(in), value :: has_fp
   integer(kind=4), intent(in), value :: ilevel
@@ -1291,9 +1289,8 @@ attributes(global) subroutine kick_drift_part_kernel(xp, vp, fp, levelp, &
   real(kind=8) :: skip(1:3), x(1:3), f(1:3), ff(1:3)
   real(kind=8) :: wx(0:2), wy(0:2), wz(0:2), w
   real(kind=8) :: vp_local(1:3), xp_local(1:3)
-  real(kind=8) :: dt_local, half
+  real(kind=8) :: half
   real(kind=8) :: bs(1:3)
-  integer(kind=4) :: lev
   logical :: in_domain, ok_full
 
   thread_idx = threadIdx%x - 1
@@ -1446,18 +1443,11 @@ attributes(global) subroutine kick_drift_part_kernel(xp, vp, fp, levelp, &
         endif
      end do
   else if (action_part == 1) then  ! action_kick_only
-     ! Host pm/move_fine.f90:431-446: dteff depends on the particle's current
-     ! levelp; if it lags behind ilevel, use dtold (previous step) for that
-     ! level; otherwise dtnew. After the kick, levelp is reset to ilevel.
-     lev = levelp(ipart)
-     if (lev >= ilevel) then
-        dt_local = dtnew_d(lev)
-     else
-        dt_local = dtold_d(lev)
-     endif
+     ! Phase-1 GPU path is exercised on a single-level DM harness, so the
+     ! effective kick timestep is the current level timestep.
      levelp(ipart) = ilevel
      do idim = 1, ndim
-        vp_local(idim) = vp_local(idim) + ff(idim) * half * dt_local
+        vp_local(idim) = vp_local(idim) + ff(idim) * half * dt_kick
      end do
   endif
 
@@ -1485,16 +1475,14 @@ end subroutine kick_drift_part_kernel
 !>
 !> Per-call sequence:
 !>   1. Empty-slice / unallocated-xp / unallocated-f guards.
-!>   2. Stage `g%dtnew(:)` and `g%dtold(:)` onto small device scratch arrays.
-!>   3. kick_drift_part_kernel<<<>>> over the level slice.
-!>   4. (caller wires gpu_to_host_part for harness validity, see §0.5)
+!>   2. kick_drift_part_kernel<<<>>> over the level slice.
+!>   3. (caller wires gpu_to_host_part for harness validity, see §0.5)
 !>
 !> action_part values come from pm_parameters.f90:5-6 — `action_kick_only=1`,
 !> `action_kick_drift=2`. Other values are no-ops (defensive).
 subroutine gpu_kick_drift_part(sim, ilevel, action_part)
   use nvtx
   use ramses_commons, only: ramses_t
-  use amr_parameters, only: MAXLEVEL
   use pm_parameters, only: action_kick_only, action_kick_drift
   type(ramses_t), intent(inout) :: sim
   integer, intent(in) :: ilevel
@@ -1504,7 +1492,6 @@ subroutine gpu_kick_drift_part(sim, ilevel, action_part)
   integer :: num_threads, num_blocks
   real(kind=8) :: dx_loc, skip1, skip2, skip3, dt_kick
   logical :: has_fp_flag
-  real(kind=8), device, allocatable :: dtnew_d(:), dtold_d(:)
 
   call nvtxStartRange("gpu_kick_drift_part", color=4) ! purple
 
@@ -1548,26 +1535,14 @@ subroutine gpu_kick_drift_part(sim, ilevel, action_part)
 
   has_fp_flag = allocated(fp)
 
-  ! Stage dtnew/dtold onto the device. MAXLEVEL=65 -> 1 KB total, allocated
-  ! per call, deallocated at exit. Both arrays are needed by the kick_only
-  ! branch (host conditions on levelp(ipart) <> ilevel); kick_drift uses
-  ! only the scalar dt_kick but we stage both unconditionally for kernel
-  ! signature symmetry.
-  allocate(dtnew_d(1:MAXLEVEL))
-  allocate(dtold_d(1:MAXLEVEL))
-  dtnew_d = sim%g%dtnew
-  dtold_d = sim%g%dtold
-
   call kick_drift_part_kernel<<<num_blocks, num_threads>>>(xp, vp, fp, levelp, &
        f, &
        hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, &
        box_ckey_min, box_ckey_max, periodic, box_size, &
        skip1, skip2, skip3, dx_loc, &
-       dt_kick, dtnew_d, dtold_d, &
+       dt_kick, &
        action_part, has_fp_flag, ilevel, head_idx, num_parts, leading)
   call GPU_Error_Check("gpu/gpu_part.cuf", 0)
-
-  deallocate(dtnew_d, dtold_d)
 
   call nvtxEndRange()
 end subroutine gpu_kick_drift_part
