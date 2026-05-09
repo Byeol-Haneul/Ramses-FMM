@@ -2,7 +2,7 @@ module rho_fine_module
 #ifdef _CUDA
   use gpu_runner, only: gpu_multipole_leaf, gpu_multipole_split, gpu_reset_rho, gpu_cic_multipole, &
        & gpu_split_part, gpu_sort_part, gpu_cic_part
-  use gpu_manager, only: gpu_to_host_part, gpu_to_host_mesh
+  use gpu_manager, only: gpu_to_host_part
 #endif
 contains
 !###############################################
@@ -717,14 +717,6 @@ recursive subroutine r_cic_part(pst,input_array,input_size)
         if(pst%s%r%sink)call cic_part(pst%s,pst%s%sink,ilevel,rtype)
         ! Sync device->host so dump_part_state sees the post-kernel state.
         call gpu_to_host_part(pst)
-#ifdef PART_DUMP
-        ! gpu_cic_part writes device rho/nref; dump_mesh_state reads host
-        ! arrays. Mirror them back so the harness sees post-deposit values.
-        ! Production builds (no PART_DUMP) keep rho/nref device-only forever
-        ! — consumed by the GPU multigrid solver and gpu_kick_drift_part.
-        ! See gpu_part_prompt.md §0.5 / modelC.md "GPU vs CPU harness signals".
-        call gpu_to_host_mesh(pst)
-#endif
         return
      endif
 #endif
