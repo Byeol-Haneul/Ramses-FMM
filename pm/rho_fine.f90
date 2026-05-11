@@ -2,7 +2,7 @@ module rho_fine_module
 #ifdef _CUDA
   use gpu_runner, only: gpu_multipole_leaf, gpu_multipole_split, gpu_reset_rho, gpu_cic_multipole, &
        & gpu_split_part, gpu_sort_part, gpu_cic_part
-  use gpu_manager, only: gpu_to_host_part
+  use gpu_manager, only: gpu_to_host_part, gpu_to_host_mesh
 #endif
 contains
 !###############################################
@@ -712,6 +712,9 @@ recursive subroutine r_cic_part(pst,input_array,input_size)
               warned_dm_dep_gpu=.true.
            endif
            call gpu_cic_part(pst%s, ilevel, rtype)
+           ! Host Poisson and PART_DUMP mesh dumps read pst%s%m%rho/nref.
+           ! Copy only after real GPU CIC has filled the device arrays.
+           call gpu_to_host_mesh(pst)
         endif
         if(pst%s%r%star)call cic_part(pst%s,pst%s%star,ilevel,rtype)
         if(pst%s%r%sink)call cic_part(pst%s,pst%s%sink,ilevel,rtype)

@@ -270,6 +270,25 @@ subroutine gpu_to_host_part(pst)
   call nvtxEndRange()
 
 end subroutine gpu_to_host_part
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
+!> Copy device mesh fields written by GPU CIC back to host. Call this only
+!> after gpu_cic_part has filled device rho/nref; copying stub or invalid mesh
+!> state can poison the host Poisson path.
+subroutine gpu_to_host_mesh(pst)
+  use ramses_commons, only: pst_t
+  implicit none
+  type(pst_t)::pst
+
+  call nvtxStartRange("Copy rho/nref from device to host", color=5)!red
+  if (allocated(rho))  pst%s%m%rho  = rho
+  if (allocated(nref)) pst%s%m%nref = nref
+  call GPU_Error_Check(__FILE__, __LINE__)
+  call nvtxEndRange()
+
+end subroutine gpu_to_host_mesh
 #endif
 !###########################################################
 !###########################################################

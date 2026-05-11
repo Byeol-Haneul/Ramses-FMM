@@ -6,8 +6,8 @@
 !>
 !> Phase 1 entry points:
 !>   gpu_split_part      (§4.1) — IMPLEMENTED.
-!>   gpu_sort_part       (§4.2) — stub.
-!>   gpu_cic_part        (§4.3) — stub.
+!>   gpu_sort_part       (§4.2) — IMPLEMENTED.
+!>   gpu_cic_part        (§4.3) — incremental global-atomic baseline.
 !>   gpu_kick_drift_part (§4.4) — stub.
 !>
 !> This file is `include`d from `module gpu_runner` (next to gpu_scan.cuf), so
@@ -879,27 +879,219 @@ end subroutine gpu_sort_part
 !##############################################################################
 !##############################################################################
 !##############################################################################
-  !> Stub: CIC mass deposition into rho at level `ilevel+1`.
-  !> See §4.3 for the real algorithm — cell-block 27-neighbor scheme,
-  !> mirroring `multipole_cic` in gpu_rho.cuf.
-  !> Temporarily restored by Model C after Marlowe jobs 301625/301824/301841
-  !> showed a pre-banner NVFORTRAN runtime segfault with the real CIC code
-  !> present. This isolates whether §4.3 codegen/module init is the trigger.
-  subroutine gpu_cic_part(sim, ilevel, rtype)
-    use nvtx
-    use ramses_commons, only: ramses_t
-    type(ramses_t), intent(inout) :: sim
-    integer, intent(in) :: ilevel
-    integer, intent(in) :: rtype
+! ============================================================================
+! §4.3 — CIC mass deposition, incremental global-atomic baseline
+! ============================================================================
 
-    call nvtxStartRange("gpu_cic_part (stub)", color=4) ! purple
-    ! TODO §4.3: per-cell particle index build + cell-block 6^3 shared-mem
-    !            atomicadd into local_rho, then flush inner 2^3 to global rho.
-    !            rho is left zero by reset_rho until this lands; downstream
-    !            multipole / phi / f are therefore wrong by design (§9 pass).
-    call nvtxEndRange()
+!> Deposit DM particle mass into device rho/nref. This is deliberately smaller
+!> than the final cell-block shared-memory tile from gpu_part_prompt.md §4.3:
+!> one thread walks one sorted particle and atomically scatters its CIC weights
+!> to the 27 neighboring cells; for CIC, 19 valid neighbors receive zero. It restores
+!> a valid RHS first; the cell-block tile can replace this kernel later behind
+!> the same gpu_cic_part dispatcher.
+attributes(global) subroutine cic_part_atomic_kernel(xp_d, mp_d, sortp_d, rho_d, nref_d, &
+     hash_key_d, hash_val_d, hash_size_d, ckey_max_d, key_off_d, &
+     box_ckey_min_d, box_ckey_max_d, periodic_d, &
+     skip1, skip2, skip3, dx_loc, vol_loc, m_refine_at_level, mass_cut_refine, &
+     ilevel, head_idx, num_parts, leading)
+  integer(kind=4), intent(in), value :: leading
+  real(kind=dp),   device :: xp_d(*)
+  real(kind=dp),   device :: mp_d(*)
+  integer(kind=4), device :: sortp_d(*)
+  real(kind=dp),   device :: rho_d(1:twotondim,*)
+  real(kind=dp),   device :: nref_d(1:twotondim,*)
+  integer(kind=8), device :: hash_key_d(*)
+  integer(kind=4), device :: hash_val_d(*)
+  integer(kind=4), intent(in), value :: hash_size_d
+  integer(kind=4), device :: ckey_max_d(*)
+  integer(kind=8), device :: key_off_d(*)
+  integer(kind=4), device :: box_ckey_min_d(1:3,*)
+  integer(kind=4), device :: box_ckey_max_d(1:3,*)
+  logical,         device :: periodic_d(1:3)
+  real(kind=8), intent(in), value :: skip1, skip2, skip3
+  real(kind=8), intent(in), value :: dx_loc, vol_loc
+  real(kind=8), intent(in), value :: m_refine_at_level, mass_cut_refine
+  integer(kind=4), intent(in), value :: ilevel
+  integer(kind=4), intent(in), value :: head_idx
+  integer(kind=4), intent(in), value :: num_parts
 
-  end subroutine gpu_cic_part
+  integer :: thread_idx, block_idx, idx, isort, ipart, idim
+  integer :: ox, oy, oz, igrid, icell
+  integer(kind=4) :: host_ckey(1:3), target_ckey(1:3), father_ckey(1:3), ii(1:3)
+  integer(kind=4) :: box_min(1:3), box_max(1:3)
+  integer(kind=8) :: nx, offset, key, ix8, iy8, iz8
+  real(kind=8) :: skip(1:3), x(1:3), frac(1:3)
+  real(kind=8) :: wx(0:2), wy(0:2), wz(0:2), weight, deposit, nref_add
+  real(kind=dp) :: old_value
+  logical :: in_domain
+
+  thread_idx = threadIdx%x - 1
+  block_idx  = blockIdx%x  - 1
+  idx = thread_idx + block_idx * blockDim%x
+  if (idx >= num_parts) return
+
+  isort = head_idx + idx
+  ipart = sortp_d(isort)
+
+  skip(1) = skip1
+  skip(2) = skip2
+  skip(3) = skip3
+
+  host_ckey = 0
+  frac = 0d0
+  do idim = 1, ndim
+     x(idim) = (xp_d(ipart + (idim-1)*leading) + skip(idim)) / dx_loc
+     host_ckey(idim) = floor(x(idim))
+     frac(idim) = x(idim) - real(host_ckey(idim), kind=8)
+  end do
+
+  wx(0) = max(0d0, 0.5d0 - frac(1))
+  wx(1) = 1d0 - abs(frac(1) - 0.5d0)
+  wx(2) = max(0d0, frac(1) - 0.5d0)
+  wy = 0d0
+  wz = 0d0
+  wy(1) = 1d0
+  wz(1) = 1d0
+  if (ndim >= 2) then
+     wy(0) = max(0d0, 0.5d0 - frac(2))
+     wy(1) = 1d0 - abs(frac(2) - 0.5d0)
+     wy(2) = max(0d0, frac(2) - 0.5d0)
+  endif
+  if (ndim >= 3) then
+     wz(0) = max(0d0, 0.5d0 - frac(3))
+     wz(1) = 1d0 - abs(frac(3) - 0.5d0)
+     wz(2) = max(0d0, frac(3) - 0.5d0)
+  endif
+
+  box_min = 0
+  box_max = 0
+  do idim = 1, ndim
+     box_min(idim) = box_ckey_min_d(idim, ilevel+1)
+     box_max(idim) = box_ckey_max_d(idim, ilevel+1)
+  end do
+
+  do oz = -1, 1
+     do oy = -1, 1
+        do ox = -1, 1
+           weight = wx(ox+1) * wy(oy+1) * wz(oz+1)
+
+           target_ckey = 0
+           target_ckey(1) = host_ckey(1) + ox
+           if (ndim >= 2) target_ckey(2) = host_ckey(2) + oy
+           if (ndim >= 3) target_ckey(3) = host_ckey(3) + oz
+
+           in_domain = .true.
+           do idim = 1, ndim
+              if (periodic_d(idim)) then
+                 if (target_ckey(idim) < box_min(idim))  target_ckey(idim) = box_max(idim) - 1
+                 if (target_ckey(idim) >= box_max(idim)) target_ckey(idim) = box_min(idim)
+              else
+                 if (target_ckey(idim) < box_min(idim))  in_domain = .false.
+                 if (target_ckey(idim) >= box_max(idim)) in_domain = .false.
+              endif
+           end do
+           if (.not. in_domain) cycle
+
+           father_ckey = target_ckey / 2
+           ii = target_ckey - 2 * father_ckey
+           icell = 1
+           do idim = 1, ndim
+              icell = icell + ii(idim) * (2**(idim-1))
+           end do
+
+           ix8 = int(father_ckey(1), kind=8)
+           iy8 = int(father_ckey(2), kind=8)
+           iz8 = int(father_ckey(3), kind=8)
+           nx  = int(ckey_max_d(ilevel), kind=8)
+           offset = key_off_d(ilevel)
+           key = offset + ix8 + iy8*nx + iz8*nx*nx
+           igrid = hash_get(hash_key_d, hash_val_d, hash_size_d, key)
+           if (igrid == 0) cycle
+
+           deposit = mp_d(ipart) * weight / vol_loc
+           old_value = atomicadd(rho_d(icell, igrid), deposit)
+
+           if (m_refine_at_level >= 0d0) then
+              if (mass_cut_refine > 0d0) then
+                 if (mp_d(ipart) < mass_cut_refine) then
+                    nref_add = weight
+                 else
+                    nref_add = 0d0
+                 endif
+              else
+                 nref_add = weight
+              endif
+              if (nref_add /= 0d0) old_value = atomicadd(nref_d(icell, igrid), nref_add)
+           endif
+        end do
+     end do
+  end do
+end subroutine cic_part_atomic_kernel
+
+!> §4.3 host dispatcher. The device kernel fills rho/nref; mesh device->host
+!> synchronization is owned by r_cic_part after this returns.
+subroutine gpu_cic_part(sim, ilevel, rtype)
+  use nvtx
+  use ramses_commons, only: ramses_t
+  type(ramses_t), intent(inout) :: sim
+  integer, intent(in) :: ilevel
+  integer, intent(in) :: rtype
+
+  integer(kind=4) :: head_idx, num_parts, leading
+  integer :: num_threads, num_blocks, i, idim
+  real(kind=8) :: dx_loc, vol_loc, skip1, skip2, skip3
+
+  call nvtxStartRange("gpu_cic_part", color=4) ! purple
+
+  ! Phase 1 supports DM only; host r_cic_part handles the rtype contract.
+  if (rtype /= 0 .and. rtype /= 1) then
+     call nvtxEndRange()
+     return
+  endif
+  if (.not. allocated(xp)) then
+     call nvtxEndRange()
+     return
+  endif
+
+  if (ilevel == sim%r%levelmin) then
+     do i = 1, sim%p%npart
+        sim%g%multipole%q(1) = sim%g%multipole%q(1) + sim%p%mp(i)
+     end do
+     do idim = 1, ndim
+        do i = 1, sim%p%npart
+           sim%g%multipole%q(idim+1) = sim%g%multipole%q(idim+1) + sim%p%mp(i) * sim%p%xp(i,idim)
+        end do
+     end do
+  endif
+
+  head_idx  = sim%p%headp(ilevel)
+  num_parts = sim%p%tailp(sim%r%nlevelmax) - head_idx + 1
+  if (num_parts <= 0) then
+     call nvtxEndRange()
+     return
+  endif
+
+  leading = size(xp, 1)
+  dx_loc  = sim%r%boxlen / 2d0**ilevel
+  vol_loc = dx_loc**ndim
+  skip1 = 0d0
+  skip2 = 0d0
+  skip3 = 0d0
+  if (ndim >= 1) skip1 = sim%m%skip(1)
+  if (ndim >= 2) skip2 = sim%m%skip(2)
+  if (ndim >= 3) skip3 = sim%m%skip(3)
+
+  num_threads = 128
+  num_blocks  = (num_parts + num_threads - 1) / num_threads
+  call cic_part_atomic_kernel<<<num_blocks, num_threads>>>(xp, mp, sortp, rho, nref, &
+       hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, &
+       box_ckey_min, box_ckey_max, periodic, &
+       skip1, skip2, skip3, dx_loc, vol_loc, sim%r%m_refine(ilevel), sim%r%mass_cut_refine, &
+       ilevel, head_idx, num_parts, leading)
+  call GPU_Error_Check("gpu/gpu_part.cuf", 0)
+
+  call nvtxEndRange()
+end subroutine gpu_cic_part
 !##############################################################################
 !##############################################################################
 !##############################################################################
