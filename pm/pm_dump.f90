@@ -74,12 +74,15 @@ contains
     else
       write(u) 0, -1
     end if
-    if (allocated(p%idp))    write(u) p%idp(1:npart)
+    ! Force fixed on-disk widths so the diff harness reader (int64 idp, real32 mp)
+    ! is invariant to build flags (LONGINT for i8b; dp kind for real arrays).
+    ! See gpu_part_diff_harness/README.md "Dump format".
+    if (allocated(p%idp))    write(u) int(p%idp(1:npart), kind=8)
     if (allocated(p%levelp)) write(u) p%levelp(1:npart)
     if (allocated(p%sortp))  write(u) p%sortp(1:npart)
     if (allocated(p%xp)) write(u) p%xp(1:npart, 1:ndim)
     if (allocated(p%vp)) write(u) p%vp(1:npart, 1:ndim)
-    if (allocated(p%mp)) write(u) p%mp(1:npart)
+    if (allocated(p%mp)) write(u) real(p%mp(1:npart), kind=4)
     if (allocated(p%fp)) then
        write(u) 1
        write(u) p%fp(1:npart, 1:ndim)
