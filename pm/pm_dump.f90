@@ -17,6 +17,7 @@ module pm_dump
 
   character(len=512), save :: dump_dir = ""
   logical, save           :: dir_resolved = .false.
+  integer, save           :: dump_seq = 0
 
 contains
 
@@ -44,13 +45,16 @@ contains
     integer,          intent(in) :: ilevel
 
     character(len=1024) :: path
+    integer :: seq
     integer :: u, npart, nlevels
     integer :: ih0, ih1, it0, it1
 
     call resolve_dir()
+    dump_seq = dump_seq + 1
+    seq = dump_seq
     npart   = p%npart
     nlevels = r%nlevelmax
-    write(path,'(a,"/part_",a,"_lev",i2.2,".bin")') trim(dump_dir), trim(tag), ilevel
+    write(path,'(a,"/part_",i6.6,"_",a,"_lev",i2.2,".bin")') trim(dump_dir), seq, trim(tag), ilevel
     open(newunit=u, file=trim(path), access="stream", form="unformatted", status="replace")
     write(u) MAGIC_PART
     write(u) ilevel
@@ -98,12 +102,15 @@ contains
     integer,          intent(in) :: ilevel
 
     character(len=1024) :: path
+    integer :: seq
     integer :: u, ngrid, ncell
 
     call resolve_dir()
+    dump_seq = dump_seq + 1
+    seq = dump_seq
     ngrid = m%ifree - 1
     ncell = 0
-    write(path,'(a,"/mesh_",a,"_lev",i2.2,".bin")') trim(dump_dir), trim(tag), ilevel
+    write(path,'(a,"/mesh_",i6.6,"_",a,"_lev",i2.2,".bin")') trim(dump_dir), seq, trim(tag), ilevel
     open(newunit=u, file=trim(path), access="stream", form="unformatted", status="replace")
     write(u) MAGIC_MESH
     write(u) ilevel
