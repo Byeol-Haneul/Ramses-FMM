@@ -32,7 +32,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   use feedback_module, only: out_feedback_t, r_thermal_feedback, m_mechanical_feedback
   use clump_finder_module, only: m_clump_finder
   use lightcone_module, only: m_output_lightcone
-  use rt_godunov_fine_module, only: r_rt_godunov_fine,r_set_rtunew,r_set_rtuold,r_set_emissivity
+  use rt_godunov_fine_module, only: r_set_rtunew,r_set_emissivity
   use rt_step_module, only: m_rt_step
   use sink_evolution_module, only: r_sink_evolution, out_accretion_t
   use sink_merger_module, only: r_sink_merger

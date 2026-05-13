@@ -78,7 +78,7 @@ recursive subroutine r_save_phi_old(pst,ilevel,input_size)
      call r_save_phi_old(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-#ifdef __CUDA
+#ifdef _CUDA
      call gpu_save_phi_old(pst%s, ilevel)
 #else
      call save_phi_old(pst%s%m,ilevel)

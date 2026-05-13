@@ -1,5 +1,11 @@
 module force_fine_module
+
   use multigrid_fine_coarse, only: level_count_t
+
+#ifdef _CUDA
+  use gpu_runner, only: gpu_gradient_phi, gpu_epot, gpu_rhomax
+#endif
+
 contains
 #ifdef GRAV  
 !#########################################################
@@ -152,7 +158,11 @@ recursive subroutine r_gradient_phi(pst,input,input_size)
      call r_gradient_phi(pst%pLower,input,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
+#ifdef _CUDA
+     call gpu_gradient_phi(pst%s,input%ilevel)
+#else
      call gradient_phi(pst%s,input%ilevel,input%icount)
+#endif
   endif
 
 end subroutine r_gradient_phi
@@ -355,7 +365,11 @@ recursive subroutine r_compute_epot(pst,ilevel,input_size,epot,output_size)
      call mdl_get_reply(pst%s%mdl,rID,output_size,next_epot)
      epot=epot+next_epot
   else
+#ifdef _CUDA
+     call gpu_epot(pst%s,ilevel,epot)
+#else
      call compute_epot(pst%s%r,pst%s%g,pst%s%m,ilevel,epot)
+#endif
   endif
 
 end subroutine r_compute_epot
@@ -427,7 +441,11 @@ recursive subroutine r_compute_rhomax(pst,ilevel,input_size,rhomax,output_size)
      call mdl_get_reply(pst%s%mdl,rID,output_size,next_rhomax)
      rhomax=MAX(rhomax,next_rhomax)
   else
+#ifdef _CUDA
+     call gpu_rhomax(pst%s,ilevel,rhomax)
+#else
      call compute_rhomax(pst%s%r,pst%s%g,pst%s%m,ilevel,rhomax)
+#endif
   endif
 
 end subroutine r_compute_rhomax
