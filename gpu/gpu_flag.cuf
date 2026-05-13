@@ -51,7 +51,7 @@ contains
     flag1(cell_idx, oct_idx) = 0
 
   end subroutine reset_flag1_kernel
-  ! =========================================================================~
+  ! =========================================================================
 
   ! =========================================================================
   attributes(global) subroutine reset_flag2_kernel(flag2, head_idx, num_octs)
@@ -74,7 +74,7 @@ contains
     flag2(cell_idx, oct_idx) = 0
 
   end subroutine reset_flag2_kernel
-  ! =========================================================================~
+  ! =========================================================================
 
   ! =========================================================================
   attributes(global) subroutine count_flag1_kernel(flag1, head_idx, num_octs, nflag)
@@ -159,7 +159,7 @@ contains
     if (ok) flag1(cell_idx, father_idx) = 1
 
   end subroutine init_flag_kernel
-  ! =========================================================================~
+  ! =========================================================================
 
   ! =========================================================================
   attributes(global) subroutine count_neighbors(flag2, flag1, nbor, head_idx, num_octs)
@@ -220,7 +220,7 @@ contains
     flag2(cell_idx, oct_idx) = number_nbors
 
   end subroutine count_neighbors
-  ! =========================================================================~
+  ! =========================================================================
 
   ! =========================================================================
   attributes(global) subroutine flag_count_kernel(flag1, flag2, head_idx, num_octs, num_nbors)
@@ -251,7 +251,7 @@ contains
     endif
 
   end subroutine flag_count_kernel
-  ! =========================================================================~
+  ! =========================================================================
 
   ! =========================================================================
   attributes(global) subroutine enforce_subgrid_kernel(flag1, head_idx, num_octs)
@@ -284,7 +284,7 @@ contains
     end if
 
   end subroutine enforce_subgrid_kernel
-  ! =========================================================================~
+  ! =========================================================================
 
   ! =========================================================================
   attributes(global) subroutine enforce_rules(flag1, nbor, head_idx, num_octs, ngridmax)
@@ -342,7 +342,81 @@ contains
     end if
 
   end subroutine enforce_rules
-  ! =========================================================================~
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine poisson_flag_kernel(flag1, nref, uold, head_idx, num_octs, &
+       & gamma, mass_sph, m_refine, jeans_refine, factG, dx_loc)
+    real(kind=dp), device :: uold(1:twotondim,1:nvar,*)
+    real(kind=dp), device :: nref(1:twotondim,*)
+    integer(kind=4), device :: flag1(1:twotondim,*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+    real(kind=dp), intent(in), value :: gamma, factG
+    real(kind=dp), intent(in), value :: mass_sph, dx_loc
+    real(kind=dp), intent(in), value :: m_refine, jeans_refine
+
+    integer :: cell_idx, oct_idx, block_idx
+    real(kind=dp) :: vol_loc, d_scale, density, pressure
+    real(kind=dp) :: momentum_x, momentum_y, momentum_z
+    real(kind=dp) :: energy, c_iso, t_ff, jeans_length
+    logical :: ok
+
+    block_idx = blockIdx%x - 1
+
+    ! Compute the oct idx
+    oct_idx = block_idx * blockDim%y + threadIdx%y - 1
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Compute the cell idx
+    cell_idx = threadIdx%x
+
+    vol_loc = dx_loc**3
+    d_scale = mass_sph / vol_loc
+
+    ok = .false.
+
+#ifdef GRAV
+    ! Refine if number of particles exceeds threshold
+    if (m_refine >= 0) then
+       ok = ok .or. (nref(cell_idx, oct_idx) >= m_refine)
+    endif
+#else
+    ! Refine if gas mass exceeds threshold
+    if (mass_sph > 0 .and. m_refine >= 0)then
+       ok = ok .or. (uold(cell_idx, 1, oct_idx) >= m_refine * d_scale)
+    end if
+#endif
+
+#ifdef HYDRO
+    if (jeans_refine >= 0) then
+
+       ! Convert to primitive variables
+       density    = uold(cell_idx, 1, oct_idx)
+       momentum_x = uold(cell_idx, 2, oct_idx)
+       momentum_y = uold(cell_idx, 3, oct_idx)
+       momentum_z = uold(cell_idx, 4, oct_idx)
+       energy     = uold(cell_idx, 5, oct_idx)
+       pressure   = energy - 0.5d0*(momentum_x**2 + momentum_y**2 + momentum_z**2) / density
+       pressure   = (gamma - 1d0) * pressure
+
+       ! Compute Jeans length
+       c_iso = sqrt(max(pressure / density, 1d-20))
+       t_ff = sqrt(ACOS(-1d0) /density / factG)
+       jeans_length = c_iso * t_ff
+
+       ! Refine if Jeans length is not resolved enough
+       ok = ok .or. (jeans_refine * dx_loc >= jeans_length)
+
+    endif
+#endif
+
+    ! If satisfied set flag1 to 1
+    if (ok) flag1(cell_idx, oct_idx) = 1
+
+  end subroutine poisson_flag_kernel
+  ! =========================================================================
 
 end module flag_device
 

@@ -56,7 +56,7 @@ attributes(device) subroutine nbor_father_cells(grid, father, nbor, oct_idx, igr
   j = grid(oct_idx)%ckey(2) - 2 * (grid(oct_idx)%ckey(2) / 2)
   k = grid(oct_idx)%ckey(3) - 2 * (grid(oct_idx)%ckey(3) / 2)
 
-  ! Loop over 27 neighbors
+  ! Loop over 27 neighboring cells
   inbor = 0
   do kk = -1, +1
      do jj = -1, +1

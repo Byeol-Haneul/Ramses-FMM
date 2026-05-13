@@ -1792,9 +1792,10 @@ contains
   ! =========================================================================
 
   ! =========================================================================
-  attributes(global) subroutine cmpdt_kernel(grid, uold, head_idx, num_octs, mass, ekin, eint, emag, dt, dx, gamma, courant_factor)
+  attributes(global) subroutine cmpdt_kernel(grid, uold, f, head_idx, num_octs, mass, ekin, eint, emag, dt, dx, gamma, courant_factor)
     type(oct), device :: grid(*)
     real(kind=dp), device :: uold(1:twotondim,1:nvar,*)
+    real(kind=dp), device :: f(1:twotondim,1:ndim,*)
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
     real(kind=8), device, intent(inout) :: mass, ekin, eint, emag, dt
@@ -1861,9 +1862,11 @@ contains
           emag_loc = 0_dp
 
           ! Compute time step
-          grav = 0.0001d0 ! Placeholder for gravity
           sound_speed = sqrt(gamma*primitive%pressure/primitive%density)
           ctot = (abs(primitive%velocity_x)+abs(primitive%velocity_y)+abs(primitive%velocity_z)+3d0*sound_speed)
+          grav = abs(f(cell_idx, 1, oct_idx)) + abs(f(cell_idx, 2, oct_idx)) + abs(f(cell_idx, 3, oct_idx))
+          grav = grav*dx/ctot**2
+          grav = MAX(grav,0.0001d0)
           dt_loc = dx / ctot*(sqrt(1d0+2d0*courant_factor*grav)-1d0)/grav
 
        end if

@@ -1,5 +1,10 @@
 module multigrid_fine_coarse
 
+#ifdef _CUDA
+  use gpu_runner, only: gpu_restrict_mask, gpu_cmp_residual, gpu_gauss_seidel, &
+       & gpu_restrict_residual, gpu_interpolate_correct, gpu_reset_corr, gpu_residual_norm2
+#endif
+
   type :: level_count_t
      integer::ilevel,icount
   end type level_count_t
@@ -13,9 +18,6 @@ module multigrid_fine_coarse
      logical::safe,redstep
   end type gs_step_t
 
-#ifdef __CUDA
-  use gpu_runner, only: gpu_restrict_mask, gpu_cmp_residual, gpu_gauss_seidel, gpu_restrict_residual, gpu_interpolate_correct
-#endif
 contains
 
 #ifdef GRAV
@@ -49,8 +51,8 @@ recursive subroutine r_restrict_mask(pst,input,input_size,masked,output_size)
      call mdl_get_reply(pst%s%mdl,rID,output_size,next_masked)
      masked=masked*next_masked
   else
-#ifdef __CUDA
-     call gpu_restrict_mask(pst%s,input%ilevel,input%ifine,allmasked)
+#ifdef _CUDA
+     call gpu_restrict_mask(pst%s, input%ilevel, input%ifine, allmasked)
 #else
      if(input%ifine==input%ilevel)then
         call restrict_mask(pst%s,pst%s%m,input%ifine,allmasked)
@@ -235,8 +237,8 @@ recursive subroutine r_cmp_residual_mg(pst,input,input_size)
      call r_cmp_residual_mg(pst%pLower,input,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-#ifdef __CUDA
-     call gpu_cmp_residual(pst,input%ilevel,input%ifine)
+#ifdef _CUDA
+     call gpu_cmp_residual(pst%s, input%ilevel, input%ifine)
 #else
      if(input%ifine==input%ilevel)then
         call cmp_residual_mg(pst%s,pst%s%m,input%ifine)
@@ -470,8 +472,8 @@ recursive subroutine r_gauss_seidel_mg(pst,input,input_size)
      call r_gauss_seidel_mg(pst%pLower,input,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-#ifdef __CUDA
-     call gpu_gauss_seidel(pst%s,input%ilevel,input%ifine,input%safe,input%redstep)
+#ifdef _CUDA
+     call gpu_gauss_seidel(pst%s, input%ilevel, input%ifine, input%safe, input%redstep)
 #else
      if(input%ifine==input%ilevel)then
         call gauss_seidel_mg(pst%s,pst%s%m,input%ifine,input%safe,input%redstep)
@@ -671,8 +673,8 @@ recursive subroutine r_reset_correction(pst,ilevel,input_size)
      call r_reset_correction(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-#ifdef __CUDA
-     call gpu_reset_corr(pst%s,ilevel)
+#ifdef _CUDA
+     call gpu_reset_corr(pst%s, ilevel)
 #else
      do igrid=pst%s%m_mg%head(ilevel),pst%s%m_mg%tail(ilevel)
         pst%s%m_mg%phi(1:twotondim,igrid)=0.0d0
@@ -708,8 +710,8 @@ recursive subroutine r_restrict_residual(pst,input,input_size)
      call r_restrict_residual(pst%pLower,input,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-#ifdef __CUDA
-     call gpu_restrict_residual(pst%s,input%ilevel,input%ifine)
+#ifdef _CUDA
+     call gpu_restrict_residual(pst%s, input%ilevel, input%ifine)
 #else
      if(input%ifine==input%ilevel)then
         call restrict_residual(pst%s,pst%s%m,input%ifine)
@@ -929,7 +931,7 @@ recursive subroutine r_interpolate_and_correct(pst,input,input_size)
      call r_interpolate_and_correct(pst%pLower,input,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-#ifdef __CUDA
+#ifdef _CUDA
      call gpu_interpolate_correct(pst%s, input%ilevel, input%ifine)
 #else
      if(input%ifine==input%ilevel)then
@@ -1164,7 +1166,7 @@ recursive subroutine r_set_scan_flag(pst,input,input_size)
      call r_set_scan_flag(pst%pLower,input,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-#ifdef __CUDA
+#ifdef _CUDA
      ! Do nothing
 #else
      if(input%ifine==input%ilevel)then
@@ -1369,8 +1371,8 @@ recursive subroutine r_cmp_residual_norm2(pst,ilevel,input_size,norm2,output_siz
      call mdl_get_reply(pst%s%mdl,rID,output_size,next_norm2)
      norm2=norm2+next_norm2
   else
-#ifdef __CUDA
-     call gpu_residual_norm(pst%s,ilevel,norm2)
+#ifdef _CUDA
+     call gpu_residual_norm2(pst%s, ilevel, norm2)
 #else
      call cmp_residual_norm2(pst%s%r,pst%s%m,ilevel,norm2)
 #endif
