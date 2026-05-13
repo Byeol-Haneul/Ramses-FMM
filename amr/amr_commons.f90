@@ -754,10 +754,16 @@ module amr_commons
 contains
 
   subroutine print_run_parameters(run_p)
-    class(run_t)::run_p
+    class(run_t), intent(in)::run_p
     type(run_t)::run_params
     namelist /run_parameters/ run_params
-    run_params = run_p
+    ! gfortran rejects `run_params = run_p` (CLASS to TYPE); use SELECT TYPE.
+    select type (rp => run_p)
+    type is (run_t)
+       run_params = rp
+    class default
+       error stop 'print_run_parameters: dynamic type must be run_t'
+    end select
     write(*,NML=run_parameters)
   end subroutine print_run_parameters
 
