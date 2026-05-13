@@ -67,8 +67,6 @@ subroutine multigrid(pst,ilevel,icount)
 
   if(pst%s%r%verbose) print '(A,I2)','Entering multigrid at level ',ilevel
 
-  call m_timer('MG - init','start')
-
   ! ---------------------------------------------------------------------
   ! Prepare first guess, mask and BCs at finest level
   ! ---------------------------------------------------------------------
@@ -141,8 +139,6 @@ subroutine multigrid(pst,ilevel,icount)
      gs_step%ifine=ilevel
      gs_step%safe=pst%s%g%safe_mode(ilevel)
 
-     call m_timer('MG - Gauss-Seidel','start')
-
      ! Pre-smoothing
      do i=1,ngs_fine
         gs_step%redstep=.true.   ! Red step
@@ -150,8 +146,6 @@ subroutine multigrid(pst,ilevel,icount)
         gs_step%redstep=.false.  ! Black step
         call r_gauss_seidel_mg(pst,gs_step,storage_size(gs_step)/32)
      end do
-
-     call m_timer('MG - Residual','start')
 
      ! Compute new residual
      double_level%ilevel=ilevel
@@ -171,19 +165,13 @@ subroutine multigrid(pst,ilevel,icount)
         ! Reset correction from upper level before solve
         call r_reset_correction(pst,ilevel-1,1)
 
-        call m_timer('MG - Recursive','start')
-
         ! Multigrid-solve the upper level
-        call recursive_multigrid(pst,ilevel-1,pst%s%g%safe_mode(ilevel))
-
-        call m_timer('MG - Interpol/Correct','start')
+        call recursive_multigrid(pst,ilevel,ilevel-1,pst%s%g%safe_mode(ilevel))
 
         ! Interpolate coarse solution and correct fine solution
         call r_interpolate_and_correct(pst,double_level,storage_size(double_level)/32)
 
      end if
-
-     call m_timer('MG - Gauss-Seidel','start')
 
      ! Post-smoothing
      do i=1,ngs_fine
@@ -192,8 +180,6 @@ subroutine multigrid(pst,ilevel,icount)
         gs_step%redstep=.false.  ! Black step
         call r_gauss_seidel_mg(pst,gs_step,storage_size(gs_step)/32)
      end do
-
-     call m_timer('MG - Residual','start')
 
      ! Update fine residual
      double_level%ilevel=ilevel
@@ -239,12 +225,13 @@ end subroutine multigrid
 ! Recursive multigrid routine for coarse MG levels
 ! ------------------------------------------------------------------------
 
-recursive subroutine recursive_multigrid(pst,ifinelevel,safe)
+recursive subroutine recursive_multigrid(pst,ilevel,ifinelevel,safe)
   use amr_parameters, only: twotondim
   use poisson_parameters, only: ngs_fine, ngs_coarse, ncycles_coarse_safe
   use ramses_commons, only: pst_t
   implicit none
   type(pst_t)::pst
+  integer,intent(in) :: ilevel
   integer,intent(in) :: ifinelevel
   logical,intent(in) :: safe
 
@@ -253,7 +240,7 @@ recursive subroutine recursive_multigrid(pst,ifinelevel,safe)
   type(gs_step_t)::gs_step
 
   ! Set parameter array
-  gs_step%ilevel=ifinelevel+1
+  gs_step%ilevel=ilevel
   gs_step%ifine=ifinelevel
   gs_step%safe=safe
 
@@ -287,7 +274,7 @@ recursive subroutine recursive_multigrid(pst,ifinelevel,safe)
      end do     
 
      ! Compute residual and restrict into upper level RHS
-     double_level%ilevel=ifinelevel+1
+     double_level%ilevel=ilevel
      double_level%ifine=ifinelevel
      call r_cmp_residual_mg(pst,double_level,storage_size(double_level)/32)
 
@@ -298,7 +285,7 @@ recursive subroutine recursive_multigrid(pst,ifinelevel,safe)
      call r_reset_correction(pst,ifinelevel-1,1)
 
      ! Multigrid-solve the upper level
-     call recursive_multigrid(pst,ifinelevel-1, safe)
+     call recursive_multigrid(pst,ilevel,ifinelevel-1, safe)
 
      ! Interpolate coarse solution and correct back into fine solution
      call r_interpolate_and_correct(pst,double_level,storage_size(double_level)/32)

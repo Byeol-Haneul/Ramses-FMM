@@ -2,7 +2,7 @@ module multigrid_fine_coarse
 
 #ifdef _CUDA
   use gpu_runner, only: gpu_restrict_mask, gpu_cmp_residual, gpu_gauss_seidel, &
-       & gpu_restrict_residual, gpu_interpolate_correct, gpu_reset_corr, gpu_residual_norm
+       & gpu_restrict_residual, gpu_interpolate_correct, gpu_reset_corr, gpu_residual_norm2
 #endif
 
   type :: level_count_t
@@ -1372,7 +1372,7 @@ recursive subroutine r_cmp_residual_norm2(pst,ilevel,input_size,norm2,output_siz
      norm2=norm2+next_norm2
   else
 #ifdef _CUDA
-     call gpu_residual_norm(pst%s, ilevel, norm2)
+     call gpu_residual_norm2(pst%s, ilevel, norm2)
 #else
      call cmp_residual_norm2(pst%s%r,pst%s%m,ilevel,norm2)
 #endif
