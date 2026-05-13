@@ -80,6 +80,7 @@ module gpu_runner
   !> NB: device array `size_p` mirrors host `pst%s%p%size`; renamed to avoid
   !> shadowing the Fortran intrinsic `size()` in modules that `use gpu_runner`.
   real(kind=dp),   device, allocatable, dimension(:,:) :: fp
+  real(kind=dp),   device, allocatable, dimension(:)   :: fp_dummy
   real(kind=dp),   device, allocatable, dimension(:,:) :: jp
   real(kind=dp),   device, allocatable, dimension(:)   :: zp, tp, tm, size_p, charge
   integer(i8b),    device, allocatable, dimension(:)   :: idm

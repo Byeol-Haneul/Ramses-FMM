@@ -54,6 +54,9 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
+#ifdef _CUDA
+  use pm_parameters, only: PART_TYPE
+#endif
   implicit none
   type(pst_t)::pst
   integer,VALUE::input_size
@@ -89,6 +92,10 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
         ! — see gpu_part_prompt.md §4.4 / §5. Stars/sinks/tree round-trip
         ! through host CIC; tracers/dust still abort.
         if(pst%s%r%part)then
+           if(pst%s%p%type/=PART_TYPE)then
+              write(*,*)'r_kick_drift_part: GPU particle kick-drift supports DM PART_TYPE only in phase 1.'
+              call abort
+           endif
            if(pst%s%r%part_force_interpolation_scheme/=1 .and. .not.warned_dm_kick_gpu)then
               write(*,'(A,I0,A)')' WARNING: r_kick_drift_part: GPU TSC/PCS DM force interpolation (scheme ', &
                    & pst%s%r%part_force_interpolation_scheme,') unavailable in phase 1; using GPU CIC kick-drift path instead.'
