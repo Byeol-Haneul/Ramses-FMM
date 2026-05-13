@@ -1402,7 +1402,7 @@ attributes(global) subroutine kick_drift_part_kernel(xp_d, vp_d, fp_d, levelp_d,
           ff, ok_level)
   endif
 
-  if (has_fp /= 0) then
+  if (has_fp /= 0 .and. ok_level) then
      do idim = 1, ndim
         fp_d(ipart + (idim-1)*leading) = ff(idim)
      end do
