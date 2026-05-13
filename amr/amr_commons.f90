@@ -118,11 +118,32 @@ module amr_commons
      logical::zoom_only=.false.
      integer::imovout=0    ! Increment for output times
      integer::imov=1       ! Initialize
+     real(kind=8)::tstartmov=0d0
+     real(kind=8)::astartmov=0d0
      real(kind=8)::tendmov=0.
      real(kind=8)::aendmov=0.
      character(LEN=5)::proj_axis='z' ! x->x, y->y, projection along z
      integer,dimension(0:NVAR+2+nrtgrp)::movie_vars=0
      character(len=5),dimension(0:NVAR+2+nrtgrp)::movie_vars_txt=''
+     ! Movie camera and rendering options (per-projection, NMOV=5)
+     real(kind=8),dimension(1:5)::theta_camera=0d0
+     real(kind=8),dimension(1:5)::phi_camera=0d0
+     real(kind=8),dimension(1:5)::dtheta_camera=0d0
+     real(kind=8),dimension(1:5)::dphi_camera=0d0
+     real(kind=8),dimension(1:5)::tstart_theta_camera=0d0
+     real(kind=8),dimension(1:5)::tstart_phi_camera=0d0
+     real(kind=8),dimension(1:5)::tend_theta_camera=0d0
+     real(kind=8),dimension(1:5)::tend_phi_camera=0d0
+     real(kind=8),dimension(1:5)::focal_camera=0d0
+     real(kind=8),dimension(1:5)::dist_camera=0d0
+     real(kind=8),dimension(1:5)::ddist_camera=0d0
+     real(kind=8),dimension(1:5)::smooth_frame=1d0
+     real(kind=8),dimension(1:5)::varmin_frame=-1d60
+     real(kind=8),dimension(1:5)::varmax_frame=1d60
+     logical,dimension(1:5)::perspective_camera=.false.
+     logical,dimension(1:5)::zoom_only_frame=.false.
+     character(LEN=6),dimension(1:5)::shader_frame='square'
+     character(LEN=10),dimension(1:5)::method_frame='mean_mass'
 
      ! Hydro solver parameters
      real(kind=8)::gamma=1.4d0

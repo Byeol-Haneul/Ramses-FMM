@@ -122,6 +122,7 @@ subroutine m_read_params(pst)
   ! Movie
   integer::imovout=0     ! Increment for output times
   integer::imov=1        ! Initialize
+  real(kind=8)::tstartmov=0d0,astartmov=0d0
   real(kind=8)::tendmov=0.,aendmov=0.
   logical::movie=.false.
   logical::zoom_only=.false.
@@ -138,6 +139,25 @@ subroutine m_read_params(pst)
   character(LEN=5)::proj_axis='z' ! x->x, y->y, projection along z
   integer,dimension(0:NVAR+2+nrtgrp)::movie_vars=0
   character(len=5),dimension(0:NVAR+2+nrtgrp)::movie_vars_txt=''
+  ! Movie camera and rendering options (per-projection, NMOV=5)
+  real(kind=8),dimension(1:5)::theta_camera=0d0
+  real(kind=8),dimension(1:5)::phi_camera=0d0
+  real(kind=8),dimension(1:5)::dtheta_camera=0d0
+  real(kind=8),dimension(1:5)::dphi_camera=0d0
+  real(kind=8),dimension(1:5)::tstart_theta_camera=0d0
+  real(kind=8),dimension(1:5)::tstart_phi_camera=0d0
+  real(kind=8),dimension(1:5)::tend_theta_camera=0d0
+  real(kind=8),dimension(1:5)::tend_phi_camera=0d0
+  real(kind=8),dimension(1:5)::focal_camera=0d0
+  real(kind=8),dimension(1:5)::dist_camera=0d0
+  real(kind=8),dimension(1:5)::ddist_camera=0d0
+  real(kind=8),dimension(1:5)::smooth_frame=1d0
+  real(kind=8),dimension(1:5)::varmin_frame=-1d60
+  real(kind=8),dimension(1:5)::varmax_frame=1d60
+  logical,dimension(1:5)::perspective_camera=.false.
+  logical,dimension(1:5)::zoom_only_frame=.false.
+  character(LEN=6),dimension(1:5)::shader_frame='square'
+  character(LEN=10),dimension(1:5)::method_frame='mean_mass'
 
   ! Refinement parameters for each level
   integer ,dimension(1:MAXLEVEL)::nexpand = 1 ! Number of mesh expansion
@@ -552,8 +572,14 @@ subroutine m_read_params(pst)
   ! Movies parameters
   namelist/movie_params/levelmax_frame,nw_frame,nh_frame,ivar_frame &
        & ,xcentre_frame,ycentre_frame,zcentre_frame &
-       & ,deltax_frame,deltay_frame,deltaz_frame,movie,zoom_only &
-       & ,imovout,imov,tendmov,aendmov,proj_axis,movie_vars,movie_vars_txt
+       & ,deltax_frame,deltay_frame,deltaz_frame,movie,zoom_only,zoom_only_frame &
+       & ,imovout,imov,tstartmov,astartmov,tendmov,aendmov,proj_axis &
+       & ,movie_vars,movie_vars_txt &
+       & ,theta_camera,phi_camera,dtheta_camera,dphi_camera &
+       & ,tstart_theta_camera,tstart_phi_camera,tend_theta_camera,tend_phi_camera &
+       & ,focal_camera,dist_camera,ddist_camera &
+       & ,perspective_camera,smooth_frame,shader_frame,method_frame &
+       & ,varmin_frame,varmax_frame
   ! Initial conditions parameters
   namelist/init_params/filetype,initfile,multiple,nregion,region_type &
        & ,x_center,y_center,z_center,aexp_ini,omega_b,omega_m,omega_l,h0 &
@@ -1266,12 +1292,32 @@ subroutine m_read_params(pst)
   s%r%deltaz_frame=deltaz_frame
   s%r%movie=movie
   s%r%zoom_only=zoom_only
+  s%r%zoom_only_frame=zoom_only_frame
   s%r%imovout=imovout
   s%r%imov=imov
+  s%r%tstartmov=tstartmov
+  s%r%astartmov=astartmov
   s%r%tendmov=tendmov
   s%r%aendmov=aendmov
   s%r%proj_axis=proj_axis
   s%r%movie_vars_txt=movie_vars_txt
+  s%r%theta_camera=theta_camera
+  s%r%phi_camera=phi_camera
+  s%r%dtheta_camera=dtheta_camera
+  s%r%dphi_camera=dphi_camera
+  s%r%tstart_theta_camera=tstart_theta_camera
+  s%r%tstart_phi_camera=tstart_phi_camera
+  s%r%tend_theta_camera=tend_theta_camera
+  s%r%tend_phi_camera=tend_phi_camera
+  s%r%focal_camera=focal_camera
+  s%r%dist_camera=dist_camera
+  s%r%ddist_camera=ddist_camera
+  s%r%perspective_camera=perspective_camera
+  s%r%smooth_frame=smooth_frame
+  s%r%shader_frame=shader_frame
+  s%r%method_frame=method_frame
+  s%r%varmin_frame=varmin_frame
+  s%r%varmax_frame=varmax_frame
   if(s%r%movie)call set_movie_vars(s%r)
 
   ! Trajectory output params
