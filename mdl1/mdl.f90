@@ -1,4 +1,7 @@
 module mdl_module
+  ! Dummy args use assumed-type TYPE(*) for C_LOC/C_F_POINTER. gfortran supports
+  ! this; nvfortran needs a recent HPC SDK (23.3+). Older nvfortran may fail
+  ! with "Syntax error at or near *" in mdl_add_service / mdl_send_request_scalar.
 
   use mdl_parameters
   USE, INTRINSIC :: ISO_C_BINDING, ONLY: C_FUNPTR, C_PTR

@@ -274,9 +274,10 @@ end subroutine gpu_to_host_part
 !###########################################################
 !###########################################################
 !###########################################################
+#ifdef GRAV
 !> Copy device mesh fields written by GPU CIC back to host. Call this only
 !> after gpu_cic_part has filled device rho/nref; copying stub or invalid mesh
-!> state can poison the host Poisson path.
+!> state can poison the host Poisson path. (mesh_t rho/nref exist only with GRAV.)
 subroutine gpu_to_host_mesh(pst)
   use ramses_commons, only: pst_t
   implicit none
@@ -289,6 +290,7 @@ subroutine gpu_to_host_mesh(pst)
   call nvtxEndRange()
 
 end subroutine gpu_to_host_mesh
+#endif
 #endif
 !###########################################################
 !###########################################################
