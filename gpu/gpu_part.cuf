@@ -8,7 +8,7 @@
 !>   gpu_split_part      (§4.1) — IMPLEMENTED.
 !>   gpu_sort_part       (§4.2) — IMPLEMENTED.
 !>   gpu_cic_part        (§4.3) — incremental global-atomic baseline.
-!>   gpu_kick_drift_part (§4.4) — stub.
+!>   gpu_kick_drift_part (§4.4) — incremental global force-gather baseline.
 !>
 !> This file is `include`d from `module gpu_runner` (next to gpu_scan.cuf), so
 !> all kernels and host helpers below are module procedures of `gpu_runner`
@@ -1098,22 +1098,48 @@ end subroutine gpu_cic_part
 !##############################################################################
 ! §4.4 — gpu_kick_drift_part
 !
-!> Incremental first step: drift only for action_kick_drift. The force gather
-!> and velocity half-kicks are intentionally deferred until this minimal kernel
-!> is verified on the cluster.
-attributes(global) subroutine drift_part_kernel(xp_d, vp_d, box_size_d, periodic_d, &
-     dt, head_idx, num_parts, leading)
+!> Incremental baseline: one thread per particle gathers CIC force from device
+!> `f`, updates `fp` when present, applies the velocity half-kick for both
+!> action modes, and drifts/wraps positions for action_kick_drift. This mirrors
+!> the existing global-atomic CIC baseline; the shared-memory cell-block version
+!> can replace it behind the same dispatcher after numerical verification.
+attributes(global) subroutine kick_drift_part_kernel(xp_d, vp_d, fp_d, levelp_d, f_d, &
+     hash_key_d, hash_val_d, hash_size_d, ckey_max_d, key_off_d, &
+     box_ckey_min_d, box_ckey_max_d, box_size_d, periodic_d, &
+     dtnew_d, dtold_d, skip1, skip2, skip3, dx_loc, &
+     action_part, ilevel, head_idx, num_parts, leading, has_fp)
   integer(kind=4), intent(in), value :: leading
-  real(kind=dp), device :: xp_d(*)
-  real(kind=dp), device :: vp_d(*)
-  real(kind=8), device :: box_size_d(1:3)
-  logical, device :: periodic_d(1:3)
-  real(kind=8), intent(in), value :: dt
+  real(kind=dp),   device :: xp_d(*)
+  real(kind=dp),   device :: vp_d(*)
+  real(kind=dp),   device :: fp_d(*)
+  integer(kind=4), device :: levelp_d(*)
+  real(kind=dp),   device :: f_d(1:twotondim,1:ndim,*)
+  integer(kind=8), device :: hash_key_d(*)
+  integer(kind=4), device :: hash_val_d(*)
+  integer(kind=4), intent(in), value :: hash_size_d
+  integer(kind=4), device :: ckey_max_d(*)
+  integer(kind=8), device :: key_off_d(*)
+  integer(kind=4), device :: box_ckey_min_d(1:3,*)
+  integer(kind=4), device :: box_ckey_max_d(1:3,*)
+  real(kind=8),    device :: box_size_d(1:3)
+  logical,         device :: periodic_d(1:3)
+  real(kind=8),    device :: dtnew_d(*)
+  real(kind=8),    device :: dtold_d(*)
+  real(kind=8), intent(in), value :: skip1, skip2, skip3, dx_loc
+  integer(kind=4), intent(in), value :: action_part
+  integer(kind=4), intent(in), value :: ilevel
   integer(kind=4), intent(in), value :: head_idx
   integer(kind=4), intent(in), value :: num_parts
+  integer(kind=4), intent(in), value :: has_fp
 
   integer :: thread_idx, block_idx, idx, ipart, idim
-  real(kind=8) :: xnew
+  integer :: ox, oy, oz, igrid, icell, lp
+  integer(kind=4) :: host_ckey(1:3), target_ckey(1:3), father_ckey(1:3), ii(1:3)
+  integer(kind=4) :: box_min(1:3), box_max(1:3)
+  integer(kind=8) :: nx, offset, key, ix8, iy8, iz8
+  real(kind=8) :: skip(1:3), x(1:3), frac(1:3), ff(1:3)
+  real(kind=8) :: wx(0:2), wy(0:2), wz(0:2), weight, dteff, xnew
+  logical :: in_domain
 
   thread_idx = threadIdx%x - 1
   block_idx  = blockIdx%x  - 1
@@ -1121,15 +1147,122 @@ attributes(global) subroutine drift_part_kernel(xp_d, vp_d, box_size_d, periodic
   if (idx >= num_parts) return
 
   ipart = head_idx + idx
+  ff = 0d0
+
+  skip(1) = skip1
+  skip(2) = skip2
+  skip(3) = skip3
+
+  host_ckey = 0
+  frac = 0d0
   do idim = 1, ndim
-     xnew = xp_d(ipart + (idim-1)*leading) + vp_d(ipart + (idim-1)*leading) * dt
-     if (periodic_d(idim)) then
-        if (xnew < 0d0)              xnew = xnew + box_size_d(idim)
-        if (xnew >= box_size_d(idim)) xnew = xnew - box_size_d(idim)
-     endif
-     xp_d(ipart + (idim-1)*leading) = xnew
+     x(idim) = (xp_d(ipart + (idim-1)*leading) + skip(idim)) / dx_loc
+     host_ckey(idim) = floor(x(idim))
+     frac(idim) = x(idim) - real(host_ckey(idim), kind=8)
   end do
-end subroutine drift_part_kernel
+
+  wx(0) = max(0d0, 0.5d0 - frac(1))
+  wx(1) = 1d0 - abs(frac(1) - 0.5d0)
+  wx(2) = max(0d0, frac(1) - 0.5d0)
+  wy = 0d0
+  wz = 0d0
+  wy(1) = 1d0
+  wz(1) = 1d0
+  if (ndim >= 2) then
+     wy(0) = max(0d0, 0.5d0 - frac(2))
+     wy(1) = 1d0 - abs(frac(2) - 0.5d0)
+     wy(2) = max(0d0, frac(2) - 0.5d0)
+  endif
+  if (ndim >= 3) then
+     wz(0) = max(0d0, 0.5d0 - frac(3))
+     wz(1) = 1d0 - abs(frac(3) - 0.5d0)
+     wz(2) = max(0d0, frac(3) - 0.5d0)
+  endif
+
+  box_min = 0
+  box_max = 0
+  do idim = 1, ndim
+     box_min(idim) = box_ckey_min_d(idim, ilevel+1)
+     box_max(idim) = box_ckey_max_d(idim, ilevel+1)
+  end do
+
+  do oz = -1, 1
+     do oy = -1, 1
+        do ox = -1, 1
+           weight = wx(ox+1) * wy(oy+1) * wz(oz+1)
+
+           target_ckey = 0
+           target_ckey(1) = host_ckey(1) + ox
+           if (ndim >= 2) target_ckey(2) = host_ckey(2) + oy
+           if (ndim >= 3) target_ckey(3) = host_ckey(3) + oz
+
+           in_domain = .true.
+           do idim = 1, ndim
+              if (periodic_d(idim)) then
+                 if (target_ckey(idim) < box_min(idim))  target_ckey(idim) = box_max(idim) - 1
+                 if (target_ckey(idim) >= box_max(idim)) target_ckey(idim) = box_min(idim)
+              else
+                 if (target_ckey(idim) < box_min(idim))  in_domain = .false.
+                 if (target_ckey(idim) >= box_max(idim)) in_domain = .false.
+              endif
+           end do
+           if (.not. in_domain) cycle
+
+           father_ckey = target_ckey / 2
+           ii = target_ckey - 2 * father_ckey
+           icell = 1
+           do idim = 1, ndim
+              icell = icell + ii(idim) * (2**(idim-1))
+           end do
+
+           ix8 = int(father_ckey(1), kind=8)
+           iy8 = int(father_ckey(2), kind=8)
+           iz8 = int(father_ckey(3), kind=8)
+           nx  = int(ckey_max_d(ilevel), kind=8)
+           offset = key_off_d(ilevel)
+           key = offset + ix8 + iy8*nx + iz8*nx*nx
+           igrid = hash_get(hash_key_d, hash_val_d, hash_size_d, key)
+           if (igrid == 0) cycle
+
+           do idim = 1, ndim
+              ff(idim) = ff(idim) + real(f_d(icell, idim, igrid), kind=8) * weight
+           end do
+        end do
+     end do
+  end do
+
+  if (has_fp /= 0) then
+     do idim = 1, ndim
+        fp_d(ipart + (idim-1)*leading) = ff(idim)
+     end do
+  endif
+
+  if (action_part == 2) then
+     do idim = 1, ndim
+        vp_d(ipart + (idim-1)*leading) = vp_d(ipart + (idim-1)*leading) &
+             + ff(idim) * 0.5d0 * dtnew_d(ilevel)
+        xnew = xp_d(ipart + (idim-1)*leading) &
+             + vp_d(ipart + (idim-1)*leading) * dtnew_d(ilevel)
+        if (periodic_d(idim)) then
+           if (xnew < 0d0)              xnew = xnew + box_size_d(idim)
+           if (xnew >= box_size_d(idim)) xnew = xnew - box_size_d(idim)
+        endif
+        xp_d(ipart + (idim-1)*leading) = xnew
+     end do
+  else if (action_part == 1) then
+     lp = levelp_d(ipart)
+     if (lp >= ilevel) then
+        dteff = dtnew_d(lp)
+     else
+        dteff = dtold_d(lp)
+     endif
+     levelp_d(ipart) = ilevel
+     do idim = 1, ndim
+        vp_d(ipart + (idim-1)*leading) = vp_d(ipart + (idim-1)*leading) &
+             + ff(idim) * 0.5d0 * dteff
+     end do
+  endif
+end subroutine kick_drift_part_kernel
 
 subroutine gpu_kick_drift_part(sim, ilevel, action_part)
   use nvtx
@@ -1140,19 +1273,15 @@ subroutine gpu_kick_drift_part(sim, ilevel, action_part)
 
   integer(kind=4) :: head_idx, num_parts, leading
   integer :: num_threads, num_blocks
-  real(kind=8) :: dt
+  real(kind=8) :: dx_loc, skip1, skip2, skip3
 
-  call nvtxStartRange("gpu_kick_drift_part (drift only)", color=4) ! purple
+  call nvtxStartRange("gpu_kick_drift_part", color=4) ! purple
 
   if (.not. allocated(xp)) then
      call nvtxEndRange()
      return
   endif
-
-  ! pm_parameters: action_kick_only=1, action_kick_drift=2. Keep kick-only as
-  ! a no-op for this first §4.4 reintroduction; job 308885 showed the first
-  ! kick-only dump had only sortp WARNs.
-  if (action_part /= 2) then
+  if (.not. allocated(f)) then
      call nvtxEndRange()
      return
   endif
@@ -1165,11 +1294,32 @@ subroutine gpu_kick_drift_part(sim, ilevel, action_part)
   endif
 
   leading = size(xp, 1)
-  dt = sim%g%dtnew(ilevel)
+  dx_loc = sim%r%boxlen / 2d0**ilevel
+  skip1 = 0d0
+  skip2 = 0d0
+  skip3 = 0d0
+  if (ndim >= 1) skip1 = sim%m%skip(1)
+  if (ndim >= 2) skip2 = sim%m%skip(2)
+  if (ndim >= 3) skip3 = sim%m%skip(3)
+  dtnew_part = sim%g%dtnew
+  dtold_part = sim%g%dtold
+  ! force_fine currently fills host m%f; refresh the device mirror before
+  ! gathering forces so §4.4 does not consume stale data.
+  f = sim%m%f
+  call GPU_Error_Check("gpu/gpu_part.cuf", 0)
   num_threads = 128
   num_blocks  = (num_parts + num_threads - 1) / num_threads
-  call drift_part_kernel<<<num_blocks, num_threads>>>(xp, vp, box_size, periodic, &
-       dt, head_idx, num_parts, leading)
+  if (allocated(fp)) then
+     call kick_drift_part_kernel<<<num_blocks, num_threads>>>(xp, vp, fp, levelp, f, &
+          hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, &
+          box_ckey_min, box_ckey_max, box_size, periodic, dtnew_part, dtold_part, &
+          skip1, skip2, skip3, dx_loc, action_part, ilevel, head_idx, num_parts, leading, 1)
+  else
+     call kick_drift_part_kernel<<<num_blocks, num_threads>>>(xp, vp, xp, levelp, f, &
+          hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, &
+          box_ckey_min, box_ckey_max, box_size, periodic, dtnew_part, dtold_part, &
+          skip1, skip2, skip3, dx_loc, action_part, ilevel, head_idx, num_parts, leading, 0)
+  endif
   call GPU_Error_Check("gpu/gpu_part.cuf", 0)
 
   call nvtxEndRange()

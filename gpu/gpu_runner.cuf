@@ -1,5 +1,5 @@
 module gpu_runner
-  use amr_parameters, only: ndim, twotondim, threetondim, dp, i8b
+  use amr_parameters, only: ndim, twotondim, threetondim, dp, i8b, MAXLEVEL
   use oct_commons, only: oct
   use gpu_utils
   use cudafor
@@ -10,6 +10,7 @@ module gpu_runner
   logical, device, dimension(1:3) :: periodic
   real(kind=8), device, dimension(1:3) :: box_size
   real(kind=8), device, dimension(1:3) :: constant_gravity
+  real(kind=8), device, dimension(1:MAXLEVEL) :: dtnew_part, dtold_part
   integer(kind=4), device, allocatable, dimension(:) :: ckey_max
   integer(kind=8), device, allocatable, dimension(:) :: key_off
   integer(kind=4), device, allocatable, dimension(:,:) :: box_ckey_min, box_ckey_max
