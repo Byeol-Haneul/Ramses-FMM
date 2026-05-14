@@ -2028,6 +2028,13 @@ contains
     integer(kind=4) :: num_octs, num_blocks, num_threads
     integer :: threadsX_per_block, threadsY_per_block
     real(kind=8) :: dx, dx2
+    ! Verbose-gated D->H f-dump scratch (docs/triage/2026-05-14-vp-1pct-uniform-bias.md
+    ! Hypothesis 1 vs 2). Sized to a small compile-time constant so this is a
+    ! plain host stack array (no `device, allocatable` scratch, per
+    ! docs/gpu_pm_debug_invariants.md "Avoid local device, allocatable scratch").
+    integer, parameter :: N_FDUMP = 4
+    integer :: n_dump, ioct_dump, idim_dump, ind_dump
+    real(kind=dp) :: f_host_dump(1:twotondim, 1:ndim, 1:N_FDUMP)
 
     dx  = sim%r%boxlen/2**ilevel
 
@@ -2063,6 +2070,42 @@ contains
 
     call gradient_phi<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(phi, f, nbor, &
          & head_idx, num_octs, dx)
+
+    ! Post-kernel verbose-gated D->H f-dump for the first N_FDUMP octs of
+    ! the level-ilevel slab. Falsifiable check for the ~1% uniform vp bias
+    ! triage (docs/triage/2026-05-14-vp-1pct-uniform-bias.md):
+    !   * Identical CPU/GPU `fdump_grad` lines  -> Hypothesis 1 falsified; the
+    !     bias enters in gpu_gather_cic_force_part / gpu_kick_drift_part.
+    !   * Uniform offset across all (idim, ind) -> Hypothesis 1 confirmed; the
+    !     bias lives in gradient_phi or its phi source.
+    ! The CPU-side mirror lives in poisson/force_fine.f90:gradient_phi.
+    !
+    ! Implementation notes:
+    !   * The slice assignment below is an implicit synchronous D->H memcpy
+    !     in CUDA Fortran (same idiom as gpu_to_host_mesh / r_transfer_grid_host:
+    !     `pst%s%m%f = f`); no explicit cudaDeviceSynchronize is needed.
+    !   * No new kernel launch; no grid/block geometry / shared memory.
+    !   * twotondim*ndim*N_FDUMP*sizeof(dp) = 8*3*4*8 = 768 B host stack only.
+    !   * Output volume bound: N_FDUMP * ndim * twotondim = 96 lines per call,
+    !     ~6 calls per harness step at levelmin=7 (see job 312149 log).
+    if (sim%r%verbose) then
+       n_dump = MIN(N_FDUMP, num_octs)
+       if (n_dump > 0) then
+          f_host_dump(:,:,1:n_dump) = f(:,:,head_idx:head_idx+n_dump-1)
+          do ioct_dump = 1, n_dump
+             do idim_dump = 1, ndim
+                do ind_dump = 1, twotondim
+                   write(*,'(A,I0,A,I0,A,I0,A,I0,A,ES23.15)') &
+                        ' fdump_grad: ilevel=', ilevel, &
+                        ' oct=',  head_idx+ioct_dump-1, &
+                        ' idim=', idim_dump, &
+                        ' ind=',  ind_dump, &
+                        ' f=',    f_host_dump(ind_dump, idim_dump, ioct_dump)
+                end do
+             end do
+          end do
+       endif
+    endif
 
   end subroutine gpu_gradient_phi
 
