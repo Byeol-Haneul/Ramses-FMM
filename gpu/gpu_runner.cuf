@@ -2036,17 +2036,29 @@ contains
 
     if (num_octs == 0) return
 
-    threadsX_per_block = 4
+    ! threadsX_per_block must be twotondim (= 8 in 3D): the gradient_phi kernel
+    ! uses `cell_idx = threadIdx%x` to write f(cell_idx, idim, oct_idx) for all
+    ! twotondim cells of every oct. A prior value of 4 only wrote cells 1..4
+    ! and left cells 5..8 of f at MG-iteration scratch (residual / RHS / mask).
+    ! That stale state then leaks into gpu_kick_drift_part's 8-corner CIC force
+    ! gather (half the corners land on icell ∈ {5..8} of their parent oct),
+    ! producing a small systematic vp/xp drift seen in job 312040
+    ! (part_000010_kickdrift_lev07.bin first diverged here).
+    threadsX_per_block = 8
     threadsY_per_block = 32
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
 
     ! 311937 triage: log f-write window so we can detect whether a level-(L+1)
     ! gradient_phi writes into the level-L oct slab (Hypothesis A for the
     ! kick_drift action=2 over-kick).
+    ! 312040 fix sentinel: also log (threadsX, threadsY) so the next harness
+    ! cluster run proves the build picked up the cells-5..8 fix. Expected:
+    ! threadsX=8 threadsY=32. If the log shows threadsX=4 the binary is stale.
     if (sim%r%verbose) then
-       write(*,'(A,I0,A,I0,A,I0)') &
+       write(*,'(A,I0,A,I0,A,I0,A,I0,A,I0)') &
             ' gpu_gradient_phi: ilevel=', ilevel, &
-            ' head_idx=', head_idx, ' num_octs=', num_octs
+            ' head_idx=', head_idx, ' num_octs=', num_octs, &
+            ' threadsX=', threadsX_per_block, ' threadsY=', threadsY_per_block
     endif
 
     call gradient_phi<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(phi, f, nbor, &
