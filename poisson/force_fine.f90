@@ -205,6 +205,41 @@ subroutine gradient_phi(s,ilevel,icount)
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
+  ! Verbose-gated CPU mirror of the GPU `phidump_grad` dump emitted by
+  ! gpu/gpu_runner.cuf:gpu_gradient_phi BEFORE its kernel launch. This is the
+  ! Hypothesis-1 split sub-check for the ~1% uniform vp bias triage
+  ! (docs/triage/2026-05-14-vp-1pct-uniform-bias.md): job 312274 confirmed
+  ! the per-cell `f` mismatch is sign-consistent and ~uniform-relative, so the
+  ! bias is in gradient_phi or its phi input. Compare matching
+  ! `phidump_grad: ilevel=L oct=O ind=I phi=...` records between
+  ! cpu_run/run.log and gpu_run/run.log with the harness comparator:
+  !   * phi matches within tolerance, f does not -> the kernel itself is
+  !     wrong (corner index, dx/dx2, ghost-neighbour read).
+  !   * phi already diverges -> bias enters earlier (MG phi solve, phip
+  !     injection, or phi host<->device synchronisation).
+  ! Placed at the head of gradient_phi so the dump captures the same m%phi
+  ! the routine's subsequent gather loop consumes; interpol_phi reads (not
+  ! writes) m%phi, so head placement and pre-loop placement are equivalent
+  ! values-wise. Volume bound: N_FDUMP=4 octs * twotondim = 32 lines per
+  ! call (~6 calls per harness binary in the cosmo l7 nml).
+  if(r%verbose)then
+     block
+       integer, parameter :: N_FDUMP = 4
+       integer :: n_dump, ioct_pd, ind_pd, gidx_pd
+       n_dump = MIN(N_FDUMP, m%tail(ilevel)-m%head(ilevel)+1)
+       do ioct_pd = 1, n_dump
+          gidx_pd = m%head(ilevel) + ioct_pd - 1
+          do ind_pd = 1, twotondim
+             write(*,'(A,I0,A,I0,A,I0,A,ES23.15)') &
+                  ' phidump_grad: ilevel=', ilevel, &
+                  ' oct=',  gidx_pd, &
+                  ' ind=',  ind_pd, &
+                  ' phi=',  m%phi(ind_pd, gidx_pd)
+          end do
+       end do
+     end block
+  endif
+
   ! Mesh size at level ilevel in code units
   dx=r%boxlen/2**ilevel
 

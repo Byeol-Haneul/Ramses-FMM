@@ -2035,6 +2035,10 @@ contains
     integer, parameter :: N_FDUMP = 4
     integer :: n_dump, ioct_dump, idim_dump, ind_dump
     real(kind=dp) :: f_host_dump(1:twotondim, 1:ndim, 1:N_FDUMP)
+    ! Verbose-gated pre-kernel D->H phi-dump scratch (twotondim*N_FDUMP = 32
+    ! doubles = 256 B host stack). Same N_FDUMP=4 octs as f_host_dump so
+    ! every fdump_grad record has a matching phidump_grad pre-image.
+    real(kind=dp) :: phi_host_dump(1:twotondim, 1:N_FDUMP)
 
     dx  = sim%r%boxlen/2**ilevel
 
@@ -2066,6 +2070,43 @@ contains
             ' gpu_gradient_phi: ilevel=', ilevel, &
             ' head_idx=', head_idx, ' num_octs=', num_octs, &
             ' threadsX=', threadsX_per_block, ' threadsY=', threadsY_per_block
+    endif
+
+    ! Pre-kernel verbose-gated D->H phi-dump for the first N_FDUMP octs of
+    ! the level-ilevel slab. Hypothesis-1 split sub-check for the ~1%
+    ! uniform vp bias triage (docs/triage/2026-05-14-vp-1pct-uniform-bias.md);
+    ! Job 312274 already confirmed Hypothesis 1 (sign-consistent ~uniform
+    ! offset on f), this isolates "kernel itself drifts" vs "kernel reads a
+    ! different phi". CPU mirror at the head of poisson/force_fine.f90:gradient_phi.
+    !
+    ! Safety:
+    !   * Nothing between this dump and the kernel launch writes phi (only
+    !     scalar assignments + early-return + a verbose printf above), so
+    !     the dumped values are exactly what gradient_phi<<<...>>> consumes.
+    !   * No streams are used anywhere in the GPU path, so the implicit
+    !     synchronous D->H slice copy drains all prior default-stream work
+    !     (MG solve writes to phi) before reading.
+    !   * Slice idiom matches the post-kernel f_host_dump assignment below
+    !     (same as gpu_to_host_mesh's `m%f = f`); no explicit
+    !     cudaDeviceSynchronize, no new kernel launch, no host->device copy,
+    !     no `device, allocatable` scratch.
+    !   * twotondim*N_FDUMP*sizeof(dp) = 8*4*8 = 256 B host stack only.
+    !   * Output volume: N_FDUMP * twotondim = 32 lines per call, ~6 calls
+    !     per harness binary (matches the fdump_grad call cadence).
+    if (sim%r%verbose) then
+       n_dump = MIN(N_FDUMP, num_octs)
+       if (n_dump > 0) then
+          phi_host_dump(:,1:n_dump) = phi(:,head_idx:head_idx+n_dump-1)
+          do ioct_dump = 1, n_dump
+             do ind_dump = 1, twotondim
+                write(*,'(A,I0,A,I0,A,I0,A,ES23.15)') &
+                     ' phidump_grad: ilevel=', ilevel, &
+                     ' oct=',  head_idx+ioct_dump-1, &
+                     ' ind=',  ind_dump, &
+                     ' phi=',  phi_host_dump(ind_dump, ioct_dump)
+             end do
+          end do
+       endif
     endif
 
     call gradient_phi<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(phi, f, nbor, &
