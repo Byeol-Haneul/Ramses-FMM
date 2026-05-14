@@ -315,6 +315,7 @@ subroutine output_frame(s,ind_proj,ind_var,map_size,map)
   integer::box_xidx,box_yidx,box_zidx
   real(kind=8)::theta_cam,phi_cam,dist_cam,fov_camera
   real(kind=8)::alpha,beta,pers_corr,timer,timer_end
+  real(kind=8)::base_dist,tend_theta_eff,tend_phi_eff,span
   real(kind=8)::xtmp,ytmp,ztmp
   real(kind=8)::xcentre,ycentre,zcentre,dx_proj
   real(kind=8)::xpc,ypc,xmap,ymap,zmap
@@ -362,15 +363,65 @@ subroutine output_frame(s,ind_proj,ind_var,map_size,map)
      timer_end = r%tendmov
   endif
 
-  ! Camera angles in radians, with smooth evolution between t_start and t_end.
-  call camera_value(timer,r%tstart_theta_camera(ind_proj),r%tend_theta_camera(ind_proj),timer_end, &
-       & r%theta_camera(ind_proj),r%dtheta_camera(ind_proj),r%astartmov,theta_cam)
-  call camera_value(timer,r%tstart_phi_camera(ind_proj),r%tend_phi_camera(ind_proj),timer_end, &
-       & r%phi_camera(ind_proj),r%dphi_camera(ind_proj),r%astartmov,phi_cam)
-  ! Camera distance and field-of-view (perspective only)
-  dist_cam = r%dist_camera(ind_proj)
-  if(dist_cam.le.0d0) dist_cam = r%boxlen
-  fov_camera = atan((r%deltax_frame(ind_proj*2-1)/2d0)/max(r%focal_camera(ind_proj),1d-30))
+  ! Camera evolution — formulas mirror ramses/amr/movie.f90:237-259 exactly so
+  ! the two codes produce identical camera tracks for matching namelists.
+  ! Note: in the cosmological branch, ramses gates phi on tstart_theta_camera
+  ! (not tstart_phi_camera); the non-cosmological branch uses tstart_phi_camera.
+  ! dist_cam is always gated on tstart_theta_camera / tend_theta_camera in both
+  ! modes — there is no separate tstart_dist_camera.
+
+  ! Default base distance to boxlen when unset.
+  base_dist = r%dist_camera(ind_proj)
+  if(base_dist.le.0d0) base_dist = r%boxlen
+
+  ! Default tend_*_camera to the global movie endpoint when <=0.
+  tend_theta_eff = r%tend_theta_camera(ind_proj)
+  if(tend_theta_eff.le.0d0) tend_theta_eff = timer_end
+  tend_phi_eff   = r%tend_phi_camera(ind_proj)
+  if(tend_phi_eff  .le.0d0) tend_phi_eff   = timer_end
+
+  ! Span = movie duration in the active timer.
+  if(r%cosmo)then
+     span = r%aendmov - r%astartmov
+  else
+     span = r%tendmov - r%tstartmov
+  endif
+
+  if(span.le.0d0)then
+     theta_cam = r%theta_camera(ind_proj)*pi/180d0
+     phi_cam   = r%phi_camera  (ind_proj)*pi/180d0
+     dist_cam  = base_dist
+  else
+     theta_cam = r%theta_camera(ind_proj)*pi/180d0 &
+          & + min(max(timer-r%tstart_theta_camera(ind_proj),0d0),tend_theta_eff) &
+          &   *r%dtheta_camera(ind_proj)*pi/180d0/span
+     if(r%cosmo)then
+        ! ramses cosmo branch: phi gated on tstart_THETA_camera (see ramses movie.f90:246)
+        phi_cam = r%phi_camera(ind_proj)*pi/180d0 &
+             & + min(max(timer-r%tstart_theta_camera(ind_proj),0d0),tend_phi_eff) &
+             &   *r%dphi_camera(ind_proj)*pi/180d0/span
+     else
+        phi_cam = r%phi_camera(ind_proj)*pi/180d0 &
+             & + min(max(timer-r%tstart_phi_camera(ind_proj),0d0),tend_phi_eff) &
+             &   *r%dphi_camera(ind_proj)*pi/180d0/span
+     endif
+     dist_cam = base_dist &
+          & + min(max(timer-r%tstart_theta_camera(ind_proj),0d0),tend_theta_eff) &
+          &   *r%ddist_camera(ind_proj)/span
+  endif
+
+  ! Default focal_camera — matches ramses movie.f90:258. Mutates r%focal_camera
+  ! so the perspective routines (project_point / project_particles) downstream
+  ! use the same defaulted value.
+  if(r%focal_camera(ind_proj).le.0d0 .or. r%focal_camera(ind_proj).gt.base_dist) then
+     r%focal_camera(ind_proj) = dist_cam
+  endif
+
+  ! Field-of-view from raw deltax_frame including the cosmological /aexp term,
+  ! independent of proj_axis (matches ramses movie.f90:234,259).
+  fov_camera = atan( &
+       & (r%deltax_frame(ind_proj*2-1)+r%deltax_frame(ind_proj*2)/g%aexp)/2d0 &
+       & /max(r%focal_camera(ind_proj),1d-30))
 
   ! Compute frame centre (with optional cosmological polynomial drift in aexp).
   ! After the axis-swap, (xcen,ycen,zcen) are screen-x, screen-y, line-of-sight centres
@@ -617,28 +668,6 @@ subroutine output_frame(s,ind_proj,ind_var,map_size,map)
   end associate
 
 end subroutine output_frame
-!=======================================================================
-!=======================================================================
-!=======================================================================
-!=======================================================================
-subroutine camera_value(timer,tstart,tend_in,tend_global,base,delta,t_offset,value_out)
-  ! Smoothly evolve a camera quantity between tstart and tend.
-  ! Matches ramses' formula:
-  !   value = base*pi/180 + min(max(timer-tstart,0),tend)*delta*pi/180 / (tend_global-t_offset)
-  implicit none
-  real(kind=8),intent(in)::timer,tstart,tend_in,tend_global,base,delta,t_offset
-  real(kind=8),intent(out)::value_out
-  real(kind=8)::tend_eff,span
-  real(kind=8),parameter::pi=3.14159265358979323846d0
-  tend_eff = tend_in
-  if(tend_eff.le.0d0) tend_eff = tend_global
-  span = tend_global - t_offset
-  if(span.le.0d0)then
-     value_out = base*pi/180d0
-     return
-  endif
-  value_out = base*pi/180d0 + min(max(timer-tstart,0d0),tend_eff)*delta*pi/180d0/span
-end subroutine camera_value
 !=======================================================================
 !=======================================================================
 !=======================================================================
