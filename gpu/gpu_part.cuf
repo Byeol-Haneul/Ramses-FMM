@@ -1514,10 +1514,12 @@ subroutine gpu_kick_drift_part(sim, ilevel, action_part)
      return
   endif
 
-  ! force_fine currently fills host m%f; refresh the device mirror before
-  ! gathering forces so §4.4 does not consume stale data.
-  f = sim%m%f
-  call GPU_Error_Check("gpu/gpu_part.cuf", 0)
+  ! Poisson force_fine fills device f through gpu_gradient_phi. Only analytic
+  ! gravity still writes the host force array in the CUDA path.
+  if (sim%r%gravity_type > 0) then
+     f = sim%m%f
+     call GPU_Error_Check("gpu/gpu_part.cuf", 0)
+  endif
   num_blocks  = (num_parts + num_threads - 1) / num_threads
   if (allocated(fp)) then
      call kick_drift_part_kernel<<<num_blocks, num_threads>>>(xp, vp, fp, levelp, f, &
