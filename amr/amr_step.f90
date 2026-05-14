@@ -137,8 +137,8 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   !--------------------------
   if(r%movie) then
      if(r%imov.le.r%imovout)then 
-        if((r%aendmov>0.and.g%aexp>=r%aendmov*dble(r%imov)/dble(r%imovout)) &
-             & .or.(r%tendmov>0.and.g%t>=r%tendmov*dble(r%imov)/dble(r%imovout)))then
+        if((r%aendmov>0.and.g%aexp>=(r%aendmov-r%astartmov)*dble(r%imov)/dble(r%imovout)+r%astartmov) &
+             & .or.(r%tendmov>0.and.g%t>=(r%tendmov-r%tstartmov)*dble(r%imov)/dble(r%imovout)+r%tstartmov))then
            call m_output_frame(pst)
         endif
      endif
