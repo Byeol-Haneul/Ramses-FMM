@@ -894,14 +894,16 @@ contains
             & head_idx, num_octs, gamma, mass_sph, m_refine, jeans_refine, factG, dx)
     endif
 
-    head_idx = sim%m%head(ilevel)
-    num_octs = sim%m%noct(ilevel)
-    threadsX_per_block = 8
-    threadsY_per_block = 16
-    num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
-    if(num_octs > 0)then
-       call hydro_flag_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(flag1, grid, nbor, uold, &
-            & head_idx, num_octs, gamma, err_grad_d, err_grad_p, floor_d, floor_p)
+    if (sim%r%hydro) then
+       head_idx = sim%m%head(ilevel)
+       num_octs = sim%m%noct(ilevel)
+       threadsX_per_block = 8
+       threadsY_per_block = 16
+       num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
+       if(num_octs > 0)then
+          call hydro_flag_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(flag1, grid, nbor, uold, &
+               & head_idx, num_octs, gamma, err_grad_d, err_grad_p, floor_d, floor_p)
+       endif
     endif
 
     nflag_h = 0
