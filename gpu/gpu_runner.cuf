@@ -1473,6 +1473,15 @@ contains
        head_father = sim%m%noct(ilevel) + sim%m_mg%head(ifine)
     endif
 
+    ! 311937 triage: log MG build state so the next harness records which
+    ! (ilevel, ifine, head_idx, num_octs) call hits the gpu_scan crash.
+    if (sim%r%verbose) then
+       write(*,'(A,I0,A,I0,A,I0,A,I0,A,I0)') &
+            ' gpu_build_mg: ilevel=', ilevel, ' ifine=', ifine, &
+            ' head_idx=', head_idx, ' num_octs=', num_octs, &
+            ' head_father=', head_father
+    endif
+
     if (num_octs == 0) return
 
     num_threads = 128
@@ -2028,6 +2037,15 @@ contains
     threadsX_per_block = 4
     threadsY_per_block = 32
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
+
+    ! 311937 triage: log f-write window so we can detect whether a level-(L+1)
+    ! gradient_phi writes into the level-L oct slab (Hypothesis A for the
+    ! kick_drift action=2 over-kick).
+    if (sim%r%verbose) then
+       write(*,'(A,I0,A,I0,A,I0)') &
+            ' gpu_gradient_phi: ilevel=', ilevel, &
+            ' head_idx=', head_idx, ' num_octs=', num_octs
+    endif
 
     call gradient_phi<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(phi, f, nbor, &
          & head_idx, num_octs, dx)

@@ -1521,6 +1521,20 @@ subroutine gpu_kick_drift_part(sim, ilevel, action_part)
      call GPU_Error_Check("gpu/gpu_part.cuf", 0)
   endif
   num_blocks  = (num_parts + num_threads - 1) / num_threads
+  ! 311937 triage: log per-call level/oct/dt state so the next harness run records
+  ! whether head/noct(ilevel+1) overlaps the level-ilevel oct slab and whether
+  ! dtnew(ilevel) changes between action=1 and action=2 launches.
+  if (sim%r%verbose) then
+     write(*,'(A,I0,A,I0,A,I0,A,I0,A,I0,A,I0,A,I0,A,I0,A,1PE15.8,A,1PE15.8)') &
+          ' gpu_kick_drift_part: action=', action_part, &
+          ' ilevel=', ilevel, &
+          ' head_idx=', head_idx, ' num_parts=', num_parts, &
+          ' m%head(L)=', sim%m%head(ilevel), ' m%noct(L)=', sim%m%noct(ilevel), &
+          ' m%head(L+1)=', sim%m%head(min(ilevel+1, sim%r%nlevelmax)), &
+          ' m%noct(L+1)=', sim%m%noct(min(ilevel+1, sim%r%nlevelmax)), &
+          ' dtnew(L)=', sim%g%dtnew(ilevel), &
+          ' dtold(L)=', sim%g%dtold(ilevel)
+  endif
   if (allocated(fp)) then
      call kick_drift_part_kernel<<<num_blocks, num_threads>>>(xp, vp, fp, levelp, f, &
           hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, &
