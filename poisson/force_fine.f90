@@ -341,9 +341,10 @@ subroutine gradient_phi(s,ilevel,icount)
   ! gpu/gpu_runner.cuf:gpu_gradient_phi. Falsifiable check for the
   ! ~1% uniform vp bias triage (docs/triage/2026-05-14-vp-1pct-uniform-bias.md
   ! Hypothesis 1 vs 2). Compare matching `fdump_grad: ilevel=L oct=O idim=D
-  ! ind=I f=...` lines between cpu_run/run.log and gpu_run/run.log:
-  !   * identical -> Hypothesis 1 falsified; triage moves to
-  !     gpu_gather_cic_force_part / gpu_kick_drift_part (Hypothesis 2).
+  ! ind=I f=...` records between cpu_run/run.log and gpu_run/run.log with the
+  ! harness comparator:
+  !   * values match within tolerance -> Hypothesis 1 falsified; triage moves
+  !     to gpu_gather_cic_force_part / gpu_kick_drift_part (Hypothesis 2).
   !   * uniform offset -> Hypothesis 1 confirmed; triage stays in
   !     gradient_phi / phi source.
   ! Kept small (N_FDUMP=4 octs * ndim * twotondim = 96 lines per call).

@@ -2074,8 +2074,9 @@ contains
     ! Post-kernel verbose-gated D->H f-dump for the first N_FDUMP octs of
     ! the level-ilevel slab. Falsifiable check for the ~1% uniform vp bias
     ! triage (docs/triage/2026-05-14-vp-1pct-uniform-bias.md):
-    !   * Identical CPU/GPU `fdump_grad` lines  -> Hypothesis 1 falsified; the
-    !     bias enters in gpu_gather_cic_force_part / gpu_kick_drift_part.
+    !   * CPU/GPU `fdump_grad` values match under the harness comparator ->
+    !     Hypothesis 1 falsified; the bias enters in gpu_gather_cic_force_part /
+    !     gpu_kick_drift_part.
     !   * Uniform offset across all (idim, ind) -> Hypothesis 1 confirmed; the
     !     bias lives in gradient_phi or its phi source.
     ! The CPU-side mirror lives in poisson/force_fine.f90:gradient_phi.
@@ -2086,8 +2087,8 @@ contains
     !     `pst%s%m%f = f`); no explicit cudaDeviceSynchronize is needed.
     !   * No new kernel launch; no grid/block geometry / shared memory.
     !   * twotondim*ndim*N_FDUMP*sizeof(dp) = 8*3*4*8 = 768 B host stack only.
-    !   * Output volume bound: N_FDUMP * ndim * twotondim = 96 lines per call,
-    !     ~6 calls per harness step at levelmin=7 (see job 312149 log).
+    !   * Output volume bound: N_FDUMP * ndim * twotondim = 96 lines per call.
+    !     Job 312149's current short l7 harness showed about six calls total.
     if (sim%r%verbose) then
        n_dump = MIN(N_FDUMP, num_octs)
        if (n_dump > 0) then
