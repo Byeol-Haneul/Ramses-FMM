@@ -626,13 +626,10 @@ contains
     k = grid(oct_idx)%ckey(3) - 2 * (grid(oct_idx)%ckey(3) / 2)
     cell_idx = 1 + i + 2*j + 4*k
 
-    ! Reset conservative variables
-    f_mg(cell_idx, 3, father_idx) = 0_dp
-
     ! Average children variables
     do ind = 1, twotondim
-       ngpmask = (1d0 + f(ind,3,oct_idx)) / 2d0
-       f_mg(cell_idx, 3, father_idx) = f_mg(cell_idx, 3, father_idx) + ngpmask / dble(twotondim)
+       ngpmask = (1d0 + f(ind, 3, oct_idx)) / 2d0 / dble(twotondim)
+       f_mg(cell_idx, 3, father_idx) = f_mg(cell_idx, 3, father_idx) + ngpmask
     end do
 
   end subroutine restrict_mask
@@ -665,7 +662,7 @@ contains
        oct_idx = head_idx + oct_idx
 
        ! Compute the cell idx
-       cell_idx = threadIdx%x
+       cell_idx = mod(tid, twotondim) + 1
 
        ! Initialize mask to input value
        f(cell_idx, 3, oct_idx) = 2d0 * f(cell_idx, 3, oct_idx) - 1d0

@@ -356,13 +356,13 @@ contains
 
        ! Gravity predictor step
 #ifdef GRAV
-       primitive%velocity_x = primitive%velocity_x + f(cell_idx, 1, source_idx) * 0.5 * dt 
-       primitive%velocity_y = primitive%velocity_y + f(cell_idx, 2, source_idx) * 0.5 * dt 
-       primitive%velocity_z = primitive%velocity_z + f(cell_idx, 3, source_idx) * 0.5 * dt 
+       primitive%velocity_x = primitive%velocity_x + f(cell_idx, 1, source_idx) * 0.5 * dt
+       primitive%velocity_y = primitive%velocity_y + f(cell_idx, 2, source_idx) * 0.5 * dt
+       primitive%velocity_z = primitive%velocity_z + f(cell_idx, 3, source_idx) * 0.5 * dt
 #else
-       primitive%velocity_x = primitive%velocity_x + constant_gravity(1) * 0.5 * dt 
-       primitive%velocity_y = primitive%velocity_y + constant_gravity(2) * 0.5 * dt 
-       primitive%velocity_z = primitive%velocity_z + constant_gravity(3) * 0.5 * dt 
+       primitive%velocity_x = primitive%velocity_x + constant_gravity(1) * 0.5 * dt
+       primitive%velocity_y = primitive%velocity_y + constant_gravity(2) * 0.5 * dt
+       primitive%velocity_z = primitive%velocity_z + constant_gravity(3) * 0.5 * dt
 #endif
 
        ! Write primitives cells to shared memory

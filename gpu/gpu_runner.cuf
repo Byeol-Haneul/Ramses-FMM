@@ -690,10 +690,10 @@ contains
        end if
 
        ! Compute new cache tail and next cache head
-       new_tail = new_head + new_noct - 1
-       new_head = new_tail + 1
-       sim%m%noct_cache(ilev) = new_noct
+       new_tail = new_ifree - 1
+       sim%m%noct_cache(ilev) = new_tail - new_head + 1
        sim%m%tail_cache(ilev) = new_tail
+       new_head = new_ifree
 
     end do
     ! End loop over levels
@@ -1241,6 +1241,8 @@ contains
     integer(kind=4) :: head_idx, num_octs
     integer :: threadsX_per_block, threadsY_per_block, num_threads, num_blocks
     real(kind=8) :: tfrac
+    real(kind=8), device :: test_d
+    real(kind=8) :: test_h
 
     ! Compute fraction of time steps for interpolation
     if (sim%g%dtold(ilevel-1)>0.0)then
@@ -1267,11 +1269,13 @@ contains
        endif
     endif
 
-    head_idx = sim%m%head_cache(ilevel)
+    head_idx = sim%m%ngridmax + sim%m%head_cache(ilevel)
     num_octs = sim%m%noct_cache(ilevel)
     threadsX_per_block = 8
     threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
+
+    test_h = test_d
 
     if (num_octs > 0) then
        call reset_phi<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(phi, f, &
@@ -1292,7 +1296,7 @@ contains
   !>
   !> @detail
   !> mask=1 means inside the domain, mask=0 means outside.
-  !> So we set 1 in main octs and 0 in cache octs.
+  !> So we set 1 in main octs and -1 in cache octs.
   !>
   subroutine gpu_make_mask(sim, ilevel)
     use mg_device, only: reset_mask_kernel
@@ -1302,6 +1306,10 @@ contains
 
     integer(kind=4) :: head_idx, num_octs
     integer :: threadsX_per_block, threadsY_per_block, num_threads, num_blocks
+    real(kind=8), device :: test_d
+    real(kind=8) :: test_h
+
+    test_d = 1d0
 
     head_idx = sim%m%head(ilevel)
     num_octs = sim%m%noct(ilevel)
@@ -1315,7 +1323,7 @@ contains
             & head_idx, num_octs, 1d0)
     endif
 
-    head_idx = sim%m%head_cache(ilevel)
+    head_idx = sim%m%ngridmax + sim%m%head_cache(ilevel)
     num_octs = sim%m%noct_cache(ilevel)
     threadsX_per_block = 8
     threadsY_per_block = 16
@@ -1326,6 +1334,8 @@ contains
        call reset_mask_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(f, &
             & head_idx, num_octs, -1d0)
     endif
+
+    test_h = test_d
 
   end subroutine gpu_make_mask
 
@@ -1345,6 +1355,10 @@ contains
     integer(kind=4) :: head_idx, num_octs
     integer :: threadsX_per_block, threadsY_per_block, num_threads, num_blocks
     real(kind=8) :: fourpi, offset, dx, oneoverdx2
+    real(kind=8), device :: test_d
+    real(kind=8) :: test_h
+
+    test_d = 1d0
 
     fourpi = 4.D0*ACOS(-1.0D0)
     dx  = sim%r%boxlen/2**ilevel
@@ -1360,9 +1374,13 @@ contains
 
     if (num_octs == 0) return
 
+    test_h = test_d
+    
     call reset_rhs_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(phi, rho, f, nbor, &
          & head_idx, num_octs, fourpi, offset, oneoverdx2)
 
+    test_h = test_d
+    
   end subroutine gpu_make_rhs
 
   !> @brief
@@ -1389,6 +1407,9 @@ contains
     integer(kind=4) :: num_octs, num_blocks, num_threads, num_blocks_2, num_threads_2
     integer(kind=4) :: new_noct, ind, cell_ind, nbor_ind
 
+    real(kind=8), device :: test_d
+    real(kind=8) :: test_h
+
     if (ifine == ilevel) then
        head_idx = sim%m%head(ilevel)
        num_octs = sim%m%noct(ilevel)
@@ -1406,6 +1427,9 @@ contains
 
     sim%m_mg%head(ifine-1) = sim%m_mg%tail(ifine) + 1
     head_mg = sim%m_mg%head(ifine-1)
+
+    test_d=1d0
+    test_h = test_d
 
     ! Loop over oct coloring (parent oct cell index)
     do cell_ind = 1, twotondim
@@ -1553,11 +1577,29 @@ contains
     logical, intent(out) :: allmasked
     !
     integer(kind=4) :: head_idx, head_mg, head_father
+    integer(kind=4) :: threadsX_per_block, threadsY_per_block
     integer(kind=4) :: num_octs, num_blocks, num_threads
     real(kind=8), device :: mask_max
     real(kind=8) :: mask_max_host
 
-    ! Set up the fine level
+    allmasked = .true.
+
+    ! Initialize volume fraction to 0 at coarse level
+    head_idx = sim%m_mg%head(ifine-1)
+    num_octs = sim%m_mg%noct(ifine-1)
+
+    if (num_octs > 0) then
+
+       threadsX_per_block = 8
+       threadsY_per_block = 16
+       num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
+
+       call reset_mask_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(f_mg, &
+            & head_idx, num_octs, 0d0)
+
+    endif
+
+    ! Restrict mask from fine level to volume fraction in coarse level
     if (ifine == ilevel) then
        head_idx = sim%m%head(ilevel)
        num_octs = sim%m%noct(ilevel)
@@ -1568,30 +1610,38 @@ contains
        head_father = sim%m%noct(ilevel) + sim%m_mg%head(ifine)
     endif
 
-    if (num_octs == 0) return
+    if (num_octs > 0) then
 
-    num_threads = 256
-    num_blocks = (num_octs + num_threads - 1) / num_threads
+       num_threads = 256
+       num_blocks = (num_octs + num_threads - 1) / num_threads
 
-    ! Restrict mask from fine to coarse grid
-    if (ifine == ilevel) then
-       call restrict_mask<<<num_blocks, num_threads>>>(grid, father_mg, f, f_mg, &
-            & head_idx, head_father, num_octs)
-    else
-       call restrict_mask<<<num_blocks, num_threads>>>(grid_mg, father_mg, f_mg, f_mg, &
-            & head_idx, head_father, num_octs)
+       if (ifine == ilevel) then
+          call restrict_mask<<<num_blocks, num_threads>>>(grid, father_mg, f, f_mg, &
+               & head_idx, head_father, num_octs)
+       else
+          call restrict_mask<<<num_blocks, num_threads>>>(grid_mg, father_mg, f_mg, f_mg, &
+               & head_idx, head_father, num_octs)
+       endif
+
     endif
 
-    ! Set up the coarse level
+    ! Convert back from volume fraction (0 to 1) to mask (-1 to 1) at coarse level
     head_idx = sim%m_mg%head(ifine-1)
     num_octs = sim%m_mg%noct(ifine-1)
-    num_threads = 256
-    num_blocks = (num_octs * twotondim + num_threads - 1 ) / num_threads
 
-    ! Convert back from volume fraction (0 to 1) to mask (-1 to 1)
-    call volume_to_mask<<<num_blocks, num_threads>>>(f_mg, head_idx, num_octs, mask_max)
-    mask_max_host = mask_max
-    allmasked = (mask_max_host <= 0d0)
+    if (num_octs > 0) then
+
+       num_threads = 256
+       num_blocks = (num_octs * twotondim + num_threads - 1 ) / num_threads
+
+       mask_max = -1d0
+
+       call volume_to_mask<<<num_blocks, num_threads>>>(f_mg, head_idx, num_octs, mask_max)
+       mask_max_host = mask_max
+
+       allmasked = (mask_max_host <= 0d0)
+
+    endif
 
   end subroutine gpu_restrict_mask
 
@@ -1615,13 +1665,6 @@ contains
     integer(kind=4) :: num_octs, num_blocks, num_threads
     integer :: threadsX_per_block, threadsY_per_block
     real(kind=8) :: fourpi, offset, dx, oneoverdx2
-
-    integer :: i
-    real(kind=dp), allocatable, dimension(:,:,:) :: f_host
-    type(oct), allocatable, dimension(:) :: grid_host
-
-!!$    allocate(f_host(1:twotondim,1:3,1:sim%m_mg%ngridmax+sim%m_mg%ncachemax))
-!!$    allocate(grid_host(1:sim%m_mg%ngridmax+sim%m_mg%ncachemax))
 
     fourpi = 4.D0*ACOS(-1.0D0)
     dx  = sim%r%boxlen/2**ifine
@@ -1650,29 +1693,6 @@ contains
        call cmp_residual<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(phi_mg, f_mg, nbor_mg, &
             & head_idx, num_octs, fourpi, offset, oneoverdx2, sim%m_mg%ngridmax)
     endif
-
-!!$    if (ifine .ne. ilevel) then
-!!$       f_host = f_mg
-!!$       grid_host = grid_mg
-!!$       write(*,*)'RESIDUAL ilevel=',ifine,sim%m_mg%noct(ifine)
-!!$       do i = sim%m_mg%head(ifine), sim%m_mg%tail(ifine)
-!!$          if (grid_host(i)%ckey(1) == 0 .and. grid_host(i)%ckey(2) == 0 .and. grid_host(i)%ckey(3) == 0) then
-!!$             write(*,'(3(I7),8(1X,1PE15.8))')grid_host(i)%ckey,f_host(1:8,1,i)
-!!$          endif
-!!$          if (grid_host(i)%ckey(1) == 1 .and. grid_host(i)%ckey(2) == 0 .and. grid_host(i)%ckey(3) == 0) then
-!!$             write(*,'(3(I7),8(1X,1PE15.8))')grid_host(i)%ckey,f_host(1:8,1,i)
-!!$          endif
-!!$          if (grid_host(i)%ckey(1) == 0 .and. grid_host(i)%ckey(2) == 0 .and. grid_host(i)%ckey(3) == 1) then
-!!$             write(*,'(3(I7),8(1X,1PE15.8))')grid_host(i)%ckey,f_host(1:8,1,i)
-!!$          endif
-!!$          if (grid_host(i)%ckey(1) == 1 .and. grid_host(i)%ckey(2) == 0 .and. grid_host(i)%ckey(3) == 1) then
-!!$             write(*,'(3(I7),8(1X,1PE15.8))')grid_host(i)%ckey,f_host(1:8,1,i)
-!!$          endif
-!!$       end do
-!!$    end if
-!!$
-!!$    deallocate(f_host)
-!!$    deallocate(grid_host)
 
   end subroutine gpu_cmp_residual
 
@@ -1777,13 +1797,6 @@ contains
     integer(kind=4) :: head_idx, head_mg, head_father
     integer(kind=4) :: num_octs, num_blocks, num_threads
 
-    integer :: i
-    real(kind=dp), allocatable, dimension(:,:,:) :: f_host
-    type(oct), allocatable, dimension(:) :: grid_host
-
-!!$    allocate(f_host(1:twotondim,1:3,1:sim%m_mg%ngridmax+sim%m_mg%ncachemax))
-!!$    allocate(grid_host(1:sim%m_mg%ngridmax+sim%m_mg%ncachemax))
-
     ! Set up the fine level
     if (ifine == ilevel) then
        head_idx = sim%m%head(ilevel)
@@ -1808,27 +1821,6 @@ contains
        call restrict_residual<<<num_blocks, num_threads>>>(grid_mg, father_mg, f_mg, f_mg, &
             & head_idx, head_father, num_octs)
     endif
-
-!!$    f_host = f_mg
-!!$    grid_host = grid_mg
-!!$    write(*,*)'RESTRICTED_RESIDUAL ilevel=',ifine-1,sim%m_mg%noct(ifine-1)
-!!$    do i = sim%m_mg%head(ifine-1), sim%m_mg%tail(ifine-1)
-!!$       if (grid_host(i)%ckey(1) == 0 .and. grid_host(i)%ckey(2) == 0 .and. grid_host(i)%ckey(3) == 0) then
-!!$          write(*,'(3(I7),8(1X,1PE15.8))')grid_host(i)%ckey,f_host(1:8,2,i)
-!!$       endif
-!!$       if (grid_host(i)%ckey(1) == 1 .and. grid_host(i)%ckey(2) == 0 .and. grid_host(i)%ckey(3) == 0) then
-!!$          write(*,'(3(I7),8(1X,1PE15.8))')grid_host(i)%ckey,f_host(1:8,2,i)
-!!$       endif
-!!$       if (grid_host(i)%ckey(1) == 0 .and. grid_host(i)%ckey(2) == 0 .and. grid_host(i)%ckey(3) == 1) then
-!!$          write(*,'(3(I7),8(1X,1PE15.8))')grid_host(i)%ckey,f_host(1:8,2,i)
-!!$       endif
-!!$       if (grid_host(i)%ckey(1) == 1 .and. grid_host(i)%ckey(2) == 0 .and. grid_host(i)%ckey(3) == 1) then
-!!$          write(*,'(3(I7),8(1X,1PE15.8))')grid_host(i)%ckey,f_host(1:8,2,i)
-!!$       endif
-!!$    end do
-!!$
-!!$    deallocate(f_host)
-!!$    deallocate(grid_host)
 
   end subroutine gpu_restrict_residual
 
@@ -1951,8 +1943,8 @@ contains
 
     if (num_octs == 0) return
 
-    threadsX_per_block = 4
-    threadsY_per_block = 32
+    threadsX_per_block = 8
+    threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
 
     call gradient_phi<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(phi, f, nbor, &
