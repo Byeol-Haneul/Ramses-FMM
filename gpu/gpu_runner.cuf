@@ -1421,6 +1421,7 @@ contains
     real(kind=8) :: fourpi, offset, dx, oneoverdx2
 
     fourpi = 4.D0*ACOS(-1.0D0)
+    if (sim%r%cosmo) fourpi = 1.5D0 * sim%g%omega_m * sim%g%aexp
     dx  = sim%r%boxlen/2**ilevel
     oneoverdx2 = 1.0d0/(dx*dx)
     offset = sim%g%rho_tot
@@ -1707,6 +1708,7 @@ contains
 !!$    allocate(grid_host(1:sim%m_mg%ngridmax+sim%m_mg%ncachemax))
 
     fourpi = 4.D0*ACOS(-1.0D0)
+    if (sim%r%cosmo) fourpi = 1.5D0 * sim%g%omega_m * sim%g%aexp
     dx  = sim%r%boxlen/2**ifine
     oneoverdx2 = 1.0d0/(dx*dx)
     offset = sim%g%rho_tot
