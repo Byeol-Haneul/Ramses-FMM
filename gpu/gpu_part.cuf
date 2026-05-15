@@ -425,6 +425,149 @@ subroutine ensure_scan_capacity_part(min_capacity)
   endif
 end subroutine ensure_scan_capacity_part
 
+! ============================================================================
+! §4.1 — Verbose-gated diagnostic for gpu_split_part permutation
+!
+! Falsifier instrument for run 312765 (see
+! docs/triage/2026-05-14-vp-1pct-uniform-bias.md "Run 312765" / "Localization
+! 2026-05-15"). At dump 14 (split_lev07) the gpu_split_part FAIL is, after
+! sorting both sides by idp, a real per-particle xp/vp divergence with
+! matching idp/levelp/mp set and matching headp/tailp. That requires the xp
+! and vp permutations to diverge from the idp permutation despite all four
+! gather/scatter pairs reading the same module-level swap_global. The
+! adversarial review (modelB.md) ruled out read-decidable aliasing, normal
+! rank-2 leading-dim mismatch, workp copyback, CIC/sort side effects, and
+! whole-array host sync shape mismatch. The remaining plausible class is
+! runtime corruption or unexpected gather/scatter behavior inside
+! gpu_split_part.
+!
+! This helper dumps a small, fixed slot window plus a cheap whole-slice
+! swap_global checksum at one of four stages, all keyed by the same
+! head_idx/num_parts that gpu_split_part is operating on. Decision rules:
+!   * swap_global mutates between fields  -> csum / csum_sq / smin / smax
+!     differ across stages even though no gpu_split_part code path writes
+!     swap_global after stage 3e (update_global_swap_table).
+!   * xp/vp rank-2 gather/scatter reads/writes wrong offsets -> after_xp
+!     and/or after_vp slot rows show xp/vp values that disagree with the
+!     before_xp xp/vp at swap_h(k) under the swap_global permutation.
+!   * idp/mp/levelp stay coupled while xp/vp diverge -> at after_idmpl,
+!     idp/mp/levelp at slot k are consistent (idp_h(k) == before_xp idp at
+!     swap_h(k)), but xp/vp at the same slot are not.
+!   * Bad coupling already exists before split -> at before_xp, the
+!     (slot, idp, xp, vp) triples already disagree with the host's
+!     pre-split state (cic dump 13).
+!
+! Implementation notes:
+!   * Slice-assignment idiom (host_array = device_array(slice)) is an
+!     implicit synchronous D->H memcpy in CUDA Fortran (same idiom as
+!     phidump_grad / fdump_grad in gpu_runner.cuf:2099,2136), so the
+!     dumped values reflect the device state at call time without an
+!     explicit cudaDeviceSynchronize.
+!   * Fixed slot window (NWIN_SPLIT_DUMP) is host stack only; volume per
+!     call is ~NWIN_SPLIT_DUMP+1 lines per stage, so 4 stages * (NWIN+1)
+!     lines per gpu_split_part call. The harness calls split_part once per
+!     timestep at ilevel=7, ~5 timesteps, so total volume is bounded.
+!   * The whole-slice swap_global copy uses a host allocatable sized to
+!     num_parts and freed before return, so peak host memory is one int4
+!     per particle in the level slice (~8 MB at l7 cosmo).
+! ============================================================================
+subroutine dump_split_window_part(stage, head_idx, num_parts, ilevel)
+  character(len=*), intent(in) :: stage
+  integer(kind=4),  intent(in) :: head_idx, num_parts, ilevel
+
+  integer(kind=4), parameter :: NWIN_SPLIT_DUMP = 16
+  integer(kind=4) :: nwin_eff, k, idim
+  integer(kind=4) :: slot
+  ! NDIM<=3 by amr_parameters.f90:31-34; xp_h/vp_h are dimensioned to ndim
+  ! so the slice-copy below is conformable and the format below emits
+  ! exactly ndim columns.
+  real(kind=dp)   :: xp_h(NWIN_SPLIT_DUMP, ndim)
+  real(kind=dp)   :: vp_h(NWIN_SPLIT_DUMP, ndim)
+  real(kind=dp)   :: mp_h(NWIN_SPLIT_DUMP)
+  integer(kind=4) :: levelp_h(NWIN_SPLIT_DUMP), swap_h(NWIN_SPLIT_DUMP)
+  integer(i8b)    :: idp_h(NWIN_SPLIT_DUMP)
+  integer(kind=4), allocatable :: swap_full_h(:)
+  integer(kind=8) :: csum, csum_sq, csum_pos, sval
+  integer(kind=4) :: smin, smax
+
+  if (num_parts <= 0) return
+  nwin_eff = min(NWIN_SPLIT_DUMP, num_parts)
+
+  ! Slot window D->H slice copies (synchronous, default stream).
+  swap_h(1:nwin_eff)   = swap_global(head_idx:head_idx + nwin_eff - 1)
+  idp_h(1:nwin_eff)    = idp(head_idx:head_idx + nwin_eff - 1)
+  levelp_h(1:nwin_eff) = levelp(head_idx:head_idx + nwin_eff - 1)
+  mp_h(1:nwin_eff)     = mp(head_idx:head_idx + nwin_eff - 1)
+  do idim = 1, ndim
+     xp_h(1:nwin_eff, idim) = xp(head_idx:head_idx + nwin_eff - 1, idim)
+     vp_h(1:nwin_eff, idim) = vp(head_idx:head_idx + nwin_eff - 1, idim)
+  end do
+
+  ! Whole-slice swap_global checksum: sum, sum-of-squares, min, max,
+  ! plus a position-weighted sum (csum_pos = sum_{k=1..num_parts} k *
+  ! swap_global(head_idx+k-1)). csum and csum_sq are permutation-invariant
+  ! over the slice (they only confirm swap_global is still a valid
+  ! permutation of [head_idx..head_idx+num_parts-1]); csum_pos is NOT
+  ! permutation-invariant and is what fires if swap_global mutates
+  ! ordering between gather/scatter calls. One D->H memcpy plus a host-
+  ! side reduction; only runs when the call site is verbose+ilevel==7
+  ! gated, so cost is bounded.
+  allocate(swap_full_h(1:num_parts))
+  swap_full_h(1:num_parts) = swap_global(head_idx:head_idx + num_parts - 1)
+  csum     = 0_8
+  csum_sq  = 0_8
+  csum_pos = 0_8
+  smin     = swap_full_h(1)
+  smax     = swap_full_h(1)
+  do k = 1, num_parts
+     sval     = int(swap_full_h(k), kind=8)
+     csum     = csum     + sval
+     csum_sq  = csum_sq  + sval * sval
+     csum_pos = csum_pos + int(k, kind=8) * sval
+     if (swap_full_h(k) < smin) smin = swap_full_h(k)
+     if (swap_full_h(k) > smax) smax = swap_full_h(k)
+  end do
+  deallocate(swap_full_h)
+
+  write(*,'(A,I0,A,A,A,I0,A,I0,A,I0,A,I0,A,I0,A,I0,A,I0)') &
+       ' split_part_csum: ilevel=', ilevel, ' stage=', trim(stage), &
+       ' head=', head_idx, ' num=', num_parts, &
+       ' csum=', csum, ' csum_sq=', csum_sq, &
+       ' csum_pos=', csum_pos, &
+       ' smin=', smin, ' smax=', smax
+
+  ! Per-slot record. Branch on ndim so the format consumes exactly ndim
+  ! xp/vp columns (ndim is a compile-time parameter; dead arms elide).
+  do k = 1, nwin_eff
+     slot = head_idx + k - 1
+     if (ndim == 3) then
+        write(*,'(A,I0,A,A,A,I0,A,I0,A,I0,A,I0,A,ES15.7,A,3(1X,ES15.7),A,3(1X,ES15.7))') &
+             ' split_part_dump: ilevel=', ilevel, ' stage=', trim(stage), &
+             ' slot=', slot, ' swap=', swap_h(k), &
+             ' idp=', int(idp_h(k), kind=8), ' level=', levelp_h(k), &
+             ' mp=', mp_h(k), &
+             ' xp=', xp_h(k, 1), xp_h(k, 2), xp_h(k, 3), &
+             ' vp=', vp_h(k, 1), vp_h(k, 2), vp_h(k, 3)
+     else if (ndim == 2) then
+        write(*,'(A,I0,A,A,A,I0,A,I0,A,I0,A,I0,A,ES15.7,A,2(1X,ES15.7),A,2(1X,ES15.7))') &
+             ' split_part_dump: ilevel=', ilevel, ' stage=', trim(stage), &
+             ' slot=', slot, ' swap=', swap_h(k), &
+             ' idp=', int(idp_h(k), kind=8), ' level=', levelp_h(k), &
+             ' mp=', mp_h(k), &
+             ' xp=', xp_h(k, 1), xp_h(k, 2), &
+             ' vp=', vp_h(k, 1), vp_h(k, 2)
+     else
+        write(*,'(A,I0,A,A,A,I0,A,I0,A,I0,A,I0,A,ES15.7,A,1X,ES15.7,A,1X,ES15.7)') &
+             ' split_part_dump: ilevel=', ilevel, ' stage=', trim(stage), &
+             ' slot=', slot, ' swap=', swap_h(k), &
+             ' idp=', int(idp_h(k), kind=8), ' level=', levelp_h(k), &
+             ' mp=', mp_h(k), &
+             ' xp=', xp_h(k, 1), &
+             ' vp=', vp_h(k, 1)
+     endif
+  end do
+end subroutine dump_split_window_part
+
 !##############################################################################
 !##############################################################################
 !##############################################################################
@@ -539,15 +682,35 @@ subroutine gpu_split_part(sim, ilevel)
 
   ! 4. Out-of-place gather/scatter for every host-physically-swapped field.
   !    Mandatory: xp, vp, mp, levelp, idp.
+  !
+  ! Verbose-gated falsifier instrumentation for run 312765 (split7 dump 14
+  ! per-particle xp/vp divergence; see dump_split_window_part header and
+  ! docs/triage/2026-05-14-vp-1pct-uniform-bias.md "Run 312765"). Four
+  ! stages: before xp gather/scatter, after xp scatter, after vp scatter,
+  ! after mp/levelp/idp scatter. Gated on ilevel == 7 (the failing split
+  ! level; in this harness levelmin = 7 so split is only ever called at
+  ! ilevel = 7) so the dump volume stays bounded.
+  if (sim%r%verbose .and. ilevel == 7) then
+     call dump_split_window_part("before_xp", head_idx, num_parts, ilevel)
+  endif
+
   call sort_gather_part_real_2d<<<num_blocks, num_threads>>>(xp_swap, xp, &
        swap_global, head_idx, num_parts, leading)
   call sort_scatter_part_real_2d<<<num_blocks, num_threads>>>(xp, xp_swap, &
        head_idx, num_parts, leading)
 
+  if (sim%r%verbose .and. ilevel == 7) then
+     call dump_split_window_part("after_xp", head_idx, num_parts, ilevel)
+  endif
+
   call sort_gather_part_real_2d<<<num_blocks, num_threads>>>(xp_swap, vp, &
        swap_global, head_idx, num_parts, leading)
   call sort_scatter_part_real_2d<<<num_blocks, num_threads>>>(vp, xp_swap, &
        head_idx, num_parts, leading)
+
+  if (sim%r%verbose .and. ilevel == 7) then
+     call dump_split_window_part("after_vp", head_idx, num_parts, ilevel)
+  endif
 
   call sort_gather_part_real_1d<<<num_blocks, num_threads>>>(mp_swap, mp, &
        swap_global, head_idx, num_parts)
@@ -563,6 +726,10 @@ subroutine gpu_split_part(sim, ilevel)
        swap_global, head_idx, num_parts)
   call sort_scatter_part_i8_1d<<<num_blocks, num_threads>>>(idp, idp_swap, &
        head_idx, num_parts)
+
+  if (sim%r%verbose .and. ilevel == 7) then
+     call dump_split_window_part("after_idmpl", head_idx, num_parts, ilevel)
+  endif
 
   ! Optional: only if device counterpart is allocated (r_set_grid_device
   ! mirrors host `allocated(p%X)` predicate, see gpu_manager.f90 §9 follow-up).
