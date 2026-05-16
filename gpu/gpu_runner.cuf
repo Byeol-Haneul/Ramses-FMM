@@ -88,10 +88,10 @@ contains
     real(kind=dp) :: gamma, dx, courant_factor
     real(kind=8), device :: mass_d, ekin_d, eint_d, emag_d, dt_d
 
+    courant_factor = sim%r%courant_factor
     gamma = sim%r%gamma
     dx = sim%r%boxlen/2**ilevel
-    dt = dx/sim%r%smallc
-    courant_factor = sim%r%courant_factor
+    dt = courant_factor*dx/sim%r%smallc
 
     ! host to device
     dt_d = dt

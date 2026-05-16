@@ -584,7 +584,7 @@ contains
     do idim = 1, ndim
        grid_mg(cache_idx)%ckey(idim) = ckey(idim)
     end do
-    grid_mg(cache_idx)%refined(1:twotondim) = .true.
+    grid_mg(cache_idx)%refined(1:twotondim) = .false.
 
     ! Compute new oct Hilbert key
     hkey = hilbert_key(grid_mg(cache_idx)%ckey, grid_mg(cache_idx)%lev - 1)
@@ -1246,7 +1246,7 @@ contains
        phi3 = phi(ind3_idx, oct3_idx)
        phi4 = phi(ind4_idx, oct4_idx)
 
-       f(cell_idx, idim, oct_idx) = a * (phi1 - phi2 ) - b * (phi3 - phi4)
+       f(cell_idx, idim, oct_idx) = a * (phi1 - phi2) - b * (phi3 - phi4)
 
     end do
 
