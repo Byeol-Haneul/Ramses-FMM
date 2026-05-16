@@ -149,7 +149,7 @@ contains
   ! =========================================================================
 
   ! =========================================================================
-  attributes(global) subroutine make_initial_phi(grid, father, nbor, phi, phi_old, tfrac, head_idx, num_octs)
+  attributes(global) subroutine make_initial_phi(grid, father, nbor, phi, phi_old, tfrac, head_idx, num_octs, ngridmax)
     implicit none
     type(oct), device :: grid(*)
     integer, device :: father(*)
@@ -159,6 +159,7 @@ contains
     real(kind=8), value  :: tfrac
     integer, value :: head_idx
     integer, value :: num_octs
+    integer, value :: ngridmax
 
     integer(4) :: cell_idx, oct_idx, block_idx
     integer(4) :: igrid_nbor(1:threetondim)
@@ -194,7 +195,7 @@ contains
        igrid_nbr  = igrid_nbor(ind_father)
        ind_nbr    = icell_nbor(ind_father)
 
-       if (igrid_nbr == 0) then ! Should never happen
+       if (igrid_nbr == 0 .or. igrid_nbr > ngridmax) then ! Should never happen
           igrid_nbr = igrid_cen
           ind_nbr   = ind_cen
        end if
@@ -235,13 +236,14 @@ contains
   ! =========================================================================
 
   ! =========================================================================
-  attributes(global) subroutine reset_rhs_kernel(phi, rho, f, nbor, head_idx, num_octs, fourpi, offset, oneoverdx2)
+  attributes(global) subroutine reset_rhs_kernel(phi, rho, f, nbor, head_idx, num_octs, ngridmax, fourpi, offset, oneoverdx2)
     real(kind=dp), device :: phi(1:twotondim,*)
     real(kind=dp), device :: rho(1:twotondim,*)
     real(kind=dp), device :: f(1:twotondim,1:ndim,*)
     integer(kind=4), device :: nbor(1:subgridsize,*)
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
+    integer(kind=4), intent(in), value :: ngridmax
     real(kind=8), intent(in), value :: fourpi, offset, oneoverdx2
 
     real(kind=dp) :: phi_nbr, dis_nbr, w, phi_b
@@ -299,9 +301,15 @@ contains
           ! Compute neighboring cell index in parent octs
           cell_nbr_idx = hhh(cell_idx, 2*(idim-1) + inbor)
 
-          ! Get phi and distance function
+          ! Get phi
           phi_nbr = phi(cell_nbr_idx, oct_nbr_idx)
-          dis_nbr = f(cell_nbr_idx, 3, oct_nbr_idx)
+
+          ! Get distance function
+          if (oct_nbr_idx <= ngridmax) then
+             dis_nbr = f(cell_nbr_idx, 3, oct_nbr_idx)
+          else
+             dis_nbr = -1d0
+          end if
 
           ! If close to boundary and cell is not masked,
           ! then modify RHS using linear reconstruction

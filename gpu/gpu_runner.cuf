@@ -259,7 +259,7 @@ contains
     integer, intent(in)::ilevel
     !
     integer(kind=4) :: head_idx, num_subgrids
-    integer :: threads_per_block, num_blocks, ngridmax
+    integer :: threads_per_block, num_blocks
     real(dp) :: dt, dx, gamma
     integer :: slope, riemann
 
@@ -268,7 +268,6 @@ contains
     dt = sim%g%dtnew(ilevel)
     dx = sim%r%boxlen/2**ilevel
     gamma = sim%r%gamma
-    ngridmax = sim%m%ngridmax
     slope = sim%r%slope_type
     riemann = sim%r%riemann
 
@@ -283,7 +282,7 @@ contains
 
     call nvtxStartRange("GPU Godunov", color=0)!green
     call hydro_integrator_kernel<<<num_blocks, threads_per_block>>>(grid, uold, unew, f, father, nbor, &
-         & head_idx, num_subgrids, ngridmax, ilevel, sim%r%levelmin, sim%r%nlevelmax, &
+         & head_idx, num_subgrids, sim%m%ngridmax, ilevel, sim%r%levelmin, sim%r%nlevelmax, &
          & gamma, dt, dx, slope, riemann, constant_gravity)
     call GPU_Error_Check(__FILE__, __LINE__)
     call nvtxEndRange()
@@ -911,16 +910,15 @@ contains
     integer, intent(in)::ilevel
 
     integer(kind=4) :: head_idx, num_octs
-    integer :: num_threads, num_blocks, ngridmax
+    integer :: num_threads, num_blocks
 
     head_idx = sim%m%head(ilevel)
     num_octs = sim%m%noct(ilevel)
-    ngridmax = sim%r%ngridmax
 
     num_threads = 128
     num_blocks = (num_octs + num_threads - 1) / num_threads
     if(num_octs > 0)then
-       call enforce_rules<<<num_blocks, num_threads>>>(flag1, nbor, head_idx, num_octs, ngridmax)
+       call enforce_rules<<<num_blocks, num_threads>>>(flag1, nbor, head_idx, num_octs, sim%m%ngridmax)
     endif
 
   end subroutine gpu_enforce_rules
@@ -1266,7 +1264,7 @@ contains
     if (ilevel > sim%r%levelmin) then
        if (num_octs > 0) then
           call make_initial_phi<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(grid, father, &
-               & nbor, phi, phi_old, tfrac, head_idx, num_octs)
+               & nbor, phi, phi_old, tfrac, head_idx, num_octs, sim%m%ngridmax)
        endif
     endif
 
@@ -1282,7 +1280,7 @@ contains
     if (ilevel > sim%r%levelmin) then
        if (num_octs > 0) then
           call make_initial_phi<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(grid, father, &
-               & nbor, phi, phi_old, tfrac, head_idx, num_octs)
+               & nbor, phi, phi_old, tfrac, head_idx, num_octs, sim%m%ngridmax)
        endif
     endif
 
@@ -1351,9 +1349,10 @@ contains
     ! Modify the rhs to account for boundary conditions.
     ! From now on, boundary conditions are phi = 0.
     ! We preserve phi in the ghost cells stored in the cache.
+    ! Note that the mask is only defined in the inner cells, not in the ghost cells.
     if (num_octs > 0) then
        call reset_rhs_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(phi, rho, f, nbor, &
-            & head_idx, num_octs, fourpi, offset, oneoverdx2)
+            & head_idx, num_octs, sim%m%ngridmax, fourpi, offset, oneoverdx2)
     end if
 
   end subroutine gpu_make_rhs
