@@ -452,6 +452,75 @@ contains
   ! =========================================================================
 
   ! =========================================================================
+  attributes(global) subroutine update_father_array(father, grid, grid_mg, hash_key, hash_val, hash_size, &
+       & ckey_max, key_off, head_idx, head_father, num_octs)
+    type(oct), device :: grid(*)
+    type(oct), device :: grid_mg(*)
+    integer(kind=4), device :: father(*)
+    integer(kind=4), device :: ckey_max(*)
+    integer(kind=8), device :: key_off(*)
+    integer(kind=8), device :: hash_key(*)
+    integer(kind=4), device :: hash_val(*)
+    integer(kind=4), intent(in), value :: hash_size
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: head_father
+    integer(kind=4), intent(in), value :: num_octs
+
+    integer(kind=8) :: key, offset, ix, iy, iz, nx
+    integer :: thread_idx, block_idx, subgrid_idx, oct_idx
+    integer :: nbor_idx, cell_idx, father_idx, mg_idx
+    integer :: ilevel, i, j, k, ind, idim
+    integer(kind=4), dimension(1:ndim) ::ckey, father_ckey
+
+    ! Compute thread and block idx
+    thread_idx = threadIdx%x - 1
+    block_idx = blockIdx%x - 1
+
+    ! Compute oct idx
+    oct_idx = thread_idx + block_idx * blockDim%x
+    if (oct_idx >= num_octs) return
+    mg_idx = head_father + oct_idx
+    oct_idx = head_idx + oct_idx
+
+    ! Compute cell index in parent oct
+    i = grid(oct_idx)%ckey(1) - 2 * (grid(oct_idx)%ckey(1) / 2)
+    j = grid(oct_idx)%ckey(2) - 2 * (grid(oct_idx)%ckey(2) / 2)
+    k = grid(oct_idx)%ckey(3) - 2 * (grid(oct_idx)%ckey(3) / 2)
+    cell_idx = 1 + i + 2*j + 4*k
+
+    ! Compute oct Cartesian key
+    ilevel = grid(oct_idx)%lev
+    ckey(1) = grid(oct_idx)%ckey(1)
+    ckey(2) = grid(oct_idx)%ckey(2)
+    ckey(3) = grid(oct_idx)%ckey(3)
+
+    ! Compute father oct Cartesian key
+    ilevel = ilevel - 1
+    father_ckey(1) = ckey(1) / 2
+    father_ckey(2) = ckey(2) / 2
+    father_ckey(3) = ckey(3) / 2
+
+    ! Compute key
+    ix = int(father_ckey(1), kind=8)
+    iy = int(father_ckey(2), kind=8)
+    iz = int(father_ckey(3), kind=8)
+    nx = int(ckey_max(ilevel), kind=8)
+    offset = key_off(ilevel)
+    key = offset + ix + iy * nx + iz * nx * nx
+
+    ! Get parent oct index in memory
+    father_idx = hash_get(hash_key, hash_val, hash_size, key)
+
+    ! Set corresponding cell to refined
+    grid_mg(father_idx)%refined(cell_idx) = .true.
+
+    ! Update father array
+    father(mg_idx) = father_idx
+
+  end subroutine update_father_array
+  ! =========================================================================
+
+  ! =========================================================================
   attributes(global) subroutine init_prefix_sum_father(father, prefix_sum, head_idx, num_octs)
     integer(kind=4), device :: father(*)
     integer(kind=4), device :: prefix_sum(*)
@@ -480,6 +549,38 @@ contains
     endif
 
   end subroutine init_prefix_sum_father
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine init_prefix_sum_mg(grid, prefix_sum, head_idx, num_octs)
+    type(oct), device :: grid(*)
+    integer(kind=4), device :: prefix_sum(*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
+    integer :: oct_idx, thread_idx, block_idx
+
+    ! Compute thread and block idx
+    thread_idx = threadIdx%x - 1
+    block_idx = blockIdx%x - 1
+
+    ! Compute oct idx
+    oct_idx = thread_idx + block_idx * blockDim%x
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! If oct is first in parent oct, set prefix_sum to one
+    if (oct_idx == head_idx) then
+       prefix_sum(oct_idx) = 1
+    else
+       if (grid(oct_idx)%hkey(1)/twotondim .NE. grid(oct_idx - 1)%hkey(1)/twotondim) then
+          prefix_sum(oct_idx) = 1
+       else
+          prefix_sum(oct_idx) = 0
+       endif
+    endif
+
+  end subroutine init_prefix_sum_mg
   ! =========================================================================
 
   ! =========================================================================
@@ -520,6 +621,44 @@ contains
     endif
 
   end subroutine compute_mg_swap_table
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine compute_father_swap_table(swap_local, prefix_sum, head_idx, num_octs)
+    integer(kind=4), device :: swap_local(*)
+    integer(kind=4), device :: prefix_sum(*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
+    integer :: oct_idx, thread_idx, block_idx, father_idx
+    integer :: previous_sum, bit
+
+    ! Compute thread and block idx
+    thread_idx = threadIdx%x - 1
+    block_idx = blockIdx%x - 1
+
+    ! Compute new oct idx
+    oct_idx = thread_idx + block_idx * blockDim%x
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Get previous prefix sum
+    if (oct_idx > head_idx)then
+       previous_sum = prefix_sum(oct_idx - 1)
+    else
+       previous_sum = 0
+    endif
+
+    ! Compute original table value (0 or 1)
+    bit = prefix_sum(oct_idx) - previous_sum
+
+    ! Compute parent oct index corresponding to new oct index
+    if(bit == 1)then
+       father_idx = previous_sum + 1
+       swap_local(father_idx) = oct_idx
+    endif
+
+  end subroutine compute_father_swap_table
   ! =========================================================================
 
   ! =========================================================================
@@ -599,6 +738,70 @@ contains
     end do
 
   end subroutine make_mg_octs
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine make_father_octs(grid, grid_mg, phi, f, swap_local, &
+       & head_idx, num_octs)
+    type(oct), device :: grid(*)
+    type(oct), device :: grid_mg(*)
+    real(kind=dp), device :: f(1:twotondim,1:ndim,*)
+    real(kind=dp), device :: phi(1:twotondim,*)
+    integer(kind=4), device :: swap_local(*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
+    integer(kind=8) :: hkey
+    integer :: oct_idx, thread_idx, block_idx, father_idx
+    integer :: ilevel, idim, ind
+    integer, dimension(1:ndim) :: ckey
+
+    ! Compute thread and block idx
+    thread_idx = threadIdx%x - 1
+    block_idx = blockIdx%x - 1
+
+    ! Compute new cache index
+    father_idx = thread_idx + block_idx * blockDim%x
+    if (father_idx >= num_octs) return
+
+    ! Get original subgrid index
+    oct_idx = swap_local(father_idx + 1)
+
+    ! Get proper idx for cache grid
+    father_idx = head_idx + father_idx
+
+    ! Compute neighboring oct Cartesian key
+    ilevel = grid(oct_idx)%lev
+    ckey(1) = grid(oct_idx)%ckey(1)
+    ckey(2) = grid(oct_idx)%ckey(2)
+    ckey(3) = grid(oct_idx)%ckey(3)
+
+    ! Compute father oct Cartesian key
+    ilevel = ilevel - 1
+    ckey(1) = ckey(1) / 2
+    ckey(2) = ckey(2) / 2
+    ckey(3) = ckey(3) / 2
+
+    ! Compute cache oct properties
+    grid_mg(father_idx)%lev = ilevel
+    do idim = 1, ndim
+       grid_mg(father_idx)%ckey(idim) = ckey(idim)
+    end do
+    grid_mg(father_idx)%refined(1:twotondim) = .false.
+
+    ! Compute new oct Hilbert key
+    hkey = hilbert_key(grid_mg(father_idx)%ckey, grid_mg(father_idx)%lev - 1)
+    grid_mg(father_idx)%hkey(1) = hkey
+
+    ! Initial potential and force set to zero
+    do ind = 1, twotondim
+       phi(ind, father_idx) = 0d0
+       f(ind, 1, father_idx) = 0d0
+       f(ind, 2, father_idx) = 0d0
+       f(ind, 3, father_idx) = 0d0
+    end do
+
+  end subroutine make_father_octs
   ! =========================================================================
 
   ! =========================================================================
@@ -1197,28 +1400,21 @@ contains
 
     ! Loop over directions
     do idim = 1, ndim
-
-       ! Loop over 2 neighbors
-       do inbor = 1, 2
-
+       do inbor = 1, 2  ! Loop over 2 neighbors
           ind_nbor = 2*(idim-1) + inbor
-
           ! Compute neighboring oct index
           in = 0; jn = 0; kn = 0
           if (idim == 1) then
-             in = iii(cell_idx, ind_nbor)
+             in = -1+2*(inbor-1)
           else if (idim == 2) then
-             jn = iii(cell_idx, ind_nbor)
+             jn = -1+2*(inbor-1)
           else
-             kn = iii(cell_idx, ind_nbor)
+             kn = -1+2*(inbor-1)
           end if
           ind = 1 + (i + in) + nsubgridp2 * (j + jn)  + nsubgridp2sq * (k + kn)
-
           ! Store neighboring oct index
           nbor_idx(ind_nbor) = nbor(ind, subgrid_idx)
-
        end do
-
     end do
 
     ! Rescaling factor

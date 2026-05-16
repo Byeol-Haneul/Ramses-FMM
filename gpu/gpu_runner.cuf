@@ -1493,7 +1493,158 @@ contains
     end if
 
   end subroutine gpu_build_mg
+#ifdef TOTO
+  !> @brief
+  !> This routine builds the MG hierarchy on top of the current level.
+  !>
+  !> @detail
+  !> It uses father-son connectivity to trigger the formation of parent grids
+  !> starting from fine level ifine. If ifine == ilevel, then this is the finest
+  !> MG level that corresponds to the AMR level.
+  !>
+  !> @param[in] sim : The simulation object
+  !> @param[in] ilevel : The refinement level to update
+  !>
+  subroutine gpu_build_mg2(sim, ilevel, ifine)
+    use mg_device
+    use refine_device, only: insert_hash_kernel, update_nbor_array
+    use ramses_commons, only: ramses_t
+    implicit none
+    type(ramses_t), intent(inout) :: sim
+    integer, intent(in) :: ilevel
+    integer, intent(in) :: ifine
+    !
+    integer(kind=4) :: head_idx, head_mg, head_father
+    integer(kind=4) :: num_octs, num_blocks, num_threads, num_blocks_2, num_threads_2
+    integer(kind=4) :: new_noct, ind, cell_ind, nbor_ind
 
+    if (ifine == ilevel) then
+       head_idx = sim%m%head(ilevel)
+       num_octs = sim%m%noct(ilevel)
+       head_father = 1
+    else
+       head_idx = sim%m_mg%head(ifine)
+       num_octs = sim%m_mg%noct(ifine)
+       head_father = sim%m%noct(ilevel) + sim%m_mg%head(ifine)
+    endif
+
+    if (num_octs == 0) return
+
+    num_threads = 128
+    num_blocks = (num_octs + num_threads - 1) / num_threads
+
+    sim%m_mg%head(ifine-1) = sim%m_mg%tail(ifine) + 1
+    head_mg = sim%m_mg%head(ifine-1)
+
+    ! Init prefix sum (count new parent octs)
+    if (ifine == ilevel) then
+       call init_prefix_sum_mg<<<num_blocks, num_threads>>>(grid, prefix_sum, head_idx, num_octs)
+    else
+       call init_prefix_sum_mg<<<num_blocks, num_threads>>>(grid_mg, prefix_sum, head_idx, num_octs)
+    endif
+
+    ! Compute prefix sums
+    call gpu_scan(head_idx, num_octs, new_noct)
+
+    if (new_noct > 0) then
+
+       num_threads_2 = 128
+       num_blocks_2 = (new_noct + num_threads_2 - 1) / num_threads_2
+
+       ! Check we have enough memory
+       if ((head_mg + new_noct) > sim%m_mg%ngridmax) then
+          write(*,*)'No more grid memory, increase ngridmax for MG'
+          write(*,*)'New multigrid octs:', new_noct
+          stop
+       endif
+
+       ! Compute MG father swap table
+       call compute_father_swap_table<<<num_blocks, num_threads>>>(swap_local, prefix_sum, head_idx, num_octs)
+
+       ! Make new MG octs
+       if (ifine == ilevel) then
+          call make_father_octs<<<num_blocks_2, num_threads_2>>>(grid, grid_mg, f_mg, phi_mg, swap_local, &
+               & head_mg, new_noct)
+       else
+          call make_father_octs<<<num_blocks_2, num_threads_2>>>(grid_mg, grid_mg, f_mg, phi_mg, swap_local, &
+               & head_mg, new_noct)
+       endif
+
+       ! Insert new octs in hash table
+       call insert_hash_kernel<<<num_blocks_2, num_threads_2>>>(grid_mg, hash_key_mg, hash_val_mg, &
+            & sim%m_mg%hash_size, ckey_max, key_off, head_mg, new_noct)
+
+    end if
+
+    ! Compute final father array
+    if (ifine == ilevel) then
+       call update_father_array<<<num_blocks, num_threads>>>(father_mg, grid, grid_mg, &
+            & hash_key_mg, hash_val_mg, sim%m_mg%hash_size, &
+            & ckey_max, key_off, head_idx, head_father, num_octs)
+    else
+       call update_father_array<<<num_blocks, num_threads>>>(father_mg, grid_mg, grid_mg, &
+            & hash_key_mg, hash_val_mg, sim%m_mg%hash_size, &
+            & ckey_max, key_off, head_idx, head_father, num_octs)
+    endif
+
+    ! Store new first free cache oct
+    head_nbor = head_mg + new_noct
+
+    ! Loop over 27 neighbors
+    do ind = 1, threetondim
+
+       ! Create new oct if neighboring oct is required
+       call init_prefix_sum_nbor<<<num_blocks_2, num_threads_2>>>(grid_mg, prefix_sum, head_mg, new_noct, ind)
+
+       ! Compute prefix sum
+       call gpu_scan(head_mg, new_noct, new_noct_2)
+
+       if (new_noct_2 > 0) then
+
+          num_threads_3 = 128
+          num_blocks_3 = (new_noct_2 + num_threads_3 - 1) / num_threads_3
+
+          ! Check we have enough memory
+          if ((head_nbor + new_noct_2) > sim%m_mg%ngridmax) then
+             write(*,*)'No more grid memory, increase ngridmax for MG'
+             write(*,*)'New multigrid octs:', new_noct_2
+             stop
+          endif
+
+          ! Compute MG nbor swap table
+          call compute_nbor_swap_table<<<num_blocks_2, num_threads_2>>>(swap_local, prefix_sum, head_mg, new_noct)
+
+          ! Make new coarse neighboring oct
+          call make_nbor_octs<<<num_blocks_3, num_threads_3>>>(grid_mg, f_mg, phi_mg, swap_local, &
+               & head_nbor, new_noct_2, ind)
+
+          ! Insert new octs in hash table
+          call insert_hash_kernel<<<num_blocks_3, num_threads_3>>>(grid_mg, hash_key_mg, hash_val_mg, &
+               & sim%m_mg%hash_size, ckey_max, key_off, head_nbor, new_noct_2)
+
+          ! Store new first free cache oct
+          head_nbor = head_nbor + new_noct_2
+
+    end do
+
+    sim%m_mg%tail(ifine-1) = head_nbor - 1
+    sim%m_mg%noct(ifine-1) = sim%m_mg%tail(ifine-1) - sim%m_mg%head(ifine-1) + 1
+
+    ! Compute final nbor array
+    head_idx = sim%m_mg%head(ifine-1)
+    num_octs = sim%m_mg%noct(ifine-1)
+    num_threads = 128
+    num_blocks = (num_octs + num_threads - 1) / num_threads
+
+    if (num_octs > 0) then
+       do ind = 1, threetondim
+          call update_nbor_array<<<num_blocks, num_threads>>>(nbor_mg, grid_mg, hash_key_mg, hash_val_mg, &
+               & sim%m_mg%hash_size, ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, head_idx, num_octs, ind)
+       end do
+    end if
+
+  end subroutine gpu_build_mg2
+#endif
   !> @brief
   !> This routine cleans up the MG hierarchy.
   !>
