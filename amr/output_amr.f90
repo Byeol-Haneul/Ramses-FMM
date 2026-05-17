@@ -139,7 +139,7 @@ subroutine m_dump_all(pst,write_bkp_file)
      filename=TRIM(filedir)//'params.bin'
      call output_params(r,g,m,filename)
      filename=TRIM(filedir)//'timer.txt'
-     call m_output_timer(pst,.true.,filename)
+     call m_output_timer(.true.,filename)
 
      !-----------------------
      ! All slave processes

@@ -204,9 +204,62 @@ def build_turbulent_velocity(
     return u, v, w
 
 
+def _coarsen_average(arr: np.ndarray, fx: int, fy: int, fz: int) -> np.ndarray:
+    """Average values over blocks of size (fx, fy, fz)."""
+    if fx == fy == fz == 1:
+        return arr
+    n1, n2, n3 = arr.shape
+    if (n1 % fx) or (n2 % fy) or (n3 % fz):
+        raise ValueError("Array shape not divisible by coarsening factors")
+    reshaped = arr.reshape(n1 // fx, fx, n2 // fy, fy, n3 // fz, fz)
+    return reshaped.mean(axis=(1, 3, 5), dtype=np.float64).astype(np.float32)
+
+
+def derefine_fields(
+    d: np.ndarray,
+    u: np.ndarray,
+    v: np.ndarray,
+    w: np.ndarray,
+    p: np.ndarray,
+    *,
+    factor: int,
+    ndim: int,
+    bx: np.ndarray | None = None,
+    by: np.ndarray | None = None,
+    bz: np.ndarray | None = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray | None, np.ndarray | None, np.ndarray | None]:
+    """Derefine by averaging conservative quantities over blocks."""
+    if factor < 1:
+        raise ValueError("factor must be >= 1")
+    if factor == 1:
+        return d, u, v, w, p, bx, by, bz
+
+    fx = fy = factor
+    fz = factor if (ndim == 3 and d.shape[2] > 1) else 1
+
+    rho = _coarsen_average(d, fx, fy, fz)
+    momx = _coarsen_average(d * u, fx, fy, fz)
+    momy = _coarsen_average(d * v, fx, fy, fz)
+    momz = _coarsen_average(d * w, fx, fy, fz)
+
+    with np.errstate(divide="ignore", invalid="ignore"):
+        u_c = np.divide(momx, rho, out=np.zeros_like(momx, dtype=np.float32), where=rho != 0.0)
+        v_c = np.divide(momy, rho, out=np.zeros_like(momy, dtype=np.float32), where=rho != 0.0)
+        w_c = np.divide(momz, rho, out=np.zeros_like(momz, dtype=np.float32), where=rho != 0.0)
+
+    p_c = _coarsen_average(p, fx, fy, fz)
+
+    bx_c = _coarsen_average(bx, fx, fy, fz) if bx is not None else None
+    by_c = _coarsen_average(by, fx, fy, fz) if by is not None else None
+    bz_c = _coarsen_average(bz, fx, fy, fz) if bz is not None else None
+
+    return rho, u_c, v_c, w_c, p_c, bx_c, by_c, bz_c
+
+
 def main():
     parser = argparse.ArgumentParser(description="Generate band-limited turbulent ICs (GRAFIC format)")
     parser.add_argument("lvl", type=int, help="Refinement level (grid size is 2^lvl)")
+    parser.add_argument("--gen_level", type=int, default=None, help="Generation level (grid size 2^gen_level). Defaults to lvl.")
     parser.add_argument("--size", type=float, default=1.0, help="Box size in code units (default: 1.0)")
     parser.add_argument("--ndim", type=int, default=3, help="Output dimensionality: 2 or 3 (default: 3)")
     parser.add_argument("--kmin", type=float, default=2.0, help="Minimum wavenumber for band-pass (>=1)")
@@ -234,17 +287,24 @@ def main():
     args = parser.parse_args()
 
     lvl = int(args.lvl)
+    gen_level = lvl if args.gen_level is None else int(args.gen_level)
+    if gen_level < lvl:
+        raise SystemExit("--gen_level must be >= lvl")
+
     n = 2 ** lvl
+    n_gen = 2 ** gen_level
     if args.ndim == 3:
         n1, n2, n3 = n, n, n
+        n1g, n2g, n3g = n_gen, n_gen, n_gen
     elif args.ndim == 2:
         n1, n2, n3 = n, n, 1
+        n1g, n2g, n3g = n_gen, n_gen, 1
     else:
         raise SystemExit("--ndim must be 2 or 3")
 
     L = float(args.size)
     kmin = float(args.kmin)
-    kmax = float(args.kmax) if args.kmax is not None else n / 2.0
+    kmax = float(args.kmax) if args.kmax is not None else n_gen / 2.0
     if not (0.0 <= args.alpha <= 1.0):
         raise SystemExit("--alpha must be in [0,1]")
 
@@ -252,16 +312,28 @@ def main():
 
     # Generate turbulent velocity components
     u, v, w = build_turbulent_velocity(
-        n1, n2, n3, kmin, kmax, args.alpha, args.vrms, rng,
+        n1g, n2g, n3g, kmin, kmax, args.alpha, args.vrms, rng,
         spectrum_type=args.spectrum, power_law_slope=args.slope
     )
 
     # Hydrodynamic primitives
-    d = np.full((n1, n2, n3), float(args.rho), dtype=np.float32)
-    p = np.full((n1, n2, n3), float(args.p0), dtype=np.float32)
+    d = np.full((n1g, n2g, n3g), float(args.rho), dtype=np.float32)
+    p = np.full((n1g, n2g, n3g), float(args.p0), dtype=np.float32)
+
+    factor = 2 ** (gen_level - lvl)
+
+    bx = by = bz = None
+    if (args.bx != 0.0) or (args.by != 0.0) or (args.bz != 0.0):
+        bx = np.full((n1g, n2g, n3g), float(args.bx), dtype=np.float32)
+        by = np.full((n1g, n2g, n3g), float(args.by), dtype=np.float32)
+        bz = np.full((n1g, n2g, n3g), float(args.bz), dtype=np.float32)
+
+    d, u, v, w, p, bx, by, bz = derefine_fields(
+        d, u, v, w, p, factor=factor, ndim=args.ndim, bx=bx, by=by, bz=bz
+    )
 
     # Determine output dir
-    tag = f"ic_turb_{lvl}_{args.ndim}d"
+    tag = f"ic_turb_lvl{lvl}_gen{gen_level}_{args.ndim}d"
     outdir = Path(args.outdir) if args.outdir is not None else Path("ic_turb") / tag
     os.makedirs(outdir, exist_ok=True)
     os.chdir(outdir)
@@ -274,17 +346,13 @@ def main():
     write_array("ic_p", p, L)
 
     # Optional uniform magnetic field boundaries
-    if (args.bx != 0.0) or (args.by != 0.0) or (args.bz != 0.0):
-        bx = float(args.bx)
-        by = float(args.by)
-        bz = float(args.bz)
-        shape = (n1, n2, n3)
-        write_array("ic_bxleft",  np.full(shape, bx, dtype=np.float32), L)
-        write_array("ic_bxright", np.full(shape, bx, dtype=np.float32), L)
-        write_array("ic_byleft",  np.full(shape, by, dtype=np.float32), L)
-        write_array("ic_byright", np.full(shape, by, dtype=np.float32), L)
-        write_array("ic_bzleft",  np.full(shape, bz, dtype=np.float32), L)
-        write_array("ic_bzright", np.full(shape, bz, dtype=np.float32), L)
+    if bx is not None or by is not None or bz is not None:
+        write_array("ic_bxleft",  bx, L)
+        write_array("ic_bxright", bx, L)
+        write_array("ic_byleft",  by, L)
+        write_array("ic_byright", by, L)
+        write_array("ic_bzleft",  bz, L)
+        write_array("ic_bzright", bz, L)
 
     # Optional particle ICs
     if args.particles:

@@ -24,7 +24,7 @@ subroutine m_load_balance(pst,ilevel)
   integer::ilev,icpu,input_size,output_size,dummy,adummy(1)
 
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
-  
+
   if(g%ncpu==1)return
   if(ilevel==r%nlevelmax)return
 
@@ -35,7 +35,7 @@ subroutine m_load_balance(pst,ilevel)
   do ilev=ilevel+1,r%nlevelmax
 
      if(m%noct_tot(ilev)>0)then
-        
+
         ! Collect number of oct in each cpu for current level
         adummy(1) = ilev
         call r_collect_noct(pst,adummy,1,noct,g%ncpu)
@@ -49,7 +49,7 @@ subroutine m_load_balance(pst,ilevel)
         ! Allocate output array
         output_size=2*nhilbert*(g%ncpu+1)
         allocate(output_array(1:output_size))
-        
+
         ! Compute and collect new Hilbert key boundaries for the new domain decomposition
         call r_collect_bound_key(pst,input_array,input_size,output_array,output_size)
         bound_key=reshape(transfer(output_array,zero_key),[nhilbert,g%ncpu+1])
@@ -91,12 +91,12 @@ subroutine m_load_balance(pst,ilevel)
 
   end do
   ! End loop over finer levels
-  
+
   ! Redistribute the grid across CPU according to the new domains
   call r_load_balance(pst,ilevel,1,dummy,0)
 
   end associate
-  
+
 end subroutine m_load_balance
 !###############################################
 !###############################################

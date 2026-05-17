@@ -1,0 +1,42 @@
+!================================================================
+!================================================================
+!================================================================
+!================================================================
+
+attributes(device) function hilbert_key(ix, level) result(hkey)
+  use amr_parameters, only: nhilbert, ndim, twotondim
+  use hilbert, only: left_shift, right_shift, next_digits_diagram, next_state_diagram
+  implicit none
+  integer,                            intent(in) :: level
+  integer(kind=4), dimension(1:ndim), intent(in) :: ix
+  integer(kind=8) :: hkey
+
+  ! Compute 3-integer hilbert keys from the cartesian keys ix
+
+  integer(kind=4) :: cstate, sdigit, ind
+  integer         :: ibit, add_digit, idim
+
+  cstate = 0
+  hkey = 0
+
+  do ibit = level - 1, 0, -1
+     hkey = ISHFT(hkey, left_shift)
+     hkey = ISHFT(hkey, right_shift)
+
+     sdigit=0
+     do idim = 1, ndim
+        add_digit = 2 ** (ndim - idim)
+        if(btest(ix(idim),ibit)) sdigit = sdigit + add_digit
+     end do
+
+     ind = cstate * twotondim + sdigit
+     cstate = next_state_diagram(ind)
+     hkey = hkey + next_digits_diagram(ind)
+  enddo
+
+end function hilbert_key
+
+!================================================================
+!================================================================
+!================================================================
+!================================================================

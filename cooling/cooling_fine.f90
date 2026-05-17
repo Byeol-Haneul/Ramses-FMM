@@ -1,4 +1,8 @@
 module cooling_fine_module
+#ifdef _CUDA
+  use gpu_runner, only: gpu_cooling
+  use nvtx
+#endif
 contains
 !###########################################################
 !###########################################################
@@ -20,7 +24,11 @@ recursive subroutine r_cooling_fine(pst,ilevel,input_size)
      call r_cooling_fine(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
+#ifdef _CUDA
+     call gpu_cooling(pst%s, ilevel)
+#else
      call cooling_fine(pst%s%r,pst%s%g,pst%s%m,pst%s%cool,pst%s%tables,ilevel)
+#endif
   endif
 
 end subroutine r_cooling_fine

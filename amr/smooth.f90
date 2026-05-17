@@ -1,4 +1,8 @@
 module smooth_module
+#ifdef _CUDA
+  use gpu_runner, only: gpu_smooth_flag
+  use nvtx
+#endif
 contains
 !################################################################
 !################################################################
@@ -24,7 +28,17 @@ recursive subroutine r_smooth_fine(pst,ilevel,input_size,noct,output_size)
      call mdl_get_reply(pst%s%mdl,rID,output_size,next_noct)
      noct=noct+next_noct
   else
+#ifdef _CUDA
+     if(pst%s%m%data_on_device)then
+        call nvtxStartRange("GPU Smoothflag", color=6)!teal
+        call gpu_smooth_flag(pst%s, ilevel, nflag)
+        call nvtxEndRange()
+     else
+        call smooth_fine(pst%s,ilevel,nflag)
+     endif
+#else
      call smooth_fine(pst%s,ilevel,nflag)
+#endif
      noct=nflag
   endif
 
@@ -114,7 +128,7 @@ subroutine smooth_fine(s,ilevel,nflag)
            call get_grid(s,hash_nbor,igridn(i_nbor),flush_cache=.false.,fetch_cache=.true.,lock=.true.)
         end do
 
-        ! Count neighbors and set flag2 accordingly        
+        ! Count neighbors and set flag2 accordingly
         do ind=1,twotondim
            count_nbor=0
            do in=1,twondim
@@ -150,7 +164,7 @@ subroutine smooth_fine(s,ilevel,nflag)
               g%nflag=g%nflag+1
            endif
         end do
-     end do     
+     end do
 
   end do
   ! End loop over steps
@@ -158,7 +172,7 @@ subroutine smooth_fine(s,ilevel,nflag)
   nflag=g%nflag
 
   end associate
-  
+
 end subroutine smooth_fine
 !############################################################
 !############################################################

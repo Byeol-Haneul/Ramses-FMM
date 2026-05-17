@@ -96,7 +96,7 @@ contains
     write(*,*) "Testing comoving_distance with the following cosmology:"
     write(*,*) "  omega_m = ", Omega0
     write(*,*) "  omega_l = ", OmegaL
-    write(*,*) "  omega_b = ", OmegaR
+    write(*,*) "  omega_r = ", OmegaR
     write(*,*) "  h0 = ", h0
     write(*,*) ""
 
