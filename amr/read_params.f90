@@ -445,6 +445,7 @@ subroutine m_read_params(pst)
   logical::output_peak_trac=.false.
   logical::output_peak_dust=.false.
   integer::rho_type_clump=1 ! 1: DM, 2: stars, 3: sinks, 4: gas
+  integer::nsteps_per_tree=1 ! Call clump finder for tree formation every n coarse steps
   real(kind=8)::relevance_threshold=2
   real(kind=8)::density_threshold=-1
   real(kind=8)::saddle_threshold=-1
@@ -682,7 +683,7 @@ subroutine m_read_params(pst)
        & ,output_peak_trac,output_peak_dust &
        & ,relevance_threshold,density_threshold,saddle_threshold &
        & ,mass_threshold,purity_threshold,fraction_threshold &
-       & ,merger_tree,orphan,ntreemax,ntreetot,rho_type_clump
+       & ,merger_tree,orphan,ntreemax,ntreetot,rho_type_clump,nsteps_per_tree
   ! Lightcone parameters
   namelist/lightcone_params/lightcone,cone_z_min,cone_z_max,cone_opening_angle_y,cone_opening_angle_z &
        & ,cone_theta,cone_phi,cone_observer
@@ -1607,6 +1608,7 @@ subroutine m_read_params(pst)
   s%r%purity_threshold=purity_threshold
   s%r%fraction_threshold=fraction_threshold
   s%r%rho_type_clump=rho_type_clump
+  s%r%nsteps_per_tree=nsteps_per_tree
 
   s%r%lightcone = lightcone
   s%r%cone_z_min = cone_z_min

@@ -371,6 +371,7 @@ module amr_commons
      logical::output_peak_trac=.false.
      logical::output_peak_dust=.false.
      integer::rho_type_clump=1
+     integer::nsteps_per_tree=1
      real(kind=8)::relevance_threshold=2
      real(kind=8)::density_threshold=-1
      real(kind=8)::saddle_threshold=-1
