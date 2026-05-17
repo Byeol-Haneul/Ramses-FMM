@@ -144,14 +144,16 @@ subroutine halo_mass_def(s,mbin,rad,r200c,rmax,c)
   type(ramses_t)::s
   real(kind=8),dimension(1:nbin)::mbin
   real(kind=8)::rad,rmax,r200c,c,deltamax,cmin,cmax
-  real(kind=8)::pi,G,delta,deltaold,rbin,vcirc,volbin,alpha
+  real(kind=8)::pi,G,delta,deltaold,rbin,vcirc,volbin,alpha,omega_mz
   real(kind=8)::d200c,vmax,v200c,c0,cl,cr,err,const,dr
   integer::i,imax
   ! Constants
   pi=ACOS(-1.0D0)
   G=1d0
   if(s%r%cosmo)G=3d0/8d0/pi*s%g%omega_m*s%g%aexp
-  d200c = 200d0/s%g%omega_m !200c is 200 times the critical density, not the mean density
+  if(s%r%cosmo)omega_mz = (s%g%omega_m/s%g%aexp**3) / (s%g%omega_m/s%g%aexp**3 + s%g%omega_l) !include redshift dependence
+
+  d200c = 200d0/omega_mz !200c is 200 times the critical density, not the mean density
   ! Find densest bin
   deltamax=0
   imax=1
