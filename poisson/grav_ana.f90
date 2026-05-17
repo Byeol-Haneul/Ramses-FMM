@@ -14,7 +14,7 @@ subroutine gravana(r,g,x,f,dx,ncell)
   real(kind=8),dimension(1:nvector,1:ndim)::x ! Cell center position.
   !================================================================
   ! This routine computes the acceleration using analytical models.
-  ! x(i,1:ndim) are cell center position in [0,boxlen] (user units).
+  ! x(i,1:ndim) are cell center position in [0,box_size] (user units).
   ! f(i,1:ndim) is the gravitational acceleration in user units.
   !================================================================
   integer::idim,i
@@ -36,13 +36,13 @@ subroutine gravana(r,g,x,f,dx,ncell)
         f(i,1)=-g%multipole%q(1)*2d0*ACOS(-1d0)*rx/rr
 #endif
 #if NDIM==2
-        f(i,1)=-g%multipole%q(1)*2d0*rx/rr*2
-        f(i,2)=-g%multipole%q(1)*2d0*ry/rr*2
+        f(i,1)=-g%multipole%q(1)*2d0*rx/rr**2
+        f(i,2)=-g%multipole%q(1)*2d0*ry/rr**2
 #endif
 #if NDIM==3
-        f(i,1)=-g%multipole%q(1)*rx/rr*3
-        f(i,2)=-g%multipole%q(1)*ry/rr*3
-        f(i,3)=-g%multipole%q(1)*rz/rr*3
+        f(i,1)=-g%multipole%q(1)*rx/rr**3
+        f(i,2)=-g%multipole%q(1)*ry/rr**3
+        f(i,3)=-g%multipole%q(1)*rz/rr**3
 #endif
      end do
   end if
@@ -105,7 +105,7 @@ subroutine phiana(r,g,x,phi,dx,ncell)
   real(kind=8),dimension(1:nvector,1:ndim)::x ! Cell center position.
   !================================================================
   ! This routine computes the potential using analytical models.
-  ! x(i,1:ndim) are cell center position in [0,boxlen] (user units).
+  ! x(i,1:ndim) are cell center position in [0,box_size] (user units).
   ! phi(i is the gravitational potential in user units.
   !================================================================
   integer :: i

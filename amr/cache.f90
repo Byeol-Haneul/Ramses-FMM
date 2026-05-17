@@ -1,8 +1,6 @@
 module cache
   use amr_parameters, only: ndim, twotondim
   use amr_commons, only: mesh_t
-  use cache_commons, only: ntilemax
-  use mdl_module, only: mdl_t
   use clfind_commons, only: clump_t
   use cache_commons
   use hash

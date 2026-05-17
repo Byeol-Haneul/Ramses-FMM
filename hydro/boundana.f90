@@ -17,7 +17,7 @@ subroutine boundana(r,g,x,u,dx,ibound,ncell)
   !================================================================
   ! This routine generates boundary conditions for RAMSES.
   ! Positions are in user (aka code) units:
-  ! x(i,1:ndim) are in [0,boxlen]**ndim.
+  ! x(i,1:ndim) are in [0,box_size]**ndim.
   ! U is the conservative variable vector. Conventions are here:
   ! U(i,1): d, U(i,2:4): d.u,d.v,d.w and U(i,5): E.
   ! U is in user (aka code) units.

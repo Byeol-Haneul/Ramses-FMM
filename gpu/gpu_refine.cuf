@@ -1,0 +1,1095 @@
+module refine_device
+  use amr_parameters, only: dp, ndim, twotondim, nhilbert
+  use hydro_parameters, only: nvar
+  use oct_commons, only: oct
+  use gpu_utils
+  use cudafor
+  implicit none
+
+contains
+  include 'gpu_hash.cuf'
+  include 'gpu_hilbert.cuf'
+  include 'gpu_scan.cuf'
+
+  ! =========================================================================
+  attributes(device) subroutine make_new_oct(grid, flag1, uold, f, phi, phi_old, ifree, oct_idx, cell_idx)
+    use amr_parameters, only: ndim
+    type(oct), device :: grid(*)
+    real(kind=dp), device :: f(1:twotondim,1:ndim,*)
+    real(kind=dp), device :: phi(1:twotondim,*)
+    real(kind=dp), device :: phi_old(1:twotondim,*)
+    real(kind=dp), device :: uold(1:twotondim,1:nvar,*)
+    integer(kind=4), device :: flag1(1:twotondim,*)
+    integer, device :: ifree
+    integer, value :: oct_idx, cell_idx
+
+    integer(kind=4) :: i, j, k, ind, child_idx, ilevel
+    integer(kind=4), dimension(1:ndim) :: ckey
+    integer(kind=8) :: hkey
+
+    ! Compute cell coordinates
+    i = MOD((cell_idx-1)  , 2)
+    j = MOD((cell_idx-1)/2, 2)
+    k = MOD((cell_idx-1)/4, 2)
+
+    ! Compute child level and Cartesian key
+    ilevel =    grid(oct_idx)%lev + 1
+    ckey(1) = 2*grid(oct_idx)%ckey(1) + i
+    ckey(2) = 2*grid(oct_idx)%ckey(2) + j
+    ckey(3) = 2*grid(oct_idx)%ckey(3) + k
+
+    ! Get index from free memory
+    child_idx = atomicadd(ifree, 1)
+
+    ! Set new oct properties
+    grid(child_idx)%lev = ilevel
+    grid(child_idx)%ckey(1) = ckey(1)
+    grid(child_idx)%ckey(2) = ckey(2)
+    grid(child_idx)%ckey(3) = ckey(3)
+    grid(child_idx)%refined(1:twotondim) = .false.
+    flag1(1:twotondim,child_idx) = 0
+
+    ! Compute new oct Hilbert key
+    hkey = hilbert_key(ckey, ilevel - 1)
+    grid(child_idx)%hkey(1) = hkey
+
+#ifdef HYDRO
+    ! Straight injection for hydro variables
+    do ind = 1, twotondim
+       uold(ind,1,child_idx) = uold(cell_idx,1,oct_idx)
+       uold(ind,2,child_idx) = uold(cell_idx,2,oct_idx)
+       uold(ind,3,child_idx) = uold(cell_idx,3,oct_idx)
+       uold(ind,4,child_idx) = uold(cell_idx,4,oct_idx)
+       uold(ind,5,child_idx) = uold(cell_idx,5,oct_idx)
+    end do
+#endif
+
+#ifdef GRAV
+      ! Straight injection for gravity variables
+    do ind = 1, twotondim
+       f(ind,1,child_idx) = f(cell_idx,1,oct_idx)
+       f(ind,2,child_idx) = f(cell_idx,2,oct_idx)
+       f(ind,3,child_idx) = f(cell_idx,3,oct_idx)
+       phi(ind,child_idx) = phi(cell_idx,oct_idx)
+       phi_old(ind,child_idx) = phi_old(cell_idx,oct_idx)
+    end do
+#endif
+
+  end subroutine make_new_oct
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine refine_kernel(grid, flag1, uold, f, phi, phi_old, ifree, head_idx, num_octs)
+    type(oct), device :: grid(*)
+    integer, device :: flag1(1:twotondim,*)
+    real(kind=dp), device :: f(1:twotondim,1:ndim,*)
+    real(kind=dp), device :: phi(1:twotondim,*)
+    real(kind=dp), device :: phi_old(1:twotondim,*)
+    real(kind=dp), device :: uold(1:twotondim,1:nvar,*)
+    integer, device :: ifree
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
+    integer :: block_idx, oct_idx, cell_idx
+    logical :: flagged, refined
+
+    ! Compute block idx
+    block_idx = blockIdx%x - 1
+
+    ! Compute oct idx
+    oct_idx = block_idx * blockDim%y + threadIdx%y - 1
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Compute cell idx
+    cell_idx = threadIdx%x
+
+    flagged = flag1(cell_idx,oct_idx) == 1
+    refined = grid(oct_idx)%refined(cell_idx)
+
+    ! Create new oct
+    if (flagged .and. .not. refined) then
+       call make_new_oct(grid, flag1, uold, f, phi, phi_old, ifree, oct_idx, cell_idx)
+       grid(oct_idx)%refined(cell_idx) = .true.
+    endif
+
+  end subroutine refine_kernel
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine derefine_kernel(grid, flag1, hash_key, hash_val, hash_size, ckey_max, key_off, head_idx, num_octs)
+    type(oct), device :: grid(*)
+    integer(kind=4), device :: flag1(1:twotondim,*)
+    integer(kind=4), device :: ckey_max(*)
+    integer(kind=8), device :: key_off(*)
+    integer(kind=8), device :: hash_key(*)
+    integer(kind=4), device :: hash_val(*)
+    integer(kind=4), intent(in), value :: hash_size
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
+    integer(kind=8) :: key, parent_key, offset
+    integer(kind=8) :: ix, iy, iz, nx
+    integer :: thread_idx, block_idx, oct_idx, cell_idx, parent_idx
+    integer :: ilevel, i, j, k
+    logical :: flagged, refined
+
+    integer(kind=8), dimension(1:ndim) :: ckey
+
+    ! Compute thread and block idx
+    thread_idx = threadIdx%x - 1
+    block_idx = blockIdx%x - 1
+
+    ! Compute oct idx
+    oct_idx = thread_idx + block_idx * blockDim%x
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Get oct Cartesian key
+    ckey(1) = grid(oct_idx)%ckey(1)
+    ckey(2) = grid(oct_idx)%ckey(2)
+    ckey(3) = grid(oct_idx)%ckey(3)
+
+    ! Compute oct hash table key
+    ilevel = grid(oct_idx)%lev
+    ix = int(ckey(1), kind=8)
+    iy = int(ckey(2), kind=8)
+    iz = int(ckey(3), kind=8)
+    nx = int(ckey_max(ilevel), kind=8)
+    offset = key_off(ilevel)
+    key = offset + ix + iy * nx + iz * nx * nx
+
+    ! Compute parent oct hash table key
+    ilevel = grid(oct_idx)%lev - 1
+    ix = int(ckey(1) / 2, kind=8)
+    iy = int(ckey(2) / 2, kind=8)
+    iz = int(ckey(3) / 2, kind=8)
+    nx = int(ckey_max(ilevel), kind=8)
+    offset = key_off(ilevel)
+    parent_key = offset + ix + iy * nx + iz * nx * nx
+
+    ! Get parent oct index in memory
+    parent_idx = hash_get(hash_key, hash_val, hash_size, parent_key)
+
+    ! Get parent cell idx
+    i = ckey(1) - 2*ix
+    j = ckey(2) - 2*iy
+    k = ckey(3) - 2*iz
+    cell_idx = 1 + i + 2*j + 4*k
+
+    flagged = (flag1(cell_idx, parent_idx) == 1)
+    refined = grid(parent_idx)%refined(cell_idx)
+
+    ! Derefine
+    if (.not. flagged .and. refined) then
+       ! Free key/val pair in hash table
+       call hash_free(hash_key, hash_val, hash_size, key)
+       ! Set level to 0
+       grid(oct_idx)%lev = 0
+       ! Set parent refinement flag to .false.
+       grid(parent_idx)%refined(cell_idx) = .false.
+    endif
+
+  end subroutine derefine_kernel
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine insert_hash_kernel(grid, hash_key, hash_val, hash_size, ckey_max, key_off, head_idx, num_octs)
+    type(oct), device :: grid(*)
+    integer(kind=4), device :: ckey_max(*)
+    integer(kind=8), device :: key_off(*)
+    integer(kind=8), device :: hash_key(*)
+    integer(kind=4), device :: hash_val(*)
+    integer(kind=4), intent(in), value :: hash_size
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
+    integer :: thread_idx, block_idx, oct_idx
+    integer(kind=8) :: key, ix, iy, iz, nx, offset
+    integer(kind=4) :: val, ilevel
+
+    ! Compute thread and block idx
+    thread_idx = threadIdx%x - 1
+    block_idx = blockIdx%x - 1
+
+    ! Compute oct idx
+    oct_idx = thread_idx + block_idx * blockDim%x
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Get oct level
+    ilevel = grid(oct_idx)%lev
+
+    if (ilevel > 0)then
+
+       ! Compute key and value
+       ix = int(grid(oct_idx)%ckey(1), kind=8)
+       iy = int(grid(oct_idx)%ckey(2), kind=8)
+       iz = int(grid(oct_idx)%ckey(3), kind=8)
+       nx = int(ckey_max(ilevel), kind=8)
+       offset = key_off(ilevel)
+
+       key = offset + ix + iy * nx + iz * nx * nx
+       val = oct_idx
+
+       ! Insert key/value pair in hash table
+       call hash_set(hash_key, hash_val, hash_size, key, val)
+
+    end if
+
+  end subroutine insert_hash_kernel
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine free_hash_kernel(grid, hash_key, hash_val, hash_size, ckey_max, key_off, head_idx, num_octs)
+    type(oct), device :: grid(*)
+    integer(kind=4), device :: ckey_max(*)
+    integer(kind=8), device :: key_off(*)
+    integer(kind=8), device :: hash_key(*)
+    integer(kind=4), device :: hash_val(*)
+    integer(kind=4), intent(in), value :: hash_size
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
+    integer :: thread_idx, block_idx, oct_idx
+    integer(kind=8) :: key, ix, iy, iz, nx, offset
+    integer(kind=4) :: val, ilevel
+
+    ! Compute thread and block idx
+    thread_idx = threadIdx%x - 1
+    block_idx = blockIdx%x - 1
+
+    ! Compute oct idx
+    oct_idx = thread_idx + block_idx * blockDim%x
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Get oct level
+    ilevel = grid(oct_idx)%lev
+
+    if (ilevel > 0)then
+
+       ! Compute key and value
+       ix = int(grid(oct_idx)%ckey(1), kind=8)
+       iy = int(grid(oct_idx)%ckey(2), kind=8)
+       iz = int(grid(oct_idx)%ckey(3), kind=8)
+       nx = int(ckey_max(ilevel), kind=8)
+       offset = key_off(ilevel)
+
+       key = offset + ix + iy * nx + iz * nx * nx
+
+       ! Free key location in hash table
+       call hash_free(hash_key, hash_val, hash_size, key)
+
+    end if
+
+  end subroutine free_hash_kernel
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine update_hash_kernel(grid, hash_key, hash_val, hash_size, ckey_max, key_off, head_idx, num_octs)
+    type(oct), device :: grid(*)
+    integer(kind=4), device :: ckey_max(*)
+    integer(kind=8), device :: key_off(*)
+    integer(kind=8), device :: hash_key(*)
+    integer(kind=4), device :: hash_val(*)
+    integer(kind=4), intent(in), value :: hash_size
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
+    integer :: thread_idx, block_idx, oct_idx
+    integer(kind=8) :: key, ix, iy, iz, nx, offset
+    integer(kind=4) :: val, ilevel
+
+    ! Compute thread and block idx
+    thread_idx = threadIdx%x - 1
+    block_idx = blockIdx%x - 1
+
+    ! Compute oct idx
+    oct_idx = thread_idx + block_idx * blockDim%x
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Compute key and value
+    ilevel = grid(oct_idx)%lev
+    ix = int(grid(oct_idx)%ckey(1), kind=8)
+    iy = int(grid(oct_idx)%ckey(2), kind=8)
+    iz = int(grid(oct_idx)%ckey(3), kind=8)
+    nx = int(ckey_max(ilevel), kind=8)
+    offset = key_off(ilevel)
+
+    key = offset + ix + iy * nx + iz * nx * nx
+    val = oct_idx
+
+    ! Update value at key location in hash table
+    if (ilevel > 0)then
+       call hash_update(hash_key, hash_val, hash_size, key, val)
+    endif
+
+  end subroutine update_hash_kernel
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine init_global_swap_table_kernel(swap_global, head_idx, num_octs)
+    integer(kind=4), device :: swap_global(*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
+    integer :: oct_idx, thread_idx, block_idx
+
+    ! Compute thread and block idx
+    thread_idx = threadIdx%x - 1
+    block_idx = blockIdx%x - 1
+
+    ! Compute oct idx
+    oct_idx = thread_idx + block_idx * blockDim%x
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    swap_global(oct_idx) = oct_idx
+
+  end subroutine init_global_swap_table_kernel
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine init_prefix_sum_level(grid, swap_global, prefix_sum, head_idx, num_octs, ilevel)
+    type(oct), device :: grid(*)
+    integer(kind=4), device :: swap_global(*)
+    integer(kind=4), device :: prefix_sum(*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+    integer(kind=4), intent(in), value :: ilevel
+
+    integer :: oct_idx, thread_idx, block_idx, old_oct_idx
+
+    ! Compute the thread and block idx
+    thread_idx = threadIdx%x - 1
+    block_idx = blockIdx%x - 1
+
+    ! Compute new oct idx
+    oct_idx = thread_idx + block_idx * blockDim%x
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Get old oct idx
+    old_oct_idx = swap_global(oct_idx)
+
+    ! If level is equal to ilevel set prefix_sum to zero
+    if(grid(old_oct_idx)%lev == ilevel)then
+       prefix_sum(oct_idx) = 0
+    else
+       prefix_sum(oct_idx) = 1
+    endif
+
+  end subroutine init_prefix_sum_level
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine init_prefix_sum_bit(grid, swap_global, prefix_sum, head_idx, num_octs, skip_bit, bucket)
+    type(oct), device :: grid(*)
+    integer(kind=4), device :: swap_global(*)
+    integer(kind=4), device :: prefix_sum(*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+    integer(kind=4), intent(in), value :: skip_bit
+    integer(kind=4), intent(in), value :: bucket
+
+    integer :: oct_idx, thread_idx, block_idx, old_oct_idx, ibucket
+
+    ! Compute the thread and block idx
+    thread_idx = threadIdx%x - 1
+    block_idx = blockIdx%x - 1
+
+    ! Compute new oct idx
+    oct_idx = thread_idx + block_idx * blockDim%x
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Get old oct idx
+    old_oct_idx = swap_global(oct_idx)
+
+    ! Compute the bucket of each oct
+    ibucket = int(ibits(grid(old_oct_idx)%hkey(1), skip_bit, ndim), kind=4)
+
+    ! If oct has proper input bucket set prefix_sum to zero
+    if(ibucket == bucket)then
+       prefix_sum(oct_idx) = 0
+    else
+       prefix_sum(oct_idx) = 1
+    endif
+
+  end subroutine init_prefix_sum_bit
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine compute_local_swap_table(swap_local, swap_global, prefix_sum, head_idx, num_octs)
+    integer(kind=4), device :: swap_local(*)
+    integer(kind=4), device :: swap_global(*)
+    integer(kind=4), device :: prefix_sum(*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
+    integer :: oct_idx, thread_idx, block_idx
+    integer :: old_oct_idx, sorted_idx
+    integer :: nfinal, nones, nzeros, previous_sum, bit
+    
+    ! Compute thread and block idx
+    thread_idx = threadIdx%x - 1
+    block_idx = blockIdx%x - 1
+
+    ! Compute new oct idx
+    oct_idx = thread_idx + block_idx * blockDim%x
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Compute final oct idx
+    nfinal = head_idx + num_octs - 1
+
+    ! Compute total counts
+    nones = prefix_sum(nfinal)
+    nzeros = num_octs - nones
+
+    ! Get previous prefix sum
+    if (oct_idx > head_idx)then
+       previous_sum = prefix_sum(oct_idx - 1)
+    else
+       previous_sum = 0
+    endif
+
+    ! Compute original table value (0 or 1)
+    bit = prefix_sum(oct_idx) - previous_sum
+
+    ! Get old oct idx
+    old_oct_idx = swap_global(oct_idx)
+
+    ! Compute sorted new index
+    if(bit == 0)then
+       sorted_idx = oct_idx - previous_sum
+    else
+       sorted_idx = head_idx + nzeros + previous_sum
+    endif
+
+    ! Compute local swap table
+    swap_local(sorted_idx) = old_oct_idx
+
+  end subroutine compute_local_swap_table
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine update_global_swap_table(swap_global, swap_local, head_idx, num_octs)
+    integer(kind=4), device :: swap_global(*)
+    integer(kind=4), device :: swap_local(*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
+    integer :: oct_idx, thread_idx, block_idx
+
+    ! Compute the thread and block idx
+    thread_idx = threadIdx%x - 1
+    block_idx = blockIdx%x - 1
+
+    ! Compute the new oct idx
+    oct_idx = thread_idx + block_idx * blockDim%x
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Update the global swap table
+    swap_global(oct_idx) = swap_local(oct_idx)
+
+  end subroutine update_global_swap_table
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine sort_gather_grid(flag2, grid, swap_global, head_idx, num_octs)
+    type(oct), device :: grid(*)
+    integer(kind=4), device :: swap_global(*)
+    integer(kind=4), device :: flag2(1:twotondim,*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+    
+    integer :: oct_idx, thread_idx, block_idx, old_oct_idx
+    integer :: bit, mask, idim, ind
+
+    ! Compute the thread and block idx
+    thread_idx = threadIdx%x - 1
+    block_idx = blockIdx%x - 1
+
+    ! Compute the new oct idx
+    oct_idx = thread_idx + block_idx * blockDim%x
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Update the global swap table
+    old_oct_idx = swap_global(oct_idx)
+
+    ! Gather grid properties into flag2
+    flag2(1, oct_idx) = grid(old_oct_idx)%lev
+    do idim = 1, ndim
+       flag2(1 + idim, oct_idx) = grid(old_oct_idx)%ckey(idim)
+    end do
+    mask = 0
+    do ind = 1, twotondim
+       if (grid(old_oct_idx)%refined(ind)) then
+          mask = IBSET(mask, ind - 1)
+       end if
+    end do
+    flag2(ndim + 2, oct_idx) = mask
+
+  end subroutine sort_gather_grid
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine sort_scatter_grid(grid, flag2, head_idx, num_octs)
+    type(oct), device :: grid(*)
+    integer(kind=4), device :: flag2(1:twotondim,*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
+    integer :: oct_idx, thread_idx, block_idx
+    integer :: ind, idim, mask, bit
+
+    ! Compute the thread and block idx
+    thread_idx = threadIdx%x - 1
+    block_idx = blockIdx%x - 1
+
+    ! Compute the new oct idx
+    oct_idx = thread_idx + block_idx * blockDim%x
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Scatter flag2 to new grid properties
+    grid(oct_idx)%lev = flag2(1, oct_idx)
+    do idim = 1, ndim
+       grid(oct_idx)%ckey(idim) = flag2(1 + idim, oct_idx)
+    end do
+    mask = flag2(ndim + 2, oct_idx)
+    do ind = 1, twotondim
+       bit = IBITS(mask, ind - 1, 1)
+       grid(oct_idx)%refined(ind) = (bit == 1)
+    end do
+
+    ! Compute Hilbert key
+    grid(oct_idx)%hkey(1) = hilbert_key(grid(oct_idx)%ckey, grid(oct_idx)%lev-1)
+
+  end subroutine sort_scatter_grid
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine sort_gather_flag(flag2, flag1, swap_global, head_idx, num_octs)
+    integer(kind=4), device :: flag1(1:twotondim,*)
+    integer(kind=4), device :: flag2(1:twotondim,*)
+    integer(kind=4), device :: swap_global(*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+    
+    integer :: oct_idx, thread_idx, block_idx, old_oct_idx
+
+    ! Compute the thread and block idx
+    thread_idx = threadIdx%x - 1
+    block_idx = blockIdx%x - 1
+
+    ! Compute the new oct idx
+    oct_idx = thread_idx + block_idx * blockDim%x
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Update the global swap table
+    old_oct_idx = swap_global(oct_idx)
+
+    ! Gather flag1 into flag2
+    flag2(:, oct_idx) = flag1(:, old_oct_idx)
+
+  end subroutine sort_gather_flag
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine sort_scatter_flag(flag1, flag2, head_idx, num_octs)
+    integer(kind=4), device :: flag1(1:twotondim,*)
+    integer(kind=4), device :: flag2(1:twotondim,*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+    
+    integer :: oct_idx, thread_idx, block_idx
+
+    ! Compute the thread and block idx
+    thread_idx = threadIdx%x - 1
+    block_idx = blockIdx%x - 1
+
+    ! Compute the new oct idx
+    oct_idx = thread_idx + block_idx * blockDim%x
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Scatter flag2 to flag1
+    flag1(:, oct_idx) = flag2(:, oct_idx)
+
+  end subroutine sort_scatter_flag
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine sort_gather_hydro(unew, uold, swap_global, head_idx, num_octs)
+    real(kind=dp), device :: unew(1:twotondim,1:nvar,*)
+    real(kind=dp), device :: uold(1:twotondim,1:nvar,*)
+    integer(kind=4), device :: swap_global(*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+    
+    integer :: oct_idx, thread_idx, block_idx, old_oct_idx
+
+    ! Compute the thread and block idx
+    thread_idx = threadIdx%x - 1
+    block_idx = blockIdx%x - 1
+
+    ! Compute the new oct idx
+    oct_idx = thread_idx + block_idx * blockDim%x
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Update the global swap table
+    old_oct_idx = swap_global(oct_idx)
+
+    ! Gather uold into unew
+    unew(:, :, oct_idx) = uold(:, :, old_oct_idx)
+
+  end subroutine sort_gather_hydro
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine sort_scatter_hydro(uold, unew, head_idx, num_octs)
+    real(kind=dp), device :: uold(1:twotondim,1:nvar,*)
+    real(kind=dp), device :: unew(1:twotondim,1:nvar,*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+    
+    integer :: oct_idx, thread_idx, block_idx
+
+    ! Compute the thread and block idx
+    thread_idx = threadIdx%x - 1
+    block_idx = blockIdx%x - 1
+
+    ! Compute the new oct idx
+    oct_idx = thread_idx + block_idx * blockDim%x
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Scatter unew to uold
+    uold(:, :, oct_idx) = unew(:, :, oct_idx)
+
+  end subroutine sort_scatter_hydro
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine sort_gather_force(nref, f, idim, swap_global, head_idx, num_octs)
+    real(kind=dp), device :: nref(1:twotondim,*)
+    real(kind=dp), device :: f(1:twotondim,1:ndim,*)
+    integer(kind=4), device :: swap_global(*)
+    integer(kind=4), intent(in), value :: idim
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
+    integer :: oct_idx, thread_idx, block_idx, old_oct_idx
+
+    ! Compute the thread and block idx
+    thread_idx = threadIdx%x - 1
+    block_idx = blockIdx%x - 1
+
+    ! Compute the new oct idx
+    oct_idx = thread_idx + block_idx * blockDim%x
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Update the global swap table
+    old_oct_idx = swap_global(oct_idx)
+
+    ! Gather force into nref
+    nref(:, oct_idx) = f(:, idim, old_oct_idx)
+
+  end subroutine sort_gather_force
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine sort_scatter_force(f, nref, idim, head_idx, num_octs)
+    real(kind=dp), device :: f(1:twotondim,1:ndim,*)
+    real(kind=dp), device :: nref(1:twotondim,*)
+    integer(kind=4), intent(in), value :: idim
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
+    integer :: oct_idx, thread_idx, block_idx
+
+    ! Compute the thread and block idx
+    thread_idx = threadIdx%x - 1
+    block_idx = blockIdx%x - 1
+
+    ! Compute the new oct idx
+    oct_idx = thread_idx + block_idx * blockDim%x
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Scatter nref to force
+    f(:, idim, oct_idx) = nref(:, oct_idx)
+
+  end subroutine sort_scatter_force
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine sort_gather_phi(nref, phi, swap_global, head_idx, num_octs)
+    real(kind=dp), device :: nref(1:twotondim,*)
+    real(kind=dp), device :: phi(1:twotondim,*)
+    integer(kind=4), device :: swap_global(*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
+    integer :: oct_idx, thread_idx, block_idx, old_oct_idx
+
+    ! Compute the thread and block idx
+    thread_idx = threadIdx%x - 1
+    block_idx = blockIdx%x - 1
+
+    ! Compute the new oct idx
+    oct_idx = thread_idx + block_idx * blockDim%x
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Update the global swap table
+    old_oct_idx = swap_global(oct_idx)
+
+    ! Gather phi into nref
+    nref(:, oct_idx) = phi(:, old_oct_idx)
+
+  end subroutine sort_gather_phi
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine sort_scatter_phi(phi, nref, head_idx, num_octs)
+    real(kind=dp), device :: phi(1:twotondim,*)
+    real(kind=dp), device :: nref(1:twotondim,*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
+    integer :: oct_idx, thread_idx, block_idx
+
+    ! Compute the thread and block idx
+    thread_idx = threadIdx%x - 1
+    block_idx = blockIdx%x - 1
+
+    ! Compute the new oct idx
+    oct_idx = thread_idx + block_idx * blockDim%x
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Scatter nref to phi
+    phi(:, oct_idx) = nref(:, oct_idx)
+
+  end subroutine sort_scatter_phi
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine update_father_array(grid, father, hash_key, hash_val, hash_size, &
+       & ckey_max, key_off, head_idx, num_octs)
+    type(oct), device :: grid(*)
+    integer(kind=4), device :: father(*)
+    integer(kind=4), device :: ckey_max(*)
+    integer(kind=8), device :: key_off(*)
+    integer(kind=8), device :: hash_key(*)
+    integer(kind=4), device :: hash_val(*)
+    integer(kind=4), intent(in), value :: hash_size
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
+    integer(kind=8) :: parent_key, offset, ix, iy, iz, nx
+    integer :: thread_idx, block_idx, oct_idx, parent_idx
+    integer :: ilevel
+
+    ! Compute thread and block idx
+    thread_idx = threadIdx%x - 1
+    block_idx = blockIdx%x - 1
+
+    ! Compute oct idx
+    oct_idx = thread_idx + block_idx * blockDim%x
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    ! Compute parent oct hash table key
+    ilevel = grid(oct_idx)%lev - 1
+    ix = int(grid(oct_idx)%ckey(1) / 2, kind=8)
+    iy = int(grid(oct_idx)%ckey(2) / 2, kind=8)
+    iz = int(grid(oct_idx)%ckey(3) / 2, kind=8)
+    nx = int(ckey_max(ilevel), kind=8)
+    offset = key_off(ilevel)
+    parent_key = offset + ix + iy * nx + iz * nx * nx
+
+    ! Get parent oct index in memory
+    parent_idx = hash_get(hash_key, hash_val, hash_size, parent_key)
+    father(oct_idx) = parent_idx
+
+  end subroutine update_father_array
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine update_nbor_array(nbor, grid, hash_key, hash_val, hash_size, &
+       & ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, head_idx, num_subgrids, input_ind)
+    logical, device :: periodic(1:3)
+    type(oct), device :: grid(*)
+    integer(kind=4), device :: nbor(1:subgridsize,*)
+    integer(kind=4), device :: ckey_max(*)
+    integer(kind=4), device :: box_ckey_min(1:ndim,*)
+    integer(kind=4), device :: box_ckey_max(1:ndim,*)
+    integer(kind=8), device :: key_off(*)
+    integer(kind=8), device :: hash_key(*)
+    integer(kind=4), device :: hash_val(*)
+    integer(kind=4), intent(in), value :: hash_size
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_subgrids
+    integer(kind=4), intent(in), value :: input_ind
+
+    integer(kind=8) :: key, offset, ix, iy, iz, nx
+    integer :: thread_idx, block_idx, subgrid_idx, oct_idx, nbor_idx
+    integer :: ilevel, i, j, k, ind, idim
+    integer(kind=4), dimension(1:ndim) ::ckey
+
+    ! Compute thread and block idx
+    thread_idx = threadIdx%x - 1
+    block_idx = blockIdx%x - 1
+
+    ! Compute subgrid and leading oct idx
+    subgrid_idx = thread_idx + block_idx * blockDim%x
+    if (subgrid_idx >= num_subgrids) return
+    subgrid_idx = head_idx + subgrid_idx
+    oct_idx = (subgrid_idx - 1) * nsubgridtondim + 1
+
+    ! Compute offsets to get nbor oct
+    ind = input_ind - 1
+    k = ind / nsubgridp2sq
+    ind = ind - k * nsubgridp2sq
+    j = ind / nsubgridp2
+    i = ind - j * nsubgridp2
+
+    ! Compute neighboring oct Cartesian key
+    ilevel = grid(oct_idx)%lev
+    ckey(1) = (grid(oct_idx)%ckey(1) / nsubgrid) * nsubgrid + i - 1
+    ckey(2) = (grid(oct_idx)%ckey(2) / nsubgrid) * nsubgrid + j - 1
+    ckey(3) = (grid(oct_idx)%ckey(3) / nsubgrid) * nsubgrid + k - 1
+
+    ! Periodic boundary conditions
+    do idim = 1,ndim
+       if(periodic(idim))then
+          if(ckey(idim)<box_ckey_min(idim,ilevel))ckey(idim)=box_ckey_max(idim,ilevel)-1
+          if(ckey(idim)>=box_ckey_max(idim,ilevel))ckey(idim)=box_ckey_min(idim,ilevel)
+       endif
+    enddo
+
+    ! Conpute key
+    ix = int(ckey(1), kind=8)
+    iy = int(ckey(2), kind=8)
+    iz = int(ckey(3), kind=8)
+    nx = int(ckey_max(ilevel), kind=8)
+    offset = key_off(ilevel)
+    key = offset + ix + iy * nx + iz * nx * nx
+
+    ! Get parent oct index in memory
+    nbor_idx = hash_get(hash_key, hash_val, hash_size, key)
+    nbor(input_ind, subgrid_idx) = nbor_idx
+
+  end subroutine update_nbor_array
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine init_prefix_sum_nbor(nbor, prefix_sum, head_idx, num_subgrids, input_ind)
+    integer(kind=4), device :: nbor(1:subgridsize,*)
+    integer(kind=4), device :: prefix_sum(*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_subgrids
+    integer(kind=4), intent(in), value :: input_ind
+
+    integer :: subgrid_idx, thread_idx, block_idx, nbor_idx
+
+    ! Compute the thread and block idx
+    thread_idx = threadIdx%x - 1
+    block_idx = blockIdx%x - 1
+
+    ! Compute oct idx
+    subgrid_idx = thread_idx + block_idx * blockDim%x
+    if (subgrid_idx >= num_subgrids) return
+    subgrid_idx = head_idx + subgrid_idx
+
+    ! Get nbor idx
+    nbor_idx = nbor(input_ind, subgrid_idx)
+
+    ! If nbor index is zero set prefix_sum to one
+    if(nbor_idx == 0)then
+       prefix_sum(subgrid_idx) = 1
+    else
+       prefix_sum(subgrid_idx) = 0
+    endif
+
+  end subroutine init_prefix_sum_nbor
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine compute_cache_swap_table(swap_local, prefix_sum, head_idx, num_subgrids)
+    integer(kind=4), device :: swap_local(*)
+    integer(kind=4), device :: prefix_sum(*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_subgrids
+
+    integer :: subgrid_idx, thread_idx, block_idx, cache_idx
+    integer :: previous_sum, bit
+
+    ! Compute thread and block idx
+    thread_idx = threadIdx%x - 1
+    block_idx = blockIdx%x - 1
+
+    ! Compute new oct idx
+    subgrid_idx = thread_idx + block_idx * blockDim%x
+    if (subgrid_idx >= num_subgrids) return
+    subgrid_idx = head_idx + subgrid_idx
+
+    ! Get previous prefix sum
+    if (subgrid_idx > head_idx)then
+       previous_sum = prefix_sum(subgrid_idx - 1)
+    else
+       previous_sum = 0
+    endif
+
+    ! Compute original table value (0 or 1)
+    bit = prefix_sum(subgrid_idx) - previous_sum
+
+    ! Compute new index in the cache
+    if(bit == 1)then
+       cache_idx = previous_sum + 1
+       swap_local(cache_idx) = subgrid_idx
+    endif
+
+  end subroutine compute_cache_swap_table
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine make_cache_octs(grid, flag1, uold, f, phi, phi_old, swap_local, father, nbor, &
+       & hash_key, hash_val, hash_size, ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, &
+       & head_idx, num_octs, input_ind)
+    type(oct), device :: grid(*)
+    real(kind=dp), device :: f(1:twotondim,1:ndim,*)
+    real(kind=dp), device :: phi(1:twotondim,*)
+    real(kind=dp), device :: phi_old(1:twotondim,*)
+    real(kind=dp), device :: uold(1:twotondim,1:nvar,*)
+    integer(kind=4), device :: flag1(1:twotondim,*)
+    integer(kind=4), device :: swap_local(*)
+    integer(kind=4), device :: father(*)
+    integer(kind=4), device :: nbor(1:subgridsize,*)
+    integer(kind=4), device :: ckey_max(*)
+    integer(kind=8), device :: key_off(*)
+    integer(kind=4), device :: box_ckey_min(1:ndim,*)
+    integer(kind=4), device :: box_ckey_max(1:ndim,*)
+    integer(kind=8), device :: hash_key(*)
+    integer(kind=4), device :: hash_val(*)
+    logical, device :: periodic(1:3)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: hash_size
+    integer(kind=4), intent(in), value :: num_octs
+    integer(kind=4), intent(in), value :: input_ind
+
+    integer(kind=8) :: hkey, parent_key, offset, ix, iy, iz, nx
+    integer :: oct_idx, subgrid_idx, thread_idx, block_idx, cache_idx, parent_idx, cell_idx
+    integer :: ind, i, j, k, ilevel, idim
+    integer, dimension(1:ndim) :: ckey
+
+    ! Compute thread and block idx
+    thread_idx = threadIdx%x - 1
+    block_idx = blockIdx%x - 1
+
+    ! Compute new cache index
+    cache_idx = thread_idx + block_idx * blockDim%x
+    if (cache_idx >= num_octs) return
+
+    ! Get original subgrid index
+    subgrid_idx = swap_local(cache_idx + 1)
+
+    ! Get corresponding leading oct index
+    oct_idx = (subgrid_idx - 1) * nsubgridtondim + 1
+
+    ! Get proper idx for cache grid
+    cache_idx = head_idx + cache_idx
+
+    ! Update nbor index (no race condition)
+    nbor(input_ind, subgrid_idx) = cache_idx
+
+    ! Compute offsets to get nbor oct
+    ind = input_ind - 1
+    k = ind / nsubgridp2sq
+    ind = ind - k * nsubgridp2sq
+    j = ind / nsubgridp2
+    i = ind - j * nsubgridp2
+
+    ! Compute neighboring oct Cartesian key
+    ilevel = grid(oct_idx)%lev
+    ckey(1) = (grid(oct_idx)%ckey(1) / nsubgrid) * nsubgrid + i - 1
+    ckey(2) = (grid(oct_idx)%ckey(2) / nsubgrid) * nsubgrid + j - 1
+    ckey(3) = (grid(oct_idx)%ckey(3) / nsubgrid) * nsubgrid + k - 1
+
+    ! Periodic boundary conditions
+    do idim = 1,ndim
+       if(periodic(idim))then
+          if(ckey(idim)<box_ckey_min(idim,ilevel))ckey(idim)=box_ckey_max(idim,ilevel)-1
+          if(ckey(idim)>=box_ckey_max(idim,ilevel))ckey(idim)=box_ckey_min(idim,ilevel)
+       endif
+    enddo
+
+    ! Compute cache oct properties
+    grid(cache_idx)%lev = grid(oct_idx)%lev
+    do idim = 1, ndim
+       grid(cache_idx)%ckey(idim) = ckey(idim)
+    end do
+    grid(cache_idx)%refined(1:twotondim) = .false.
+    flag1(1:twotondim, cache_idx) = 0
+
+    ! Compute new oct Hilbert key
+    hkey = hilbert_key(grid(cache_idx)%ckey, grid(cache_idx)%lev - 1)
+    grid(cache_idx)%hkey(1) = hkey
+
+    ! Compute parent oct hash table key
+    ilevel = grid(cache_idx)%lev - 1
+    ix = int(grid(cache_idx)%ckey(1) / 2, kind=8)
+    iy = int(grid(cache_idx)%ckey(2) / 2, kind=8)
+    iz = int(grid(cache_idx)%ckey(3) / 2, kind=8)
+    nx = int(ckey_max(ilevel), kind=8)
+    offset = key_off(ilevel)
+    parent_key = offset + ix + iy * nx + iz * nx * nx
+
+    ! Get parent oct index in memory (always exists)
+    parent_idx = hash_get(hash_key, hash_val, hash_size, parent_key)
+    father(cache_idx) = parent_idx
+
+    ! Get parent cell index
+    i = grid(cache_idx)%ckey(1) - 2*ix
+    j = grid(cache_idx)%ckey(2) - 2*iy
+    k = grid(cache_idx)%ckey(3) - 2*iz
+    cell_idx = 1 + i + 2*j + 4*k
+
+#ifdef HYDRO
+    ! Straight injection for hydro variables
+    do ind = 1, twotondim
+       uold(ind,1,cache_idx) = uold(cell_idx,1,parent_idx)
+       uold(ind,2,cache_idx) = uold(cell_idx,2,parent_idx)
+       uold(ind,3,cache_idx) = uold(cell_idx,3,parent_idx)
+       uold(ind,4,cache_idx) = uold(cell_idx,4,parent_idx)
+       uold(ind,5,cache_idx) = uold(cell_idx,5,parent_idx)
+    end do
+#endif
+
+#ifdef GRAV
+    ! Straight injection for gravity variables
+    do ind = 1, twotondim
+       f(ind,1,cache_idx) = f(cell_idx,1,parent_idx)
+       f(ind,2,cache_idx) = f(cell_idx,2,parent_idx)
+       f(ind,3,cache_idx) = f(cell_idx,3,parent_idx)
+       phi(ind,cache_idx) = phi(cell_idx,parent_idx)
+       phi_old(ind,cache_idx) = phi_old(cell_idx,parent_idx)
+    end do
+#endif
+
+  end subroutine make_cache_octs
+  ! =========================================================================
+
+end module refine_device
+

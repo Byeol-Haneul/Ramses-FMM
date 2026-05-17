@@ -4,7 +4,7 @@
 
 ! - VALUE: Integer (typically grid indices) are stored in the hash table.
 
-! - HASH FUNCTION: Simple hash function based on multiplication with constants.
+! - HASH FUNCTION: Simple hash function based on multiplication with hash_constants.
 ! - interface to murmur3 hash exists but is not used anymore
 
 ! - COLLISIONS: A linked list is used to deal with collisions.
@@ -14,18 +14,18 @@ module hash
   implicit none
 
   ! General module parameters
-  integer, dimension(0:3), parameter :: constants = (/5, -1640531527, 97, 1003313/)
+  integer, dimension(0:3), parameter :: hash_constants = (/5, -1640531527, 97, 1003313/)
 
   ! Define a bucket as a derived type
   type bucket
      integer(kind=8), dimension(0:ndim) :: key
-     integer :: valuep
+     integer :: val
      integer :: next_ibucket
   end type bucket
 
   type bucket_simple
      integer(kind=8) :: key
-     integer :: valuep
+     integer :: val
      integer :: next_ibucket
   end type bucket_simple
 
@@ -83,7 +83,7 @@ contains
   pure function hash_func(key)
     integer(kind=8), dimension(0:ndim), intent(in) :: key
     integer(kind=8)                                :: hash_func
-    hash_func = dot_product(key(0:ndim), constants(0:ndim))
+    hash_func = dot_product(key(0:ndim), hash_constants(0:ndim))
 !    hash_func = fnv1a(key)
   end function hash_func
   ! =============================================================================
@@ -247,7 +247,7 @@ contains
 
        ! Bucket is empty, simply insert value       
        htable%data(ibucket)%next_ibucket = 0
-       htable%data(ibucket)%valuep = val
+       htable%data(ibucket)%val = val
        htable%data(ibucket)%key(0:ndim) = key(0:ndim)
        htable%nfree = htable%nfree - 1
 
@@ -261,7 +261,7 @@ contains
              write(*,*) "new key: ",key
              write(*,*) "new value: ",val
              write(*,*) "existing key: ",htable%data(ibucket)%key(0:ndim)
-             write(*,*) "existing value: ",htable%data(ibucket)%valuep
+             write(*,*) "existing value: ",htable%data(ibucket)%val
              stop
           end if
           ibucket = htable%data(ibucket)%next_ibucket
@@ -273,7 +273,7 @@ contains
           write(*,*) "new key: ",key
           write(*,*) "new value: ",val
           write(*,*) "existing key: ",htable%data(ibucket)%key(0:ndim)
-          write(*,*) "existing value: ",htable%data(ibucket)%valuep
+          write(*,*) "existing value: ",htable%data(ibucket)%val
           CALL ABORT
           stop
        end if
@@ -282,7 +282,7 @@ contains
        htable%data(ibucket)%next_ibucket = htable%head_free
        ibucket = htable%head_free
        htable%data(ibucket)%next_ibucket = 0
-       htable%data(ibucket)%valuep = val
+       htable%data(ibucket)%val = val
        htable%data(ibucket)%key(0:ndim) = key(0:ndim)
 
        ! remove bucket from head of free linked list
@@ -316,7 +316,7 @@ contains
     if (htable%data(ibucket)%next_ibucket < 0) then
 
        ! Bucket is empty, simply insert value
-       htable%data(ibucket)%valuep = val
+       htable%data(ibucket)%val = val
        htable%data(ibucket)%next_ibucket = 0
        htable%data(ibucket)%key = key
        htable%nfree = htable%nfree - 1
@@ -344,7 +344,7 @@ contains
        ! Have reached end of chain, val not present yet -> add
        htable%data(ibucket)%next_ibucket = htable%head_free
        ibucket = htable%head_free
-       htable%data(ibucket)%valuep = val
+       htable%data(ibucket)%val = val
        htable%data(ibucket)%next_ibucket = 0
        htable%data(ibucket)%key = key
 
@@ -372,7 +372,7 @@ contains
     ibucket = IAND(full_hash, htable%bitmask) + 1
 
     if (same_keys(htable%data(ibucket)%key(0:ndim), key(0:ndim)))then
-       hash_getp = htable%data(ibucket)%valuep
+       hash_getp = htable%data(ibucket)%val
        return
     end if
 
@@ -380,7 +380,7 @@ contains
     do while( htable%data(ibucket)%next_ibucket > 0)
        ibucket = htable%data(ibucket)%next_ibucket
        if (same_keys(htable%data(ibucket)%key(0:ndim), key(0:ndim)))then
-          hash_getp = htable%data(ibucket)%valuep
+          hash_getp = htable%data(ibucket)%val
           return
        end if
     end do
@@ -403,7 +403,7 @@ contains
     ibucket = MOD(key,int(htable%size,kind=8)) + 1
 
     if (htable%data(ibucket)%key == key)then
-       hash_getp_simple = htable%data(ibucket)%valuep
+       hash_getp_simple = htable%data(ibucket)%val
        return
     end if
 
@@ -411,7 +411,7 @@ contains
     do while( htable%data(ibucket)%next_ibucket > 0)
        ibucket = htable%data(ibucket)%next_ibucket
        if (htable%data(ibucket)%key == key)then
-          hash_getp_simple = htable%data(ibucket)%valuep
+          hash_getp_simple = htable%data(ibucket)%val
           return
        end if
     end do
@@ -438,7 +438,7 @@ contains
     full_hash = 0
     do idim = 0, ndim
        do i = 1, n
-          full_hash(i) = full_hash(i) + keys(i, idim) * constants(idim)
+          full_hash(i) = full_hash(i) + keys(i, idim) * hash_constants(idim)
        end do
     end do
 
@@ -462,7 +462,7 @@ contains
     n_coll = 0
     do i = 1, n
        if (ok(i)) then
-          hash_getp_vec(i) = htable%data(ibucket(i))%valuep
+          hash_getp_vec(i) = htable%data(ibucket(i))%val
        else
           n_coll = n_coll + 1
        endif
@@ -476,7 +476,7 @@ contains
           do while( htable%data(ibucket(i))%next_ibucket > 0)
              ibucket(i) = htable%data(ibucket(i))%next_ibucket
              if (same_keys(htable%data(ibucket(i))%key(0:ndim), keys(i,0:ndim)))then
-                hash_getp_vec(i) = htable%data(ibucket(i))%valuep
+                hash_getp_vec(i) = htable%data(ibucket(i))%val
                 ok(i) = .true.
              end if
           end do
@@ -550,7 +550,7 @@ contains
        if (ibucket <= htable%size) then           
           ! It's the first element we need to erase: Move first element from chaning 
           ! space into bucket and do as if the value to remove had been in the chaning space
-          htable%data(ibucket)%valuep = htable%data(htable%data(ibucket)%next_ibucket)%valuep
+          htable%data(ibucket)%val = htable%data(htable%data(ibucket)%next_ibucket)%val
           htable%data(ibucket)%key = htable%data(htable%data(ibucket)%next_ibucket)%key
           previous_ibucket = ibucket
           ibucket = htable%data(ibucket)%next_ibucket
@@ -588,7 +588,7 @@ contains
        if (ibucket <= htable%size)then
           ! It's the first element we need to erase: Move first element from chaining
           ! space into bucket and do as if the value to remove had been in the chaining space
-          htable%data(ibucket)%valuep = htable%data(htable%data(ibucket)%next_ibucket)%valuep
+          htable%data(ibucket)%val = htable%data(htable%data(ibucket)%next_ibucket)%val
           htable%data(ibucket)%key = htable%data(htable%data(ibucket)%next_ibucket)%key
           previous_ibucket = ibucket
           ibucket = htable%data(ibucket)%next_ibucket

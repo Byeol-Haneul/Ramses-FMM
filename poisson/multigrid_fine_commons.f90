@@ -1,9 +1,15 @@
 module multigrid_fine_commons
+
 #ifdef GRAV
   use multigrid_fine_coarse, only: r_cmp_residual_mg, r_cmp_residual_norm2, r_gauss_seidel_mg,&
         r_interpolate_and_correct, r_reset_correction, r_restrict_mask, r_restrict_residual, r_set_scan_flag,&
         double_level_t, level_count_t, gs_step_t
 #endif
+
+#ifdef _CUDA
+  use gpu_runner, only: gpu_init_phi, gpu_make_mask, gpu_make_rhs, gpu_build_mg, gpu_clean_mg
+#endif
+
 contains
 
 ! ------------------------------------------------------------------------
@@ -160,7 +166,7 @@ subroutine multigrid(pst,ilevel,icount)
         call r_reset_correction(pst,ilevel-1,1)
 
         ! Multigrid-solve the upper level
-        call recursive_multigrid(pst,ilevel-1,pst%s%g%safe_mode(ilevel))
+        call recursive_multigrid(pst,ilevel,ilevel-1,pst%s%g%safe_mode(ilevel))
 
         ! Interpolate coarse solution and correct fine solution
         call r_interpolate_and_correct(pst,double_level,storage_size(double_level)/32)
@@ -219,12 +225,13 @@ end subroutine multigrid
 ! Recursive multigrid routine for coarse MG levels
 ! ------------------------------------------------------------------------
 
-recursive subroutine recursive_multigrid(pst,ifinelevel,safe)
+recursive subroutine recursive_multigrid(pst,ilevel,ifinelevel,safe)
   use amr_parameters, only: twotondim
   use poisson_parameters, only: ngs_fine, ngs_coarse, ncycles_coarse_safe
   use ramses_commons, only: pst_t
   implicit none
   type(pst_t)::pst
+  integer,intent(in) :: ilevel
   integer,intent(in) :: ifinelevel
   logical,intent(in) :: safe
 
@@ -233,7 +240,7 @@ recursive subroutine recursive_multigrid(pst,ifinelevel,safe)
   type(gs_step_t)::gs_step
 
   ! Set parameter array
-  gs_step%ilevel=ifinelevel+1
+  gs_step%ilevel=ilevel
   gs_step%ifine=ifinelevel
   gs_step%safe=safe
 
@@ -267,7 +274,7 @@ recursive subroutine recursive_multigrid(pst,ifinelevel,safe)
      end do     
 
      ! Compute residual and restrict into upper level RHS
-     double_level%ilevel=ifinelevel+1
+     double_level%ilevel=ilevel
      double_level%ifine=ifinelevel
      call r_cmp_residual_mg(pst,double_level,storage_size(double_level)/32)
 
@@ -278,7 +285,7 @@ recursive subroutine recursive_multigrid(pst,ifinelevel,safe)
      call r_reset_correction(pst,ifinelevel-1,1)
 
      ! Multigrid-solve the upper level
-     call recursive_multigrid(pst,ifinelevel-1, safe)
+     call recursive_multigrid(pst,ilevel,ifinelevel-1, safe)
 
      ! Interpolate coarse solution and correct back into fine solution
      call r_interpolate_and_correct(pst,double_level,storage_size(double_level)/32)
@@ -372,11 +379,15 @@ recursive subroutine r_build_mg(pst,input,input_size)
      call r_build_mg(pst%pLower,input,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
+#ifdef _CUDA
+     call gpu_build_mg(pst%s,input%ilevel,input%ifine)
+#else
      if(input%ifine==input%ilevel)then
         call build_mg(pst%s,pst%s%m,input%ifine)
      else
         call build_mg(pst%s,pst%s%m_mg,input%ifine)
      end if
+#endif
   endif
 
 end subroutine r_build_mg
@@ -629,7 +640,11 @@ recursive subroutine r_cleanup_mg(pst)
      call r_cleanup_mg(pst%pLower)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
+#ifdef _CUDA
+     call gpu_clean_mg(pst%s)
+#else
      call cleanup_mg(pst%s%m_mg)
+#endif
   endif
 
 end subroutine r_cleanup_mg
@@ -678,7 +693,11 @@ recursive subroutine r_make_mask(pst,ilevel,input_size)
      call r_make_mask(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
+#ifdef _CUDA
+     call gpu_make_mask(pst%s,ilevel)
+#else
      call make_mask(pst%s%m,ilevel)
+#endif
   endif
 
 end subroutine r_make_mask
@@ -739,7 +758,11 @@ recursive subroutine r_make_bc_rhs(pst,input,input_size)
      call r_make_bc_rhs(pst%pLower,input,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
+#ifdef _CUDA
+     call gpu_make_rhs(pst%s,input%ilevel)
+#else
      call make_bc_rhs(pst%s,input%ilevel,input%icount)
+#endif
   endif
 
 end subroutine r_make_bc_rhs

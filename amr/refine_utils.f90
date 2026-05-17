@@ -1,4 +1,8 @@
 module refine_utils
+#ifdef _CUDA
+  use gpu_runner, only: gpu_refine
+  use nvtx
+#endif
   type out_refine_fine_t
     integer::make,kill
   end type out_refine_fine_t
@@ -29,16 +33,16 @@ subroutine m_refine_fine(pst,ilevel)
   if(s%m%noct_tot(ilevel)==0)return
 
   if(s%r%verbose)write(*,111)ilevel
-111 format(' Entering refine_fine for level ',I2)
+111 format('   Entering refine_fine for level ',I2)
 
   ! Create new octs and destroy unecessary octs
   call r_refine_fine(pst,ilevel,1,out_refine_fine,2)
 
   if(s%r%verbose)write(*,112)out_refine_fine%make
-112 format(' ==> Make ',i7,' sub-grids')
+112 format('   ==> Make ',i7,' sub-grids')
 
   if(s%r%verbose)write(*,113)out_refine_fine%kill
-113 format(' ==> Kill ',i7,' sub-grids')
+113 format('   ==> Kill ',i7,' sub-grids')
 
   ! Get total, min and max grid count (only in master)
   do ilev=ilevel+1,s%r%nlevelmax
@@ -54,7 +58,7 @@ subroutine m_refine_fine(pst,ilevel)
   call m_load_balance(pst,ilevel)
 
   ! Find clean and dirty octs
-  call r_clean_dirty(pst,ilevel,1)
+!  call r_clean_dirty(pst,ilevel,1)
 
   ! Get total, min and max grid count (only in master).
   do ilev=ilevel+1,s%r%nlevelmax
@@ -97,7 +101,7 @@ recursive subroutine r_refine_fine(pst,ilevel,input_size,output,output_size)
 
   type(out_refine_fine_t)::next_output
   integer::rID
-  
+
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_REFINE_FINE,pst%iUpper+1,input_size,output_size,ilevel)
      call r_refine_fine(pst%pLower,ilevel,input_size,output,output_size)
@@ -105,7 +109,15 @@ recursive subroutine r_refine_fine(pst,ilevel,input_size,output,output_size)
      output%make = output%make + next_output%make
      output%kill = output%kill + next_output%kill
   else
+#ifdef _CUDA
+     if(pst%s%m%data_on_device)then
+        call gpu_refine(pst%s,ilevel,output%make,output%kill)
+     else
+        call refine_fine(pst%s,ilevel,output%make,output%kill)
+     endif
+#else
      call refine_fine(pst%s,ilevel,output%make,output%kill)
+#endif
   endif
 
 end subroutine r_refine_fine

@@ -75,6 +75,8 @@ module amr_commons
      integer::ndustmax=0         ! Maximum number of dust particles
      integer::ntrac_per_cell=1   ! Number of tracer particles per cell in ICs
      integer::ndust_per_cell=1   ! Number of dust particles per cell in ICs
+     logical::part_subcell_positions=.true.  ! Use subcell positions for particles
+     character(LEN=32)::tracer_kick_pdf='piecewise_skew_uniform' ! Tracer kick PDF type
      real(kind=8)::dust_to_gas_mass_ratio=0.0d0   ! Dust to gas mass ratio
      real(kind=8)::grain_size_parameter=0.0d0   ! Dust particle size parameter (dimensionless)
      real(kind=8)::grain_charge_parameter=0.0d0  ! Dust particle charge-to-mass ratio (dimensionless)
@@ -159,6 +161,8 @@ module amr_commons
      logical ::induction=.false.
      logical ::entropy=.false.
      logical ::sgs_turb=.false.
+     logical ::equilibrium_sgs=.false.       ! Equilibrium SGS turbulence
+     real(kind=8)::smagorinsky_lilly_constant=1.0d0 ! Smagorinsky-Lilly constant for SGS turbulence
      real(kind=8)::dual_energy=-1
      real(kind=8)::T2_fix=0d0
      character(LEN=10)::scheme='muscl'
@@ -670,17 +674,27 @@ module amr_commons
   end type global_t
 
   type mesh_t
+     ! For GPU, is data on device
+     logical::data_on_device=.false.
+
      ! Level related arrays
      integer(kind=4),allocatable,dimension(:)::head      ! Starting index for each level
      integer(kind=4),allocatable,dimension(:)::tail      ! Final index for each level
      integer(kind=4),allocatable,dimension(:)::noct      ! Number of octs for each level
      integer::ifree                                      ! Index of first oct in free memory
 
+     ! Cache related arrays
+     integer(kind=4),allocatable,dimension(:)::head_cache
+     integer(kind=4),allocatable,dimension(:)::tail_cache
+     integer(kind=4),allocatable,dimension(:)::noct_cache
+     integer::ifree_cache
+
      integer(kind=4),allocatable,dimension(:)::noct_min  ! Min. number of octs across cpus
      integer(kind=4),allocatable,dimension(:)::noct_max  ! Max. number of octs across cpus
      integer(kind=8),allocatable,dimension(:)::noct_tot  ! Total number of octs across cpus
 
      integer(kind=4),allocatable,dimension(:)::ckey_max        ! Max. Cartesian key per level
+     integer(kind=8),allocatable,dimension(:)::key_off         ! Key offset for GPU nly
      integer(kind=8),allocatable,dimension(:,:)::hkey_max      ! Max. Hilbert key per level
      integer(kind=4),allocatable,dimension(:,:)::box_ckey_min  ! Min. Cartesian key per level for the box
      integer(kind=4),allocatable,dimension(:,:)::box_ckey_max  ! Max. Cartesian key per level for the box
@@ -700,6 +714,8 @@ module amr_commons
 
      ! Grid hash table
      type(hash_table)::grid_dict
+     integer(kind=4)::hash_size
+     integer(kind=4)::hash_used
 
      ! Grid variables
      integer,allocatable,dimension(:,:)::flag1
@@ -707,6 +723,9 @@ module amr_commons
 #ifdef HYDRO
      real(dp),allocatable,dimension(:,:,:)::uold
      real(dp),allocatable,dimension(:,:,:)::unew
+#ifdef TRCFLX
+     real(dp),allocatable,dimension(:,:,:)::mflux      ! Time-integrated mass flux for tracers
+#endif
 #endif
 #ifdef MHD
      real(dp),allocatable,dimension(:,:,:)::bold

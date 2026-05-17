@@ -86,7 +86,7 @@ subroutine m_update_time(pst,ilevel,done)
         !------------------------
         ! Output timing data
         !------------------------
-        if(r%verbose)call m_output_timer(pst,.false.,'dummy')
+        if(r%verbose)call m_output_timer(.false.,'dummy')
 
         !----------------------------------------------
         ! RT and non-equilibrium chemistry updates

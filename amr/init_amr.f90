@@ -73,15 +73,16 @@ end subroutine r_init_amr
 !###############################################
 !###############################################
 subroutine init_amr(r,g,m,type)
-  use amr_parameters, ONLY: nhilbert, ndim, twotondim
+  use amr_parameters, ONLY: nhilbert, ndim, twotondim, threetondim, dp
   use hydro_parameters, ONLY: nvar
   use rt_parameters, ONLY: nrtvar, nrtgrp
   use amr_commons, ONLY: run_t, global_t, mesh_t
   use hash
   use hilbert
 #ifdef _CUDA
-  use cudafor
   use gpu_runner
+  use gpu_utils
+  use cudafor
 #endif
   implicit none
   type(run_t)::r
@@ -89,10 +90,8 @@ subroutine init_amr(r,g,m,type)
   type(mesh_t)::m
   character(len=*)::type
   ! Local variables
-#ifdef _CUDA
-  integer::err_code
-#endif
   integer::idim,ilevel,icpu,igrid,ibound,ilevelmin
+  integer::nborarrsize
   integer(kind=8)::max_key
   real(kind=8)::dx
   integer(kind=8)::ngrid_tot,ikey
@@ -103,11 +102,12 @@ subroutine init_amr(r,g,m,type)
   ! Store size in mesh object
   if(type=='amr')then
      m%ngridmax=r%ngridmax
+     m%ncachemax=MAX(r%ncachemax,10000)
   endif
   if(type=='mg')then
      m%ngridmax=r%ngridmax/7
+     m%ncachemax=MAX(r%ncachemax/7,10000)
   endif
-  m%ncachemax=r%ncachemax
 
   ! Allocate main oct array
   allocate(m%grid(1:m%ngridmax+m%ncachemax))
@@ -118,12 +118,63 @@ subroutine init_amr(r,g,m,type)
   ! Allocate grid arrays
   allocate(m%flag1(1:twotondim,1:m%ngridmax+m%ncachemax))
   allocate(m%flag2(1:twotondim,1:m%ngridmax+m%ncachemax))
+  m%flag1=0
+  m%flag2=0
+
+  ! Allocate the device arrays
+#ifdef _CUDA
+  if(type=='amr')then
+     allocate(grid(1:m%ngridmax+m%ncachemax))
+     allocate(flag1(1:twotondim,1:m%ngridmax+m%ncachemax))
+     allocate(flag2(1:twotondim,1:m%ngridmax+m%ncachemax))
+     allocate(father(1:m%ngridmax+m%ncachemax))
+     nborarrsize = (m%ngridmax + nsubgridtondim - 1) / nsubgridtondim
+     allocate(nbor(1:subgridsize,1:nborarrsize))
+     flag1=0
+     flag2=0
+     father=0
+     nbor=0
+     ! Allocate hash table space
+     m%hash_size=2*(m%ngridmax+m%ncachemax)
+     allocate(hash_key(1:m%hash_size))
+     allocate(hash_val(1:m%hash_size))
+     hash_key=0
+     hash_val=0
+     ! Work buffers for GPU scan/sort/refine
+     allocate(swap_local(1:m%ngridmax+m%ncachemax))
+     allocate(swap_global(1:m%ngridmax+m%ncachemax))
+     allocate(prefix_sum(1:m%ngridmax+m%ncachemax))
+     allocate(partial_sums_0(1:max(1,(m%ngridmax+m%ncachemax)/256)))
+     allocate(partial_sums_1(1:max(1,(m%ngridmax+m%ncachemax)/65536)))
+     allocate(partial_sums_2(1:max(1,(m%ngridmax+m%ncachemax)/16777216)))
+     swap_local=0
+     swap_global=0
+     prefix_sum=0
+  endif
+  if(type=='mg')then
+#ifdef GRAV
+     allocate(grid_mg(1:m%ngridmax+m%ncachemax))
+     allocate(father_mg(1:r%ngridmax+r%ngridmax/7+m%ncachemax))
+     allocate(nbor_mg(1:threetondim,1:m%ngridmax))
+     father_mg=0
+     nbor_mg=0
+     ! Allocate hash table space
+     m%hash_size=2*(m%ngridmax+m%ncachemax)
+     allocate(hash_key_mg(1:m%hash_size))
+     allocate(hash_val_mg(1:m%hash_size))
+     hash_key_mg=0
+     hash_val_mg=0
+#endif
+  endif
+#endif
 
   ! Allocate AMR specific arrays
   if(type=='amr')then
 #ifdef HYDRO
      allocate(m%uold(1:twotondim,1:nvar,1:m%ngridmax+m%ncachemax))
      allocate(m%unew(1:twotondim,1:nvar,1:m%ngridmax+m%ncachemax))
+     m%uold=0d0
+     m%unew=0d0
 #endif
 #ifdef MHD
      allocate(m%bold(1:twotondim,1:6,1:m%ngridmax+m%ncachemax))
@@ -143,8 +194,37 @@ subroutine init_amr(r,g,m,type)
      allocate(m%nref(1:twotondim,1:m%ngridmax+m%ncachemax))
      allocate(m%f(1:twotondim,1:3,1:m%ngridmax+m%ncachemax))
      allocate(m%phi_old(1:twotondim,1:m%ngridmax+m%ncachemax))
+     m%f=0d0
+     m%rho=0d0
+     m%phi=0d0
+     m%nref=0d0
+     m%phi_old=0d0
 #endif
   endif
+
+  ! Allocate the device arrays
+#ifdef _CUDA
+  if(type=='amr')then
+#ifdef HYDRO
+     allocate(uold(1:twotondim,1:nvar,1:m%ngridmax+m%ncachemax))
+     allocate(unew(1:twotondim,1:nvar,1:m%ngridmax+m%ncachemax))
+     uold=0d0
+     unew=0d0
+#endif
+#ifdef GRAV
+     allocate(rho(1:twotondim,1:m%ngridmax+m%ncachemax))
+     allocate(phi(1:twotondim,1:m%ngridmax+m%ncachemax))
+     allocate(nref(1:twotondim,1:m%ngridmax+m%ncachemax))
+     allocate(f(1:twotondim,1:3,1:m%ngridmax+m%ncachemax))
+     allocate(phi_old(1:twotondim,1:m%ngridmax+m%ncachemax))
+     f=0d0
+     rho=0d0
+     phi=0d0
+     nref=0d0
+     phi_old=0d0
+#endif
+  endif
+#endif
 
   ! Allocate MG solver specific arrays
 #ifdef GRAV
@@ -154,12 +234,14 @@ subroutine init_amr(r,g,m,type)
   endif
 #endif
 
-  ! Allocate the device array
+  ! Allocate the device arrays
+#ifdef GRAV
 #ifdef _CUDA
-  if(type=='amr')then
-     err_code = cudaMalloc(grid_device_cptr, sizeof(m%grid))
-     call c_f_pointer(grid_device_cptr, grid_device, [m%ngridmax+m%ncachemax])
+  if(type=='mg')then
+     allocate(phi_mg(1:twotondim,1:m%ngridmax+m%ncachemax))
+     allocate(f_mg(1:twotondim,1:3,1:m%ngridmax+m%ncachemax))
   endif
+#endif
 #endif
 
   ! Allocate cache-related arrays
@@ -402,22 +484,50 @@ subroutine init_amr(r,g,m,type)
      end do
   end do
 
-  ! Set effective levelmin
-  if(type=='amr')then
-     ilevelmin=r%levelmin
-  endif
-  if(type=='mg')then
-     ilevelmin=1
-  endif
-  
   ! Allocate head, tail and numbers for each level
   if(r%verbose.and.g%myid==1)write(*,*)'Initialize oct decomposition'
-  allocate(m%head(ilevelmin:r%nlevelmax))
-  allocate(m%tail(ilevelmin:r%nlevelmax))
-  allocate(m%noct(ilevelmin:r%nlevelmax))
-  allocate(m%noct_min(ilevelmin:r%nlevelmax))
-  allocate(m%noct_max(ilevelmin:r%nlevelmax))
-  allocate(m%noct_tot(ilevelmin:r%nlevelmax))
+  allocate(m%head(1:r%nlevelmax))
+  allocate(m%tail(1:r%nlevelmax))
+  allocate(m%noct(1:r%nlevelmax))
+  allocate(m%noct_min(1:r%nlevelmax))
+  allocate(m%noct_max(1:r%nlevelmax))
+  allocate(m%noct_tot(1:r%nlevelmax))
+
+#ifdef _CUDA
+  if(type=='amr')then
+     allocate(m%head_cache(1:r%nlevelmax))
+     allocate(m%tail_cache(1:r%nlevelmax))
+     allocate(m%noct_cache(1:r%nlevelmax))
+     m%head_cache=1
+     m%tail_cache=0
+     m%noct_cache=0
+     m%ifree_cache=1
+     ! Compute Cartesian key offset for GPU hash table
+     allocate(m%key_off(1:r%nlevelmax+1))
+     m%key_off(1)=1
+     do ilevel=2,r%nlevelmax+1
+        m%key_off(ilevel)=m%key_off(ilevel-1)+m%hkey_max(1,ilevel-1)
+     end do
+     ! Allocate and transfer bounding box to device
+     allocate(ckey_max(1:r%nlevelmax+1))
+     allocate(key_off(1:r%nlevelmax+1))
+     allocate(box_ckey_min(1:3,1:r%nlevelmax+1))
+     allocate(box_ckey_max(1:3,1:r%nlevelmax+1))
+     ckey_max=m%ckey_max
+     key_off=m%key_off
+     periodic=r%periodic
+     box_size=r%box_size
+     constant_gravity=r%constant_gravity
+     box_ckey_min=m%box_ckey_min
+     box_ckey_max=m%box_ckey_max
+     if(r%nbound>0)then
+        allocate(bound_ckey_min(1:3,1:r%nbound,1:r%nlevelmax+1))
+        allocate(bound_ckey_max(1:3,1:r%nbound,1:r%nlevelmax+1))
+        bound_ckey_min=m%bound_ckey_min
+        bound_ckey_max=m%bound_ckey_max
+     endif
+  endif
+#endif
 
   ! Initialize level-based arrays
   m%head=1       ! Head oct in the level
@@ -430,14 +540,14 @@ subroutine init_amr(r,g,m,type)
   m%noct_used_tot=0  ! Total number of oct used (all cpus)
 
   ! Allocate head, tail, numbers and indice for clean and dirty octs at each level
-  allocate(m%head_clean(ilevelmin:r%nlevelmax))
-  allocate(m%tail_clean(ilevelmin:r%nlevelmax))
-  allocate(m%noct_clean(ilevelmin:r%nlevelmax))
-  allocate(m%indx_clean(1:m%ngridmax))
-  allocate(m%head_dirty(ilevelmin:r%nlevelmax))
-  allocate(m%tail_dirty(ilevelmin:r%nlevelmax))
-  allocate(m%noct_dirty(ilevelmin:r%nlevelmax))
-  allocate(m%indx_dirty(1:m%ngridmax))
+!!$  allocate(m%head_clean(1:r%nlevelmax))
+!!$  allocate(m%tail_clean(1:r%nlevelmax))
+!!$  allocate(m%noct_clean(1:r%nlevelmax))
+!!$  allocate(m%indx_clean(1:m%ngridmax))
+!!$  allocate(m%head_dirty(1:r%nlevelmax))
+!!$  allocate(m%tail_dirty(1:r%nlevelmax))
+!!$  allocate(m%noct_dirty(1:r%nlevelmax))
+!!$  allocate(m%indx_dirty(1:m%ngridmax))
 
 end subroutine init_amr
 !###############################################
@@ -451,10 +561,6 @@ subroutine init_params(mdl,r,g)
   use hash
   use hilbert
   use output_amr_module, only: input_params
-#ifdef _CUDA
-  use cudafor
-  use gpu_runner
-#endif
   implicit none
   type(mdl_t)::mdl
   type(run_t)::r
