@@ -467,9 +467,8 @@ contains
     integer(kind=4), intent(in), value :: num_octs
 
     integer(kind=8) :: key, offset, ix, iy, iz, nx
-    integer :: thread_idx, block_idx, subgrid_idx, oct_idx
-    integer :: nbor_idx, cell_idx, father_idx, mg_idx
-    integer :: ilevel, i, j, k, ind, idim
+    integer :: thread_idx, block_idx, oct_idx, mg_idx
+    integer :: father_idx, ilevel
     integer(kind=4), dimension(1:ndim) ::ckey, father_ckey
 
     ! Compute thread and block idx
@@ -481,12 +480,6 @@ contains
     if (oct_idx >= num_octs) return
     mg_idx = head_father + oct_idx
     oct_idx = head_idx + oct_idx
-
-    ! Compute cell index in parent oct
-    i = grid(oct_idx)%ckey(1) - 2 * (grid(oct_idx)%ckey(1) / 2)
-    j = grid(oct_idx)%ckey(2) - 2 * (grid(oct_idx)%ckey(2) / 2)
-    k = grid(oct_idx)%ckey(3) - 2 * (grid(oct_idx)%ckey(3) / 2)
-    cell_idx = 1 + i + 2*j + 4*k
 
     ! Compute oct Cartesian key
     ilevel = grid(oct_idx)%lev
@@ -511,44 +504,10 @@ contains
     ! Get parent oct index in memory
     father_idx = hash_get(hash_key, hash_val, hash_size, key)
 
-    ! Set corresponding cell to refined
-    grid_mg(father_idx)%refined(cell_idx) = .true.
-
     ! Update father array
     father(mg_idx) = father_idx
 
   end subroutine update_father_array
-  ! =========================================================================
-
-  ! =========================================================================
-  attributes(global) subroutine init_prefix_sum_father(father, prefix_sum, head_idx, num_octs)
-    integer(kind=4), device :: father(*)
-    integer(kind=4), device :: prefix_sum(*)
-    integer(kind=4), intent(in), value :: head_idx
-    integer(kind=4), intent(in), value :: num_octs
-
-    integer :: oct_idx, thread_idx, block_idx, nbor_idx, father_idx
-
-    ! Compute thread and block idx
-    thread_idx = threadIdx%x - 1
-    block_idx = blockIdx%x - 1
-
-    ! Compute oct idx
-    oct_idx = thread_idx + block_idx * blockDim%x
-    if (oct_idx >= num_octs) return
-    oct_idx = head_idx + oct_idx
-
-    ! Get nbor idx
-    father_idx = father(oct_idx)
-
-    ! If nbor index is zero set prefix_sum to one
-    if(father_idx == 0)then
-       prefix_sum(oct_idx) = 1
-    else
-       prefix_sum(oct_idx) = 0
-    endif
-
-  end subroutine init_prefix_sum_father
   ! =========================================================================
 
   ! =========================================================================
@@ -581,46 +540,6 @@ contains
     endif
 
   end subroutine init_prefix_sum_mg
-  ! =========================================================================
-
-  ! =========================================================================
-  attributes(global) subroutine compute_mg_swap_table(swap_local, prefix_sum, head_idx, head_father, num_octs)
-    integer(kind=4), device :: swap_local(*)
-    integer(kind=4), device :: prefix_sum(*)
-    integer(kind=4), intent(in), value :: head_idx
-    integer(kind=4), intent(in), value :: head_father
-    integer(kind=4), intent(in), value :: num_octs
-
-    integer :: oct_idx, thread_idx, block_idx, cache_idx, mg_idx
-    integer :: previous_sum, bit
-
-    ! Compute thread and block idx
-    thread_idx = threadIdx%x - 1
-    block_idx = blockIdx%x - 1
-
-    ! Compute new oct idx
-    oct_idx = thread_idx + block_idx * blockDim%x
-    if (oct_idx >= num_octs) return
-    mg_idx = head_father + oct_idx
-    oct_idx = head_idx + oct_idx
-
-    ! Get previous prefix sum
-    if (mg_idx > head_father)then
-       previous_sum = prefix_sum(mg_idx - 1)
-    else
-       previous_sum = 0
-    endif
-
-    ! Compute original table value (0 or 1)
-    bit = prefix_sum(mg_idx) - previous_sum
-
-    ! Compute parent oct index corresponding to new oct index
-    if(bit == 1)then
-       cache_idx = previous_sum + 1
-       swap_local(cache_idx) = oct_idx
-    endif
-
-  end subroutine compute_mg_swap_table
   ! =========================================================================
 
   ! =========================================================================
@@ -659,85 +578,6 @@ contains
     endif
 
   end subroutine compute_father_swap_table
-  ! =========================================================================
-
-  ! =========================================================================
-  attributes(global) subroutine make_mg_octs(grid, grid_mg, phi, f, swap_local, &
-       & ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, &
-       & head_idx, num_octs, nbor_ind)
-    type(oct), device :: grid(*)
-    type(oct), device :: grid_mg(*)
-    real(kind=dp), device :: f(1:twotondim,1:ndim,*)
-    real(kind=dp), device :: phi(1:twotondim,*)
-    integer(kind=4), device :: swap_local(*)
-    integer(kind=4), device :: ckey_max(*)
-    integer(kind=8), device :: key_off(*)
-    integer(kind=4), device :: box_ckey_min(1:ndim,*)
-    integer(kind=4), device :: box_ckey_max(1:ndim,*)
-    logical, device :: periodic(1:3)
-    integer(kind=4), intent(in), value :: head_idx
-    integer(kind=4), intent(in), value :: num_octs
-    integer(kind=4), intent(in), value :: nbor_ind
-
-    integer(kind=8) :: hkey, parent_key, offset, ix, iy, iz, nx
-    integer :: oct_idx, subgrid_idx, thread_idx, block_idx, cache_idx, parent_idx, cell_idx
-    integer :: ilevel, idim, ind
-    integer, dimension(1:ndim) :: ckey
-
-    ! Compute thread and block idx
-    thread_idx = threadIdx%x - 1
-    block_idx = blockIdx%x - 1
-
-    ! Compute new cache index
-    cache_idx = thread_idx + block_idx * blockDim%x
-    if (cache_idx >= num_octs) return
-
-    ! Get original subgrid index
-    oct_idx = swap_local(cache_idx + 1)
-
-    ! Get proper idx for cache grid
-    cache_idx = head_idx + cache_idx
-
-    ! Compute neighboring oct Cartesian key
-    ilevel = grid(oct_idx)%lev
-    ckey(1) = grid(oct_idx)%ckey(1) + shift_oct(1, nbor_ind)
-    ckey(2) = grid(oct_idx)%ckey(2) + shift_oct(2, nbor_ind)
-    ckey(3) = grid(oct_idx)%ckey(3) + shift_oct(3, nbor_ind)
-
-    ! Periodic boundary conditions
-    do idim = 1,ndim
-       if(periodic(idim))then
-          if(ckey(idim)<box_ckey_min(idim,ilevel))ckey(idim)=box_ckey_max(idim,ilevel)-1
-          if(ckey(idim)>=box_ckey_max(idim,ilevel))ckey(idim)=box_ckey_min(idim,ilevel)
-       endif
-    enddo
-
-    ! Compute father oct Cartesian key
-    ilevel = ilevel - 1
-    ckey(1) = ckey(1) / 2
-    ckey(2) = ckey(2) / 2
-    ckey(3) = ckey(3) / 2
-
-    ! Compute cache oct properties
-    grid_mg(cache_idx)%lev = ilevel
-    do idim = 1, ndim
-       grid_mg(cache_idx)%ckey(idim) = ckey(idim)
-    end do
-    grid_mg(cache_idx)%refined(1:twotondim) = .false.
-
-    ! Compute new oct Hilbert key
-    hkey = hilbert_key(grid_mg(cache_idx)%ckey, grid_mg(cache_idx)%lev - 1)
-    grid_mg(cache_idx)%hkey(1) = hkey
-
-    ! Initial potential and force set to zero
-    do ind = 1, twotondim
-       phi(ind, cache_idx) = 0d0
-       f(ind, 1, cache_idx) = 0d0
-       f(ind, 2, cache_idx) = 0d0
-       f(ind, 3, cache_idx) = 0d0
-    end do
-
-  end subroutine make_mg_octs
   ! =========================================================================
 
   ! =========================================================================
@@ -790,8 +630,7 @@ contains
     grid_mg(father_idx)%refined(1:twotondim) = .false.
 
     ! Compute new oct Hilbert key
-    hkey = hilbert_key(grid_mg(father_idx)%ckey, grid_mg(father_idx)%lev - 1)
-    grid_mg(father_idx)%hkey(1) = hkey
+    grid_mg(father_idx)%hkey(1) = grid(oct_idx)%hkey(1) / twotondim
 
     ! Initial potential and force set to zero
     do ind = 1, twotondim

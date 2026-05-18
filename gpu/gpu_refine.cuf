@@ -546,7 +546,9 @@ contains
     integer(kind=4), intent(in), value :: num_octs
 
     integer :: oct_idx, thread_idx, block_idx
-    integer :: ind, idim, mask, bit
+    integer :: ind, idim, mask, bit, ilevel
+    integer(kind=4), dimension(1:ndim) :: ckey
+    integer(kind=8) :: hkey
 
     ! Compute the thread and block idx
     thread_idx = threadIdx%x - 1
@@ -569,7 +571,10 @@ contains
     end do
 
     ! Compute Hilbert key
-    grid(oct_idx)%hkey(1) = hilbert_key(grid(oct_idx)%ckey, grid(oct_idx)%lev-1)
+    ckey = grid(oct_idx)%ckey
+    ilevel = grid(oct_idx)%lev
+    hkey = hilbert_key(ckey, ilevel - 1)
+    grid(oct_idx)%hkey(1) = hkey
 
   end subroutine sort_scatter_grid
   ! =========================================================================
@@ -1044,7 +1049,7 @@ contains
     flag1(1:twotondim, cache_idx) = 0
 
     ! Compute new oct Hilbert key
-    hkey = hilbert_key(grid(cache_idx)%ckey, grid(cache_idx)%lev - 1)
+    hkey = hilbert_key(ckey, ilevel - 1)
     grid(cache_idx)%hkey(1) = hkey
 
     ! Compute parent oct hash table key
