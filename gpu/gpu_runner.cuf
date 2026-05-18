@@ -521,31 +521,28 @@ contains
 
        if (sim%m%noct(ilev) > 0) then
 
+          ! Compute kernel size and offset
+          head_idx = sim%m%head(ilev)
+          num_octs = sim%m%noct(ilev)
+          num_threads = 128
+          num_blocks = (num_octs + num_threads - 1) / num_threads
+
           do ibit = 0, ndim * ilev - 1
 
-             ! Compute kernel size and offset
-             head_idx = sim%m%head(ilev)
-             num_octs = sim%m%noct(ilev)
-             num_threads = 128
-             num_blocks = (num_octs + num_threads - 1) / num_threads
+             ! Init prefix sum
+             call init_prefix_sum_bit<<<num_blocks, num_threads>>>(grid, swap_global, prefix_sum, &
+                  & head_idx, num_octs, ibit)
 
-             if (num_octs > 0) then
+             ! Compute prefix sum
+             call gpu_scan(head_idx, num_octs, new_noct)
 
-                ! Init prefix sum
-                call init_prefix_sum_bit<<<num_blocks, num_threads>>>(grid, swap_global, prefix_sum, &
-                     & head_idx, num_octs, ibit)
+             ! Compute local swap table
+             call compute_local_swap_table<<<num_blocks, num_threads>>>(swap_local, swap_global, prefix_sum, &
+                  & head_idx, num_octs)
 
-                ! Compute prefix sum
-                call gpu_scan(head_idx, num_octs, new_noct)
-
-                ! Compute local swap table
-                call compute_local_swap_table<<<num_blocks, num_threads>>>(swap_local, swap_global, prefix_sum, &
-                     & head_idx, num_octs)
-
-                ! Update global swap table
-                call update_global_swap_table<<<num_blocks, num_threads>>>(swap_global, swap_local, &
-                     & head_idx, num_octs)
-             end if
+             ! Update global swap table
+             call update_global_swap_table<<<num_blocks, num_threads>>>(swap_global, swap_local, &
+                  & head_idx, num_octs)
 
           end do
 
