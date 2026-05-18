@@ -516,56 +516,41 @@ contains
     ! Copy back to device
     ifree = sim%m%ifree
 
-    ! Sort Hilbert key within each level
+    ! Sort Hilbert key within each level using LSD radix sort.
     do ilev = ilevel + 1, sim%r%nlevelmax
 
-       noct_level = sim%m%noct(ilev)
+       if (sim%m%noct(ilev) > 0) then
 
-       if (noct_level > 0) then
-
-          do ibit = ilev, 1, -1
-
-             ! Get bit to read from
-             skip_bit = ndim*(ilev-ibit)
+          do ibit = 0, ndim * ilev - 1
 
              ! Compute kernel size and offset
-             new_head = sim%m%head(ilev)
-             new_noct = noct_level
+             head_idx = sim%m%head(ilev)
+             num_octs = sim%m%noct(ilev)
+             num_threads = 128
+             num_blocks = (num_octs + num_threads - 1) / num_threads
 
-             ! loop over buckets
-             do ibucket = 1, twotondim - 1
+             if (num_octs > 0) then
 
-                ! Compute kernel size and offset
-                head_idx = new_head
-                num_octs = new_noct
-                num_threads = 128
-                num_blocks = (num_octs + num_threads - 1) / num_threads
+                ! Init prefix sum
+                call init_prefix_sum_bit<<<num_blocks, num_threads>>>(grid, swap_global, prefix_sum, &
+                     & head_idx, num_octs, ibit)
 
-                if (num_octs > 0) then
+                ! Compute prefix sum
+                call gpu_scan(head_idx, num_octs, new_noct)
 
-                   ! Init prefix sum
-                   call init_prefix_sum_bit<<<num_blocks, num_threads>>>(grid, swap_global, prefix_sum, &
-                        & head_idx, num_octs, skip_bit, ibucket - 1)
+                ! Compute local swap table
+                call compute_local_swap_table<<<num_blocks, num_threads>>>(swap_local, swap_global, prefix_sum, &
+                     & head_idx, num_octs)
 
-                   ! Compute prefix sum
-                   call gpu_scan(head_idx, num_octs, new_noct)
+                ! Update global swap table
+                call update_global_swap_table<<<num_blocks, num_threads>>>(swap_global, swap_local, &
+                     & head_idx, num_octs)
+             end if
 
-                   ! Compute local swap table
-                   call compute_local_swap_table<<<num_blocks, num_threads>>>(swap_local, swap_global, prefix_sum, &
-                        & head_idx, num_octs)
-
-                   ! Update global swap table
-                   call update_global_swap_table<<<num_blocks, num_threads>>>(swap_global, swap_local, &
-                        & head_idx, num_octs)
-
-                   ! Compute new head and noct
-                   new_head = head_idx + num_octs - new_noct
-
-                endif
-
-             end do
           end do
+
        endif
+
     end do
 
     ! Compute kernel size and offset
