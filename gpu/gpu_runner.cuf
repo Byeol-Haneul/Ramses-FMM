@@ -105,7 +105,7 @@ contains
     num_threads = 256
     num_blocks = (num_octs * twotondim + num_threads - 1 ) / num_threads
     call nvtxStartRange("GPU cmpdt", color=0)!green
-    call cmpdt_kernel<<<num_blocks, num_threads>>>(grid, uold, f, head_idx, num_octs, &
+    call cmpdt_kernel<<<num_blocks, num_threads>>>(grid, uold, f, constant_gravity, head_idx, num_octs, &
          & mass_d, ekin_d, eint_d, emag_d, dt_d, dx, gamma, courant_factor)
     call GPU_Error_Check(__FILE__, __LINE__)
     call nvtxEndRange()
