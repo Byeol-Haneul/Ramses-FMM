@@ -149,7 +149,7 @@ contains
   ! =========================================================================
 
   ! =========================================================================
-  attributes(global) subroutine make_initial_phi(grid, father, nbor, phi, phi_old, tfrac, head_idx, num_octs)
+  attributes(global) subroutine make_initial_phi(grid, father, nbor, phi, phi_old, tfrac, head_idx, num_octs, ngridmax)
     implicit none
     type(oct), device :: grid(*)
     integer, device :: father(*)
@@ -159,6 +159,7 @@ contains
     real(kind=8), value  :: tfrac
     integer, value :: head_idx
     integer, value :: num_octs
+    integer, value :: ngridmax
 
     integer(4) :: cell_idx, oct_idx, block_idx
     integer(4) :: igrid_nbor(1:threetondim)
@@ -194,7 +195,7 @@ contains
        igrid_nbr  = igrid_nbor(ind_father)
        ind_nbr    = icell_nbor(ind_father)
 
-       if (igrid_nbr == 0) then ! Should never happen
+       if (igrid_nbr == 0 .or. igrid_nbr > ngridmax) then ! Should never happen
           igrid_nbr = igrid_cen
           ind_nbr   = ind_cen
        end if
@@ -235,13 +236,14 @@ contains
   ! =========================================================================
 
   ! =========================================================================
-  attributes(global) subroutine reset_rhs_kernel(phi, rho, f, nbor, head_idx, num_octs, fourpi, offset, oneoverdx2)
+  attributes(global) subroutine reset_rhs_kernel(phi, rho, f, nbor, head_idx, num_octs, ngridmax, fourpi, offset, oneoverdx2)
     real(kind=dp), device :: phi(1:twotondim,*)
     real(kind=dp), device :: rho(1:twotondim,*)
     real(kind=dp), device :: f(1:twotondim,1:ndim,*)
     integer(kind=4), device :: nbor(1:subgridsize,*)
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
+    integer(kind=4), intent(in), value :: ngridmax
     real(kind=8), intent(in), value :: fourpi, offset, oneoverdx2
 
     real(kind=dp) :: phi_nbr, dis_nbr, w, phi_b
@@ -299,9 +301,15 @@ contains
           ! Compute neighboring cell index in parent octs
           cell_nbr_idx = hhh(cell_idx, 2*(idim-1) + inbor)
 
-          ! Get phi and distance function
+          ! Get phi
           phi_nbr = phi(cell_nbr_idx, oct_nbr_idx)
-          dis_nbr = f(cell_nbr_idx, 3, oct_nbr_idx)
+
+          ! Get distance function
+          if (oct_nbr_idx <= ngridmax) then
+             dis_nbr = f(cell_nbr_idx, 3, oct_nbr_idx)
+          else
+             dis_nbr = -1d0
+          end if
 
           ! If close to boundary and cell is not masked,
           ! then modify RHS using linear reconstruction
@@ -318,39 +326,12 @@ contains
   ! =========================================================================
 
   ! =========================================================================
-  attributes(global) subroutine reset_father_kernel(father, head_idx, num_octs, father_val)
-    integer(kind=4), device :: father(*)
-    integer(kind=4), intent(in), value :: head_idx
-    integer(kind=4), intent(in), value :: num_octs
-    integer(kind=4), intent(in), value :: father_val
-
-    integer :: thread_idx, block_idx, oct_idx
-
-    ! Compute thread and block idx
-    thread_idx = threadIdx%x - 1
-    block_idx = blockIdx%x - 1
-
-    ! Compute oct idx
-    oct_idx = thread_idx + block_idx * blockDim%x
-    if (oct_idx >= num_octs) return
-    oct_idx = head_idx + oct_idx
-
-    ! Initialize mask to input value
-    father(oct_idx) = father_val
-
-  end subroutine reset_father_kernel
-  ! =========================================================================
-
-  ! =========================================================================
-  attributes(global) subroutine update_mg_father_array(father, grid, hash_key, hash_val, hash_size, &
-       & ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, &
-       & head_idx, head_father, num_octs, nbor_ind, cell_ind)
-    logical, device :: periodic(1:3)
+  attributes(global) subroutine update_father_array(father, grid, grid_mg, hash_key, hash_val, hash_size, &
+       & ckey_max, key_off, head_idx, head_father, num_octs)
     type(oct), device :: grid(*)
+    type(oct), device :: grid_mg(*)
     integer(kind=4), device :: father(*)
     integer(kind=4), device :: ckey_max(*)
-    integer(kind=4), device :: box_ckey_min(1:ndim,*)
-    integer(kind=4), device :: box_ckey_max(1:ndim,*)
     integer(kind=8), device :: key_off(*)
     integer(kind=8), device :: hash_key(*)
     integer(kind=4), device :: hash_val(*)
@@ -358,13 +339,10 @@ contains
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: head_father
     integer(kind=4), intent(in), value :: num_octs
-    integer(kind=4), intent(in), value :: nbor_ind
-    integer(kind=4), intent(in), value :: cell_ind
 
     integer(kind=8) :: key, offset, ix, iy, iz, nx
-    integer :: thread_idx, block_idx, subgrid_idx, oct_idx
-    integer :: nbor_idx, cell_idx, father_idx, mg_idx
-    integer :: ilevel, i, j, k, ind, idim
+    integer :: thread_idx, block_idx, oct_idx, mg_idx
+    integer :: father_idx, ilevel
     integer(kind=4), dimension(1:ndim) ::ckey, father_ckey
 
     ! Compute thread and block idx
@@ -377,37 +355,11 @@ contains
     mg_idx = head_father + oct_idx
     oct_idx = head_idx + oct_idx
 
-    ! Compute cell index in parent oct
-    i = grid(oct_idx)%ckey(1) - 2 * (grid(oct_idx)%ckey(1) / 2)
-    j = grid(oct_idx)%ckey(2) - 2 * (grid(oct_idx)%ckey(2) / 2)
-    k = grid(oct_idx)%ckey(3) - 2 * (grid(oct_idx)%ckey(3) / 2)
-    cell_idx = 1 + i + 2*j + 4*k
-
-    if (nbor_ind == 0) then
-
-       ! Just compute father oct
-       ilevel = grid(oct_idx)%lev
-       ckey(1) = grid(oct_idx)%ckey(1)
-       ckey(2) = grid(oct_idx)%ckey(2)
-       ckey(3) = grid(oct_idx)%ckey(3)
-
-    else
-
-       ! Compute neighboring oct Cartesian key
-       ilevel = grid(oct_idx)%lev
-       ckey(1) = grid(oct_idx)%ckey(1) + shift_oct(1, nbor_ind)
-       ckey(2) = grid(oct_idx)%ckey(2) + shift_oct(2, nbor_ind)
-       ckey(3) = grid(oct_idx)%ckey(3) + shift_oct(3, nbor_ind)
-
-       ! Periodic boundary conditions
-       do idim = 1,ndim
-          if(periodic(idim))then
-             if(ckey(idim)<box_ckey_min(idim,ilevel))ckey(idim)=box_ckey_max(idim,ilevel)-1
-             if(ckey(idim)>=box_ckey_max(idim,ilevel))ckey(idim)=box_ckey_min(idim,ilevel)
-          endif
-       enddo
-
-    endif
+    ! Compute oct Cartesian key
+    ilevel = grid(oct_idx)%lev
+    ckey(1) = grid(oct_idx)%ckey(1)
+    ckey(2) = grid(oct_idx)%ckey(2)
+    ckey(3) = grid(oct_idx)%ckey(3)
 
     ! Compute father oct Cartesian key
     ilevel = ilevel - 1
@@ -426,31 +378,20 @@ contains
     ! Get parent oct index in memory
     father_idx = hash_get(hash_key, hash_val, hash_size, key)
 
-    if (cell_ind == 0) then
+    ! Update father array
+    father(mg_idx) = father_idx
 
-       ! Update father array
-       father(mg_idx) = father_idx
-
-    else
-
-       ! Update father array with no race condition using coloring
-       if (cell_idx == cell_ind) then
-          father(mg_idx) = father_idx
-       endif
-
-    endif
-
-  end subroutine update_mg_father_array
+  end subroutine update_father_array
   ! =========================================================================
 
   ! =========================================================================
-  attributes(global) subroutine init_prefix_sum_father(father, prefix_sum, head_idx, num_octs)
-    integer(kind=4), device :: father(*)
+  attributes(global) subroutine init_prefix_sum_mg(grid, prefix_sum, head_idx, num_octs)
+    type(oct), device :: grid(*)
     integer(kind=4), device :: prefix_sum(*)
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
 
-    integer :: oct_idx, thread_idx, block_idx, nbor_idx, father_idx
+    integer :: oct_idx, thread_idx, block_idx
 
     ! Compute thread and block idx
     thread_idx = threadIdx%x - 1
@@ -461,28 +402,28 @@ contains
     if (oct_idx >= num_octs) return
     oct_idx = head_idx + oct_idx
 
-    ! Get nbor idx
-    father_idx = father(oct_idx)
-
-    ! If nbor index is zero set prefix_sum to one
-    if(father_idx == 0)then
+    ! If oct is first in parent oct, set prefix_sum to one
+    if (oct_idx == head_idx) then
        prefix_sum(oct_idx) = 1
     else
-       prefix_sum(oct_idx) = 0
+       if (grid(oct_idx)%hkey(1)/twotondim .NE. grid(oct_idx - 1)%hkey(1)/twotondim) then
+          prefix_sum(oct_idx) = 1
+       else
+          prefix_sum(oct_idx) = 0
+       endif
     endif
 
-  end subroutine init_prefix_sum_father
+  end subroutine init_prefix_sum_mg
   ! =========================================================================
 
   ! =========================================================================
-  attributes(global) subroutine compute_mg_swap_table(swap_local, prefix_sum, head_idx, head_father, num_octs)
+  attributes(global) subroutine compute_father_swap_table(swap_local, prefix_sum, head_idx, num_octs)
     integer(kind=4), device :: swap_local(*)
     integer(kind=4), device :: prefix_sum(*)
     integer(kind=4), intent(in), value :: head_idx
-    integer(kind=4), intent(in), value :: head_father
     integer(kind=4), intent(in), value :: num_octs
 
-    integer :: oct_idx, thread_idx, block_idx, cache_idx, mg_idx
+    integer :: oct_idx, thread_idx, block_idx, father_idx
     integer :: previous_sum, bit
 
     ! Compute thread and block idx
@@ -492,48 +433,40 @@ contains
     ! Compute new oct idx
     oct_idx = thread_idx + block_idx * blockDim%x
     if (oct_idx >= num_octs) return
-    mg_idx = head_father + oct_idx
     oct_idx = head_idx + oct_idx
 
     ! Get previous prefix sum
-    if (mg_idx > head_father)then
-       previous_sum = prefix_sum(mg_idx - 1)
+    if (oct_idx > head_idx)then
+       previous_sum = prefix_sum(oct_idx - 1)
     else
        previous_sum = 0
     endif
 
     ! Compute original table value (0 or 1)
-    bit = prefix_sum(mg_idx) - previous_sum
+    bit = prefix_sum(oct_idx) - previous_sum
 
     ! Compute parent oct index corresponding to new oct index
     if(bit == 1)then
-       cache_idx = previous_sum + 1
-       swap_local(cache_idx) = oct_idx
+       father_idx = previous_sum + 1
+       swap_local(father_idx) = oct_idx
     endif
 
-  end subroutine compute_mg_swap_table
+  end subroutine compute_father_swap_table
   ! =========================================================================
 
   ! =========================================================================
-  attributes(global) subroutine make_mg_octs(grid, grid_mg, phi, f, swap_local, &
-       & ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, &
-       & head_idx, num_octs, nbor_ind)
+  attributes(global) subroutine make_father_octs(grid, grid_mg, phi, f, swap_local, &
+       & head_idx, num_octs)
     type(oct), device :: grid(*)
     type(oct), device :: grid_mg(*)
     real(kind=dp), device :: f(1:twotondim,1:ndim,*)
     real(kind=dp), device :: phi(1:twotondim,*)
     integer(kind=4), device :: swap_local(*)
-    integer(kind=4), device :: ckey_max(*)
-    integer(kind=8), device :: key_off(*)
-    integer(kind=4), device :: box_ckey_min(1:ndim,*)
-    integer(kind=4), device :: box_ckey_max(1:ndim,*)
-    logical, device :: periodic(1:3)
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
-    integer(kind=4), intent(in), value :: nbor_ind
 
-    integer(kind=8) :: hkey, parent_key, offset, ix, iy, iz, nx
-    integer :: oct_idx, subgrid_idx, thread_idx, block_idx, cache_idx, parent_idx, cell_idx
+    integer(kind=8) :: hkey
+    integer :: oct_idx, thread_idx, block_idx, father_idx
     integer :: ilevel, idim, ind
     integer, dimension(1:ndim) :: ckey
 
@@ -542,28 +475,20 @@ contains
     block_idx = blockIdx%x - 1
 
     ! Compute new cache index
-    cache_idx = thread_idx + block_idx * blockDim%x
-    if (cache_idx >= num_octs) return
+    father_idx = thread_idx + block_idx * blockDim%x
+    if (father_idx >= num_octs) return
 
     ! Get original subgrid index
-    oct_idx = swap_local(cache_idx + 1)
+    oct_idx = swap_local(father_idx + 1)
 
     ! Get proper idx for cache grid
-    cache_idx = head_idx + cache_idx
+    father_idx = head_idx + father_idx
 
     ! Compute neighboring oct Cartesian key
     ilevel = grid(oct_idx)%lev
-    ckey(1) = grid(oct_idx)%ckey(1) + shift_oct(1, nbor_ind)
-    ckey(2) = grid(oct_idx)%ckey(2) + shift_oct(2, nbor_ind)
-    ckey(3) = grid(oct_idx)%ckey(3) + shift_oct(3, nbor_ind)
-
-    ! Periodic boundary conditions
-    do idim = 1,ndim
-       if(periodic(idim))then
-          if(ckey(idim)<box_ckey_min(idim,ilevel))ckey(idim)=box_ckey_max(idim,ilevel)-1
-          if(ckey(idim)>=box_ckey_max(idim,ilevel))ckey(idim)=box_ckey_min(idim,ilevel)
-       endif
-    enddo
+    ckey(1) = grid(oct_idx)%ckey(1)
+    ckey(2) = grid(oct_idx)%ckey(2)
+    ckey(3) = grid(oct_idx)%ckey(3)
 
     ! Compute father oct Cartesian key
     ilevel = ilevel - 1
@@ -572,25 +497,24 @@ contains
     ckey(3) = ckey(3) / 2
 
     ! Compute cache oct properties
-    grid_mg(cache_idx)%lev = ilevel
+    grid_mg(father_idx)%lev = ilevel
     do idim = 1, ndim
-       grid_mg(cache_idx)%ckey(idim) = ckey(idim)
+       grid_mg(father_idx)%ckey(idim) = ckey(idim)
     end do
-    grid_mg(cache_idx)%refined(1:twotondim) = .true.
+    grid_mg(father_idx)%refined(1:twotondim) = .false.
 
     ! Compute new oct Hilbert key
-    hkey = hilbert_key(grid_mg(cache_idx)%ckey, grid_mg(cache_idx)%lev - 1)
-    grid_mg(cache_idx)%hkey(1) = hkey
+    grid_mg(father_idx)%hkey(1) = grid(oct_idx)%hkey(1) / twotondim
 
     ! Initial potential and force set to zero
     do ind = 1, twotondim
-       phi(ind, cache_idx) = 0d0
-       f(ind, 1, cache_idx) = 0d0
-       f(ind, 2, cache_idx) = 0d0
-       f(ind, 3, cache_idx) = 0d0
+       phi(ind, father_idx) = 0d0
+       f(ind, 1, father_idx) = 0d0
+       f(ind, 2, father_idx) = 0d0
+       f(ind, 3, father_idx) = 0d0
     end do
 
-  end subroutine make_mg_octs
+  end subroutine make_father_octs
   ! =========================================================================
 
   ! =========================================================================
@@ -626,13 +550,10 @@ contains
     k = grid(oct_idx)%ckey(3) - 2 * (grid(oct_idx)%ckey(3) / 2)
     cell_idx = 1 + i + 2*j + 4*k
 
-    ! Reset conservative variables
-    f_mg(cell_idx, 3, father_idx) = 0_dp
-
     ! Average children variables
     do ind = 1, twotondim
-       ngpmask = (1d0 + f(ind,3,oct_idx)) / 2d0
-       f_mg(cell_idx, 3, father_idx) = f_mg(cell_idx, 3, father_idx) + ngpmask / dble(twotondim)
+       ngpmask = (1d0 + f(ind, 3, oct_idx)) / 2d0 / dble(twotondim)
+       f_mg(cell_idx, 3, father_idx) = f_mg(cell_idx, 3, father_idx) + ngpmask
     end do
 
   end subroutine restrict_mask
@@ -665,7 +586,7 @@ contains
        oct_idx = head_idx + oct_idx
 
        ! Compute the cell idx
-       cell_idx = threadIdx%x
+       cell_idx = mod(tid, twotondim) + 1
 
        ! Initialize mask to input value
        f(cell_idx, 3, oct_idx) = 2d0 * f(cell_idx, 3, oct_idx) - 1d0
@@ -1192,28 +1113,21 @@ contains
 
     ! Loop over directions
     do idim = 1, ndim
-
-       ! Loop over 2 neighbors
-       do inbor = 1, 2
-
+       do inbor = 1, 2  ! Loop over 2 neighbors
           ind_nbor = 2*(idim-1) + inbor
-
           ! Compute neighboring oct index
           in = 0; jn = 0; kn = 0
           if (idim == 1) then
-             in = iii(cell_idx, ind_nbor)
+             in = -1+2*(inbor-1)
           else if (idim == 2) then
-             jn = iii(cell_idx, ind_nbor)
+             jn = -1+2*(inbor-1)
           else
-             kn = iii(cell_idx, ind_nbor)
+             kn = -1+2*(inbor-1)
           end if
           ind = 1 + (i + in) + nsubgridp2 * (j + jn)  + nsubgridp2sq * (k + kn)
-
           ! Store neighboring oct index
           nbor_idx(ind_nbor) = nbor(ind, subgrid_idx)
-
        end do
-
     end do
 
     ! Rescaling factor
@@ -1241,7 +1155,7 @@ contains
        phi3 = phi(ind3_idx, oct3_idx)
        phi4 = phi(ind4_idx, oct4_idx)
 
-       f(cell_idx, idim, oct_idx) = a * (phi1 - phi2 ) - b * (phi3 - phi4)
+       f(cell_idx, idim, oct_idx) = a * (phi1 - phi2) - b * (phi3 - phi4)
 
     end do
 

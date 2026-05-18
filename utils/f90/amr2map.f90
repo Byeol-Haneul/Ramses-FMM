@@ -301,14 +301,14 @@ program amr2map
                        map = rho*pres
                     endif
                  case (66) ! H2 fraction 
-                    metmax = max(metmax,qold(ind,type))
+                    metmax = max(metmax,real(qold(ind,type),kind=8))
                     if(do_max)then
                        map = qold(ind,type)
                     else
                        map = rho*(1.-qold(ind,6)-qold(ind,7))
                     endif
                  case default ! Passive scalar
-                    metmax = max(metmax,qold(ind,type))
+                    metmax = max(metmax,real(qold(ind,type),kind=8))
                     if(do_max)then
                        map = qold(ind,type)
                     else

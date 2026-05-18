@@ -246,9 +246,9 @@ subroutine init_cosmo(mdl,r,g)
         if(r%initfile(ilevel).ne.' ')then
            if(r%multiple)then
               call title(g%myid,nchar)
-              filename=TRIM(r%initfile(ilevel))//'/dir_deltab/ic_deltab.'//TRIM(nchar)
+              filename=TRIM(r%initfile(ilevel))//'/dir_deltab/ic_velcx.'//TRIM(nchar)
            else
-              filename=TRIM(r%initfile(ilevel))//'/ic_deltab'
+              filename=TRIM(r%initfile(ilevel))//'/ic_velcx'
            endif
            INQUIRE(file=filename,exist=ok)
            if(.not.ok)then

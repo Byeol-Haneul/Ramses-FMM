@@ -56,7 +56,7 @@ module amr_parameters
   integer,parameter::n_frw=1000
 
   ! Number of bins for halo mass profiles
-  integer, parameter::nbin=10
+  integer, parameter::nbin=100
 
   ! Executable identification
   CHARACTER(LEN=300)::builddate,buildcommand,patchdir
