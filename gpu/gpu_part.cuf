@@ -1,42 +1,8 @@
-!##############################################################################
-!##############################################################################
-!##############################################################################
-!##############################################################################
-!> Particle GPU kernels and host-callable dispatchers.
-!>
-!> Phase 1 entry points:
-!>   gpu_split_part      (§4.1) — IMPLEMENTED.
-!>   gpu_sort_part       (§4.2) — IMPLEMENTED.
-!>   gpu_cic_part        (§4.3) — incremental global-atomic baseline.
-!>   gpu_kick_drift_part (§4.4) — incremental global force-gather baseline.
-!>
-!> This file is `include`d from `module gpu_runner` (next to gpu_scan.cuf), so
-!> all kernels and host helpers below are module procedures of `gpu_runner`
-!> with direct visibility of the module-level device particle / scratch /
-!> hash / scan-buffer arrays declared in gpu_runner.cuf.
-!>
-!> 2D real(dp) particle arrays (xp, vp, fp, jp, xp_swap) are laid out
-!> (capacity, ndim) on both host and device, matching part_t in
-!> pm/pm_commons.f90:18-37. To keep dummy declarations consistent with the
-!> existing repo idiom (which uses `(*)` for runtime-bounded extents), the
-!> rank-2 gather/scatter kernels declare the dummy as 1D `(*)` and compute the
-!> column-major flat offset `idx + (idim-1)*leading` where `leading` is the
-!> device array's allocated leading dimension (= size(host xp, 1) =
-!> r%npartmax for DM, set in r_set_grid_device — pm/init_part.f90:62) and is
-!> passed by value. NB: `pst%s%p%npart_max` is NOT a safe leading value:
-!> r_npart_max (pm/input_part.f90:43) overwrites it to the actual particle
-!> count, not the host array capacity.
+!> Particle kernels and dispatchers (included from gpu_runner).
+!> Rank-2 arrays use layout (npart_max, ndim); gather/scatter use flat
+!> indices with `leading` = size(xp,1), not npart_max.
 
-! ============================================================================
-! §4.1 — Bucket classification kernels
-! ============================================================================
-
-!> Classify particles in [head_idx : head_idx+num_parts-1] into bucket 0
-!> (coarse: stays at level <= ilevel) or bucket 1 (fine: belongs at level
-!> >= ilevel+1). This is the boundary special case used when
-!> ilevel == levelmin-1 in the host pipeline (pm/rho_fine.f90:97-101).
-!> Coarse iff any non-periodic dim places the particle outside [0, box_size).
-!> Mirrors host split_part lines 1305-1325.
+!> Bucket 0/1 for ilevel == levelmin-1 (domain test).
 attributes(global) subroutine bucket_part_boundary(xp, bucket_part, &
      box_size_d, periodic_d, head_idx, num_parts, leading)
   integer(kind=4), intent(in), value :: leading
@@ -72,22 +38,11 @@ attributes(global) subroutine bucket_part_boundary(xp, bucket_part, &
   endif
 end subroutine bucket_part_boundary
 
-!> General case: ilevel >= levelmin. For each particle, compute the parent
-!> grid Cartesian key at level `ilevel`, look it up in the device hash table,
-!> and classify as coarse iff (igrid == 0) OR (parent cell is a leaf, i.e.
-!> not refined). Mirrors host split_part lines 1340-1390 and the host
-!> get_grid call with flush_cache=.false./fetch_cache=.true. — in single-rank
-!> mode a hash miss is the same as "particle is in a leaf or out of domain".
-!> Cartesian-key encoding identical to insert_hash_kernel
-!> (gpu/gpu_refine.cuf:225-232).
+!> Bucket 0/1 from hash lookup and leaf/refined test.
 attributes(global) subroutine bucket_part_general(xp, bucket_part, &
      grid, hash_key_d, hash_val_d, hash_size_d, ckey_max_d, key_off_d, &
      skip1, skip2, skip3, dx_loc, ilevel, head_idx, num_parts, leading)
-  ! hash_get is a module procedure of gpu_runner (gpu_hash.cuf is
-  ! `include`d at the top of gpu_runner.cuf alongside gpu_scan.cuf /
-  ! gpu_part.cuf), so it is visible here without an explicit `use`.
-  ! That makes the device call intra-compilation-unit, satisfying the
-  ! build's `-gpu=...,nordc` constraint (no relocatable device code).
+  ! hash_get: same compilation unit as gpu_runner (nordc).
   integer(kind=4), intent(in), value :: leading
   real(kind=dp), device :: xp(*)
   integer(kind=4), device :: bucket_part(*)
@@ -142,12 +97,7 @@ attributes(global) subroutine bucket_part_general(xp, bucket_part, &
   endif
 
   ! Compute in-cell index inside the parent (igrid) oct.
-  ! NB: cannot use `#if NDIM==N` here — gpu_part.cuf is `include`d into
-  ! gpu_runner.cuf via the Fortran `include` statement, which happens AFTER
-  ! the CPP pass has finished on gpu_runner.cuf, so any CPP directives in
-  ! this file would be passed through to nvfortran as raw text. Use a
-  ! runtime expression keyed on the `ndim` parameter constant — the dead
-  ! arms are eliminated at compile time. icell = 1 + sum(ii(idim) * 2^(idim-1)).
+  ! Runtime ndim loops (no #if in this included file).
   do idim = 1, ndim
      x(idim) = (xp(ipart + (idim-1)*leading) + skip(idim)) * inv_dx_loc
      ii(idim) = int(x(idim) - 2*ix(idim))
@@ -164,16 +114,7 @@ attributes(global) subroutine bucket_part_general(xp, bucket_part, &
   endif
 end subroutine bucket_part_general
 
-! ============================================================================
-! §4.1 — Prefix-sum init from bucket_part
-! ============================================================================
-
-!> Write prefix_sum(idx) := bucket_part(idx) over the slice. Convention
-!> matches existing init_prefix_sum_level / init_prefix_sum_bit
-!> (gpu/gpu_refine.cuf:355-421): 0 stays in the LEFT bucket, 1 goes to the
-!> RIGHT bucket. compute_local_swap_table then places coarse (0) at
-!> [head, head+n_coarse-1] and fine (1) at [head+n_coarse, head+num-1],
-!> stably preserving relative order within each bucket.
+!> prefix_sum(idx) := bucket_part(idx) for stable 0/1 partition.
 attributes(global) subroutine init_prefix_sum_part(bucket_part, prefix_sum_d, &
      head_idx, num_parts)
   integer(kind=4), device :: bucket_part(*)
@@ -190,18 +131,7 @@ attributes(global) subroutine init_prefix_sum_part(bucket_part, prefix_sum_d, &
   prefix_sum_d(idx) = bucket_part(idx)
 end subroutine init_prefix_sum_part
 
-! ============================================================================
-! §4.1 — Typed gather/scatter kernels
-!   Convention (matches gpu_refine.cuf:503-784): gather reads
-!   src(swap_global(new_idx)) into buf(new_idx); scatter copies buf(new_idx)
-!   into dst(new_idx).
-! ============================================================================
-
-!> Rank-2 real(dp) gather (xp/vp/fp/jp). The dummy is declared as 1D `(*)`
-!> and the kernel computes the column-major flat offset using `leading`,
-!> the device array's allocated leading dim (== size(host xp, 1) ==
-!> r%npartmax for DM, set in r_set_grid_device). NOT pst%s%p%npart_max,
-!> which is the dynamic actual-particle-count post-r_npart_max.
+!> Gather/scatter rank-2 field; `leading` = size(xp,1).
 attributes(global) subroutine sort_gather_part_real_2d(buf, src, swap_global_d, &
      head_idx, num_parts, leading)
   integer(kind=4), intent(in), value :: leading
@@ -242,7 +172,7 @@ attributes(global) subroutine sort_scatter_part_real_2d(dst, buf, &
   end do
 end subroutine sort_scatter_part_real_2d
 
-!> Rank-1 real(dp) gather/scatter (mp/zp/tp/tm/size_p/charge).
+!> Gather/scatter rank-1 real(dp).
 attributes(global) subroutine sort_gather_part_real_1d(buf, src, swap_global_d, &
      head_idx, num_parts)
   real(kind=dp), device :: buf(*)
@@ -276,10 +206,7 @@ attributes(global) subroutine sort_scatter_part_real_1d(dst, buf, head_idx, num_
   dst(idx) = buf(idx)
 end subroutine sort_scatter_part_real_1d
 
-!> Rank-1 particle-id gather/scatter (idp/idm).
-!> Kind = `i8b` (parameter from amr_parameters: 4 by default, 8 with -DLONGINT)
-!> — must match the module-level allocations of idp/idm/idp_swap, NOT the
-!> literal `kind=8` (which fails when LONGINT is undefined).
+!> Gather/scatter particle ids (kind=i8b).
 attributes(global) subroutine sort_gather_part_i8_1d(buf, src, swap_global_d, &
      head_idx, num_parts)
   integer(i8b),    device :: buf(*)
@@ -313,10 +240,7 @@ attributes(global) subroutine sort_scatter_part_i8_1d(dst, buf, head_idx, num_pa
   dst(idx) = buf(idx)
 end subroutine sort_scatter_part_i8_1d
 
-!> Rank-1 integer(kind=4) gather/scatter (levelp/idt). Reuses module-level
-!> `workp` as scratch (host split_part uses workp as in-place cyclic-swap
-!> scratch — its post-call contents are not read by any caller, so on device
-!> we may freely repurpose it as gather/scatter scratch; see §13).
+!> Gather/scatter int4; workp used as scratch.
 attributes(global) subroutine sort_gather_part_i4_1d(buf, src, swap_global_d, &
      head_idx, num_parts)
   integer(kind=4), device :: buf(*)
@@ -350,17 +274,7 @@ attributes(global) subroutine sort_scatter_part_i4_1d(dst, buf, head_idx, num_pa
   dst(idx) = buf(idx)
 end subroutine sort_scatter_part_i4_1d
 
-! ============================================================================
-! §4.1 — Host helper: lazily grow scan work arrays for particle slices
-! ============================================================================
-
-!> Init_amr.f90:144-149 sizes swap_local/swap_global/prefix_sum and the three
-!> partial_sums_* to (ngridmax+ncachemax). For particle scans we may need up
-!> to size(host_xp, 1) elements (the host particle array capacity, =
-!> r%npartmax for DM). Grow lazily inside gpu_split_part / gpu_sort_part.
-!> All these buffers are overwritten before each use
-!> (init_global_swap_table_kernel, init_prefix_sum_*), so deallocate /
-!> reallocate is safe.
+!> Grow scan buffers to at least npart_max if needed.
 subroutine ensure_scan_capacity_part(min_capacity)
   integer(kind=4), intent(in) :: min_capacity
   integer(kind=4), parameter :: block_size = 256
@@ -425,52 +339,7 @@ subroutine ensure_scan_capacity_part(min_capacity)
   endif
 end subroutine ensure_scan_capacity_part
 
-! ============================================================================
-! §4.1 — Verbose-gated diagnostic for gpu_split_part permutation
-!
-! Falsifier instrument for run 312765 (see
-! docs/triage/2026-05-14-vp-1pct-uniform-bias.md "Run 312765" / "Localization
-! 2026-05-15"). At dump 14 (split_lev07) the gpu_split_part FAIL is, after
-! sorting both sides by idp, a real per-particle xp/vp divergence with
-! matching idp/levelp/mp set and matching headp/tailp. That requires the xp
-! and vp permutations to diverge from the idp permutation despite all four
-! gather/scatter pairs reading the same module-level swap_global. The
-! adversarial review (modelB.md) ruled out read-decidable aliasing, normal
-! rank-2 leading-dim mismatch, workp copyback, CIC/sort side effects, and
-! whole-array host sync shape mismatch. The remaining plausible class is
-! runtime corruption or unexpected gather/scatter behavior inside
-! gpu_split_part.
-!
-! This helper dumps a small, fixed slot window plus a cheap whole-slice
-! swap_global checksum at one of four stages, all keyed by the same
-! head_idx/num_parts that gpu_split_part is operating on. Decision rules:
-!   * swap_global mutates between fields  -> csum / csum_sq / smin / smax
-!     differ across stages even though no gpu_split_part code path writes
-!     swap_global after stage 3e (update_global_swap_table).
-!   * xp/vp rank-2 gather/scatter reads/writes wrong offsets -> after_xp
-!     and/or after_vp slot rows show xp/vp values that disagree with the
-!     before_xp xp/vp at swap_h(k) under the swap_global permutation.
-!   * idp/mp/levelp stay coupled while xp/vp diverge -> at after_idmpl,
-!     idp/mp/levelp at slot k are consistent (idp_h(k) == before_xp idp at
-!     swap_h(k)), but xp/vp at the same slot are not.
-!   * Bad coupling already exists before split -> at before_xp, the
-!     (slot, idp, xp, vp) triples already disagree with the host's
-!     pre-split state (cic dump 13).
-!
-! Implementation notes:
-!   * Slice-assignment idiom (host_array = device_array(slice)) is an
-!     implicit synchronous D->H memcpy in CUDA Fortran (same idiom as
-!     phidump_grad / fdump_grad in gpu_runner.cuf:2099,2136), so the
-!     dumped values reflect the device state at call time without an
-!     explicit cudaDeviceSynchronize.
-!   * Fixed slot window (NWIN_SPLIT_DUMP) is host stack only; volume per
-!     call is ~NWIN_SPLIT_DUMP+1 lines per stage, so 4 stages * (NWIN+1)
-!     lines per gpu_split_part call. The harness calls split_part once per
-!     timestep at ilevel=7, ~5 timesteps, so total volume is bounded.
-!   * The whole-slice swap_global copy uses a host allocatable sized to
-!     num_parts and freed before return, so peak host memory is one int4
-!     per particle in the level slice (~8 MB at l7 cosmo).
-! ============================================================================
+!> Verbose-only: dump swap_global checksum and slot window during split.
 subroutine dump_split_window_part(stage, head_idx, num_parts, ilevel)
   character(len=*), intent(in) :: stage
   integer(kind=4),  intent(in) :: head_idx, num_parts, ilevel
@@ -478,9 +347,6 @@ subroutine dump_split_window_part(stage, head_idx, num_parts, ilevel)
   integer(kind=4), parameter :: NWIN_SPLIT_DUMP = 16
   integer(kind=4) :: nwin_eff, k, idim
   integer(kind=4) :: slot
-  ! NDIM<=3 by amr_parameters.f90:31-34; xp_h/vp_h are dimensioned to ndim
-  ! so the slice-copy below is conformable and the format below emits
-  ! exactly ndim columns.
   real(kind=dp)   :: xp_h(NWIN_SPLIT_DUMP, ndim)
   real(kind=dp)   :: vp_h(NWIN_SPLIT_DUMP, ndim)
   real(kind=dp)   :: mp_h(NWIN_SPLIT_DUMP)
@@ -493,7 +359,6 @@ subroutine dump_split_window_part(stage, head_idx, num_parts, ilevel)
   if (num_parts <= 0) return
   nwin_eff = min(NWIN_SPLIT_DUMP, num_parts)
 
-  ! Slot window D->H slice copies (synchronous, default stream).
   swap_h(1:nwin_eff)   = swap_global(head_idx:head_idx + nwin_eff - 1)
   idp_h(1:nwin_eff)    = idp(head_idx:head_idx + nwin_eff - 1)
   levelp_h(1:nwin_eff) = levelp(head_idx:head_idx + nwin_eff - 1)
@@ -503,15 +368,6 @@ subroutine dump_split_window_part(stage, head_idx, num_parts, ilevel)
      vp_h(1:nwin_eff, idim) = vp(head_idx:head_idx + nwin_eff - 1, idim)
   end do
 
-  ! Whole-slice swap_global checksum: sum, sum-of-squares, min, max,
-  ! plus a position-weighted sum (csum_pos = sum_{k=1..num_parts} k *
-  ! swap_global(head_idx+k-1)). csum and csum_sq are permutation-invariant
-  ! over the slice (they only confirm swap_global is still a valid
-  ! permutation of [head_idx..head_idx+num_parts-1]); csum_pos is NOT
-  ! permutation-invariant and is what fires if swap_global mutates
-  ! ordering between gather/scatter calls. One D->H memcpy plus a host-
-  ! side reduction; only runs when the call site is verbose+ilevel==7
-  ! gated, so cost is bounded.
   allocate(swap_full_h(1:num_parts))
   swap_full_h(1:num_parts) = swap_global(head_idx:head_idx + num_parts - 1)
   csum     = 0_8
@@ -536,8 +392,6 @@ subroutine dump_split_window_part(stage, head_idx, num_parts, ilevel)
        ' csum_pos=', csum_pos, &
        ' smin=', smin, ' smax=', smax
 
-  ! Per-slot record. Branch on ndim so the format consumes exactly ndim
-  ! xp/vp columns (ndim is a compile-time parameter; dead arms elide).
   do k = 1, nwin_eff
      slot = head_idx + k - 1
      if (ndim == 3) then
@@ -568,22 +422,7 @@ subroutine dump_split_window_part(stage, head_idx, num_parts, ilevel)
   end do
 end subroutine dump_split_window_part
 
-!##############################################################################
-!##############################################################################
-!##############################################################################
-!##############################################################################
-!> §4.1 host dispatcher — bucket-sort DM particles into coarse / fine groups
-!> at level `ilevel`, mirroring host split_part (pm/rho_fine.f90:1278-1505).
-!> Operates on the slice [headp(ilevel) : tailp(nlevelmax)]. After this
-!> routine returns:
-!>   - particles classified coarse occupy [headp(ilevel) : tailp(ilevel)],
-!>   - particles classified fine   occupy [headp(ilevel)+n_coarse : tailp(nlevelmax)],
-!>   - within each bucket relative order is preserved (stable, matches the
-!>     host's "Hilbert ordering after partitioning" guarantee),
-!>   - headp(ilev) / tailp(ilev) for ilev > ilevel are updated as in the
-!>     host (lines 1396-1400),
-!>   - levelp signs are unchanged (host net-toggles them and flips back —
-!>     see lines 1305-1422 — so the GPU port simply leaves them alone).
+!> Partition particles coarse/fine and permute (host split_part).
 subroutine gpu_split_part(sim, ilevel)
   use nvtx
   use ramses_commons, only: ramses_t
@@ -598,13 +437,11 @@ subroutine gpu_split_part(sim, ilevel)
 
   call nvtxStartRange("gpu_split_part", color=4) ! purple
 
-  ! Slice [headp(ilevel) : tailp(nlevelmax)] — same as host loop bounds.
   head_idx = sim%p%headp(ilevel)
   num_parts = sim%p%tailp(sim%r%nlevelmax) - head_idx + 1
 
   if (num_parts <= 0) then
-     ! Empty slice: still must mirror host metadata.
-     sim%p%tailp(ilevel) = sim%p%headp(ilevel) - 1
+        sim%p%tailp(ilevel) = sim%p%headp(ilevel) - 1
      do ilev = ilevel + 1, sim%r%nlevelmax
         sim%p%headp(ilev) = sim%p%tailp(ilevel) + 1
         sim%p%tailp(ilev) = sim%p%npart
@@ -614,25 +451,14 @@ subroutine gpu_split_part(sim, ilevel)
   endif
 
   if (.not. allocated(xp)) then
-     ! Defensive: device particle arrays were never set up
-     ! (e.g. r%part==.false. or host xp not allocated; r_set_grid_device
-     ! skips the H->D block).
      call nvtxEndRange()
      return
   endif
 
-  ! Leading dim of every rank-2 device particle array (xp/vp/fp/jp/xp_swap)
-  ! and the natural upper bound for the per-particle scratch arrays. Equals
-  ! the host array capacity (r%npartmax for DM), set in r_set_grid_device.
-  ! See file-header comment for why pst%s%p%npart_max is NOT a safe value.
   leading = size(xp, 1)
 
-  ! 1. Grow scan work arrays if the particle slice can exceed their current
-  !    capacity (init_amr sizes them to ngridmax+ncachemax, which may be
-  !    smaller than the host particle capacity).
   call ensure_scan_capacity_part(leading)
 
-  ! 2. Per-particle bucket classification.
   num_threads = 128
   num_blocks  = (num_parts + num_threads - 1) / num_threads
 
@@ -656,40 +482,22 @@ subroutine gpu_split_part(sim, ilevel)
   endif
   call GPU_Error_Check("gpu/gpu_part.cuf", 0)
 
-  ! 3. Stable bucket sort using the existing scan + swap pipeline.
-  ! 3a. swap_global := identity over the slice.
   call init_global_swap_table_kernel<<<num_blocks, num_threads>>>(swap_global, &
        head_idx, num_parts)
 
-  ! 3b. prefix_sum(idx) := bucket_part(idx) over the slice
-  !     (0 = stays left = coarse, 1 = goes right = fine).
   call init_prefix_sum_part<<<num_blocks, num_threads>>>(bucket_part, prefix_sum, &
        head_idx, num_parts)
 
-  ! 3c. Inclusive prefix sum -> n_fine = total number of fine particles.
   call gpu_scan(head_idx, num_parts, n_fine)
   n_coarse = num_parts - n_fine
 
-  ! 3d. Local swap table: coarse -> [head, head+n_coarse-1],
-  !                       fine   -> [head+n_coarse, head+num-1].
   call compute_local_swap_table<<<num_blocks, num_threads>>>(swap_local, &
        swap_global, prefix_sum, head_idx, num_parts)
 
-  ! 3e. swap_global := swap_local (final permutation).
   call update_global_swap_table<<<num_blocks, num_threads>>>(swap_global, &
        swap_local, head_idx, num_parts)
   call GPU_Error_Check("gpu/gpu_part.cuf", 0)
 
-  ! 4. Out-of-place gather/scatter for every host-physically-swapped field.
-  !    Mandatory: xp, vp, mp, levelp, idp.
-  !
-  ! Verbose-gated falsifier instrumentation for run 312765 (split7 dump 14
-  ! per-particle xp/vp divergence; see dump_split_window_part header and
-  ! docs/triage/2026-05-14-vp-1pct-uniform-bias.md "Run 312765"). Four
-  ! stages: before xp gather/scatter, after xp scatter, after vp scatter,
-  ! after mp/levelp/idp scatter. Gated on ilevel == 7 (the failing split
-  ! level; in this harness levelmin = 7 so split is only ever called at
-  ! ilevel = 7) so the dump volume stays bounded.
   if (sim%r%verbose .and. ilevel == 7) then
      call dump_split_window_part("before_xp", head_idx, num_parts, ilevel)
   endif
@@ -731,8 +539,6 @@ subroutine gpu_split_part(sim, ilevel)
      call dump_split_window_part("after_idmpl", head_idx, num_parts, ilevel)
   endif
 
-  ! Optional: only if device counterpart is allocated (r_set_grid_device
-  ! mirrors host `allocated(p%X)` predicate, see gpu_manager.f90 §9 follow-up).
   if (allocated(fp)) then
      call sort_gather_part_real_2d<<<num_blocks, num_threads>>>(xp_swap, fp, &
           swap_global, head_idx, num_parts, leading)
@@ -789,7 +595,6 @@ subroutine gpu_split_part(sim, ilevel)
   endif
   call GPU_Error_Check("gpu/gpu_part.cuf", 0)
 
-  ! 5. Update host metadata (matches host split_part lines 1396-1400).
   sim%p%tailp(ilevel) = sim%p%headp(ilevel) + n_coarse - 1
   do ilev = ilevel + 1, sim%r%nlevelmax
      sim%p%headp(ilev) = sim%p%tailp(ilevel) + 1
@@ -799,29 +604,9 @@ subroutine gpu_split_part(sim, ilevel)
   call nvtxEndRange()
 end subroutine gpu_split_part
 
-! ============================================================================
-! §4.2 — Hilbert-key compute kernel + bit-radix init + sortp writeback
-! ============================================================================
-
-!> Per-particle Hilbert key for sort_part. For each particle in
-!> [head_idx : head_idx+num_parts-1], compute the parent-oct Cartesian key
-!> at AMR level `ilevel` (resolution 2**(ilevel-1) per axis, range
-!> [0, ckey_max(ilevel))) and convert to a Hilbert key.
-!>
-!> The host's sort_hilbert (pm/rho_fine.f90:2031-2061) sorts particles at the
-!> OCT level (final_level = AMR_ilevel - 1, ckey_factor = 2**(ilevel-1)/boxlen
-!> at the deepest recursion), so the GPU port matches by passing
-!> `level = ilevel - 1` and `dx_inv = 2**(ilevel-1) / boxlen`.
-!>
-!> Note: the prompt §4.2 step 1 wording (`2**ilevel/boxlen`) is one bit
-!> finer than host; sortp divergence is downgraded to a warning by §10
-!> ("permutation valid"), so either choice is harness-accepted, but matching
-!> host minimizes diff noise. See modelA.md.
+!> Hilbert key at oct level ilevel-1 (matches host sort_hilbert).
 attributes(global) subroutine compute_hkey_part_kernel(xp, hkey_part_d, &
      skip1, skip2, skip3, dx_inv, head_idx, num_parts, leading, level)
-  ! hilbert_key is a module procedure of gpu_runner (gpu_hilbert.cuf is
-  ! `include`d at the top of gpu_runner.cuf). Same nordc-friendly
-  ! include-into-caller pattern as the bucket kernel's hash_get usage.
   integer(kind=4), intent(in), value :: leading
   real(kind=dp),   device :: xp(*)
   integer(kind=8), device :: hkey_part_d(*)
@@ -853,22 +638,17 @@ attributes(global) subroutine compute_hkey_part_kernel(xp, hkey_part_d, &
   hkey_part_d(ipart) = hilbert_key(ix, level)
 end subroutine compute_hkey_part_kernel
 
-!> Init prefix_sum from a single-digit bucket of hkey_part. Mirrors
-!> init_prefix_sum_bit (gpu/gpu_refine.cuf:388-421) but reads the bucket
-!> from hkey_part(old_idx) instead of grid(old_idx)%hkey(1). Convention is
-!> identical: prefix_sum=0 for matching bucket (lands LEFT after the stable
-!> compute_local_swap_table); prefix_sum=1 otherwise (lands RIGHT).
+!> Radix digit (1 bit) for hkey_part (stable LSD sort).
 attributes(global) subroutine init_prefix_sum_part_bit(hkey_part_d, swap_global_d, &
-     prefix_sum_d, head_idx, num_parts, skip_bit, bucket)
+     prefix_sum_d, head_idx, num_parts, ibit)
   integer(kind=8), device :: hkey_part_d(*)
   integer(kind=4), device :: swap_global_d(*)
   integer(kind=4), device :: prefix_sum_d(*)
   integer(kind=4), intent(in), value :: head_idx
   integer(kind=4), intent(in), value :: num_parts
-  integer(kind=4), intent(in), value :: skip_bit
-  integer(kind=4), intent(in), value :: bucket
+  integer(kind=4), intent(in), value :: ibit
 
-  integer :: thread_idx, block_idx, idx, old_idx, ibucket
+  integer :: thread_idx, block_idx, idx, old_idx
   thread_idx = threadIdx%x - 1
   block_idx  = blockIdx%x  - 1
   idx = thread_idx + block_idx * blockDim%x
@@ -876,19 +656,10 @@ attributes(global) subroutine init_prefix_sum_part_bit(hkey_part_d, swap_global_
   idx = head_idx + idx
 
   old_idx = swap_global_d(idx)
-  ibucket = int(ibits(hkey_part_d(old_idx), skip_bit, ndim), kind=4)
-
-  if (ibucket == bucket) then
-     prefix_sum_d(idx) = 0
-  else
-     prefix_sum_d(idx) = 1
-  endif
+  prefix_sum_d(idx) = int(ibits(hkey_part_d(old_idx), ibit, 1), kind=4)
 end subroutine init_prefix_sum_part_bit
 
-!> Final pass of gpu_sort_part: write swap_global into the device sortp array
-!> over the active slice. Host sort_part returns sortp(i) = original index of
-!> the particle now in position i, which is exactly what swap_global encodes
-!> after the LSD radix loop.
+!> sortp(i) := original index at position i after radix sort.
 attributes(global) subroutine write_sortp_part(sortp_d, swap_global_d, &
      head_idx, num_parts)
   integer(kind=4), device :: sortp_d(*)
@@ -905,27 +676,7 @@ attributes(global) subroutine write_sortp_part(sortp_d, swap_global_d, &
   sortp_d(idx) = swap_global_d(idx)
 end subroutine write_sortp_part
 
-!##############################################################################
-!##############################################################################
-!##############################################################################
-!##############################################################################
-!> §4.2 host dispatcher — Hilbert-sort DM particles in the slice
-!> [headp(ilevel) : tailp(nlevelmax)] and write the resulting permutation
-!> into device `sortp`. Mirrors host sort_part (pm/rho_fine.f90:2031-2061),
-!> which calls sort_hilbert with final_level = ilevel-1 (oct-level
-!> resolution). On output, walking sortp from head_idx upward yields
-!> particles in Hilbert order at the OCT level for AMR level `ilevel`.
-!>
-!> Algorithm: LSD radix sort with `ndim`-bit digits over `hilbert_key(ix,
-!> ilevel-1)` (level-1 digits = ndim*(ilevel-1) bits total). For each digit
-!> from LSB upward, run twotondim-1 stable 0/1 splits to place buckets 0..6
-!> in order; bucket 7 falls into place at the right. Reuses the same scan
-!> primitives as gpu_split_part (init_prefix_sum_part_bit, gpu_scan,
-!> compute_local_swap_table, update_global_swap_table — same pattern as
-!> gpu_refine's grid sort, gpu/gpu_runner.cuf:574-623).
-!>
-!> Particle arrays xp/vp/mp/... are NOT physically permuted — sort_part
-!> only writes sortp.
+!> Hilbert-sort particles; updates sortp only (host sort_part).
 subroutine gpu_sort_part(sim, ilevel)
   use nvtx
   use ramses_commons, only: ramses_t
@@ -934,15 +685,13 @@ subroutine gpu_sort_part(sim, ilevel)
   type(ramses_t), intent(inout) :: sim
   integer, intent(in) :: ilevel
 
-  integer(kind=4) :: head_idx, num_parts, sub_head, sub_num, n_right, n_match
-  integer(kind=4) :: num_blocks_sub, leading
+  integer(kind=4) :: head_idx, num_parts, total_sum, leading
   integer :: num_threads, num_blocks
-  integer :: ibit, ibucket, skip_bit, level
+  integer :: ibit, level
   real(kind=8) :: dx_inv, skip1, skip2, skip3
 
   call nvtxStartRange("gpu_sort_part", color=4) ! purple
 
-  ! Slice [headp(ilevel) : tailp(nlevelmax)] — same as host sort_part bounds.
   head_idx  = sim%p%headp(ilevel)
   num_parts = sim%p%tailp(sim%r%nlevelmax) - head_idx + 1
 
@@ -952,29 +701,16 @@ subroutine gpu_sort_part(sim, ilevel)
   endif
 
   if (.not. allocated(xp)) then
-     ! Defensive: device particle arrays were never set up
-     ! (r%part==.false. or r_set_grid_device skipped its host xp gate).
      call nvtxEndRange()
      return
   endif
 
-  ! Leading dim of every rank-2 device particle array; also the natural
-  ! upper bound for scan/scratch sizing. Equals size(host xp, 1) =
-  ! r%npartmax for DM, set in r_set_grid_device. See file-header comment
-  ! for why pst%s%p%npart_max is NOT a safe value here.
   leading = size(xp, 1)
-
-  ! Grow scan work arrays if necessary. init_amr sizes them to
-  ! ngridmax+ncachemax which may be smaller than the host particle
-  ! capacity. Idempotent — first call grows, subsequent calls are no-ops.
-  ! Same helper as §4.1.
   call ensure_scan_capacity_part(leading)
 
   num_threads = 128
   num_blocks  = (num_parts + num_threads - 1) / num_threads
 
-  ! Trivial case: ilevel == 1 -> level == 0 -> 0 bits to radix-sort.
-  ! sortp degenerates to identity over the slice.
   level = ilevel - 1
   if (level <= 0) then
      call init_global_swap_table_kernel<<<num_blocks, num_threads>>>(swap_global, &
@@ -986,8 +722,6 @@ subroutine gpu_sort_part(sim, ilevel)
      return
   endif
 
-  ! 1. Compute Hilbert keys at oct-level resolution for AMR level `ilevel`
-  !    (level = ilevel-1 -> ndim*(ilevel-1) bits per key, in the LSBs).
   dx_inv = 2.0d0**(ilevel-1) / sim%r%boxlen
   skip1 = 0d0
   skip2 = 0d0
@@ -999,63 +733,27 @@ subroutine gpu_sort_part(sim, ilevel)
        skip1, skip2, skip3, dx_inv, head_idx, num_parts, leading, level)
   call GPU_Error_Check("gpu/gpu_part.cuf", 0)
 
-  ! 2. Initialize swap_global := identity over the slice. Each digit pass
-  !    advances the partition by partitioning swap_global in place (the
-  !    permutation accumulates across passes — standard LSD radix).
   call init_global_swap_table_kernel<<<num_blocks, num_threads>>>(swap_global, &
        head_idx, num_parts)
 
-  ! 3. LSD radix loop. ibit indexes the digit position from LSB (level digits
-  !    -> skip_bit=0, bits 0..ndim-1) up to MSB (1 digit -> skip_bit=ndim*(level-1),
-  !    bits ndim*(level-1)..ndim*level-1). Within each digit, run twotondim-1
-  !    stable 0/1 splits, pulling buckets 0..twotondim-2 to the left in order;
-  !    bucket twotondim-1 falls into place at the right of the residual slice.
-  !    Same nested-loop structure as the grid Hilbert sort in gpu_runner.cuf:574-623.
-  do ibit = level, 1, -1
-     skip_bit = ndim * (level - ibit)
-     sub_head = head_idx
-     sub_num  = num_parts
-     do ibucket = 1, twotondim - 1
-        if (sub_num <= 0) exit
-        num_blocks_sub = (sub_num + num_threads - 1) / num_threads
-        call init_prefix_sum_part_bit<<<num_blocks_sub, num_threads>>>(hkey_part, &
-             swap_global, prefix_sum, sub_head, sub_num, skip_bit, ibucket - 1)
-        ! gpu_scan returns total inclusive sum = number of "1"s = number of
-        ! particles in the residual non-target buckets (going right).
-        call gpu_scan(sub_head, sub_num, n_right)
-        call compute_local_swap_table<<<num_blocks_sub, num_threads>>>(swap_local, &
-             swap_global, prefix_sum, sub_head, sub_num)
-        call update_global_swap_table<<<num_blocks_sub, num_threads>>>(swap_global, &
-             swap_local, sub_head, sub_num)
-        ! Advance sub_slice past the just-placed target bucket.
-        n_match = sub_num - n_right
-        sub_head = sub_head + n_match
-        sub_num  = sub_num  - n_match
-     end do
+  do ibit = 0, ndim * level - 1
+     call init_prefix_sum_part_bit<<<num_blocks, num_threads>>>(hkey_part, &
+          swap_global, prefix_sum, head_idx, num_parts, ibit)
+     call gpu_scan(head_idx, num_parts, total_sum)
+     call compute_local_swap_table<<<num_blocks, num_threads>>>(swap_local, &
+          swap_global, prefix_sum, head_idx, num_parts)
+     call update_global_swap_table<<<num_blocks, num_threads>>>(swap_global, &
+          swap_local, head_idx, num_parts)
   end do
   call GPU_Error_Check("gpu/gpu_part.cuf", 0)
 
-  ! 4. Materialize the permutation into device sortp.
   call write_sortp_part<<<num_blocks, num_threads>>>(sortp, swap_global, &
        head_idx, num_parts)
   call GPU_Error_Check("gpu/gpu_part.cuf", 0)
 
   call nvtxEndRange()
 end subroutine gpu_sort_part
-!##############################################################################
-!##############################################################################
-!##############################################################################
-!##############################################################################
-! ============================================================================
-! §4.3 — CIC mass deposition, incremental global-atomic baseline
-! ============================================================================
-
-!> Deposit DM particle mass into device rho/nref. This is deliberately smaller
-!> than the final cell-block shared-memory tile from gpu_part_prompt.md §4.3:
-!> one thread walks one sorted particle and atomically scatters its CIC weights
-!> to the 27 neighboring cells; for CIC, 19 valid neighbors receive zero. It restores
-!> a valid RHS first; the cell-block tile can replace this kernel later behind
-!> the same gpu_cic_part dispatcher.
+!> Per-particle CIC deposition into rho/nref (global atomicAdd).
 attributes(global) subroutine cic_part_atomic_kernel(xp_d, mp_d, sortp_d, rho_d, nref_d, &
      hash_key_d, hash_val_d, hash_size_d, ckey_max_d, key_off_d, &
      box_ckey_min_d, box_ckey_max_d, periodic_d, &
@@ -1195,8 +893,7 @@ attributes(global) subroutine cic_part_atomic_kernel(xp_d, mp_d, sortp_d, rho_d,
   end do
 end subroutine cic_part_atomic_kernel
 
-!> §4.3 host dispatcher. The device kernel fills rho/nref; mesh device->host
-!> synchronization is owned by r_cic_part after this returns.
+!> Host dispatcher for CIC deposition.
 subroutine gpu_cic_part(sim, ilevel, rtype)
   use nvtx
   use ramses_commons, only: ramses_t
@@ -1210,7 +907,6 @@ subroutine gpu_cic_part(sim, ilevel, rtype)
 
   call nvtxStartRange("gpu_cic_part", color=4) ! purple
 
-  ! Phase 1 supports DM only; host r_cic_part handles the rtype contract.
   if (rtype /= 0 .and. rtype /= 1) then
      call nvtxEndRange()
      return
@@ -1259,17 +955,7 @@ subroutine gpu_cic_part(sim, ilevel, rtype)
 
   call nvtxEndRange()
 end subroutine gpu_cic_part
-!##############################################################################
-!##############################################################################
-!##############################################################################
-!##############################################################################
-! §4.4 — gpu_kick_drift_part
-!
-!> Incremental baseline: one thread per particle gathers CIC force from device
-!> `f`, updates `fp` when present, applies the velocity half-kick for both
-!> action modes, and drifts/wraps positions for action_kick_drift. This mirrors
-!> the existing global-atomic CIC baseline; the shared-memory cell-block version
-!> can replace it behind the same dispatcher after numerical verification.
+!> Kick/drift: CIC gather from f, optional fp, position update.
 attributes(device) subroutine analytic_gravity_part(x, ff, dx_loc, gravity_type, &
      gp1, gp2, gp3, gp4, gp5, q1, q2, q3, q4)
   real(kind=8) :: x(1:3), ff(1:3)
@@ -1681,16 +1367,12 @@ subroutine gpu_kick_drift_part(sim, ilevel, action_part)
      return
   endif
 
-  ! Poisson force_fine fills device f through gpu_gradient_phi. Only analytic
-  ! gravity still writes the host force array in the CUDA path.
+  ! Analytic gravity: copy host f to device before kick.
   if (sim%r%gravity_type > 0) then
      f = sim%m%f
      call GPU_Error_Check("gpu/gpu_part.cuf", 0)
   endif
   num_blocks  = (num_parts + num_threads - 1) / num_threads
-  ! 311937 triage: log per-call level/oct/dt state so the next harness run records
-  ! whether head/noct(ilevel+1) overlaps the level-ilevel oct slab and whether
-  ! dtnew(ilevel) changes between action=1 and action=2 launches.
   if (sim%r%verbose) then
      write(*,'(A,I0,A,I0,A,I0,A,I0,A,I0,A,I0,A,I0,A,I0,A,1PE15.8,A,1PE15.8)') &
           ' gpu_kick_drift_part: action=', action_part, &

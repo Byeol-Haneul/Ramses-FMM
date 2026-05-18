@@ -68,8 +68,6 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
   integer::action_part
   integer::rID
 #ifdef _CUDA
-  ! Print the GPU TSC/PCS->CIC fallback warning once per rank (Eric's decision,
-  ! GPU_PM_STATE.md / gpu_part_prompt.md §15.15).
   logical,save::warned_dm_kick_gpu=.false.
 #endif
 
@@ -82,15 +80,7 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
      action_part=input_array(2)
 #ifdef _CUDA
      if(pst%s%m%data_on_device)then
-        ! Phase-1 GPU dispatch for DM:
-        !   * scheme==1 (CIC): use the GPU CIC kick-drift path.
-        !   * scheme==2 (TSC) or 3 (PCS): GPU TSC/PCS is unavailable in phase 1.
-        !     Eric's decision (gpu_part_prompt.md §15.15): warn and use the GPU
-        !     CIC kick-drift path. Falling back to host TSC/PCS would read
-        !     stale host xp/vp/fp because particles live on device.
-        ! Other particle types (star/sink/tree/trac/dust) are not on device yet
-        ! — see gpu_part_prompt.md §4.4 / §5. Stars/sinks/tree round-trip
-        ! through host CIC; tracers/dust still abort.
+        ! DM on device: GPU CIC kick-drift; TSC/PCS warn once and use CIC.
         if(pst%s%r%part)then
            if(pst%s%p%type/=PART_TYPE)then
               write(*,*)'r_kick_drift_part: GPU particle kick-drift supports DM PART_TYPE only in phase 1.'

@@ -36,20 +36,7 @@ recursive subroutine r_set_grid_device(pst)
      call nvtxEndRange()
 
 #ifdef _CUDA
-     ! Allocate and copy particle arrays (DM only in phase 1; gpu_part_prompt.md §3, §9).
-     ! Sizing rule: each device mirror is sized to the corresponding host
-     ! array's capacity (size(pst%s%p%X, ...)), NOT to pst%s%p%npart_max.
-     ! Reason: pst%s%p%npart_max is overwritten by m_input_part →
-     ! r_npart_max (pm/input_part.f90:43) to the per-rank MAX(p%npart) —
-     ! the *actual* particle count, not the array capacity. The host
-     ! arrays themselves stay sized to r%npartmax (init_part.f90:62-74)
-     ! for the run, so allocating the device to that capacity makes the
-     ! whole-array H→D / D→H copies shape-safe and leaves headroom for
-     ! particle creation (star formation, accretion) without having to
-     ! reallocate the device arrays mid-run.
-     ! Optional fields (zp/tp/tm/jp/idm/idt/size_p/charge) mirror the host
-     ! `allocated(p%X)` gate used by split_part (pm/rho_fine.f90:1413-1494):
-     ! allocate device storage iff the host counterpart is allocated.
+     ! Copy particle arrays host→device (size = host array capacity, not npart_max).
      if (pst%s%r%part .and. allocated(pst%s%p%xp)) then
         call nvtxStartRange("Copy particles from host to device", color=5)!red
         ! Mandatory arrays (always allocated when host xp is allocated)
@@ -77,8 +64,7 @@ recursive subroutine r_set_grid_device(pst)
         if (allocated(cell_part_count)) deallocate(cell_part_count)
         if (allocated(cell_part_head))  deallocate(cell_part_head)
         if (allocated(cell_part_idx))   deallocate(cell_part_idx)
-        ! Out-of-place gather/scatter scratch for split/sort kernels (§4.1, §13).
-        ! See the typed-scratch table in gpu/gpu_runner.cuf next to the decl.
+        ! Gather/scatter scratch for split/sort.
         if (allocated(xp_swap))  deallocate(xp_swap)
         if (allocated(mp_swap))  deallocate(mp_swap)
         if (allocated(idp_swap)) deallocate(idp_swap)
@@ -231,16 +217,7 @@ end subroutine r_transfer_grid_host
 !###########################################################
 !###########################################################
 #ifdef _CUDA
-!> Copy device particle arrays back to host. Required so PART_DUMP / I/O paths
-!> that read pst%s%p%xp etc. see the post-kernel state. See §0.5 / §10.
-!> No-op when device particle mirrors were never allocated.
-!>
-!> The gate on `allocated(xp)` is sufficient: r_set_grid_device above only
-!> allocates the device mirrors when the host arrays are allocated AND
-!> sizes them to match the host capacity, so a whole-array assignment is
-!> always shape-safe here. We deliberately do NOT gate on
-!> pst%s%p%npart_max — that field is the actual particle count after
-!> r_npart_max (pm/input_part.f90:43) overwrites it, NOT the array size.
+!> Copy device particle arrays to host (dumps / I/O). No-op if not allocated.
 subroutine gpu_to_host_part(pst)
   use ramses_commons, only: pst_t
   implicit none

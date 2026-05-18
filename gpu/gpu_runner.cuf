@@ -65,10 +65,7 @@ module gpu_runner
   !> The total number of halo and ghost octs
   integer(kind=4) :: num_send, num_recv
 
-  !> Particle arrays on device (phase 1: DM only, populated from pst%s%p).
-  !> See gpu_part_prompt.md §3. Allocated/copied in gpu_manager:r_set_grid_device.
-  !> Mandatory (always swapped by split_part) — must be allocated whenever
-  !> npart_max > 0:
+  !> Particle arrays on device (DM; allocated in r_set_grid_device).
   real(kind=dp),   device, allocatable, dimension(:,:) :: xp, vp
   real(kind=dp),   device, allocatable, dimension(:)   :: mp
   integer(kind=4), device, allocatable, dimension(:)   :: levelp
@@ -87,54 +84,26 @@ module gpu_runner
   integer(i8b),    device, allocatable, dimension(:)   :: idm
   integer(kind=4), device, allocatable, dimension(:)   :: idt
 
-  !> Per-particle scratch (built fresh by future split/sort kernels)
+  !> Per-particle scratch (split/sort/CIC)
   integer(kind=8), device, allocatable, dimension(:) :: hkey_part
   integer(kind=4), device, allocatable, dimension(:) :: bucket_part
 
-  !> Per-cell index for the cell-block CIC/kick-drift kernels (§4.3)
+  !> Per-cell particle lists (CIC / kick-drift)
   integer(kind=4), device, allocatable, dimension(:) :: cell_part_count
   integer(kind=4), device, allocatable, dimension(:) :: cell_part_head
   integer(kind=4), device, allocatable, dimension(:) :: cell_part_idx
 
-  !> Out-of-place gather/scatter scratch for gpu_split_part / gpu_sort_part.
-  !> Host split_part (pm/rho_fine.f90:1411-1491) physically swaps every
-  !> particle field whose host counterpart is allocated. The GPU port replaces
-  !> the host's in-place cyclic swap with the existing scan + swap_global
-  !> pipeline (mirroring gpu_refine's grid sort, gpu/gpu_runner.cuf:614-633),
-  !> which needs one scratch slot of the same type and shape as each field
-  !> being permuted. §13 forbids reusing nref / flag2 (owned by gravity /
-  !> hydro sorts), so we allocate dedicated typed scratch keyed by the field
-  !> type seen in part_t (pm/pm_commons.f90:18-37):
-  !>   real(dp) (npart_max, ndim) — covers xp, vp, fp, jp        -> xp_swap
-  !>   real(dp) (npart_max)       — covers mp, zp, tp, tm, size_p, charge -> mp_swap
-  !>   integer(i8b) (npart_max)   — covers idp, idm              -> idp_swap
-  !>   integer(kind=4) (npart_max) — covers levelp, idt          -> reuse workp
-  !> workp is host-side scratch in split_part (its contents are not physically
-  !> swapped — see the cyclic-swap loop), so on device it is free to serve as
-  !> int4 gather/scatter scratch for levelp / idt. Allocation/dealloc in
-  !> gpu/gpu_manager.f90:r_set_grid_device alongside the other particle arrays.
+  !> Gather/scatter scratch (xp_swap, mp_swap, idp_swap; workp for int4).
   real(kind=dp),   device, allocatable, dimension(:,:) :: xp_swap
   real(kind=dp),   device, allocatable, dimension(:)   :: mp_swap
   integer(i8b),    device, allocatable, dimension(:)   :: idp_swap
 
-  ! gpu_hash.cuf and gpu_hilbert.cuf are `include`d below to make hash_get
-  ! and hilbert_key callable from particle kernels in the same compilation
-  ! unit (required by the build's `-gpu=...,nordc` constraint — no
-  ! relocatable device code, so device callees must live in the caller's
-  ! module). Mark them private so they do not collide with the same names
-  ! in module refine_device for routines that `use refine_device` (no
-  ! `only:`) — see gpu_refine, gpu_build_mg below.
+  ! hash_get / hilbert_key included here for nordc (private vs refine_device).
   private :: mix64, fnv64, fnv32, hash_set, hash_get, hash_update, hash_free
   private :: hilbert_key
 
 contains
 
-  ! Note: gpu_hash.cuf and gpu_hilbert.cuf must be include'd into the same
-  ! module as any kernel that calls hash_get / hilbert_key. The build uses
-  ! `-gpu=...,nordc` (no relocatable device code), which forbids device-side
-  ! calls across compilation units. `module refine_device` (gpu_refine.cuf)
-  ! already include's both; we re-include them here so that the particle
-  ! kernels in gpu_part.cuf can call them without crossing into refine_device.
   include 'gpu_hash.cuf'
   include 'gpu_hilbert.cuf'
   include 'gpu_scan.cuf'
@@ -1448,8 +1417,6 @@ contains
        head_father = sim%m%noct(ilevel) + sim%m_mg%head(ifine)
     endif
 
-    ! 311937 triage: log MG build state so the next harness records which
-    ! (ilevel, ifine, head_idx, num_octs) call hits the gpu_scan crash.
     if (sim%r%verbose) then
        write(*,'(A,I0,A,I0,A,I0,A,I0,A,I0)') &
             ' gpu_build_mg: ilevel=', ilevel, ' ifine=', ifine, &
@@ -1927,16 +1894,9 @@ contains
     integer(kind=4) :: num_octs, num_blocks, num_threads
     integer :: threadsX_per_block, threadsY_per_block
     real(kind=8) :: dx, dx2
-    ! Verbose-gated D->H f-dump scratch (docs/triage/2026-05-14-vp-1pct-uniform-bias.md
-    ! Hypothesis 1 vs 2). Sized to a small compile-time constant so this is a
-    ! plain host stack array (no `device, allocatable` scratch, per
-    ! docs/gpu_pm_debug_invariants.md "Avoid local device, allocatable scratch").
     integer, parameter :: N_FDUMP = 4
     integer :: n_dump, ioct_dump, idim_dump, ind_dump
     real(kind=dp) :: f_host_dump(1:twotondim, 1:ndim, 1:N_FDUMP)
-    ! Verbose-gated pre-kernel D->H phi-dump scratch (twotondim*N_FDUMP = 32
-    ! doubles = 256 B host stack). Same N_FDUMP=4 octs as f_host_dump so
-    ! every fdump_grad record has a matching phidump_grad pre-image.
     real(kind=dp) :: phi_host_dump(1:twotondim, 1:N_FDUMP)
 
     dx  = sim%r%boxlen/2**ilevel
@@ -1946,24 +1906,11 @@ contains
 
     if (num_octs == 0) return
 
-    ! threadsX_per_block must be twotondim (= 8 in 3D): the gradient_phi kernel
-    ! uses `cell_idx = threadIdx%x` to write f(cell_idx, idim, oct_idx) for all
-    ! twotondim cells of every oct. A prior value of 4 only wrote cells 1..4
-    ! and left cells 5..8 of f at MG-iteration scratch (residual / RHS / mask).
-    ! That stale state then leaks into gpu_kick_drift_part's 8-corner CIC force
-    ! gather (half the corners land on icell ∈ {5..8} of their parent oct),
-    ! producing a small systematic vp/xp drift seen in job 312040
-    ! (part_000010_kickdrift_lev07.bin first diverged here).
+    ! threadIdx%x must cover all twotondim cells per oct (8 in 3D).
     threadsX_per_block = 8
     threadsY_per_block = 32
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
 
-    ! 311937 triage: log f-write window so we can detect whether a level-(L+1)
-    ! gradient_phi writes into the level-L oct slab (Hypothesis A for the
-    ! kick_drift action=2 over-kick).
-    ! 312040 fix sentinel: also log (threadsX, threadsY) so the next harness
-    ! cluster run proves the build picked up the cells-5..8 fix. Expected:
-    ! threadsX=8 threadsY=32. If the log shows threadsX=4 the binary is stale.
     if (sim%r%verbose) then
        write(*,'(A,I0,A,I0,A,I0,A,I0,A,I0)') &
             ' gpu_gradient_phi: ilevel=', ilevel, &
@@ -1971,27 +1918,6 @@ contains
             ' threadsX=', threadsX_per_block, ' threadsY=', threadsY_per_block
     endif
 
-    ! Pre-kernel verbose-gated D->H phi-dump for the first N_FDUMP octs of
-    ! the level-ilevel slab. Hypothesis-1 split sub-check for the ~1%
-    ! uniform vp bias triage (docs/triage/2026-05-14-vp-1pct-uniform-bias.md);
-    ! Job 312274 already confirmed Hypothesis 1 (sign-consistent ~uniform
-    ! offset on f), this isolates "kernel itself drifts" vs "kernel reads a
-    ! different phi". CPU mirror at the head of poisson/force_fine.f90:gradient_phi.
-    !
-    ! Safety:
-    !   * Nothing between this dump and the kernel launch writes phi (only
-    !     scalar assignments + early-return + a verbose printf above), so
-    !     the dumped values are exactly what gradient_phi<<<...>>> consumes.
-    !   * No streams are used anywhere in the GPU path, so the implicit
-    !     synchronous D->H slice copy drains all prior default-stream work
-    !     (MG solve writes to phi) before reading.
-    !   * Slice idiom matches the post-kernel f_host_dump assignment below
-    !     (same as gpu_to_host_mesh's `m%f = f`); no explicit
-    !     cudaDeviceSynchronize, no new kernel launch, no host->device copy,
-    !     no `device, allocatable` scratch.
-    !   * twotondim*N_FDUMP*sizeof(dp) = 8*4*8 = 256 B host stack only.
-    !   * Output volume: N_FDUMP * twotondim = 32 lines per call, ~6 calls
-    !     per harness binary (matches the fdump_grad call cadence).
     if (sim%r%verbose) then
        n_dump = MIN(N_FDUMP, num_octs)
        if (n_dump > 0) then
@@ -2011,24 +1937,6 @@ contains
     call gradient_phi<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(phi, f, nbor, &
          & head_idx, num_octs, dx)
 
-    ! Post-kernel verbose-gated D->H f-dump for the first N_FDUMP octs of
-    ! the level-ilevel slab. Falsifiable check for the ~1% uniform vp bias
-    ! triage (docs/triage/2026-05-14-vp-1pct-uniform-bias.md):
-    !   * CPU/GPU `fdump_grad` values match under the harness comparator ->
-    !     Hypothesis 1 falsified; the bias enters in gpu_gather_cic_force_part /
-    !     gpu_kick_drift_part.
-    !   * Uniform offset across all (idim, ind) -> Hypothesis 1 confirmed; the
-    !     bias lives in gradient_phi or its phi source.
-    ! The CPU-side mirror lives in poisson/force_fine.f90:gradient_phi.
-    !
-    ! Implementation notes:
-    !   * The slice assignment below is an implicit synchronous D->H memcpy
-    !     in CUDA Fortran (same idiom as gpu_to_host_mesh / r_transfer_grid_host:
-    !     `pst%s%m%f = f`); no explicit cudaDeviceSynchronize is needed.
-    !   * No new kernel launch; no grid/block geometry / shared memory.
-    !   * twotondim*ndim*N_FDUMP*sizeof(dp) = 8*3*4*8 = 768 B host stack only.
-    !   * Output volume bound: N_FDUMP * ndim * twotondim = 96 lines per call.
-    !     Job 312149's current short l7 harness showed about six calls total.
     if (sim%r%verbose) then
        n_dump = MIN(N_FDUMP, num_octs)
        if (n_dump > 0) then
