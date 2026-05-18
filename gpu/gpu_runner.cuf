@@ -459,7 +459,7 @@ contains
        call init_global_swap_table_kernel<<<num_blocks, num_threads>>>(swap_global, head_idx, num_octs)
     endif
 
-    ! Sort octs per levels
+    ! Sort octs per levels using bucket sort
 
     ! Compute new head
     new_head = sim%m%tail(ilevel)

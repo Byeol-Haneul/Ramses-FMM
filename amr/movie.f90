@@ -498,7 +498,7 @@ subroutine output_frame(s,ind_proj,ind_var,map_size,map)
            ! varmin/varmax filter on ivar_frame (matches ramses' behaviour)
            if(ok .and. r%ivar_frame.ge.1 .and. r%ivar_frame.le.nvar)then
               uvar = m%uold(ind,r%ivar_frame,igrid)
-              if(r%ivar_frame.gt.1) uvar = uvar/max(m%uold(ind,1,igrid),r%smallr)
+              if(r%ivar_frame.gt.1) uvar = uvar/max(real(m%uold(ind,1,igrid),kind=8),r%smallr)
               ok = ok .and. (uvar.ge.r%varmin_frame(ind_proj))
               ok = ok .and. (uvar.le.r%varmax_frame(ind_proj))
            endif
