@@ -527,6 +527,7 @@ contains
           num_threads = 128
           num_blocks = (num_octs + num_threads - 1) / num_threads
 
+          ! Loop over Hilbert key bits
           do ibit = 0, ndim * ilev - 1
 
              ! Init prefix sum
