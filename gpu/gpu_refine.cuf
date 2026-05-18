@@ -385,16 +385,15 @@ contains
   ! =========================================================================
 
   ! =========================================================================
-  attributes(global) subroutine init_prefix_sum_bit(grid, swap_global, prefix_sum, head_idx, num_octs, skip_bit, bucket)
+  attributes(global) subroutine init_prefix_sum_bit(grid, swap_global, prefix_sum, head_idx, num_octs, ibit)
     type(oct), device :: grid(*)
     integer(kind=4), device :: swap_global(*)
     integer(kind=4), device :: prefix_sum(*)
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
-    integer(kind=4), intent(in), value :: skip_bit
-    integer(kind=4), intent(in), value :: bucket
+    integer(kind=4), intent(in), value :: ibit
 
-    integer :: oct_idx, thread_idx, block_idx, old_oct_idx, ibucket
+    integer :: oct_idx, thread_idx, block_idx, old_oct_idx
 
     ! Compute the thread and block idx
     thread_idx = threadIdx%x - 1
@@ -408,15 +407,8 @@ contains
     ! Get old oct idx
     old_oct_idx = swap_global(oct_idx)
 
-    ! Compute the bucket of each oct
-    ibucket = int(ibits(grid(old_oct_idx)%hkey(1), skip_bit, ndim), kind=4)
-
-    ! If oct has proper input bucket set prefix_sum to zero
-    if(ibucket == bucket)then
-       prefix_sum(oct_idx) = 0
-    else
-       prefix_sum(oct_idx) = 1
-    endif
+    ! Set prefix_sum to value of bit at position ibit
+    prefix_sum(oct_idx) = int(ibits(grid(old_oct_idx)%hkey(1), ibit, 1), kind=4)
 
   end subroutine init_prefix_sum_bit
   ! =========================================================================
@@ -546,7 +538,9 @@ contains
     integer(kind=4), intent(in), value :: num_octs
 
     integer :: oct_idx, thread_idx, block_idx
-    integer :: ind, idim, mask, bit
+    integer :: ind, idim, mask, bit, ilevel
+    integer(kind=4), dimension(1:ndim) :: ckey
+    integer(kind=8) :: hkey
 
     ! Compute the thread and block idx
     thread_idx = threadIdx%x - 1
@@ -569,7 +563,10 @@ contains
     end do
 
     ! Compute Hilbert key
-    grid(oct_idx)%hkey(1) = hilbert_key(grid(oct_idx)%ckey, grid(oct_idx)%lev-1)
+    ckey = grid(oct_idx)%ckey
+    ilevel = grid(oct_idx)%lev
+    hkey = hilbert_key(ckey, ilevel - 1)
+    grid(oct_idx)%hkey(1) = hkey
 
   end subroutine sort_scatter_grid
   ! =========================================================================
@@ -1044,7 +1041,7 @@ contains
     flag1(1:twotondim, cache_idx) = 0
 
     ! Compute new oct Hilbert key
-    hkey = hilbert_key(grid(cache_idx)%ckey, grid(cache_idx)%lev - 1)
+    hkey = hilbert_key(ckey, ilevel - 1)
     grid(cache_idx)%hkey(1) = hkey
 
     ! Compute parent oct hash table key
