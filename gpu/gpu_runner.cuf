@@ -88,10 +88,34 @@ module gpu_runner
   integer(kind=8), device, allocatable, dimension(:) :: hkey_part
   integer(kind=4), device, allocatable, dimension(:) :: bucket_part
 
-  !> Per-cell particle lists (CIC / kick-drift)
-  integer(kind=4), device, allocatable, dimension(:) :: cell_part_count
-  integer(kind=4), device, allocatable, dimension(:) :: cell_part_head
-  integer(kind=4), device, allocatable, dimension(:) :: cell_part_idx
+  !> Per-cell particle lists (CIC / kick-drift). §15.16 segmented-reduction:
+  !> cell_part_count/head are rank-2 (twotondim, ngridmax+ncachemax), keyed by
+  !> the level-(ilevel+1) source cell (icell, igrid) where igrid is the level-
+  !> ilevel parent oct on this rank. cell_part_idx is the flattened per-cell
+  !> particle list (slot -> ipart). src_icell_part / src_igrid_part are the
+  !> per-particle source-cell map, populated once by Step 0 and reused across
+  !> all threetondim outer iterations of the deposit driver (§15.18).
+  integer(kind=4), device, allocatable, dimension(:,:) :: cell_part_count
+  integer(kind=4), device, allocatable, dimension(:,:) :: cell_part_head
+  integer(kind=4), device, allocatable, dimension(:)   :: cell_part_idx
+  integer(kind=4), device, allocatable, dimension(:)   :: src_icell_part
+  integer(kind=4), device, allocatable, dimension(:)   :: src_igrid_part
+
+  !> Hash-lookup amortization (§15.18): destination (igrid, icell) for each
+  !> (source_cell, k) pair. Built once per gpu_cic_part call, reused across
+  !> all threetondim outer iterations. Sentinel (0, 0) = out-of-domain.
+  integer(kind=4), device, allocatable, dimension(:,:,:) :: dest_oct_per_cell
+  integer(kind=4), device, allocatable, dimension(:,:,:) :: dest_icell_per_cell
+
+  !> Per-particle deposition weight scratch (§15.16 / §15.19), overwritten
+  !> per outer-loop iteration k. weight_part_rho holds mp*w/vol_loc;
+  !> weight_part_nref holds the gated nref contribution.
+  real(kind=dp), device, allocatable, dimension(:) :: weight_part_rho
+  real(kind=dp), device, allocatable, dimension(:) :: weight_part_nref
+
+  !> Device-scalar accumulator for the level-`ilevel == levelmin` multipole
+  !> reduction (§15.20). Length ndim+1: q(1)=sum(mp), q(idim+1)=sum(mp*xp).
+  real(kind=8), device, allocatable, dimension(:) :: multipole_q_dev
 
   !> Gather/scatter scratch (xp_swap, mp_swap, idp_swap; workp for int4).
   real(kind=dp),   device, allocatable, dimension(:,:) :: xp_swap
@@ -107,6 +131,7 @@ contains
   include 'gpu_hash.cuf'
   include 'gpu_hilbert.cuf'
   include 'gpu_scan.cuf'
+  include 'gpu_reduce.cuf'
   include 'gpu_part.cuf'
 
   !> @brief

@@ -11,6 +11,33 @@
 !> did not. Each per-column launch uses the same kernel shape as the
 !> proven-correct rank-1 gather/scatter, with one extra (idim-1)*leading
 !> offset, matching the gpu_refine `sort_gather_force` idiom.
+!>
+!> CIC deposition idiom (§15.16 per-cell segmented reduction).
+!> gpu_cic_part runs a five-stage driver:
+!>   (0) Build cell-list at level (ilevel+1) — for each particle, hash_get
+!>       its host (icell_src, igrid_src) ONCE per call and store in
+!>       src_icell_part / src_igrid_part. cell_part_count, cell_part_head
+!>       (exclusive scan of count) and cell_part_idx (slot -> ipart)
+!>       segment particles by source cell.
+!>   (0b) For each (source_cell, k=1..threetondim) entry, do ONE hash_get
+!>       to precompute (igrid_dst, icell_dst) into dest_oct_per_cell /
+!>       dest_icell_per_cell. Reused across all 27 outer iterations.
+!>   (0c) GPU multipole_q reduction at ilevel == levelmin, replacing the
+!>       prior serial host loop which read stale host mp/xp when particles
+!>       lived on device. Pattern mirrors gpu_rho.cuf:multipole_tot.
+!>   (1)  cic_weight_kernel(k) — per-particle: read precomputed source,
+!>       read dest_oct_per_cell(k, ...), compute weight from frac and
+!>       offset_k, write weight_part_rho/nref. Sentinel destination ->
+!>       weight = 0; particle stays in the cell-list segmentation (§15.21).
+!>   (2)+(3) cic_block_reduce_kernel(k) — one block per source cell,
+!>       block_reduce_sum on the per-particle weights, leader writes
+!>       rho/nref += total. NO atomics: within iteration k, distinct
+!>       source cells map to distinct destinations (lattice bijection
+!>       mod periodic wrap). Cross-iteration += across the 27 outer k
+!>       iterations is serialized by host launching them in sequence.
+!> Default build uses cic_part_atomic_kernel (the A/B reference for
+!> validation). The segmented kernels are gated by -DGPU_CIC_SEGMENTED
+!> in bin/Makefile.gpu (not in defaults) until the harness greens.
 
 !> Bucket 0/1 for ilevel == levelmin-1 (domain test).
 attributes(global) subroutine bucket_part_boundary(xp, bucket_part, &
@@ -776,6 +803,489 @@ subroutine gpu_sort_part(sim, ilevel)
 
   call nvtxEndRange()
 end subroutine gpu_sort_part
+!> §15.16 Step 0 — zero cell_part_count over the rank-2 (twotondim, igrid)
+!> table, for the igrid range we will deposit into. Launch is flat over
+!> twotondim * num_grids; one thread per (icell, igrid) slot.
+attributes(global) subroutine reset_cell_part_count_kernel(cell_part_count_d, num_grids)
+  integer(kind=4), intent(in), value :: num_grids
+  integer(kind=4), device :: cell_part_count_d(1:twotondim, *)
+
+  integer :: thread_idx, block_idx, idx, icell, igrid
+  thread_idx = threadIdx%x - 1
+  block_idx  = blockIdx%x  - 1
+  idx = thread_idx + block_idx * blockDim%x
+  if (idx >= twotondim * num_grids) return
+  icell = mod(idx, twotondim) + 1
+  igrid = idx / twotondim + 1
+  cell_part_count_d(icell, igrid) = 0
+end subroutine reset_cell_part_count_kernel
+
+!> §15.16 Step 0 count pass — for each particle in the level slice, compute
+!> its level-(ilevel+1) host cell (icell_src, igrid_src) and atomically
+!> increment cell_part_count. Also store the per-particle source-cell map
+!> (src_icell_part / src_igrid_part) so Step 1's weight kernel does not
+!> repeat the hash_get for every outer-k iteration (§15.18 amortization).
+!> Particles whose host oct hash-misses get sentinel igrid_src = 0 and are
+!> dropped from the cell-list segmentation.
+attributes(global) subroutine build_cell_part_count_kernel(xp_d, &
+     cell_part_count_d, src_icell_part_d, src_igrid_part_d, &
+     hash_key_d, hash_val_d, hash_size_d, ckey_max_d, key_off_d, &
+     skip1, skip2, skip3, dx_loc, ilevel, head_idx, num_parts, leading)
+  integer(kind=4), intent(in), value :: leading
+  real(kind=dp),   device :: xp_d(*)
+  integer(kind=4), device :: cell_part_count_d(1:twotondim, *)
+  integer(kind=4), device :: src_icell_part_d(*)
+  integer(kind=4), device :: src_igrid_part_d(*)
+  integer(kind=8), device :: hash_key_d(*)
+  integer(kind=4), device :: hash_val_d(*)
+  integer(kind=4), intent(in), value :: hash_size_d
+  integer(kind=4), device :: ckey_max_d(*)
+  integer(kind=8), device :: key_off_d(*)
+  real(kind=8), intent(in), value :: skip1, skip2, skip3, dx_loc
+  integer(kind=4), intent(in), value :: ilevel, head_idx, num_parts
+
+  integer :: thread_idx, block_idx, idx, ipart, idim, igrid, icell, old
+  integer(kind=4) :: host_ckey(1:3), father_ckey(1:3), ii(1:3)
+  integer(kind=8) :: nx, offset, key, ix8, iy8, iz8
+  real(kind=8) :: skip(1:3), xs, inv_dx_loc
+
+  thread_idx = threadIdx%x - 1
+  block_idx  = blockIdx%x  - 1
+  idx = thread_idx + block_idx * blockDim%x
+  if (idx >= num_parts) return
+  ipart = head_idx + idx
+
+  skip(1) = skip1
+  skip(2) = skip2
+  skip(3) = skip3
+  inv_dx_loc = 1d0 / dx_loc
+
+  host_ckey = 0
+  do idim = 1, ndim
+     xs = (xp_d(ipart + (idim-1)*leading) + skip(idim)) * inv_dx_loc
+     host_ckey(idim) = floor(xs)
+  end do
+
+  father_ckey = host_ckey / 2
+  ii = host_ckey - 2 * father_ckey
+  icell = 1
+  do idim = 1, ndim
+     icell = icell + ii(idim) * (2**(idim-1))
+  end do
+
+  ix8 = int(father_ckey(1), kind=8)
+  iy8 = int(father_ckey(2), kind=8)
+  iz8 = int(father_ckey(3), kind=8)
+  nx  = int(ckey_max_d(ilevel), kind=8)
+  offset = key_off_d(ilevel)
+  key = offset + ix8 + iy8*nx + iz8*nx*nx
+  igrid = hash_get(hash_key_d, hash_val_d, hash_size_d, key)
+
+  src_icell_part_d(ipart) = icell
+  src_igrid_part_d(ipart) = igrid
+
+  if (igrid == 0) return    ! sentinel: drop out-of-domain particle
+
+  old = atomicadd(cell_part_count_d(icell, igrid), 1)
+end subroutine build_cell_part_count_kernel
+
+!> Flatten cell_part_count(icell, igrid) into the 1D prefix_sum scratch so
+!> we can hand it to gpu_scan. One thread per flat slot.
+attributes(global) subroutine flatten_cell_count_kernel(cell_part_count_d, &
+     prefix_sum_d, num_grids)
+  integer(kind=4), intent(in), value :: num_grids
+  integer(kind=4), device :: cell_part_count_d(1:twotondim, *)
+  integer(kind=4), device :: prefix_sum_d(*)
+
+  integer :: thread_idx, block_idx, idx, icell, igrid
+  thread_idx = threadIdx%x - 1
+  block_idx  = blockIdx%x  - 1
+  idx = thread_idx + block_idx * blockDim%x
+  if (idx >= twotondim * num_grids) return
+  icell = mod(idx, twotondim) + 1
+  igrid = idx / twotondim + 1
+  prefix_sum_d(idx + 1) = cell_part_count_d(icell, igrid)
+end subroutine flatten_cell_count_kernel
+
+!> After gpu_scan, prefix_sum holds the INCLUSIVE scan of cell_part_count.
+!> Write cell_part_head = prefix_sum - count (exclusive scan, so it points
+!> at the first slot of the cell in cell_part_idx) AND re-zero
+!> cell_part_count so it can serve as the per-cell place-pass counter.
+attributes(global) subroutine compute_cell_part_head_kernel(cell_part_count_d, &
+     cell_part_head_d, prefix_sum_d, num_grids)
+  integer(kind=4), intent(in), value :: num_grids
+  integer(kind=4), device :: cell_part_count_d(1:twotondim, *)
+  integer(kind=4), device :: cell_part_head_d (1:twotondim, *)
+  integer(kind=4), device :: prefix_sum_d(*)
+
+  integer :: thread_idx, block_idx, idx, icell, igrid, incl, cnt
+  thread_idx = threadIdx%x - 1
+  block_idx  = blockIdx%x  - 1
+  idx = thread_idx + block_idx * blockDim%x
+  if (idx >= twotondim * num_grids) return
+  icell = mod(idx, twotondim) + 1
+  igrid = idx / twotondim + 1
+  incl = prefix_sum_d(idx + 1)
+  cnt  = cell_part_count_d(icell, igrid)
+  cell_part_head_d(icell, igrid)  = incl - cnt
+  cell_part_count_d(icell, igrid) = 0
+end subroutine compute_cell_part_head_kernel
+
+!> §15.16 Step 0 place pass — for each particle, write its ipart into the
+!> per-cell segment of cell_part_idx at slot = head + atomicAdd(count, 1).
+!> After this kernel, cell_part_count is restored to its post-Step-0-count
+!> value (the original counts), and cell_part_idx is the slot->ipart map.
+attributes(global) subroutine place_cell_part_idx_kernel(cell_part_count_d, &
+     cell_part_head_d, cell_part_idx_d, src_icell_part_d, src_igrid_part_d, &
+     head_idx, num_parts)
+  integer(kind=4), device :: cell_part_count_d(1:twotondim, *)
+  integer(kind=4), device :: cell_part_head_d (1:twotondim, *)
+  integer(kind=4), device :: cell_part_idx_d(*)
+  integer(kind=4), device :: src_icell_part_d(*)
+  integer(kind=4), device :: src_igrid_part_d(*)
+  integer(kind=4), intent(in), value :: head_idx, num_parts
+
+  integer :: thread_idx, block_idx, idx, ipart, icell, igrid, slot_off, slot
+  thread_idx = threadIdx%x - 1
+  block_idx  = blockIdx%x  - 1
+  idx = thread_idx + block_idx * blockDim%x
+  if (idx >= num_parts) return
+  ipart = head_idx + idx
+  icell = src_icell_part_d(ipart)
+  igrid = src_igrid_part_d(ipart)
+  if (igrid == 0) return
+  slot_off = atomicadd(cell_part_count_d(icell, igrid), 1)
+  slot = cell_part_head_d(icell, igrid) + slot_off + 1
+  cell_part_idx_d(slot) = ipart
+end subroutine place_cell_part_idx_kernel
+
+!> §15.16 Step 0b — for each non-empty source cell (icell_src, igrid_src)
+!> and each k in 1..threetondim (= 27 in 3D), precompute the destination
+!> (igrid_dst, icell_dst) reached by adding the k-th stencil offset to the
+!> source cell's level-(ilevel+1) Cartesian key. Periodic wrap mirrors the
+!> atomic kernel (cic_part_atomic_kernel:869-895). Out-of-domain destinations
+!> (non-periodic dim out of bounds, or hash_get miss) get sentinel
+!> (dst_igrid = 0, dst_icell = 0); Step 1 zeros their weight (§15.21).
+attributes(global) subroutine build_dest_oct_per_cell_kernel(grid_d, cell_part_count_d, &
+     dest_oct_d, dest_icell_d, hash_key_d, hash_val_d, hash_size_d, &
+     ckey_max_d, key_off_d, box_ckey_min_d, box_ckey_max_d, periodic_d, &
+     ilevel, num_grids)
+  integer(kind=4), intent(in), value :: ilevel, num_grids
+  type(oct),       device :: grid_d(*)
+  integer(kind=4), device :: cell_part_count_d(1:twotondim, *)
+  integer(kind=4), device :: dest_oct_d  (1:threetondim, 1:twotondim, *)
+  integer(kind=4), device :: dest_icell_d(1:threetondim, 1:twotondim, *)
+  integer(kind=8), device :: hash_key_d(*)
+  integer(kind=4), device :: hash_val_d(*)
+  integer(kind=4), intent(in), value :: hash_size_d
+  integer(kind=4), device :: ckey_max_d(*)
+  integer(kind=8), device :: key_off_d(*)
+  integer(kind=4), device :: box_ckey_min_d(1:3, *)
+  integer(kind=4), device :: box_ckey_max_d(1:3, *)
+  logical,         device :: periodic_d(1:3)
+
+  integer :: thread_idx, block_idx, idx, k, icell_src, igrid_src, idim
+  integer :: ox, oy, oz, igrid_dst, icell_dst
+  integer(kind=4) :: src_full_ckey(1:3), target_ckey(1:3), father_ckey(1:3), ii(1:3)
+  integer(kind=4) :: ii_src(1:3), box_min(1:3), box_max(1:3)
+  integer(kind=8) :: nx, offset, key, ix8, iy8, iz8
+  logical :: in_domain
+
+  thread_idx = threadIdx%x - 1
+  block_idx  = blockIdx%x  - 1
+  idx = thread_idx + block_idx * blockDim%x
+  if (idx >= threetondim * twotondim * num_grids) return
+
+  ! Unflatten idx -> (k, icell_src, igrid_src). twotondim is the inner stride.
+  k         = mod(idx, threetondim) + 1
+  icell_src = mod(idx / threetondim, twotondim) + 1
+  igrid_src = idx / (threetondim * twotondim) + 1
+
+  if (cell_part_count_d(icell_src, igrid_src) == 0) then
+     dest_oct_d  (k, icell_src, igrid_src) = 0
+     dest_icell_d(k, icell_src, igrid_src) = 0
+     return
+  endif
+
+  ! Decode (icell_src - 1) -> ii_src(1:ndim) in {0,1}.
+  ii_src = 0
+  do idim = 1, ndim
+     ii_src(idim) = mod((icell_src - 1) / (2**(idim-1)), 2)
+  end do
+
+  ! Source cell's level-(ilevel+1) full Cartesian key.
+  src_full_ckey = 0
+  do idim = 1, ndim
+     src_full_ckey(idim) = 2 * grid_d(igrid_src)%ckey(idim) + ii_src(idim)
+  end do
+
+  ! Decode (k-1) -> (ox, oy, oz) in {-1, 0, +1}. 3D layout: oz outermost.
+  ox = mod(k - 1, 3) - 1
+  oy = mod((k - 1) / 3, 3) - 1
+  oz = (k - 1) / 9 - 1
+
+  target_ckey = 0
+  target_ckey(1) = src_full_ckey(1) + ox
+  if (ndim >= 2) target_ckey(2) = src_full_ckey(2) + oy
+  if (ndim >= 3) target_ckey(3) = src_full_ckey(3) + oz
+
+  box_min = 0
+  box_max = 0
+  do idim = 1, ndim
+     box_min(idim) = box_ckey_min_d(idim, ilevel+1)
+     box_max(idim) = box_ckey_max_d(idim, ilevel+1)
+  end do
+
+  in_domain = .true.
+  do idim = 1, ndim
+     if (periodic_d(idim)) then
+        if (target_ckey(idim) < box_min(idim))  target_ckey(idim) = box_max(idim) - 1
+        if (target_ckey(idim) >= box_max(idim)) target_ckey(idim) = box_min(idim)
+     else
+        if (target_ckey(idim) < box_min(idim))  in_domain = .false.
+        if (target_ckey(idim) >= box_max(idim)) in_domain = .false.
+     endif
+  end do
+
+  if (.not. in_domain) then
+     dest_oct_d  (k, icell_src, igrid_src) = 0
+     dest_icell_d(k, icell_src, igrid_src) = 0
+     return
+  endif
+
+  father_ckey = target_ckey / 2
+  ii = target_ckey - 2 * father_ckey
+  icell_dst = 1
+  do idim = 1, ndim
+     icell_dst = icell_dst + ii(idim) * (2**(idim-1))
+  end do
+
+  ix8 = int(father_ckey(1), kind=8)
+  iy8 = int(father_ckey(2), kind=8)
+  iz8 = int(father_ckey(3), kind=8)
+  nx  = int(ckey_max_d(ilevel), kind=8)
+  offset = key_off_d(ilevel)
+  key = offset + ix8 + iy8*nx + iz8*nx*nx
+  igrid_dst = hash_get(hash_key_d, hash_val_d, hash_size_d, key)
+
+  dest_oct_d  (k, icell_src, igrid_src) = igrid_dst
+  dest_icell_d(k, icell_src, igrid_src) = icell_dst
+end subroutine build_dest_oct_per_cell_kernel
+
+!> §15.20 / Stage (d) — GPU `multipole_q` reduction over the full particle
+!> slice [1, npart]. Mirrors gpu_rho.cuf:multipole_tot — per-thread load,
+!> block_reduce_sum on each of (ndim+1) components, single atomicadd per
+!> block to the length-(ndim+1) device accumulator. Replaces the serial
+!> host loop at gpu_cic_part:942-951 which read stale host xp/mp when
+!> data_on_device=.true.
+attributes(global) subroutine multipole_q_kernel(xp_d, mp_d, multipole_q_d, &
+     num_parts, leading)
+  integer(kind=4), intent(in), value :: leading, num_parts
+  real(kind=dp),   device :: xp_d(*)
+  real(kind=dp),   device :: mp_d(*)
+  real(kind=8),    device :: multipole_q_d(1:ndim+1)
+
+  integer :: thread_idx, block_idx, ipart, idim, info
+  real(kind=8) :: q_loc(1:ndim+1)
+
+  thread_idx = threadIdx%x - 1
+  block_idx  = blockIdx%x  - 1
+  ipart = thread_idx + block_idx * blockDim%x + 1
+
+  q_loc = 0d0
+  if (ipart <= num_parts) then
+     q_loc(1) = mp_d(ipart)
+     do idim = 1, ndim
+        q_loc(idim+1) = mp_d(ipart) * xp_d(ipart + (idim-1)*leading)
+     end do
+  endif
+
+  do idim = 1, ndim+1
+     q_loc(idim) = block_reduce_sum(q_loc(idim))
+  end do
+
+  if (threadIdx%x == 1) then
+     do idim = 1, ndim+1
+        info = atomicadd(multipole_q_d(idim), q_loc(idim))
+     end do
+  endif
+end subroutine multipole_q_kernel
+
+#ifdef GPU_CIC_SEGMENTED
+!> §15.16 Step 1 — per-particle weight kernel for outer iteration k.
+!> Parallel over particles in the level slice. Each thread:
+!>   - reads its source cell (icell_src, igrid_src) from the per-particle map,
+!>   - reads its destination (dst_igrid, dst_icell) = dest_oct_per_cell(k, ...),
+!>   - computes the CIC weight wx(ox+1)*wy(oy+1)*wz(oz+1) from its frac,
+!>   - writes weight_part_rho(ipart) = mp*w/vol_loc and the gated nref weight.
+!> Sentinel (dropped source or out-of-domain destination) -> weight = 0.
+attributes(global) subroutine cic_weight_kernel(xp_d, mp_d, &
+     src_icell_part_d, src_igrid_part_d, dest_oct_d, &
+     weight_rho_d, weight_nref_d, &
+     skip1, skip2, skip3, dx_loc, vol_loc, m_refine_at_level, mass_cut_refine, &
+     k_outer, head_idx, num_parts, leading)
+  integer(kind=4), intent(in), value :: leading, k_outer, head_idx, num_parts
+  real(kind=dp),   device :: xp_d(*)
+  real(kind=dp),   device :: mp_d(*)
+  integer(kind=4), device :: src_icell_part_d(*)
+  integer(kind=4), device :: src_igrid_part_d(*)
+  integer(kind=4), device :: dest_oct_d(1:threetondim, 1:twotondim, *)
+  real(kind=dp),   device :: weight_rho_d (*)
+  real(kind=dp),   device :: weight_nref_d(*)
+  real(kind=8), intent(in), value :: skip1, skip2, skip3, dx_loc, vol_loc
+  real(kind=8), intent(in), value :: m_refine_at_level, mass_cut_refine
+
+  integer :: thread_idx, block_idx, idx, ipart, idim, icell_src, igrid_src
+  integer :: ox, oy, oz, dst_igrid
+  real(kind=8) :: skip(1:3), xs, frac(1:3)
+  real(kind=8) :: wx(0:2), wy(0:2), wz(0:2), w, nref_add
+
+  thread_idx = threadIdx%x - 1
+  block_idx  = blockIdx%x  - 1
+  idx = thread_idx + block_idx * blockDim%x
+  if (idx >= num_parts) return
+  ipart = head_idx + idx
+
+  weight_rho_d (ipart) = 0d0
+  weight_nref_d(ipart) = 0d0
+
+  icell_src = src_icell_part_d(ipart)
+  igrid_src = src_igrid_part_d(ipart)
+  if (igrid_src == 0) return    ! source out-of-domain: contributes nothing
+
+  dst_igrid = dest_oct_d(k_outer, icell_src, igrid_src)
+  if (dst_igrid == 0) return    ! destination out-of-domain (§15.21)
+
+  skip(1) = skip1
+  skip(2) = skip2
+  skip(3) = skip3
+  frac = 0d0
+  do idim = 1, ndim
+     xs = (xp_d(ipart + (idim-1)*leading) + skip(idim)) / dx_loc
+     frac(idim) = xs - floor(xs)
+  end do
+
+  wx(0) = max(0d0, 0.5d0 - frac(1))
+  wx(1) = 1d0 - abs(frac(1) - 0.5d0)
+  wx(2) = max(0d0, frac(1) - 0.5d0)
+  wy = 0d0
+  wz = 0d0
+  wy(1) = 1d0
+  wz(1) = 1d0
+  if (ndim >= 2) then
+     wy(0) = max(0d0, 0.5d0 - frac(2))
+     wy(1) = 1d0 - abs(frac(2) - 0.5d0)
+     wy(2) = max(0d0, frac(2) - 0.5d0)
+  endif
+  if (ndim >= 3) then
+     wz(0) = max(0d0, 0.5d0 - frac(3))
+     wz(1) = 1d0 - abs(frac(3) - 0.5d0)
+     wz(2) = max(0d0, frac(3) - 0.5d0)
+  endif
+
+  ox = mod(k_outer - 1, 3) - 1
+  oy = mod((k_outer - 1) / 3, 3) - 1
+  oz = (k_outer - 1) / 9 - 1
+  w = wx(ox+1) * wy(oy+1) * wz(oz+1)
+
+  weight_rho_d(ipart) = mp_d(ipart) * w / vol_loc
+
+  if (m_refine_at_level >= 0d0) then
+     if (mass_cut_refine > 0d0) then
+        if (mp_d(ipart) < mass_cut_refine) then
+           nref_add = w
+        else
+           nref_add = 0d0
+        endif
+     else
+        nref_add = w
+     endif
+     weight_nref_d(ipart) = nref_add
+  endif
+end subroutine cic_weight_kernel
+
+!> §15.16 Step 2+3 — per-source-cell reduction + leader write. One CUDA
+!> block per (icell_src, igrid_src) source cell; threads = particles in
+!> that cell. Two block_reduce_sum calls (rho, nref) on each particle's
+!> precomputed weight. Thread 0 (leader) reads dest_oct_per_cell to find
+!> the destination and writes rho/nref += total. **No global atomics**:
+!> within iteration k_outer, distinct source cells map to distinct
+!> destinations (offset_k is a lattice bijection modulo periodic wrap).
+!> Cross-iteration += across the threetondim outer iterations is serialized
+!> by the host launching them in sequence.
+attributes(global) subroutine cic_block_reduce_kernel(cell_part_count_d, &
+     cell_part_head_d, cell_part_idx_d, dest_oct_d, dest_icell_d, &
+     weight_rho_d, weight_nref_d, rho_d, nref_d, &
+     m_refine_at_level, k_outer, num_grids)
+  integer(kind=4), intent(in), value :: k_outer, num_grids
+  integer(kind=4), device :: cell_part_count_d(1:twotondim, *)
+  integer(kind=4), device :: cell_part_head_d (1:twotondim, *)
+  integer(kind=4), device :: cell_part_idx_d(*)
+  integer(kind=4), device :: dest_oct_d  (1:threetondim, 1:twotondim, *)
+  integer(kind=4), device :: dest_icell_d(1:threetondim, 1:twotondim, *)
+  real(kind=dp),   device :: weight_rho_d (*)
+  real(kind=dp),   device :: weight_nref_d(*)
+  real(kind=dp),   device :: rho_d (1:twotondim, *)
+  real(kind=dp),   device :: nref_d(1:twotondim, *)
+  real(kind=8), intent(in), value :: m_refine_at_level
+
+  integer :: block_idx_flat, icell_src, igrid_src, count, head
+  integer :: tid, block_size, chunk_start, chunk_size, slot, ipart
+  integer :: dst_igrid, dst_icell
+  real(kind=8) :: my_rho, my_nref, total_rho, total_nref
+
+  block_idx_flat = blockIdx%x - 1
+  if (block_idx_flat >= twotondim * num_grids) return
+
+  icell_src = mod(block_idx_flat, twotondim) + 1
+  igrid_src = block_idx_flat / twotondim + 1
+
+  count = cell_part_count_d(icell_src, igrid_src)
+  if (count == 0) return
+
+  dst_igrid = dest_oct_d  (k_outer, icell_src, igrid_src)
+  if (dst_igrid == 0) return    ! destination out-of-domain (§15.21)
+  dst_icell = dest_icell_d(k_outer, icell_src, igrid_src)
+
+  head = cell_part_head_d(icell_src, igrid_src)
+  block_size = blockDim%x
+  tid = threadIdx%x - 1
+
+  total_rho  = 0d0
+  total_nref = 0d0
+
+  ! Inner serial chunk-loop: cells exceeding block size (>1024 on H100) are
+  ! rare in the namelists in scope; loop is correct for any count.
+  chunk_start = 0
+  do while (chunk_start < count)
+     chunk_size = min(block_size, count - chunk_start)
+     if (tid < chunk_size) then
+        slot = head + chunk_start + tid + 1
+        ipart = cell_part_idx_d(slot)
+        my_rho  = weight_rho_d (ipart)
+        my_nref = weight_nref_d(ipart)
+     else
+        my_rho  = 0d0
+        my_nref = 0d0
+     endif
+     my_rho  = block_reduce_sum(my_rho)
+     my_nref = block_reduce_sum(my_nref)
+     if (tid == 0) then
+        total_rho  = total_rho  + my_rho
+        total_nref = total_nref + my_nref
+     endif
+     chunk_start = chunk_start + block_size
+  end do
+
+  if (tid == 0) then
+     rho_d(dst_icell, dst_igrid) = rho_d(dst_icell, dst_igrid) + total_rho
+     if (m_refine_at_level >= 0d0) then
+        nref_d(dst_icell, dst_igrid) = nref_d(dst_icell, dst_igrid) + total_nref
+     endif
+  endif
+end subroutine cic_block_reduce_kernel
+#endif
+
 !> Per-particle CIC deposition into rho/nref (global atomicAdd).
 attributes(global) subroutine cic_part_atomic_kernel(xp_d, mp_d, sortp_d, rho_d, nref_d, &
      hash_key_d, hash_val_d, hash_size_d, ckey_max_d, key_off_d, &
@@ -916,7 +1426,20 @@ attributes(global) subroutine cic_part_atomic_kernel(xp_d, mp_d, sortp_d, rho_d,
   end do
 end subroutine cic_part_atomic_kernel
 
-!> Host dispatcher for CIC deposition.
+!> Host dispatcher for CIC deposition (§15.16 segmented-reduction redesign).
+!>
+!> Pipeline:
+!>   Step 0    cell-list at level (ilevel+1) — cell_part_count/head/idx and
+!>             the per-particle source-cell map src_icell_part/src_igrid_part
+!>             (§15.16, Stage a).
+!>   Step 0b   dest_oct_per_cell / dest_icell_per_cell precompute, one
+!>             hash_get per (source_cell, k) entry (§15.18, Stage b).
+!>   Step 0c   GPU multipole_q reduction at ilevel == levelmin (§15.20,
+!>             Stage d) — replaces the prior serial host loop which read
+!>             stale host mp/xp when data_on_device=.true.
+!>   Deposit   Either cic_part_atomic_kernel (default, A/B reference) or
+!>             the per-cell segmented reduction under -DGPU_CIC_SEGMENTED
+!>             (cic_weight_kernel + cic_block_reduce_kernel per outer k).
 subroutine gpu_cic_part(sim, ilevel, rtype)
   use nvtx
   use ramses_commons, only: ramses_t
@@ -924,9 +1447,14 @@ subroutine gpu_cic_part(sim, ilevel, rtype)
   integer, intent(in) :: ilevel
   integer, intent(in) :: rtype
 
-  integer(kind=4) :: head_idx, num_parts, leading
-  integer :: num_threads, num_blocks, i, idim
+  integer(kind=4) :: head_idx, num_parts, leading, num_grids, total_cells
+  integer(kind=4) :: total_dest_entries, total_sum_unused
+  integer :: num_threads, num_blocks, k, idim
   real(kind=8) :: dx_loc, vol_loc, skip1, skip2, skip3
+  real(kind=8) :: q_host(1:ndim+1)
+#ifdef GPU_CIC_SEGMENTED
+  integer :: deposit_block_size, deposit_num_blocks
+#endif
 
   call nvtxStartRange("gpu_cic_part", color=4) ! purple
 
@@ -939,14 +1467,19 @@ subroutine gpu_cic_part(sim, ilevel, rtype)
      return
   endif
 
-  if (ilevel == sim%r%levelmin) then
-     do i = 1, sim%p%npart
-        sim%g%multipole%q(1) = sim%g%multipole%q(1) + sim%p%mp(i)
-     end do
-     do idim = 1, ndim
-        do i = 1, sim%p%npart
-           sim%g%multipole%q(idim+1) = sim%g%multipole%q(idim+1) + sim%p%mp(i) * sim%p%xp(i,idim)
-        end do
+  ! Step 0c (§15.20): GPU multipole_q reduction at the coarsest active level.
+  ! Slice is [1, sim%p%npart] to match host semantics in cic_part.
+  if (ilevel == sim%r%levelmin .and. sim%p%npart > 0) then
+     leading = size(xp, 1)
+     multipole_q_dev = 0d0
+     num_threads = 256
+     num_blocks  = (sim%p%npart + num_threads - 1) / num_threads
+     call multipole_q_kernel<<<num_blocks, num_threads>>>(xp, mp, multipole_q_dev, &
+          sim%p%npart, leading)
+     call GPU_Error_Check("gpu/gpu_part.cuf", 0)
+     q_host = multipole_q_dev
+     do idim = 1, ndim+1
+        sim%g%multipole%q(idim) = sim%g%multipole%q(idim) + q_host(idim)
      end do
   endif
 
@@ -967,6 +1500,86 @@ subroutine gpu_cic_part(sim, ilevel, rtype)
   if (ndim >= 2) skip2 = sim%m%skip(2)
   if (ndim >= 3) skip3 = sim%m%skip(3)
 
+  num_grids   = size(cell_part_count, 2)
+  total_cells = twotondim * num_grids
+
+  ! ============================================================
+  ! §15.16 Step 0 — build cell-list at level (ilevel+1) (Stage a)
+  ! ============================================================
+
+  num_threads = 256
+  num_blocks  = (total_cells + num_threads - 1) / num_threads
+  call reset_cell_part_count_kernel<<<num_blocks, num_threads>>>(cell_part_count, num_grids)
+  call GPU_Error_Check("gpu/gpu_part.cuf", 0)
+
+  num_threads = 128
+  num_blocks  = (num_parts + num_threads - 1) / num_threads
+  call build_cell_part_count_kernel<<<num_blocks, num_threads>>>(xp, &
+       cell_part_count, src_icell_part, src_igrid_part, &
+       hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, &
+       skip1, skip2, skip3, dx_loc, ilevel, head_idx, num_parts, leading)
+  call GPU_Error_Check("gpu/gpu_part.cuf", 0)
+
+  call ensure_scan_capacity_part(total_cells)
+
+  num_threads = 256
+  num_blocks  = (total_cells + num_threads - 1) / num_threads
+  call flatten_cell_count_kernel<<<num_blocks, num_threads>>>(cell_part_count, &
+       prefix_sum, num_grids)
+  call GPU_Error_Check("gpu/gpu_part.cuf", 0)
+
+  call gpu_scan(1, total_cells, total_sum_unused)
+
+  call compute_cell_part_head_kernel<<<num_blocks, num_threads>>>(cell_part_count, &
+       cell_part_head, prefix_sum, num_grids)
+  call GPU_Error_Check("gpu/gpu_part.cuf", 0)
+
+  num_threads = 128
+  num_blocks  = (num_parts + num_threads - 1) / num_threads
+  call place_cell_part_idx_kernel<<<num_blocks, num_threads>>>(cell_part_count, &
+       cell_part_head, cell_part_idx, src_icell_part, src_igrid_part, &
+       head_idx, num_parts)
+  call GPU_Error_Check("gpu/gpu_part.cuf", 0)
+
+  ! ============================================================
+  ! §15.16 Step 0b — precompute dest_oct_per_cell (Stage b)
+  ! ============================================================
+
+  total_dest_entries = threetondim * total_cells
+  num_threads = 256
+  num_blocks  = (total_dest_entries + num_threads - 1) / num_threads
+  call build_dest_oct_per_cell_kernel<<<num_blocks, num_threads>>>(grid, &
+       cell_part_count, dest_oct_per_cell, dest_icell_per_cell, &
+       hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, &
+       box_ckey_min, box_ckey_max, periodic, ilevel, num_grids)
+  call GPU_Error_Check("gpu/gpu_part.cuf", 0)
+
+  ! ============================================================
+  ! Deposit. Default = atomic kernel (A/B reference). Segmented
+  ! redesign behind -DGPU_CIC_SEGMENTED until harness greens.
+  ! ============================================================
+
+#ifdef GPU_CIC_SEGMENTED
+  ! §15.16 Stage (c). One block per source cell, outer loop on k = 1..27.
+  deposit_block_size = 256
+  deposit_num_blocks = total_cells
+  num_threads = 128
+  num_blocks  = (num_parts + num_threads - 1) / num_threads
+  do k = 1, threetondim
+     call cic_weight_kernel<<<num_blocks, num_threads>>>(xp, mp, &
+          src_icell_part, src_igrid_part, dest_oct_per_cell, &
+          weight_part_rho, weight_part_nref, &
+          skip1, skip2, skip3, dx_loc, vol_loc, &
+          sim%r%m_refine(ilevel), sim%r%mass_cut_refine, &
+          k, head_idx, num_parts, leading)
+     call cic_block_reduce_kernel<<<deposit_num_blocks, deposit_block_size>>>(&
+          cell_part_count, cell_part_head, cell_part_idx, &
+          dest_oct_per_cell, dest_icell_per_cell, &
+          weight_part_rho, weight_part_nref, rho, nref, &
+          sim%r%m_refine(ilevel), k, num_grids)
+  end do
+  call GPU_Error_Check("gpu/gpu_part.cuf", 0)
+#else
   num_threads = 128
   num_blocks  = (num_parts + num_threads - 1) / num_threads
   call cic_part_atomic_kernel<<<num_blocks, num_threads>>>(xp, mp, sortp, rho, nref, &
@@ -975,6 +1588,7 @@ subroutine gpu_cic_part(sim, ilevel, rtype)
        skip1, skip2, skip3, dx_loc, vol_loc, sim%r%m_refine(ilevel), sim%r%mass_cut_refine, &
        ilevel, head_idx, num_parts, leading)
   call GPU_Error_Check("gpu/gpu_part.cuf", 0)
+#endif
 
   call nvtxEndRange()
 end subroutine gpu_cic_part
