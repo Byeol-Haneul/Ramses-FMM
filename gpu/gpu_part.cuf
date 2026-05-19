@@ -1,6 +1,16 @@
 !> Particle kernels and dispatchers (included from gpu_runner).
 !> Rank-2 arrays use layout (npart_max, ndim); gather/scatter use flat
 !> indices with `leading` = size(xp,1), not npart_max.
+!>
+!> Rank-2 arrays (xp, vp, fp, jp) are gathered/scattered as ndim
+!> independent rank-1 columns via `sort_gather_part_real_col` /
+!> `sort_scatter_part_real_col`, NOT via a unified rank-2 kernel. The
+!> unified rank-2 kernel (deleted) was the source of the split-7-dump-14
+!> xp/vp decoupling bug localized in run 314583 — idp/mp/levelp (rank-1)
+!> permuted correctly under the same swap_global that xp/vp (rank-2)
+!> did not. Each per-column launch uses the same kernel shape as the
+!> proven-correct rank-1 gather/scatter, with one extra (idim-1)*leading
+!> offset, matching the gpu_refine `sort_gather_force` idiom.
 
 !> Bucket 0/1 for ilevel == levelmin-1 (domain test).
 attributes(global) subroutine bucket_part_boundary(xp, bucket_part, &
@@ -131,46 +141,51 @@ attributes(global) subroutine init_prefix_sum_part(bucket_part, prefix_sum_d, &
   prefix_sum_d(idx) = bucket_part(idx)
 end subroutine init_prefix_sum_part
 
-!> Gather/scatter rank-2 field; `leading` = size(xp,1).
-attributes(global) subroutine sort_gather_part_real_2d(buf, src, swap_global_d, &
-     head_idx, num_parts, leading)
+!> Gather/scatter one column of a rank-2 real(dp) field.
+!> `leading` = size(xp,1); `idim` selects the column (1..ndim).
+!> One call per column — mirrors gpu_refine `sort_gather_force` idiom and
+!> reuses the rank-1 thread mapping verbatim, only adding (idim-1)*leading
+!> offsets to buf/src. The unified rank-2 kernel that looped over idim
+!> inside the kernel was the source of the split-7-dump-14 bug.
+attributes(global) subroutine sort_gather_part_real_col(buf, src, swap_global_d, &
+     head_idx, num_parts, leading, idim)
   integer(kind=4), intent(in), value :: leading
+  integer(kind=4), intent(in), value :: idim
   real(kind=dp), device :: buf(*)
   real(kind=dp), device :: src(*)
   integer(kind=4), device :: swap_global_d(*)
   integer(kind=4), intent(in), value :: head_idx
   integer(kind=4), intent(in), value :: num_parts
 
-  integer :: thread_idx, block_idx, idx, old_idx, idim
+  integer :: thread_idx, block_idx, idx, old_idx, off
   thread_idx = threadIdx%x - 1
   block_idx  = blockIdx%x  - 1
   idx = thread_idx + block_idx * blockDim%x
   if (idx >= num_parts) return
   idx = head_idx + idx
   old_idx = swap_global_d(idx)
-  do idim = 1, ndim
-     buf(idx + (idim-1)*leading) = src(old_idx + (idim-1)*leading)
-  end do
-end subroutine sort_gather_part_real_2d
+  off = (idim - 1) * leading
+  buf(idx + off) = src(old_idx + off)
+end subroutine sort_gather_part_real_col
 
-attributes(global) subroutine sort_scatter_part_real_2d(dst, buf, &
-     head_idx, num_parts, leading)
+attributes(global) subroutine sort_scatter_part_real_col(dst, buf, &
+     head_idx, num_parts, leading, idim)
   integer(kind=4), intent(in), value :: leading
+  integer(kind=4), intent(in), value :: idim
   real(kind=dp), device :: dst(*)
   real(kind=dp), device :: buf(*)
   integer(kind=4), intent(in), value :: head_idx
   integer(kind=4), intent(in), value :: num_parts
 
-  integer :: thread_idx, block_idx, idx, idim
+  integer :: thread_idx, block_idx, idx, off
   thread_idx = threadIdx%x - 1
   block_idx  = blockIdx%x  - 1
   idx = thread_idx + block_idx * blockDim%x
   if (idx >= num_parts) return
   idx = head_idx + idx
-  do idim = 1, ndim
-     dst(idx + (idim-1)*leading) = buf(idx + (idim-1)*leading)
-  end do
-end subroutine sort_scatter_part_real_2d
+  off = (idim - 1) * leading
+  dst(idx + off) = buf(idx + off)
+end subroutine sort_scatter_part_real_col
 
 !> Gather/scatter rank-1 real(dp).
 attributes(global) subroutine sort_gather_part_real_1d(buf, src, swap_global_d, &
@@ -432,7 +447,7 @@ subroutine gpu_split_part(sim, ilevel)
   integer, intent(in) :: ilevel
 
   integer(kind=4) :: head_idx, num_parts, n_fine, n_coarse, ilev, leading
-  integer :: num_threads, num_blocks
+  integer :: num_threads, num_blocks, idim
   real(kind=8) :: dx_loc, skip1, skip2, skip3
 
   call nvtxStartRange("gpu_split_part", color=4) ! purple
@@ -502,19 +517,23 @@ subroutine gpu_split_part(sim, ilevel)
      call dump_split_window_part("before_xp", head_idx, num_parts, ilevel)
   endif
 
-  call sort_gather_part_real_2d<<<num_blocks, num_threads>>>(xp_swap, xp, &
-       swap_global, head_idx, num_parts, leading)
-  call sort_scatter_part_real_2d<<<num_blocks, num_threads>>>(xp, xp_swap, &
-       head_idx, num_parts, leading)
+  do idim = 1, ndim
+     call sort_gather_part_real_col<<<num_blocks, num_threads>>>(xp_swap, xp, &
+          swap_global, head_idx, num_parts, leading, idim)
+     call sort_scatter_part_real_col<<<num_blocks, num_threads>>>(xp, xp_swap, &
+          head_idx, num_parts, leading, idim)
+  end do
 
   if (sim%r%verbose .and. ilevel == 7) then
      call dump_split_window_part("after_xp", head_idx, num_parts, ilevel)
   endif
 
-  call sort_gather_part_real_2d<<<num_blocks, num_threads>>>(xp_swap, vp, &
-       swap_global, head_idx, num_parts, leading)
-  call sort_scatter_part_real_2d<<<num_blocks, num_threads>>>(vp, xp_swap, &
-       head_idx, num_parts, leading)
+  do idim = 1, ndim
+     call sort_gather_part_real_col<<<num_blocks, num_threads>>>(xp_swap, vp, &
+          swap_global, head_idx, num_parts, leading, idim)
+     call sort_scatter_part_real_col<<<num_blocks, num_threads>>>(vp, xp_swap, &
+          head_idx, num_parts, leading, idim)
+  end do
 
   if (sim%r%verbose .and. ilevel == 7) then
      call dump_split_window_part("after_vp", head_idx, num_parts, ilevel)
@@ -540,16 +559,20 @@ subroutine gpu_split_part(sim, ilevel)
   endif
 
   if (allocated(fp)) then
-     call sort_gather_part_real_2d<<<num_blocks, num_threads>>>(xp_swap, fp, &
-          swap_global, head_idx, num_parts, leading)
-     call sort_scatter_part_real_2d<<<num_blocks, num_threads>>>(fp, xp_swap, &
-          head_idx, num_parts, leading)
+     do idim = 1, ndim
+        call sort_gather_part_real_col<<<num_blocks, num_threads>>>(xp_swap, fp, &
+             swap_global, head_idx, num_parts, leading, idim)
+        call sort_scatter_part_real_col<<<num_blocks, num_threads>>>(fp, xp_swap, &
+             head_idx, num_parts, leading, idim)
+     end do
   endif
   if (allocated(jp)) then
-     call sort_gather_part_real_2d<<<num_blocks, num_threads>>>(xp_swap, jp, &
-          swap_global, head_idx, num_parts, leading)
-     call sort_scatter_part_real_2d<<<num_blocks, num_threads>>>(jp, xp_swap, &
-          head_idx, num_parts, leading)
+     do idim = 1, ndim
+        call sort_gather_part_real_col<<<num_blocks, num_threads>>>(xp_swap, jp, &
+             swap_global, head_idx, num_parts, leading, idim)
+        call sort_scatter_part_real_col<<<num_blocks, num_threads>>>(jp, xp_swap, &
+             head_idx, num_parts, leading, idim)
+     end do
   endif
   if (allocated(zp)) then
      call sort_gather_part_real_1d<<<num_blocks, num_threads>>>(mp_swap, zp, &
