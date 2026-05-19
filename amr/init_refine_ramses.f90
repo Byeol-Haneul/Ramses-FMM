@@ -261,6 +261,7 @@ subroutine init_refine_ramses(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,no
   integer(kind=8)::ipos
 
   integer,dimension(1:ndim)::ckey
+  integer::refined_int
   logical,dimension(1:twotondim)::refined
   real(kind=4),dimension(1:twotondim,1:nprim)::qout
 
@@ -345,7 +346,7 @@ subroutine init_refine_ramses(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,no
      ! Prepare reading the AMR file
      file_amr=TRIM(r%initfile(r%levelmin))//'/amr.'//TRIM(ncharcpu)
      open(unit=10,file=file_amr,access="stream",action="read",form='unformatted')
-     iskip_amr=13+4*(nlevelmax_file-levelmin_file+1)+(4*ndim+4*twotondim)*nskip_file(icpu)
+     iskip_amr=13+4*(nlevelmax_file-levelmin_file+1)+(4*ndim+4)*nskip_file(icpu)
 
      ! Prepare reading the HYDRO file
      if(r%hydro)then
@@ -358,10 +359,13 @@ subroutine init_refine_ramses(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,no
      do i=istart,iend
 
         ! Read values from AMR files
-        ipos=iskip_amr+(4*ndim+4*twotondim)*(i-1)
+        ipos=iskip_amr+(4*ndim+4)*(i-1)
         read(10,POS=ipos)ckey
-        ipos=iskip_amr+(4*ndim+4*twotondim)*(i-1)+4*ndim
-        read(10,POS=ipos)refined
+        ipos=iskip_amr+(4*ndim+4)*(i-1)+4*ndim
+        read(10,POS=ipos)refined_int
+        do ind=1,twotondim
+           refined(ind)=btest(refined_int,ind-1)
+        end do
 
         ! Read values from HYDRO files
         if(r%hydro)then

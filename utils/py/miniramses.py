@@ -848,7 +848,7 @@ def rd_amr(nout,**kwargs):
         amr[ilevel].refined = np.zeros([2**ndim,amr[ilevel].ngrid],dtype=bool)
 
     iskip = np.zeros(nlevelmax, dtype=int)
-    nvar = ndim+2**ndim
+    nvar = ndim+1
 
     # Reading and storing data
     for icpu in cpulist:
@@ -873,8 +873,9 @@ def rd_amr(nout,**kwargs):
                 amr[ilevel].xg[idim,iskip[ilevel]:iskip[ilevel]+ncache] = transfer[idim]
 
             # Store cell refinement map
+            refined_int = transfer[ndim]
             for ind in range(0,2**ndim):
-                amr[ilevel].refined[ind,iskip[ilevel]:iskip[ilevel]+ncache] = transfer[ndim+ind]
+                amr[ilevel].refined[ind,iskip[ilevel]:iskip[ilevel]+ncache] = (refined_int >> ind) & 1
 
             offset = offset + ncache*nvar*4
             iskip[ilevel] = iskip[ilevel] + ncache
