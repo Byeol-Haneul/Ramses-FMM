@@ -231,7 +231,9 @@ end subroutine r_transfer_grid_host
 !###########################################################
 !###########################################################
 #ifdef _CUDA
-!> Copy device particle arrays to host (dumps / I/O). No-op if not allocated.
+!> Copy device particle arrays to host for PART_DUMP, harness comparison, and
+!> current host-side I/O readers. Steady-state GPU execution should keep
+!> particles resident and call this only at explicit host-consumer boundaries.
 subroutine gpu_to_host_part(pst)
   use ramses_commons, only: pst_t
   implicit none
@@ -267,9 +269,10 @@ end subroutine gpu_to_host_part
 !###########################################################
 !###########################################################
 #ifdef GRAV
-!> Copy device mesh fields written by GPU CIC back to host. Call this only
-!> after gpu_cic_part has filled device rho/nref; copying stub or invalid mesh
-!> state can poison the host Poisson path. (mesh_t rho/nref exist only with GRAV.)
+!> Copy device mesh fields written by GPU CIC back to host for host Poisson,
+!> PART_DUMP, and harness comparison. Call only after gpu_cic_part has filled
+!> device rho/nref; steady-state GPU execution should avoid this sync unless a
+!> host consumer follows. (mesh_t rho/nref exist only with GRAV.)
 subroutine gpu_to_host_mesh(pst)
   use ramses_commons, only: pst_t
   implicit none

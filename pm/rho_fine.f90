@@ -710,14 +710,15 @@ recursive subroutine r_cic_part(pst,input_array,input_size)
            endif
            call gpu_cic_part(pst%s, ilevel, rtype)
 #ifdef GRAV
-           ! Host Poisson and PART_DUMP mesh dumps read pst%s%m%rho/nref.
-           ! Copy only after real GPU CIC has filled the device arrays.
+           ! Validation/host-consumer sync: host Poisson, PART_DUMP, and the
+           ! harness read pst%s%m%rho/nref. A steady-state GPU path should
+           ! keep these arrays resident until such a host boundary.
            call gpu_to_host_mesh(pst)
 #endif
         endif
         if(pst%s%r%star)call cic_part(pst%s,pst%s%star,ilevel,rtype)
         if(pst%s%r%sink)call cic_part(pst%s,pst%s%sink,ilevel,rtype)
-        ! Sync device->host so dump_part_state sees the post-kernel state.
+        ! Validation/host-consumer sync for PART_DUMP, harness, and I/O readers.
         call gpu_to_host_part(pst)
         return
      endif
@@ -1261,6 +1262,7 @@ recursive subroutine r_split_part(pst,ilevel,input_size)
         if(pst%s%r%sink)call split_part(pst%s,pst%s%sink,ilevel)
         if(pst%s%r%tree)call split_part(pst%s,pst%s%tree,ilevel)
         if(pst%s%r%trac)call split_part(pst%s,pst%s%trac,ilevel)
+        ! Validation/host-consumer sync for PART_DUMP, harness, and I/O readers.
         call gpu_to_host_part(pst)
         return
      endif
@@ -2014,6 +2016,7 @@ recursive subroutine r_sort_part(pst,ilevel,input_size)
         if(pst%s%r%sink)call sort_part(pst%s,pst%s%sink,ilevel)
         if(pst%s%r%tree)call sort_part(pst%s,pst%s%tree,ilevel)
         if(pst%s%r%trac)call sort_part(pst%s,pst%s%trac,ilevel)
+        ! Validation/host-consumer sync for PART_DUMP, harness, and I/O readers.
         call gpu_to_host_part(pst)
         return
      endif

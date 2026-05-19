@@ -100,6 +100,7 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
            write(*,*)'r_kick_drift_part: tracers/dust on the GPU path are not supported in phase 1.'
            call abort
         endif
+        ! Validation/host-consumer sync for PART_DUMP, harness, and I/O readers.
         call gpu_to_host_part(pst)
         return
      endif
