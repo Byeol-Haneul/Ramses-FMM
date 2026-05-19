@@ -155,6 +155,74 @@ attributes(global) subroutine init_prefix_sum_part(bucket_part, prefix_sum_d, &
   prefix_sum_d(idx) = bucket_part(idx)
 end subroutine init_prefix_sum_part
 
+!> prefix_sum(h) := 1 if Hilbert-rank-h's particle is COARSE, else 0.
+!> Used by the Hilbert-order second pass that re-orders gpu_split_part's
+!> coarse bucket to match CPU's intentional Hilbert ordering at
+!> pm/rho_fine.f90:1416-1424. Read from sortp_d(h) (Hilbert-ranked
+!> particle index produced by gpu_sort_part) and bucket_part_d (slot-keyed
+!> 1=fine / 0=coarse marker set by bucket_part_general/boundary).
+attributes(global) subroutine init_prefix_sum_part_hilbert_coarse( &
+     bucket_part_d, sortp_d, prefix_sum_d, head_idx, num_parts)
+  integer(kind=4), device :: bucket_part_d(*)
+  integer(kind=4), device :: sortp_d(*)
+  integer(kind=4), device :: prefix_sum_d(*)
+  integer(kind=4), intent(in), value :: head_idx
+  integer(kind=4), intent(in), value :: num_parts
+
+  integer :: thread_idx, block_idx, idx, ipart
+  thread_idx = threadIdx%x - 1
+  block_idx  = blockIdx%x  - 1
+  idx = thread_idx + block_idx * blockDim%x
+  if (idx >= num_parts) return
+  idx = head_idx + idx
+  ipart = sortp_d(idx)
+  prefix_sum_d(idx) = 1 - bucket_part_d(ipart)
+end subroutine init_prefix_sum_part_hilbert_coarse
+
+!> Overwrite swap_global's coarse range with Hilbert-ordered coarse particles.
+!> Mirrors CPU split_part's "Loop over coarse level particles" at
+!> pm/rho_fine.f90:1418-1426 (which assigns workp in sortp/Hilbert order).
+!>
+!> Pre-conditions:
+!>   - swap_global_d(head:head+num_parts-1) already holds the slot-stable
+!>     0/1 partition from the existing scan (coarse in [head, head+n_coarse-1],
+!>     fine in [head+n_coarse, head+num_parts-1], both in slot order).
+!>   - prefix_sum_d(h) for h in [head, head+num_parts-1] is the *inclusive*
+!>     scan of (1 - bucket_part_d(sortp_d(h))) -> 1-based rank of coarse
+!>     particles in Hilbert order at each Hilbert position h.
+!>
+!> Action: for each Hilbert position h, if bucket_part_d(sortp_d(h)) == 0
+!> (coarse), overwrite swap_global_d(head + prefix_sum_d(h) - 1) = sortp_d(h).
+!> Fine positions skip the write -- the fine range of swap_global is left
+!> exactly as the slot-stable scan produced it (matches CPU's slot-order
+!> fine loop at pm/rho_fine.f90:1408-1414).
+!>
+!> No race: each thread writes to a unique coarse slot in [head, head+n_coarse-1]
+!> (uniqueness guaranteed by the inclusive scan being strictly monotonic on
+!> the coarse subset). Reads of bucket_part_d / sortp_d / prefix_sum_d are
+!> from arrays not written by this kernel.
+attributes(global) subroutine write_swap_global_coarse_hilbert( &
+     swap_global_d, bucket_part_d, sortp_d, prefix_sum_d, head_idx, num_parts)
+  integer(kind=4), device :: swap_global_d(*)
+  integer(kind=4), device :: bucket_part_d(*)
+  integer(kind=4), device :: sortp_d(*)
+  integer(kind=4), device :: prefix_sum_d(*)
+  integer(kind=4), intent(in), value :: head_idx
+  integer(kind=4), intent(in), value :: num_parts
+
+  integer :: thread_idx, block_idx, idx, ipart, coarse_rank
+  thread_idx = threadIdx%x - 1
+  block_idx  = blockIdx%x  - 1
+  idx = thread_idx + block_idx * blockDim%x
+  if (idx >= num_parts) return
+  idx = head_idx + idx
+  ipart = sortp_d(idx)
+  if (bucket_part_d(ipart) == 0) then
+     coarse_rank = prefix_sum_d(idx)
+     swap_global_d(head_idx + coarse_rank - 1) = ipart
+  endif
+end subroutine write_swap_global_coarse_hilbert
+
 !> Gather/scatter one column of a rank-2 real(dp) field.
 !> `leading` = size(xp,1); `idim` selects the column (1..ndim).
 !> One call per column — mirrors gpu_refine `sort_gather_force` idiom and
@@ -460,7 +528,7 @@ subroutine gpu_split_part(sim, ilevel)
   type(ramses_t), intent(inout) :: sim
   integer, intent(in) :: ilevel
 
-  integer(kind=4) :: head_idx, num_parts, n_fine, n_coarse, ilev, leading
+  integer(kind=4) :: head_idx, num_parts, n_fine, n_coarse, n_coarse_hilbert, ilev, leading
   integer :: num_threads, num_blocks, idim
   real(kind=8) :: dx_loc, skip1, skip2, skip3
   logical :: debug_split
@@ -527,6 +595,21 @@ subroutine gpu_split_part(sim, ilevel)
 
   call update_global_swap_table<<<num_blocks, num_threads>>>(swap_global, &
        swap_local, head_idx, num_parts)
+  call GPU_Error_Check("gpu/gpu_part.cuf", 0)
+
+  ! Re-order the coarse range of swap_global to match CPU's intentional
+  ! Hilbert ordering at pm/rho_fine.f90:1416-1424 ("This enforces Hilbert
+  ! ordering after partioning"). The slot-stable scan above already lands
+  ! the fine bucket in slot order (matches CPU's fine loop at
+  ! pm/rho_fine.f90:1407-1414); we only need to overwrite the coarse
+  ! range with Hilbert-ranked coarse particles. Mismatch at dump 14 was
+  ! the proximate cause of the mesh_000030+ CIC sum-order divergence in
+  ! local-orderF-315315 (docs/triage/2026-05-19-diff-dumps-layout.md).
+  call init_prefix_sum_part_hilbert_coarse<<<num_blocks, num_threads>>>( &
+       bucket_part, sortp, prefix_sum, head_idx, num_parts)
+  call gpu_scan(head_idx, num_parts, n_coarse_hilbert)
+  call write_swap_global_coarse_hilbert<<<num_blocks, num_threads>>>( &
+       swap_global, bucket_part, sortp, prefix_sum, head_idx, num_parts)
   call GPU_Error_Check("gpu/gpu_part.cuf", 0)
 
   if (debug_split .and. ilevel == 7) then
