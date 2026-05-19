@@ -31,13 +31,15 @@
 !>       weight = 0; particle stays in the cell-list segmentation (§15.21).
 !>   (2)+(3) cic_block_reduce_kernel(k) — one block per source cell,
 !>       block_reduce_sum on the per-particle weights, leader writes
-!>       rho/nref += total. NO atomics: within iteration k, distinct
-!>       source cells map to distinct destinations (lattice bijection
-!>       mod periodic wrap). Cross-iteration += across the 27 outer k
-!>       iterations is serialized by host launching them in sequence.
-!> Default build uses cic_part_atomic_kernel (the A/B reference for
-!> validation). The segmented kernels are gated by -DGPU_CIC_SEGMENTED
-!> in bin/Makefile.gpu (not in defaults) until the harness greens.
+!>       rho/nref += total. NO atomics on rho/nref: within iteration k,
+!>       distinct source cells map to distinct destinations (lattice
+!>       bijection mod periodic wrap). Cross-iteration += across the 27
+!>       outer iterations is serialized by host launching them in sequence.
+!> The only atomicadd in gpu_cic_part after this redesign is the per-block
+!> reduce on the length-(ndim+1) multipole_q_dev accumulator (Step 0c),
+!> where contention is negligible. The earlier cic_part_atomic_kernel
+!> (per-particle global atomicadd on rho/nref) has been deleted in favor
+!> of this segmented driver.
 
 !> Bucket 0/1 for ilevel == levelmin-1 (domain test).
 attributes(global) subroutine bucket_part_boundary(xp, bucket_part, &
@@ -962,10 +964,10 @@ end subroutine place_cell_part_idx_kernel
 !> §15.16 Step 0b — for each non-empty source cell (icell_src, igrid_src)
 !> and each k in 1..threetondim (= 27 in 3D), precompute the destination
 !> (igrid_dst, icell_dst) reached by adding the k-th stencil offset to the
-!> source cell's level-(ilevel+1) Cartesian key. Periodic wrap mirrors the
-!> atomic kernel (cic_part_atomic_kernel:869-895). Out-of-domain destinations
+!> source cell's level-(ilevel+1) Cartesian key. Periodic wrap is per-dim
+!> against box_ckey_min/max(idim, ilevel+1); out-of-domain destinations
 !> (non-periodic dim out of bounds, or hash_get miss) get sentinel
-!> (dst_igrid = 0, dst_icell = 0); Step 1 zeros their weight (§15.21).
+!> (dst_igrid = 0, dst_icell = 0) and Step 1 zeros their weight (§15.21).
 attributes(global) subroutine build_dest_oct_per_cell_kernel(grid_d, cell_part_count_d, &
      dest_oct_d, dest_icell_d, hash_key_d, hash_val_d, hash_size_d, &
      ckey_max_d, key_off_d, box_ckey_min_d, box_ckey_max_d, periodic_d, &
@@ -1111,7 +1113,6 @@ attributes(global) subroutine multipole_q_kernel(xp_d, mp_d, multipole_q_d, &
   endif
 end subroutine multipole_q_kernel
 
-#ifdef GPU_CIC_SEGMENTED
 !> §15.16 Step 1 — per-particle weight kernel for outer iteration k.
 !> Parallel over particles in the level slice. Each thread:
 !>   - reads its source cell (icell_src, igrid_src) from the per-particle map,
@@ -1284,147 +1285,6 @@ attributes(global) subroutine cic_block_reduce_kernel(cell_part_count_d, &
      endif
   endif
 end subroutine cic_block_reduce_kernel
-#endif
-
-!> Per-particle CIC deposition into rho/nref (global atomicAdd).
-attributes(global) subroutine cic_part_atomic_kernel(xp_d, mp_d, sortp_d, rho_d, nref_d, &
-     hash_key_d, hash_val_d, hash_size_d, ckey_max_d, key_off_d, &
-     box_ckey_min_d, box_ckey_max_d, periodic_d, &
-     skip1, skip2, skip3, dx_loc, vol_loc, m_refine_at_level, mass_cut_refine, &
-     ilevel, head_idx, num_parts, leading)
-  integer(kind=4), intent(in), value :: leading
-  real(kind=dp),   device :: xp_d(*)
-  real(kind=dp),   device :: mp_d(*)
-  integer(kind=4), device :: sortp_d(*)
-  real(kind=dp),   device :: rho_d(1:twotondim,*)
-  real(kind=dp),   device :: nref_d(1:twotondim,*)
-  integer(kind=8), device :: hash_key_d(*)
-  integer(kind=4), device :: hash_val_d(*)
-  integer(kind=4), intent(in), value :: hash_size_d
-  integer(kind=4), device :: ckey_max_d(*)
-  integer(kind=8), device :: key_off_d(*)
-  integer(kind=4), device :: box_ckey_min_d(1:3,*)
-  integer(kind=4), device :: box_ckey_max_d(1:3,*)
-  logical,         device :: periodic_d(1:3)
-  real(kind=8), intent(in), value :: skip1, skip2, skip3
-  real(kind=8), intent(in), value :: dx_loc, vol_loc
-  real(kind=8), intent(in), value :: m_refine_at_level, mass_cut_refine
-  integer(kind=4), intent(in), value :: ilevel
-  integer(kind=4), intent(in), value :: head_idx
-  integer(kind=4), intent(in), value :: num_parts
-
-  integer :: thread_idx, block_idx, idx, isort, ipart, idim
-  integer :: ox, oy, oz, igrid, icell
-  integer(kind=4) :: host_ckey(1:3), target_ckey(1:3), father_ckey(1:3), ii(1:3)
-  integer(kind=4) :: box_min(1:3), box_max(1:3)
-  integer(kind=8) :: nx, offset, key, ix8, iy8, iz8
-  real(kind=8) :: skip(1:3), x(1:3), frac(1:3)
-  real(kind=8) :: wx(0:2), wy(0:2), wz(0:2), weight, deposit, nref_add
-  real(kind=dp) :: old_value
-  logical :: in_domain
-
-  thread_idx = threadIdx%x - 1
-  block_idx  = blockIdx%x  - 1
-  idx = thread_idx + block_idx * blockDim%x
-  if (idx >= num_parts) return
-
-  isort = head_idx + idx
-  ipart = sortp_d(isort)
-
-  skip(1) = skip1
-  skip(2) = skip2
-  skip(3) = skip3
-
-  host_ckey = 0
-  frac = 0d0
-  do idim = 1, ndim
-     x(idim) = (xp_d(ipart + (idim-1)*leading) + skip(idim)) / dx_loc
-     host_ckey(idim) = floor(x(idim))
-     frac(idim) = x(idim) - real(host_ckey(idim), kind=8)
-  end do
-
-  wx(0) = max(0d0, 0.5d0 - frac(1))
-  wx(1) = 1d0 - abs(frac(1) - 0.5d0)
-  wx(2) = max(0d0, frac(1) - 0.5d0)
-  wy = 0d0
-  wz = 0d0
-  wy(1) = 1d0
-  wz(1) = 1d0
-  if (ndim >= 2) then
-     wy(0) = max(0d0, 0.5d0 - frac(2))
-     wy(1) = 1d0 - abs(frac(2) - 0.5d0)
-     wy(2) = max(0d0, frac(2) - 0.5d0)
-  endif
-  if (ndim >= 3) then
-     wz(0) = max(0d0, 0.5d0 - frac(3))
-     wz(1) = 1d0 - abs(frac(3) - 0.5d0)
-     wz(2) = max(0d0, frac(3) - 0.5d0)
-  endif
-
-  box_min = 0
-  box_max = 0
-  do idim = 1, ndim
-     box_min(idim) = box_ckey_min_d(idim, ilevel+1)
-     box_max(idim) = box_ckey_max_d(idim, ilevel+1)
-  end do
-
-  do oz = -1, 1
-     do oy = -1, 1
-        do ox = -1, 1
-           weight = wx(ox+1) * wy(oy+1) * wz(oz+1)
-
-           target_ckey = 0
-           target_ckey(1) = host_ckey(1) + ox
-           if (ndim >= 2) target_ckey(2) = host_ckey(2) + oy
-           if (ndim >= 3) target_ckey(3) = host_ckey(3) + oz
-
-           in_domain = .true.
-           do idim = 1, ndim
-              if (periodic_d(idim)) then
-                 if (target_ckey(idim) < box_min(idim))  target_ckey(idim) = box_max(idim) - 1
-                 if (target_ckey(idim) >= box_max(idim)) target_ckey(idim) = box_min(idim)
-              else
-                 if (target_ckey(idim) < box_min(idim))  in_domain = .false.
-                 if (target_ckey(idim) >= box_max(idim)) in_domain = .false.
-              endif
-           end do
-           if (.not. in_domain) cycle
-
-           father_ckey = target_ckey / 2
-           ii = target_ckey - 2 * father_ckey
-           icell = 1
-           do idim = 1, ndim
-              icell = icell + ii(idim) * (2**(idim-1))
-           end do
-
-           ix8 = int(father_ckey(1), kind=8)
-           iy8 = int(father_ckey(2), kind=8)
-           iz8 = int(father_ckey(3), kind=8)
-           nx  = int(ckey_max_d(ilevel), kind=8)
-           offset = key_off_d(ilevel)
-           key = offset + ix8 + iy8*nx + iz8*nx*nx
-           igrid = hash_get(hash_key_d, hash_val_d, hash_size_d, key)
-           if (igrid == 0) cycle
-
-           deposit = mp_d(ipart) * weight / vol_loc
-           old_value = atomicadd(rho_d(icell, igrid), deposit)
-
-           if (m_refine_at_level >= 0d0) then
-              if (mass_cut_refine > 0d0) then
-                 if (mp_d(ipart) < mass_cut_refine) then
-                    nref_add = weight
-                 else
-                    nref_add = 0d0
-                 endif
-              else
-                 nref_add = weight
-              endif
-              if (nref_add /= 0d0) old_value = atomicadd(nref_d(icell, igrid), nref_add)
-           endif
-        end do
-     end do
-  end do
-end subroutine cic_part_atomic_kernel
 
 !> Host dispatcher for CIC deposition (§15.16 segmented-reduction redesign).
 !>
@@ -1437,9 +1297,9 @@ end subroutine cic_part_atomic_kernel
 !>   Step 0c   GPU multipole_q reduction at ilevel == levelmin (§15.20,
 !>             Stage d) — replaces the prior serial host loop which read
 !>             stale host mp/xp when data_on_device=.true.
-!>   Deposit   Either cic_part_atomic_kernel (default, A/B reference) or
-!>             the per-cell segmented reduction under -DGPU_CIC_SEGMENTED
-!>             (cic_weight_kernel + cic_block_reduce_kernel per outer k).
+!>   Deposit   Per-cell segmented reduction (cic_weight_kernel +
+!>             cic_block_reduce_kernel per outer k = 1..threetondim).
+!>             No global atomics on rho/nref.
 subroutine gpu_cic_part(sim, ilevel, rtype)
   use nvtx
   use ramses_commons, only: ramses_t
@@ -1450,11 +1310,9 @@ subroutine gpu_cic_part(sim, ilevel, rtype)
   integer(kind=4) :: head_idx, num_parts, leading, num_grids, total_cells
   integer(kind=4) :: total_dest_entries, total_sum_unused
   integer :: num_threads, num_blocks, k, idim
+  integer :: deposit_block_size, deposit_num_blocks
   real(kind=8) :: dx_loc, vol_loc, skip1, skip2, skip3
   real(kind=8) :: q_host(1:ndim+1)
-#ifdef GPU_CIC_SEGMENTED
-  integer :: deposit_block_size, deposit_num_blocks
-#endif
 
   call nvtxStartRange("gpu_cic_part", color=4) ! purple
 
@@ -1555,12 +1413,13 @@ subroutine gpu_cic_part(sim, ilevel, rtype)
   call GPU_Error_Check("gpu/gpu_part.cuf", 0)
 
   ! ============================================================
-  ! Deposit. Default = atomic kernel (A/B reference). Segmented
-  ! redesign behind -DGPU_CIC_SEGMENTED until harness greens.
+  ! §15.16 Steps 1+2+3 — segmented deposit. One block per source
+  ! cell, outer loop k = 1..threetondim. NO global atomics on rho
+  ! / nref: within iteration k, distinct source cells map to
+  ! distinct destinations (lattice bijection mod periodic wrap);
+  ! the threetondim outer iterations are serialized by the host.
   ! ============================================================
 
-#ifdef GPU_CIC_SEGMENTED
-  ! §15.16 Stage (c). One block per source cell, outer loop on k = 1..27.
   deposit_block_size = 256
   deposit_num_blocks = total_cells
   num_threads = 128
@@ -1579,16 +1438,6 @@ subroutine gpu_cic_part(sim, ilevel, rtype)
           sim%r%m_refine(ilevel), k, num_grids)
   end do
   call GPU_Error_Check("gpu/gpu_part.cuf", 0)
-#else
-  num_threads = 128
-  num_blocks  = (num_parts + num_threads - 1) / num_threads
-  call cic_part_atomic_kernel<<<num_blocks, num_threads>>>(xp, mp, sortp, rho, nref, &
-       hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, &
-       box_ckey_min, box_ckey_max, periodic, &
-       skip1, skip2, skip3, dx_loc, vol_loc, sim%r%m_refine(ilevel), sim%r%mass_cut_refine, &
-       ilevel, head_idx, num_parts, leading)
-  call GPU_Error_Check("gpu/gpu_part.cuf", 0)
-#endif
 
   call nvtxEndRange()
 end subroutine gpu_cic_part
