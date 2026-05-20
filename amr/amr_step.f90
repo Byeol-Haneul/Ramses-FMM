@@ -313,6 +313,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   end if
 #ifdef FMM
     if(ilevel==r%levelmin) then
+      call m_timer('poisson','start')
       do ilev=ilevel,r%nlevelmax
         call r_cleanup_fmm(pst, ilev, 1)
         if(pst%s%r%verbose) print *,'[FMM cleanup] LEVEL: ', ilev
