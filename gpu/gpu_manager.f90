@@ -114,11 +114,16 @@ recursive subroutine r_set_grid_device(pst)
         workp  = pst%s%p%workp
         idp    = pst%s%p%idp
 
-        ! Optional fields: allocate-and-copy only if host has them.
-        ! Each device mirror sized to its host counterpart's capacity.
+        ! Device `fp` is a GPU-private kick scratch (sized to xp capacity);
+        ! host `p%fp` is sink-only (init_part.f90:151) and unallocated on
+        ! DM/gravana runs, but the kick kernel still needs a real device
+        ! buffer to persist gathered force. Zero-init when host has none, so
+        ! `kick_part_dump`'s `ff_zero` reflects gather success.
+        allocate(fp(1:size(pst%s%p%xp, 1), 1:ndim))
         if (allocated(pst%s%p%fp)) then
-           allocate(fp(1:size(pst%s%p%fp, 1), 1:ndim))
-           fp = pst%s%p%fp
+           fp(1:size(pst%s%p%fp, 1), 1:ndim) = pst%s%p%fp
+        else
+           fp = 0d0
         endif
         if (allocated(pst%s%p%jp)) then
            allocate(jp(1:size(pst%s%p%jp, 1), 1:ndim))
