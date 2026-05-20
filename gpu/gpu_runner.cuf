@@ -1261,6 +1261,51 @@ contains
 
   end subroutine gpu_cic_multipole
 
+  subroutine gpu_cic_multipole2(sim, ilevel)
+    use nvtx
+    use rho_device, only: deposit_rho, multipole_tot
+    use ramses_commons, only: ramses_t
+    implicit none
+    type(ramses_t), intent(inout) :: sim
+    integer, intent(in) :: ilevel
+
+    integer(kind=4) :: head_idx, num_octs, num_blocks, num_threads
+    integer :: threadsX_per_block, threadsY_per_block
+    real(kind=8) :: dx, vol_loc
+    real(kind=8), device :: multipole_d(ndim+1)
+    real(kind=8) :: multipole_h(ndim+1)
+
+    dx      = real(sim%r%boxlen / 2**ilevel, kind=8)
+    vol_loc = dx**ndim
+
+    head_idx           = sim%m%head(ilevel)
+    num_octs           = sim%m%noct(ilevel)
+    threadsX_per_block = twotondim
+    threadsY_per_block = 16
+    num_blocks         = (num_octs + threadsY_per_block - 1) / threadsY_per_block
+
+    if (num_octs > 0) then
+       call nvtxStartRange("GPU cic_multipole2", color=1)!blue
+       call deposit_rho<<<num_blocks, dim3(threadsX_per_block, threadsY_per_block, 1)>>>( &
+            & unew, rho, grid, nbor, head_idx, num_octs, dx, vol_loc, sim%r%ngridmax)
+       call nvtxEndRange()
+    end if
+
+    if (ilevel == sim%r%levelmin) then
+       multipole_d = 0d0
+       num_threads = 256
+       num_blocks  = (num_octs * twotondim + num_threads - 1) / num_threads
+       if (num_octs > 0) then
+          call nvtxStartRange("GPU cic_multipole2 tot", color=1)!blue
+          call multipole_tot<<<num_blocks, num_threads>>>(unew, head_idx, num_octs, multipole_d)
+          call nvtxEndRange()
+       end if
+       multipole_h = multipole_d
+       sim%g%multipole%q = sim%g%multipole%q + multipole_h
+    end if
+
+  end subroutine gpu_cic_multipole2
+
   !> @brief
   !> Save old potential in array phi_old.
   !>
