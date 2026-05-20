@@ -380,7 +380,7 @@ contains
     integer(kind=4), intent(in), value :: head_idx, num_octs, ngridmax
     real(kind=8), intent(in), value :: dx, vol_loc
 
-    real(kind=dp) :: monopole
+    real(kind=dp) :: monopole, deposit
     real(kind=8) :: x_com(3), dg(3), dd(3), vol_cic(8)
     integer :: key_cic(3, 8), ig(3), id(3)
     integer :: oct_idx, cell_idx, idim, ind
@@ -399,7 +399,8 @@ contains
     if (.not. grid(oct_idx)%refined(cell_idx)) then
 
        ! Leaf cell: COM is at cell centre, full weight deposits onto self
-       info = atomicadd(rho(cell_idx, oct_idx), monopole / vol_loc)
+       deposit = monopole / vol_loc
+       info = atomicadd(rho(cell_idx, oct_idx), deposit)
 
     else
 
@@ -437,7 +438,8 @@ contains
           if (tgt_oct_idx > ngridmax) cycle
 
           tgt_cell_idx = 1 + tgt_cell_local(1) + 2*tgt_cell_local(2) + 4*tgt_cell_local(3)
-          info = atomicadd(rho(tgt_cell_idx, tgt_oct_idx), monopole * vol_cic(ind) / vol_loc)
+          deposit = monopole * vol_cic(ind) / vol_loc
+          info = atomicadd(rho(tgt_cell_idx, tgt_oct_idx), deposit)
        end do
 
     end if
