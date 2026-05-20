@@ -519,6 +519,164 @@ subroutine dump_split_window_part(stage, head_idx, num_parts, ilevel)
   end do
 end subroutine dump_split_window_part
 
+!> Per-slot kick gather dump: prints xp, vp, gathered ff (from fp), levelp, idp
+!> for the first lev8 `gpu_kick_drift_part(action=1)` call. Targets the
+!> first contiguous lev8 cluster from `315868` forensics (idp 1007296+).
+!> Called only when `debug_kick .and. ilevel == 8 .and. action_part == 1`.
+!> Reads device arrays via implicit device-to-host copy on slice assignment;
+!> no local `device, allocatable` scratch (NVHPC invariant).
+subroutine dump_kick_window_part(stage, head_idx, num_parts, ilevel, action_part, has_fp)
+  character(len=*), intent(in) :: stage
+  integer(kind=4),  intent(in) :: head_idx, num_parts, ilevel, action_part, has_fp
+
+  integer(kind=4), parameter :: NWIN_KICK_DUMP = 16
+  integer(i8b),    parameter :: IDP_LO = 1007296_i8b, IDP_HI = 1007426_i8b
+  integer(kind=4) :: nwin_eff, k, idim, n_idp_hits
+  integer(kind=4) :: slot
+  real(kind=dp)   :: xp_h(NWIN_KICK_DUMP, ndim)
+  real(kind=dp)   :: vp_h(NWIN_KICK_DUMP, ndim)
+  real(kind=dp)   :: fp_h(NWIN_KICK_DUMP, ndim)
+  integer(kind=4) :: levelp_h(NWIN_KICK_DUMP)
+  integer(i8b)    :: idp_h(NWIN_KICK_DUMP)
+  integer(i8b),    allocatable :: idp_full_h(:)
+  integer(kind=4), allocatable :: hit_slots_h(:)
+  integer(kind=4) :: m, n_print
+  logical         :: ff_zero
+  real(kind=dp)   :: ff_max
+
+  if (num_parts <= 0) return
+
+  ! Phase 1: head-of-range window (first NWIN_KICK_DUMP slots from head_idx).
+  ! Matches dump_split_window_part layout; gives an anchor independent of idp.
+  nwin_eff = min(NWIN_KICK_DUMP, num_parts)
+  idp_h(1:nwin_eff)    = idp(head_idx:head_idx + nwin_eff - 1)
+  levelp_h(1:nwin_eff) = levelp(head_idx:head_idx + nwin_eff - 1)
+  do idim = 1, ndim
+     xp_h(1:nwin_eff, idim) = xp(head_idx:head_idx + nwin_eff - 1, idim)
+     vp_h(1:nwin_eff, idim) = vp(head_idx:head_idx + nwin_eff - 1, idim)
+  end do
+  if (has_fp /= 0 .and. allocated(fp)) then
+     do idim = 1, ndim
+        fp_h(1:nwin_eff, idim) = fp(head_idx:head_idx + nwin_eff - 1, idim)
+     end do
+  else
+     fp_h(1:nwin_eff, 1:ndim) = 0d0
+  endif
+
+  do k = 1, nwin_eff
+     slot = head_idx + k - 1
+     ff_max = 0d0
+     do idim = 1, ndim
+        if (abs(fp_h(k, idim)) > ff_max) ff_max = abs(fp_h(k, idim))
+     end do
+     ff_zero = (has_fp == 0) .or. (ff_max == 0d0)
+     if (ndim == 3) then
+        write(*,'(A,A,A,A,I0,A,I0,A,I0,A,I0,A,I0,A,L1,A,3(1X,ES15.7),A,3(1X,ES15.7),A,3(1X,ES15.7))') &
+             ' kick_part_dump: stage=', trim(stage), ' band=head', &
+             ' ilevel=', ilevel, ' action=', action_part, &
+             ' slot=', slot, ' idp=', int(idp_h(k), kind=8), &
+             ' level=', levelp_h(k), ' ff_zero=', ff_zero, &
+             ' xp=', xp_h(k, 1), xp_h(k, 2), xp_h(k, 3), &
+             ' vp=', vp_h(k, 1), vp_h(k, 2), vp_h(k, 3), &
+             ' ff=', fp_h(k, 1), fp_h(k, 2), fp_h(k, 3)
+     else if (ndim == 2) then
+        write(*,'(A,A,A,A,I0,A,I0,A,I0,A,I0,A,I0,A,L1,A,2(1X,ES15.7),A,2(1X,ES15.7),A,2(1X,ES15.7))') &
+             ' kick_part_dump: stage=', trim(stage), ' band=head', &
+             ' ilevel=', ilevel, ' action=', action_part, &
+             ' slot=', slot, ' idp=', int(idp_h(k), kind=8), &
+             ' level=', levelp_h(k), ' ff_zero=', ff_zero, &
+             ' xp=', xp_h(k, 1), xp_h(k, 2), &
+             ' vp=', vp_h(k, 1), vp_h(k, 2), &
+             ' ff=', fp_h(k, 1), fp_h(k, 2)
+     else
+        write(*,'(A,A,A,A,I0,A,I0,A,I0,A,I0,A,I0,A,L1,A,1X,ES15.7,A,1X,ES15.7,A,1X,ES15.7)') &
+             ' kick_part_dump: stage=', trim(stage), ' band=head', &
+             ' ilevel=', ilevel, ' action=', action_part, &
+             ' slot=', slot, ' idp=', int(idp_h(k), kind=8), &
+             ' level=', levelp_h(k), ' ff_zero=', ff_zero, &
+             ' xp=', xp_h(k, 1), &
+             ' vp=', vp_h(k, 1), &
+             ' ff=', fp_h(k, 1)
+     endif
+  end do
+
+  ! Phase 2: idp-band scan. Pull idp(head:head+num_parts-1) to host once,
+  ! find slots whose idp falls in the C-verified first-cluster band
+  ! [IDP_LO, IDP_HI], then print up to NWIN_KICK_DUMP of them.
+  allocate(idp_full_h(1:num_parts))
+  idp_full_h(1:num_parts) = idp(head_idx:head_idx + num_parts - 1)
+  allocate(hit_slots_h(1:NWIN_KICK_DUMP))
+  n_idp_hits = 0
+  do k = 1, num_parts
+     if (idp_full_h(k) >= IDP_LO .and. idp_full_h(k) <= IDP_HI) then
+        n_idp_hits = n_idp_hits + 1
+        if (n_idp_hits <= NWIN_KICK_DUMP) then
+           hit_slots_h(n_idp_hits) = head_idx + k - 1
+        endif
+     endif
+  end do
+  deallocate(idp_full_h)
+
+  write(*,'(A,A,A,I0,A,I0,A,I0,A,I0,A,I0,A,I0,A,I0)') &
+       ' kick_part_csum: stage=', trim(stage), &
+       ' ilevel=', ilevel, ' action=', action_part, &
+       ' head=', head_idx, ' num=', num_parts, &
+       ' idp_lo=', int(IDP_LO, kind=8), ' idp_hi=', int(IDP_HI, kind=8), &
+       ' idp_hits=', n_idp_hits
+
+  n_print = min(n_idp_hits, NWIN_KICK_DUMP)
+  do m = 1, n_print
+     slot = hit_slots_h(m)
+     idp_h(1)    = idp(slot)
+     levelp_h(1) = levelp(slot)
+     do idim = 1, ndim
+        xp_h(1, idim) = xp(slot, idim)
+        vp_h(1, idim) = vp(slot, idim)
+     end do
+     if (has_fp /= 0 .and. allocated(fp)) then
+        do idim = 1, ndim
+           fp_h(1, idim) = fp(slot, idim)
+        end do
+     else
+        fp_h(1, 1:ndim) = 0d0
+     endif
+     ff_max = 0d0
+     do idim = 1, ndim
+        if (abs(fp_h(1, idim)) > ff_max) ff_max = abs(fp_h(1, idim))
+     end do
+     ff_zero = (has_fp == 0) .or. (ff_max == 0d0)
+     if (ndim == 3) then
+        write(*,'(A,A,A,A,I0,A,I0,A,I0,A,I0,A,I0,A,L1,A,3(1X,ES15.7),A,3(1X,ES15.7),A,3(1X,ES15.7))') &
+             ' kick_part_dump: stage=', trim(stage), ' band=idp ', &
+             ' ilevel=', ilevel, ' action=', action_part, &
+             ' slot=', slot, ' idp=', int(idp_h(1), kind=8), &
+             ' level=', levelp_h(1), ' ff_zero=', ff_zero, &
+             ' xp=', xp_h(1, 1), xp_h(1, 2), xp_h(1, 3), &
+             ' vp=', vp_h(1, 1), vp_h(1, 2), vp_h(1, 3), &
+             ' ff=', fp_h(1, 1), fp_h(1, 2), fp_h(1, 3)
+     else if (ndim == 2) then
+        write(*,'(A,A,A,A,I0,A,I0,A,I0,A,I0,A,I0,A,L1,A,2(1X,ES15.7),A,2(1X,ES15.7),A,2(1X,ES15.7))') &
+             ' kick_part_dump: stage=', trim(stage), ' band=idp ', &
+             ' ilevel=', ilevel, ' action=', action_part, &
+             ' slot=', slot, ' idp=', int(idp_h(1), kind=8), &
+             ' level=', levelp_h(1), ' ff_zero=', ff_zero, &
+             ' xp=', xp_h(1, 1), xp_h(1, 2), &
+             ' vp=', vp_h(1, 1), vp_h(1, 2), &
+             ' ff=', fp_h(1, 1), fp_h(1, 2)
+     else
+        write(*,'(A,A,A,A,I0,A,I0,A,I0,A,I0,A,I0,A,L1,A,1X,ES15.7,A,1X,ES15.7,A,1X,ES15.7)') &
+             ' kick_part_dump: stage=', trim(stage), ' band=idp ', &
+             ' ilevel=', ilevel, ' action=', action_part, &
+             ' slot=', slot, ' idp=', int(idp_h(1), kind=8), &
+             ' level=', levelp_h(1), ' ff_zero=', ff_zero, &
+             ' xp=', xp_h(1, 1), &
+             ' vp=', vp_h(1, 1), &
+             ' ff=', fp_h(1, 1)
+     endif
+  end do
+  deallocate(hit_slots_h)
+end subroutine dump_kick_window_part
+
 !> Partition particles coarse/fine and permute (host split_part).
 subroutine gpu_split_part(sim, ilevel)
   use nvtx
@@ -2172,6 +2330,17 @@ subroutine gpu_kick_drift_part(sim, ilevel, action_part)
           skip1, skip2, skip3, dx_loc, action_part, ilevel, head_idx, num_parts, leading, 0)
   endif
   call GPU_Error_Check("gpu/gpu_part.cuf", 0)
+
+  ! Per-slot kick window dump (Lev8 kick localization, first cluster from 315868).
+  ! GPU_Error_Check above issues cudaDeviceSynchronize; fp / xp / vp / levelp
+  ! are safe to read from host via implicit device-to-host slice copy.
+  if (debug_kick .and. ilevel == 8 .and. action_part == 1) then
+     if (allocated(fp)) then
+        call dump_kick_window_part("after_kernel", head_idx, num_parts, ilevel, action_part, 1)
+     else
+        call dump_kick_window_part("after_kernel", head_idx, num_parts, ilevel, action_part, 0)
+     endif
+  endif
 
   call nvtxEndRange()
 end subroutine gpu_kick_drift_part
