@@ -148,22 +148,39 @@ subroutine m_dump_all(pst,write_bkp_file)
      ! Output AMR data
      filename=TRIM(filedir)//'amr.'
      input_array=transfer(filename,input_array)
-     if(r%verbose)write(*,*)'Writing AMR files'
-     call r_output_amr(pst,input_array,flen/4,dummy,0)
+     ! Only write AMR data if output_amr is true OR if this is a backup
+     if(r%output_amr .or. write_bkp_file)then
+        if(r%verbose)write(*,*)'Writing AMR files'
+        call r_output_amr(pst,input_array,flen/4,dummy,0)
+     else
+        if(r%verbose)write(*,*)'Skipping AMR files'
+     endif
      
      ! Output HYDRO data
      if(r%hydro)then
         filename=TRIM(filedir)//'hydro.'
         input_array=transfer(filename,input_array)
-        if(r%verbose)write(*,*)'Writing hydro files'
-        call r_output_hydro(pst,input_array,flen/4,dummy,0)
+        ! Only write hydro data if output_hydro is true OR if this is a backup
+        if(r%output_hydro .or. write_bkp_file)then
+           if(r%verbose)write(*,*)'Writing hydro files'
+           call r_output_hydro(pst,input_array,flen/4,dummy,0)
+        else
+           if(r%verbose)write(*,*)'Skipping hydro files'
+        endif
      end if
 
      ! Output GRAV data
      if(r%poisson)then
+        filename=TRIM(filedir)//'grav.'
+        input_array=transfer(filename,input_array)
         in_output_poisson%filename=TRIM(filedir)//'grav.'
-        if(r%verbose)write(*,*)'Writing gravity files'
-        call r_output_poisson(pst,in_output_poisson,storage_size(in_output_poisson)/32)
+        ! Only write gravity data if output_grav is true OR if this is a backup
+        if(r%output_grav .or. write_bkp_file)then
+           if(r%verbose)write(*,*)'Writing gravity files'
+           call r_output_poisson(pst,in_output_poisson,storage_size(in_output_poisson)/32)
+        else
+           if(r%verbose)write(*,*)'Skipping gravity files'
+        endif
      end if
 
      ! Output PART data
@@ -502,7 +519,7 @@ end subroutine r_output_amr
 !#########################################################################
 !#########################################################################
 subroutine output_amr(s,filename)
-  use amr_parameters, only: ndim,flen
+  use amr_parameters, only: ndim,flen,twotondim
   use ramses_commons, only: ramses_t,open_file,close_file
   use mdl_module
   implicit none
@@ -510,8 +527,8 @@ subroutine output_amr(s,filename)
   character(LEN=flen)::filename
   !-----------------------------------
   ! Output amr grid to file
-  !-----------------------------------  
-  integer::ilun,ilevel,igrid
+  !-----------------------------------
+  integer::ilun,ilevel,igrid,ind,refined_int
   integer(kind=8),dimension(s%r%levelmin:s%r%nlevelmax)::nskip
 
   associate(r=>s%r,g=>s%g,m=>s%m)
@@ -522,7 +539,11 @@ subroutine output_amr(s,filename)
      write(ilun,POS=nskip(ilevel))
      do igrid=m%head(ilevel),m%tail(ilevel)
         write(ilun)m%grid(igrid)%ckey
-        write(ilun)m%grid(igrid)%refined
+        refined_int=0
+        do ind=1,twotondim
+           if(m%grid(igrid)%refined(ind))refined_int=ibset(refined_int,ind-1)
+        end do
+        write(ilun)refined_int
      end do
   end do
 
@@ -536,7 +557,7 @@ end subroutine output_amr
 !#########################################################################
 !#########################################################################
 subroutine backup_amr(r,g,m,mdl,filename)
-  use amr_parameters, only: ndim, flen
+  use amr_parameters, only: ndim, flen, twotondim
   use amr_commons, only: run_t, global_t, mesh_t
   use mdl_module
   implicit none
@@ -548,7 +569,7 @@ subroutine backup_amr(r,g,m,mdl,filename)
   !-----------------------------------
   ! Output amr grid to restart file
   !-----------------------------------
-  integer::ilun,ierr,ilevel,igrid
+  integer::ilun,ierr,ilevel,igrid,ind,refined_int
   character(LEN=flen)::fileloc
   character(LEN=5)::nchar
   logical::file_exist
@@ -571,7 +592,11 @@ subroutine backup_amr(r,g,m,mdl,filename)
   do ilevel=r%levelmin,r%nlevelmax
      do igrid=m%head(ilevel),m%tail(ilevel)
         write(ilun)m%grid(igrid)%ckey
-        write(ilun)m%grid(igrid)%refined
+        refined_int=0
+        do ind=1,twotondim
+           if(m%grid(igrid)%refined(ind))refined_int=ibset(refined_int,ind-1)
+        end do
+        write(ilun)refined_int
      end do
   end do
   close(ilun)

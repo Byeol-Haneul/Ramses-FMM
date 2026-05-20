@@ -15,7 +15,7 @@ subroutine vecpotentialinit(r,g,x,A,idim,nn)
   !================================================================
   ! This routine generates initial conditions for RAMSES.
   ! Positions are in user (aka code) units:
-  ! x(i,1:ndim) are in [0,boxlen]**ndim.
+  ! x(i,1:ndim) are in [0,box_size]**ndim.
   ! A is the component of the vector potential corresponding
   ! to direction idim.
   ! A(:) is in user (aka code) units.
@@ -47,8 +47,8 @@ subroutine vecpotentialinit(r,g,x,A,idim,nn)
   R0 = 0.3
   A0 = 1d-3
   do i = 1,nn
-     xx = x(i,1)-r%boxlen/2.0
-     yy = x(i,2)-r%boxlen/2.0
+     xx = x(i,1)-r%box_size(1)/2.0
+     yy = x(i,2)-r%box_size(2)/2.0
      if(idim==1)A(i) = 0.0
      if(idim==2)A(i) = 0.0
      if(idim==3)A(i) = A0*max(R0-sqrt(xx**2+yy**2),0.0d0)
@@ -69,8 +69,8 @@ subroutine vecpotentialinit(r,g,x,A,idim,nn)
   A0 = 0.1
   twopi = 2.0d0*ACOS(-1.0d0)
   do i = 1,nn
-     xx = x(i,1)-r%boxlen/2.0
-     yy = x(i,2)-r%boxlen/2.0
+     xx = x(i,1)-r%box_size(1)/2.0
+     yy = x(i,2)-r%box_size(2)/2.0
      zz = x(i,3)
      rr = sqrt(xx**2+yy**2)
      if(rr > 0.0.and.rr < 2.0)then
@@ -79,7 +79,7 @@ subroutine vecpotentialinit(r,g,x,A,idim,nn)
         else
            tt=-acos(xx/rr)+twopi
         endif
-        A(i) = A0*(2d0-rr)*rr*cos(tt)*sin(twopi*zz/r%boxlen)
+        A(i) = A0*(2d0-rr)*rr*cos(tt)*sin(twopi*zz/r%box_size(1))
         if(idim==1)A(i) = A(i)*cos(tt)
         if(idim==2)A(i) = A(i)*sin(tt)
         if(idim==3)A(i) = 0.0

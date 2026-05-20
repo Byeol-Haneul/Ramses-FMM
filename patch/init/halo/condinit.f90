@@ -78,7 +78,7 @@ subroutine condinit(r,g,x,q,dx,nn)
   !================================================================
   ! This routine generates initial conditions for RAMSES.
   ! Positions are in user (aka code) units:
-  ! x(i,1:ndim) are in [0,boxlen]**ndim.
+  ! x(i,1:ndim) are in [0,box_size]**ndim.
   ! Q is the primitve variable vector. Conventions are here:
   ! Q(i,1): d, Q(i,2:4): d.u,d.v,d.w and Q(i,5): P.
   ! If nvar >= 6, remaining variables are treated as passive

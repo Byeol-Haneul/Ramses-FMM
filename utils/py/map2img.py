@@ -34,7 +34,7 @@ my_dpi = 96
 fig, ax = plt.subplots(figsize=(512/my_dpi, 512/my_dpi), dpi=my_dpi)
 
 if args.log:
-    dat=np.log10(dat)
+    dat=np.log10(np.where(dat > 0, dat, np.nan))
 
 col="viridis"
 if args.col:

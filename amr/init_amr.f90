@@ -111,12 +111,14 @@ subroutine init_amr(r,g,m,type)
   ! Store size in mesh object
   if(type=='amr')then
      m%ngridmax=r%ngridmax
+     m%ncachemax=MAX(r%ncachemax,10000)
   endif
   if(type=='mg')then
      m%ngridmax=r%ngridmax/7
+     m%ncachemax=MAX(r%ncachemax/7,10000)
   endif
   if(type=='fmm')then
-     m%ngridmax=r%ngridmax/7
+     m%ngridmax=MAX(r%ncachemax/7,10000)
   endif
   m%ncachemax=r%ncachemax
 
@@ -146,7 +148,7 @@ subroutine init_amr(r,g,m,type)
      father=0
      nbor=0
      ! Allocate hash table space
-     m%hash_size=2*(m%ngridmax + m%ncachemax)
+     m%hash_size=2*(m%ngridmax+m%ncachemax)
      allocate(hash_key(1:m%hash_size))
      allocate(hash_val(1:m%hash_size))
      hash_key=0
@@ -161,6 +163,21 @@ subroutine init_amr(r,g,m,type)
      swap_local=0
      swap_global=0
      prefix_sum=0
+  endif
+  if(type=='mg')then
+#ifdef GRAV
+     allocate(grid_mg(1:m%ngridmax+m%ncachemax))
+     allocate(father_mg(1:r%ngridmax+r%ngridmax/7+m%ncachemax))
+     allocate(nbor_mg(1:threetondim,1:m%ngridmax))
+     father_mg=0
+     nbor_mg=0
+     ! Allocate hash table space
+     m%hash_size=2*(m%ngridmax+m%ncachemax)
+     allocate(hash_key_mg(1:m%hash_size))
+     allocate(hash_val_mg(1:m%hash_size))
+     hash_key_mg=0
+     hash_val_mg=0
+#endif
   endif
 #endif
 
@@ -190,16 +207,35 @@ subroutine init_amr(r,g,m,type)
      allocate(m%nref(1:twotondim,1:m%ngridmax+m%ncachemax))
      allocate(m%f(1:twotondim,1:3,1:m%ngridmax+m%ncachemax))
      allocate(m%phi_old(1:twotondim,1:m%ngridmax+m%ncachemax))
+     m%f=0d0
+     m%rho=0d0
+     m%phi=0d0
+     m%nref=0d0
+     m%phi_old=0d0
 #endif
   endif
 
   ! Allocate the device arrays
 #ifdef _CUDA
   if(type=='amr')then
+#ifdef HYDRO
      allocate(uold(1:twotondim,1:nvar,1:m%ngridmax+m%ncachemax))
      allocate(unew(1:twotondim,1:nvar,1:m%ngridmax+m%ncachemax))
      uold=0d0
      unew=0d0
+#endif
+#ifdef GRAV
+     allocate(rho(1:twotondim,1:m%ngridmax+m%ncachemax))
+     allocate(phi(1:twotondim,1:m%ngridmax+m%ncachemax))
+     allocate(nref(1:twotondim,1:m%ngridmax+m%ncachemax))
+     allocate(f(1:twotondim,1:3,1:m%ngridmax+m%ncachemax))
+     allocate(phi_old(1:twotondim,1:m%ngridmax+m%ncachemax))
+     f=0d0
+     rho=0d0
+     phi=0d0
+     nref=0d0
+     phi_old=0d0
+#endif
   endif
 #endif
 
@@ -222,6 +258,16 @@ subroutine init_amr(r,g,m,type)
      err_code = cudaMalloc(grid_device_cptr, sizeof(m%grid))
      call c_f_pointer(grid_device_cptr, grid_device, [m%ngridmax+m%ncachemax])
   endif
+#endif
+
+  ! Allocate the device arrays
+#ifdef GRAV
+#ifdef _CUDA
+  if(type=='mg')then
+     allocate(phi_mg(1:twotondim,1:m%ngridmax+m%ncachemax))
+     allocate(f_mg(1:twotondim,1:3,1:m%ngridmax+m%ncachemax))
+  endif
+#endif
 #endif
 
   ! Allocate cache-related arrays
@@ -482,28 +528,30 @@ subroutine init_amr(r,g,m,type)
      m%tail_cache=0
      m%noct_cache=0
      m%ifree_cache=1
-  endif
-  ! Compute Cartesian key offset for GPU hash table
-  allocate(m%key_off(1:r%nlevelmax+1))
-  m%key_off(1)=1
-  do ilevel=2,r%nlevelmax+1
-     m%key_off(ilevel)=m%key_off(ilevel-1)+m%hkey_max(1,ilevel-1)
-  end do
-  ! Allocate and transfer bounding box to device
-  allocate(ckey_max(1:r%nlevelmax+1))
-  allocate(key_off(1:r%nlevelmax+1))
-  allocate(box_ckey_min(1:3,1:r%nlevelmax+1))
-  allocate(box_ckey_max(1:3,1:r%nlevelmax+1))
-  ckey_max=m%ckey_max
-  key_off=m%key_off
-  periodic=r%periodic
-  box_ckey_min=m%box_ckey_min
-  box_ckey_max=m%box_ckey_max
-  if(r%nbound>0)then
-     allocate(bound_ckey_min(1:3,1:r%nbound,1:r%nlevelmax+1))
-     allocate(bound_ckey_max(1:3,1:r%nbound,1:r%nlevelmax+1))
-     bound_ckey_min=m%bound_ckey_min
-     bound_ckey_max=m%bound_ckey_max
+     ! Compute Cartesian key offset for GPU hash table
+     allocate(m%key_off(1:r%nlevelmax+1))
+     m%key_off(1)=1
+     do ilevel=2,r%nlevelmax+1
+        m%key_off(ilevel)=m%key_off(ilevel-1)+m%hkey_max(1,ilevel-1)
+     end do
+     ! Allocate and transfer bounding box to device
+     allocate(ckey_max(1:r%nlevelmax+1))
+     allocate(key_off(1:r%nlevelmax+1))
+     allocate(box_ckey_min(1:3,1:r%nlevelmax+1))
+     allocate(box_ckey_max(1:3,1:r%nlevelmax+1))
+     ckey_max=m%ckey_max
+     key_off=m%key_off
+     periodic=r%periodic
+     box_size=r%box_size
+     constant_gravity=r%constant_gravity
+     box_ckey_min=m%box_ckey_min
+     box_ckey_max=m%box_ckey_max
+     if(r%nbound>0)then
+        allocate(bound_ckey_min(1:3,1:r%nbound,1:r%nlevelmax+1))
+        allocate(bound_ckey_max(1:3,1:r%nbound,1:r%nlevelmax+1))
+        bound_ckey_min=m%bound_ckey_min
+        bound_ckey_max=m%bound_ckey_max
+     endif
   endif
 #endif
 

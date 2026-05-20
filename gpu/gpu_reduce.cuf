@@ -182,3 +182,64 @@ attributes(device) function block_reduce_min(dt)
 end function block_reduce_min
 ! =========================================================================
 
+! =========================================================================
+!> @brief
+!> @brief
+!> Performs a reduction min within a warp.
+!>
+!> @param[in] mass : The variable to min over the warp
+attributes(device) subroutine warp_reduce_max(dt)
+  real(kind=8) :: dt
+
+  integer :: offset
+
+  offset = warpsize/2
+  do
+     if (offset.le.0) exit
+     dt = max(dt,__shfl_down(dt,offset))
+     offset = offset / 2
+  enddo
+
+end subroutine warp_reduce_max
+! =========================================================================
+
+! ==========================================================================
+!> @brief
+!> Performs a reduction min within a block.
+!>
+!> @param[in] mass : The variable to min over the block
+attributes(device) function block_reduce_max(dt)
+  implicit none
+  real(kind=8) :: block_reduce_max
+  real(kind=8) :: dt
+
+  real(kind=8), shared :: svalues(32)
+  integer :: tid, lane, wid
+
+  tid = threadIdx%x
+  lane = mod(tid-1,warpsize)+1
+  wid = (tid-1)/warpsize+1
+
+  ! each warp performs its own reduction
+  call warp_reduce_max(dt)
+
+  ! write reduced value to shared memory
+  if (lane.eq.1) svalues(wid) = dt
+
+  ! wait for all partial reductions
+  call syncthreads()
+
+  ! real from shared memory only if that warp existed
+  if (tid .le. ((blockdim%x) / warpsize)) then
+     dt = svalues(lane)
+  else
+     dt = - huge(0d0)
+  endif
+
+  ! final reduce within first warp
+  if (wid.eq.1) call warp_reduce_max(dt)
+  block_reduce_max = dt
+
+end function block_reduce_max
+! =========================================================================
+

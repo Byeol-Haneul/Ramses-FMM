@@ -1036,7 +1036,7 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
 
   dx_loc=r%boxlen/2**ilevel
   vol_loc=dx_loc**ndim
-  if (p%type/=TRAC_TYPE) return
+
   ! Tracer hydro cache (uold, mflux)
   call open_cache(mdl, m, pack_size=storage_size(dummy_hydro_mflux)/32, &
        pack=pack_fetch_kick_trac, unpack=unpack_fetch_kick_trac)
@@ -1250,6 +1250,7 @@ subroutine tsc_trace_gas_part(s,p,ilevel,action_part)
   if (p%type/=TRAC_TYPE) return
 
   dx_loc=r%boxlen/2**ilevel
+
   call open_cache(mdl, m, pack_size=storage_size(dummy_hydro_mflux)/32, &
        pack=pack_fetch_kick_trac, unpack=unpack_fetch_kick_trac)
   do ipart=p%headp(ilevel),p%tailp(ilevel)
@@ -1395,6 +1396,7 @@ subroutine pcs_trace_gas_part(s,p,ilevel,action_part)
   if (p%type/=TRAC_TYPE) return
 
   dx_loc=r%boxlen/2**ilevel
+
   call open_cache(mdl, m, pack_size=storage_size(dummy_hydro_mflux)/32, &
        pack=pack_fetch_kick_trac, unpack=unpack_fetch_kick_trac)
   do ipart=p%headp(ilevel),p%tailp(ilevel)
@@ -1557,6 +1559,7 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
    if (p%type/=TRAC_TYPE) return
  
    dx_loc=r%boxlen/2**ilevel
+
    dt_level=g%dtnew(ilevel)
    use_sgs = r%sgs_turb .and. (r%iturb>0)
  
@@ -1725,6 +1728,7 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
    if (p%type/=TRAC_TYPE) return
  
    dx_loc=r%boxlen/2**ilevel
+
    dt_level=g%dtnew(ilevel)
    use_sgs = r%sgs_turb .and. (r%iturb>0)
  
@@ -1897,6 +1901,7 @@ subroutine cic_trace_gas_part_sgs_turb(s,p,ilevel,action_part)
    if (p%type/=TRAC_TYPE) return
  
    dx_loc=r%boxlen/2**ilevel
+
    tol_corner=0.05d0
  
    if(action_part==action_kick_only)then
@@ -2538,7 +2543,7 @@ subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
 
   dx_loc=r%boxlen/2**ilevel
   vol_loc=dx_loc**ndim
-  if (p%type/=DUST_TYPE) return
+
   coeff=9.0d0*pi*r%gamma/128.0d0
   ! Dust hydro+gravity cache
   call open_cache(mdl, m, pack_size=storage_size(dummy_large_realdp)/32, &
@@ -2716,8 +2721,10 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
   if (p%type/=DUST_TYPE) return
 
   dx_loc=r%boxlen/2**ilevel
+
   pi=4.0d0*atan(1.0d0)
   coeff=9.0d0*pi*r%gamma/128.0d0
+
   call open_cache(mdl, m, pack_size=storage_size(dummy_large_realdp)/32, &
        pack=pack_fetch_kick_dust, unpack=unpack_fetch_kick_dust)
 #if NDIM==3
@@ -2860,8 +2867,8 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
   if(action_part==action_kick_drift)then
      do ipart=p%headp(ilevel),p%tailp(ilevel)
         do idim=1,ndim
-           if(p%xp(ipart,idim)<0.0d0)p%xp(ipart,idim)=p%xp(ipart,idim)+r%boxlen
-           if(p%xp(ipart,idim)>=r%boxlen)p%xp(ipart,idim)=p%xp(ipart,idim)-r%boxlen
+           if(p%xp(ipart,idim)<0.0d0)p%xp(ipart,idim)=p%xp(ipart,idim)+r%box_size(idim)
+           if(p%xp(ipart,idim)>=r%box_size(idim))p%xp(ipart,idim)=p%xp(ipart,idim)-r%box_size(idim)
         end do
      end do
   end if
@@ -2908,8 +2915,10 @@ subroutine pcs_kick_drift_dust(s,p,ilevel,action_part)
   if (p%type/=DUST_TYPE) return
 
   dx_loc=r%boxlen/2**ilevel
+
   pi=4.0d0*atan(1.0d0)
   coeff=9.0d0*pi*r%gamma/128.0d0
+
   call open_cache(mdl, m, pack_size=storage_size(dummy_large_realdp)/32, &
        pack=pack_fetch_kick_dust, unpack=unpack_fetch_kick_dust)
 #if NDIM==3
@@ -3065,8 +3074,8 @@ subroutine pcs_kick_drift_dust(s,p,ilevel,action_part)
   if(action_part==action_kick_drift)then
      do ipart=p%headp(ilevel),p%tailp(ilevel)
         do idim=1,ndim
-           if(p%xp(ipart,idim)<0.0d0)p%xp(ipart,idim)=p%xp(ipart,idim)+r%boxlen
-           if(p%xp(ipart,idim)>=r%boxlen)p%xp(ipart,idim)=p%xp(ipart,idim)-r%boxlen
+           if(p%xp(ipart,idim)<0.0d0)p%xp(ipart,idim)=p%xp(ipart,idim)+r%box_size(idim)
+           if(p%xp(ipart,idim)>=r%box_size(idim))p%xp(ipart,idim)=p%xp(ipart,idim)-r%box_size(idim)
         end do
      end do
   end if
@@ -3282,6 +3291,7 @@ end subroutine compute_lorentz_analytic
 !#########################################################################
 !#########################################################################
 !#########################################################################
+
 ! Weight computation subroutines for CIC and TSC interpolation
 !#########################################################################
 subroutine cic_weights_and_derivs(x, w1d, dw1d, il_out, ir_out, vol_out)
@@ -3301,7 +3311,7 @@ subroutine cic_weights_and_derivs(x, w1d, dw1d, il_out, ir_out, vol_out)
   real(kind=8),intent(out),optional::vol_out(1:twotondim)
   integer::idim,ind,ix,iy,iz
   real(kind=8)::xd
-
+#if NDIM==3
   do idim=1,ndim
      xd = x(idim) + 0.5d0
      if(present(ir_out)) ir_out(idim) = int(xd)
@@ -3324,6 +3334,10 @@ subroutine cic_weights_and_derivs(x, w1d, dw1d, il_out, ir_out, vol_out)
         end do
      end do
   end if
+#else
+  w1d=0
+  dw1d=0
+#endif
 end subroutine cic_weights_and_derivs
 
 subroutine tsc_weights_and_derivs(x, w1d, dw1d, il_out, ic_out, ir_out, vol_out)
@@ -3343,7 +3357,7 @@ subroutine tsc_weights_and_derivs(x, w1d, dw1d, il_out, ic_out, ir_out, vol_out)
   real(kind=8),intent(out),optional::vol_out(1:threetondim)
   integer::idim,il,ic,ir,ind,ix,iy,iz
   real(kind=8)::xd,xl,xc,xr
-
+#if NDIM==3
   do idim=1,ndim
      xd = x(idim)
      il = int(xd)-1
@@ -3377,6 +3391,10 @@ subroutine tsc_weights_and_derivs(x, w1d, dw1d, il_out, ic_out, ir_out, vol_out)
         end do
      end do
   end if
+#else
+  w1d=0
+  dw1d=0
+#endif
 end subroutine tsc_weights_and_derivs
 
 !#########################################################################
@@ -3392,8 +3410,8 @@ subroutine compute_gradient_cic_scalar(w1d, dw1d, field, grad_out)
   real(kind=8),intent(in)::field(1:twotondim)
   real(kind=8),intent(out)::grad_out(1:ndim)
   integer::ix,iy,iz,ind
-
   grad_out = 0.d0
+#if NDIM==3
   ind = 0
   do iz=1,2
      do iy=1,2
@@ -3405,6 +3423,7 @@ subroutine compute_gradient_cic_scalar(w1d, dw1d, field, grad_out)
         end do
      end do
   end do
+#endif
 end subroutine compute_gradient_cic_scalar
 
 subroutine compute_gradient_cic(w1d, dw1d, field, grad_out)
@@ -3418,8 +3437,8 @@ subroutine compute_gradient_cic(w1d, dw1d, field, grad_out)
   real(kind=8),intent(in)::field(1:ndim,1:twotondim)
   real(kind=8),intent(out)::grad_out(1:ndim)
   integer::ix,iy,iz,ind
-
   grad_out = 0.d0
+#if NDIM==3
   ind = 0
   do iz=1,2
      do iy=1,2
@@ -3431,6 +3450,7 @@ subroutine compute_gradient_cic(w1d, dw1d, field, grad_out)
         end do
      end do
   end do
+#endif
 end subroutine compute_gradient_cic
 
 subroutine compute_gradient_tsc_scalar(w1d, dw1d, field, grad_out)
@@ -3443,8 +3463,8 @@ subroutine compute_gradient_tsc_scalar(w1d, dw1d, field, grad_out)
   real(kind=8),intent(in)::field(1:threetondim)
   real(kind=8),intent(out)::grad_out(1:ndim)
   integer::ix,iy,iz,ind
-
   grad_out = 0.d0
+#if NDIM==3
   ind = 0
   do iz=1,3
      do iy=1,3
@@ -3456,6 +3476,7 @@ subroutine compute_gradient_tsc_scalar(w1d, dw1d, field, grad_out)
         end do
      end do
   end do
+#endif
 end subroutine compute_gradient_tsc_scalar
 
 subroutine compute_gradient_tsc(w1d, dw1d, field, grad_out)
@@ -3468,8 +3489,8 @@ subroutine compute_gradient_tsc(w1d, dw1d, field, grad_out)
   real(kind=8),intent(in)::field(1:ndim,1:threetondim)
   real(kind=8),intent(out)::grad_out(1:ndim)
   integer::ix,iy,iz,ind
-
   grad_out = 0.d0
+#if NDIM==3
   ind = 0
   do iz=1,3
      do iy=1,3
@@ -3481,6 +3502,7 @@ subroutine compute_gradient_tsc(w1d, dw1d, field, grad_out)
         end do
      end do
   end do
+#endif
 end subroutine compute_gradient_tsc
 
 !#########################################################################
@@ -3495,7 +3517,7 @@ subroutine wrap_cell_coords(st,x_cell,levelp1)
   integer,intent(in)::levelp1
   integer::jd
   real(kind=8)::range
-
+#if NDIM==3
   do jd=1,ndim
      if(st%r%periodic(jd))then
         range=dble(st%m%box_ckey_max(jd,levelp1)-st%m%box_ckey_min(jd,levelp1))
@@ -3504,6 +3526,7 @@ subroutine wrap_cell_coords(st,x_cell,levelp1)
         if(x_cell(jd)>=dble(st%m%box_ckey_max(jd,levelp1)))x_cell(jd)=x_cell(jd)-range
      endif
   end do
+#endif
 end subroutine wrap_cell_coords
 
 real(dp) function tracer_cell_kappa(dens_in,eturb_in,dx_in,smallr_in) result(kappa_val)
@@ -3511,7 +3534,7 @@ real(dp) function tracer_cell_kappa(dens_in,eturb_in,dx_in,smallr_in) result(kap
   implicit none
   real(dp),intent(in)::dens_in,eturb_in,dx_in,smallr_in
   real(dp)::rho_eff,sigma_sq
-
+#if NDIM==3
   rho_eff = max(dens_in,smallr_in)
   sigma_sq = max(2.0_dp*max(eturb_in,0.0_dp)/rho_eff,0.0_dp)
   if(sigma_sq>0.0_dp)then
@@ -3519,6 +3542,9 @@ real(dp) function tracer_cell_kappa(dens_in,eturb_in,dx_in,smallr_in) result(kap
   else
      kappa_val = 0.0_dp
   end if
+#else
+  kappa_val = 0.0_dp
+#endif
 end function tracer_cell_kappa
 
 subroutine sample_tracer_gaussian(vec)
@@ -3529,13 +3555,14 @@ subroutine sample_tracer_gaussian(vec)
   real(kind=8)::u_rand,tmp
   real(kind=8), external :: RngStream_RandUni
   external :: gaussdev
-
   vec=0.0d0
+#if NDIM==3
   do jd=1,ndim
      u_rand = RngStream_RandUni(tracer_rng)
      call gaussdev(u_rand,tmp)
      vec(jd)=tmp
   end do
+#endif
 end subroutine sample_tracer_gaussian
 
 subroutine sample_tracer_uniform(vec)
@@ -3545,13 +3572,14 @@ subroutine sample_tracer_uniform(vec)
   integer :: jd
   real(kind=8)::u_rand
   real(kind=8), external :: RngStream_RandUni
-
   vec=0.0d0
+#if NDIM==3
   do jd=1,ndim
      u_rand = RngStream_RandUni(tracer_rng)
      ! Uniform distribution [-sqrt(3), sqrt(3)] with variance 1
      vec(jd) = (2.0d0*u_rand - 1.0d0) * sqrt(3.0d0)
   end do
+#endif
 end subroutine sample_tracer_uniform
 
 subroutine sample_tracer_piecewise_skew_uniform(vec, gamma1_vec)
@@ -3566,8 +3594,8 @@ subroutine sample_tracer_piecewise_skew_uniform(vec, gamma1_vec)
   integer :: jd
   real(kind=8)::u_rand,gamma1,k,a,b,p_left,apb
   real(kind=8), external :: RngStream_RandUni
-
   vec=0.0d0
+#if NDIM==3
   do jd=1,ndim
      gamma1 = gamma1_vec(jd)
      ! Compute two-piece uniform parameters from skewness
@@ -3584,6 +3612,7 @@ subroutine sample_tracer_piecewise_skew_uniform(vec, gamma1_vec)
         vec(jd) = b * (u_rand * apb - b) / a
      endif
   end do
+#endif
 end subroutine sample_tracer_piecewise_skew_uniform
 
 real(kind=8) function mc_kernel_skewness(pr, pl) result(gamma1)
@@ -3593,7 +3622,7 @@ real(kind=8) function mc_kernel_skewness(pr, pl) result(gamma1)
   implicit none
   real(kind=8),intent(in)::pr, pl
   real(kind=8)::mu3, variance
-
+#if NDIM==3
   mu3 = (pr - pl) * (1.0d0 - 3.0d0*pl + 4.0d0*pl**2 - 2.0d0*pl**3 &
        & - 3.0d0*pr - 8.0d0*pl*pr + 2.0d0*pl**2*pr &
        & + 4.0d0*pr**2 + 2.0d0*pl*pr**2 - 2.0d0*pr**3)
@@ -3603,6 +3632,9 @@ real(kind=8) function mc_kernel_skewness(pr, pl) result(gamma1)
   else
      gamma1 = 0.0d0
   endif
+#else
+  gamma1 = 0.0d0
+#endif
 end function mc_kernel_skewness
 
 subroutine gather_cic_state(st,x_cell,level_in,dx_cell,use_sgs_in,vel_out,kappa_out)
@@ -3626,12 +3658,12 @@ subroutine gather_cic_state(st,x_cell,level_in,dx_cell,use_sgs_in,vel_out,kappa_
   real(kind=8)::rho,kappa_sum
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer::ind,icell,jd,igrid
-
   vel_out=0.d0
   momentum=0.d0
   rho=0.d0
   kappa_sum=0.d0
-
+  kappa_out=0.d0
+#if NDIM==3
   ! Build CIC weights, indices, and volume weights
   call cic_weights_and_derivs(x_cell, w1d, dw1d, il, ir, vol)
   do jd=1,ndim
@@ -3668,6 +3700,7 @@ subroutine gather_cic_state(st,x_cell,level_in,dx_cell,use_sgs_in,vel_out,kappa_
   else
      kappa_out=0.d0
   end if
+#endif
 end subroutine gather_cic_state
 
 subroutine gather_tsc_state(st,x_cell,level_in,dx_cell,use_sgs_in,vel_out,kappa_out)
@@ -3692,12 +3725,12 @@ subroutine gather_tsc_state(st,x_cell,level_in,dx_cell,use_sgs_in,vel_out,kappa_
   real(kind=8)::rho,kappa_sum
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer::ind,icell,jd,igrid
-
   vel_out=0.d0
   momentum=0.d0
   rho=0.d0
   kappa_sum=0.d0
-
+  kappa_out=0.d0
+#if NDIM==3
   ! Build TSC weights, indices, and volume weights
   call tsc_weights_and_derivs(x_cell, w1d, dw1d, il, ic, ir, vol)
   do jd=1,ndim
@@ -3734,6 +3767,7 @@ subroutine gather_tsc_state(st,x_cell,level_in,dx_cell,use_sgs_in,vel_out,kappa_
   else
      kappa_out=0.d0
   end if
+#endif
 end subroutine gather_tsc_state
 
 !#########################################################################

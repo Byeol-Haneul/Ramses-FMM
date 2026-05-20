@@ -4,7 +4,7 @@
 
 ! - VALUE: Integer (typically grid indices) are stored in the hash table.
 
-! - HASH FUNCTION: Simple hash function based on multiplication with constants.
+! - HASH FUNCTION: Simple hash function based on multiplication with hash_constants.
 ! - interface to murmur3 hash exists but is not used anymore
 
 ! - COLLISIONS: A linked list is used to deal with collisions.
@@ -14,7 +14,7 @@ module hash
   implicit none
 
   ! General module parameters
-  integer, dimension(0:3), parameter :: constants = (/5, -1640531527, 97, 1003313/)
+  integer, dimension(0:3), parameter :: hash_constants = (/5, -1640531527, 97, 1003313/)
 
   ! Define a bucket as a derived type
   type bucket
@@ -83,7 +83,7 @@ contains
   pure function hash_func(key)
     integer(kind=8), dimension(0:ndim), intent(in) :: key
     integer(kind=8)                                :: hash_func
-    hash_func = dot_product(key(0:ndim), constants(0:ndim))
+    hash_func = dot_product(key(0:ndim), hash_constants(0:ndim))
 !    hash_func = fnv1a(key)
   end function hash_func
   ! =============================================================================
@@ -438,7 +438,7 @@ contains
     full_hash = 0
     do idim = 0, ndim
        do i = 1, n
-          full_hash(i) = full_hash(i) + keys(i, idim) * constants(idim)
+          full_hash(i) = full_hash(i) + keys(i, idim) * hash_constants(idim)
        end do
     end do
 

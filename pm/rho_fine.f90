@@ -1,4 +1,7 @@
 module rho_fine_module
+#ifdef _CUDA
+  use gpu_runner, only: gpu_multipole_leaf, gpu_multipole_split, gpu_reset_rho, gpu_cic_multipole, gpu_cic_multipole2
+#endif
 contains
 !###############################################
 !###############################################
@@ -162,7 +165,15 @@ recursive subroutine r_multipole_leaf_cells(pst,ilevel,input_size)
      call r_multipole_leaf_cells(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
+#ifdef _CUDA
+     if(pst%s%m%data_on_device)then
+        call gpu_multipole_leaf(pst%s, ilevel)
+     else
+        call multipole_leaf_cells(pst%s%r,pst%s%g,pst%s%m,ilevel)
+     endif
+#else
      call multipole_leaf_cells(pst%s%r,pst%s%g,pst%s%m,ilevel)
+#endif
   endif
 
 end subroutine r_multipole_leaf_cells
@@ -171,7 +182,7 @@ end subroutine r_multipole_leaf_cells
 !###########################################################
 !###########################################################
 subroutine multipole_leaf_cells(r,g,m,ilevel)
-  use amr_parameters, only: ndim, twotondim
+  use amr_parameters, only: ndim, twotondim, dp
   use amr_commons, only: run_t, global_t, mesh_t
   use cache_commons
   implicit none
@@ -224,7 +235,7 @@ subroutine multipole_leaf_cells(r,g,m,ilevel)
            end do
 #ifdef HYDRO
            ! Add gas mass
-           mmm=max(m%uold(ind,1,igrid),r%smallr)*vol_loc
+           mmm=max(m%uold(ind,1,igrid),real(r%smallr,kind=dp))*vol_loc
            m%unew(ind,1,igrid)=m%unew(ind,1,igrid)+mmm
            do idim=1,ndim
               m%unew(ind,idim+1,igrid)=m%unew(ind,idim+1,igrid)+mmm*xx(idim)
@@ -268,7 +279,15 @@ recursive subroutine r_multipole_split_cells(pst,ilevel,input_size)
      call r_multipole_split_cells(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
+#ifdef _CUDA
+     if(pst%s%m%data_on_device)then
+        call gpu_multipole_split(pst%s, ilevel)
+     else
+        call multipole_split_cells(pst%s,ilevel)
+     endif
+#else
      call multipole_split_cells(pst%s,ilevel)
+#endif
   endif
 
 end subroutine r_multipole_split_cells
@@ -433,7 +452,15 @@ recursive subroutine r_reset_rho(pst,ilevel,input_size)
      call r_reset_rho(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
+#ifdef _CUDA
+     if(pst%s%m%data_on_device)then
+        call gpu_reset_rho(pst%s, ilevel)
+     else
+        call reset_rho(pst%s%r,pst%s%g,pst%s%m,ilevel)
+     endif
+#else
      call reset_rho(pst%s%r,pst%s%g,pst%s%m,ilevel)
+#endif
   endif
 
 end subroutine r_reset_rho
@@ -489,7 +516,16 @@ recursive subroutine r_cic_multipole(pst,ilevel,input_size)
      call r_cic_multipole(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
+#ifdef _CUDA
+     if(pst%s%m%data_on_device)then
+!        call gpu_cic_multipole(pst%s, ilevel)
+        call gpu_cic_multipole2(pst%s, ilevel)
+     else
+        call cic_multipole(pst%s,ilevel)
+     endif
+#else
      call cic_multipole(pst%s,ilevel)
+#endif
   endif
 
 end subroutine r_cic_multipole
