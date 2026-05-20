@@ -394,15 +394,18 @@ with open(file_amr, "wb") as f_amr, open(file_hydro, "wb") as f_hydro:
         print("Writing amr file")
 
         # write amr data
-        size = ngrid[ilevel-1]*(ndim+2**ndim)
+        stride = ndim+1
+        size = ngrid[ilevel-1]*stride
         out_array = np.empty(size,dtype=np.int32)
-        out_array[0::11] = xg
-        out_array[1::11] = yg
-        out_array[2::11] = zg
-        for iind in range(0,8):
+        out_array[0::stride] = xg
+        out_array[1::stride] = yg
+        out_array[2::stride] = zg
+        refined_int = np.zeros(ngrid[ilevel-1],dtype=np.int32)
+        for iind in range(0,2**ndim):
             jind = true_ind[iind]-1
-            out_1 = refined[jind::8].astype(np.int32)
-            out_array[3+iind::11] = out_1[ind]
+            mask = refined[jind::2**ndim].astype(np.int32)
+            refined_int = refined_int | (mask[ind] << iind)
+        out_array[ndim::stride] = refined_int
         f_amr.seek(0,2)
         out_array.tofile(f_amr)
 

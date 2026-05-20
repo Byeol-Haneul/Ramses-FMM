@@ -163,7 +163,7 @@ subroutine open_file(s,filename,nskip,ilun)
 
      do ilevel=r%levelmin,r%nlevelmax
         nskip(ilevel)=iskip
-        if(index(filename,'amr').NE.0)iskip=iskip+(4*ndim+4*twotondim)*noct(ilevel)
+        if(index(filename,'amr').NE.0)iskip=iskip+(4*ndim+4)*noct(ilevel)
 #ifdef MHD
         if(index(filename,'hydro').NE.0)iskip=iskip+(4*twotondim*(nvar+3))*noct(ilevel)
 #else
@@ -251,7 +251,7 @@ subroutine close_file(s,filename,nskip,ilun)
 
      do ilevel=r%levelmin,r%nlevelmax
         iskip=nskip(ilevel)
-        if(index(filename,'amr').NE.0)iskip=iskip+(4*ndim+4*twotondim)*m%noct(ilevel)
+        if(index(filename,'amr').NE.0)iskip=iskip+(4*ndim+4)*m%noct(ilevel)
 #ifdef MHD
         if(index(filename,'hydro').NE.0)iskip=iskip+(4*twotondim*(nvar+3))*m%noct(ilevel)
 #else

@@ -204,8 +204,10 @@ contains
     threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
 
+    call nvtxStartRange("GPU sync_hydro", color=0)!green
     call sync_hydro<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(uold, f, constant_gravity, &
          & head_idx, num_octs, gamma, dt)
+    call nvtxEndRange()
 
   end subroutine gpu_sync_hydro
 
@@ -237,8 +239,10 @@ contains
     threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
 
+    call nvtxStartRange("GPU grav_hydro", color=0)!green
     call grav_hydro<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(uold, unew, f, constant_gravity, &
          & head_idx, num_octs, gamma, dt)
+    call nvtxEndRange()
 
   end subroutine gpu_grav_hydro
 
@@ -299,6 +303,7 @@ contains
   !> @param[in] ilevel : The refinement level to update
   !>
   subroutine gpu_upload(sim, ilevel)
+    use nvtx
     use hydro_device, only: upload_kernel
     use ramses_commons, only: ramses_t
     type(ramses_t), intent(inout)::sim
@@ -313,7 +318,9 @@ contains
     num_blocks = (num_octs + num_threads - 1) / num_threads
 
     if (num_octs > 0) then
+       call nvtxStartRange("GPU upload", color=0)!green
        call upload_kernel<<<num_blocks, num_threads>>>(grid, father, uold, head_idx, num_octs)
+       call nvtxEndRange()
     endif
 
   end subroutine gpu_upload
@@ -326,6 +333,7 @@ contains
   !> @param[in] ilevel : The refinement level to update
   !>
   subroutine gpu_cooling(sim, ilevel)
+    use nvtx
     use cooling_device, only: cooling_kernel
     use ramses_commons, only: ramses_t
     type(ramses_t), intent(inout) :: sim
@@ -345,10 +353,12 @@ contains
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
 
     if (num_octs > 0) then
+       call nvtxStartRange("GPU cooling", color=0)!green
        call cooling_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(uold, grid, &
             & head_idx, num_octs, &
             & sim%r%gamma, sim%g%dtnew(ilevel), sim%r%eos_type, sim%r%eos_T2, sim%r%eos_nH, sim%r%eos_index, &
             & scale_T2, scale_nH)
+       call nvtxEndRange()
     end if
 
   end subroutine gpu_cooling
@@ -389,8 +399,10 @@ contains
     num_threads = 128
     num_blocks = (num_octs + num_threads - 1) / num_threads
     if (num_octs > 0) then
+       call nvtxStartRange("GPU refine", color=2)!yellow
        call free_hash_kernel<<<num_blocks, num_threads>>>(grid, hash_key, hash_val, sim%m%hash_size, &
             & ckey_max, key_off, head_idx, num_octs)
+       call nvtxEndRange()
     endif
     sim%m%ifree_cache = head_cache
 
@@ -405,9 +417,11 @@ contains
     threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
     if (num_octs > 0) then
+       call nvtxStartRange("GPU refine", color=2)!yellow
        call refine_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(grid, flag1, &
             & uold, f, phi, phi_old, &
             & ifree, head_idx, num_octs)
+       call nvtxEndRange()
     endif
 
     ! Copy back to host new free memory pointer ifree
@@ -430,8 +444,10 @@ contains
     num_threads = 128
     num_blocks = (num_octs + num_threads - 1) / num_threads
     if (num_octs > 0) then
+       call nvtxStartRange("GPU refine", color=2)!yellow
        call insert_hash_kernel<<<num_blocks, num_threads>>>(grid, hash_key, hash_val, sim%m%hash_size, &
             & ckey_max, key_off, head_idx, num_octs)
+       call nvtxEndRange()
     end if
 
     ! Remove old octs by setting lev to zero and free their hash table entry
@@ -441,8 +457,10 @@ contains
        num_threads = 128
        num_blocks = (num_octs + num_threads - 1) / num_threads
        if (num_octs > 0) then
+          call nvtxStartRange("GPU refine", color=2)!yellow
           call derefine_kernel<<<num_blocks, num_threads>>>(grid, flag1, hash_key, hash_val, sim%m%hash_size, &
                & ckey_max, key_off, head_idx, num_octs)
+          call nvtxEndRange()
        endif
     end do
 
@@ -456,7 +474,9 @@ contains
 
     ! Init global swap table
     if (num_octs > 0) then
+       call nvtxStartRange("GPU refine", color=2)!yellow
        call init_global_swap_table_kernel<<<num_blocks, num_threads>>>(swap_global, head_idx, num_octs)
+       call nvtxEndRange()
     endif
 
     ! Sort octs per levels using bucket sort
@@ -481,22 +501,30 @@ contains
        if (num_octs > 0) then
 
           ! Init prefix sum
+          call nvtxStartRange("GPU refine", color=2)!yellow
           call init_prefix_sum_level<<<num_blocks, num_threads>>>(grid, swap_global, prefix_sum, &
                & head_idx, num_octs, ilev)
+          call nvtxEndRange()
 
           ! Compute prefix sum
+          call nvtxStartRange("GPU refine", color=2)!yellow
           call gpu_scan(head_idx, num_octs, new_noct)
+          call nvtxEndRange()
 
           ! Compute new noct
           new_noct = num_octs - new_noct
 
           ! Compute local swap table
+          call nvtxStartRange("GPU refine", color=2)!yellow
           call compute_local_swap_table<<<num_blocks, num_threads>>>(swap_local, swap_global, prefix_sum, &
                & head_idx, num_octs)
+          call nvtxEndRange()
 
           ! Update global swap table
+          call nvtxStartRange("GPU refine", color=2)!yellow
           call update_global_swap_table<<<num_blocks, num_threads>>>(swap_global, swap_local, &
                & head_idx, num_octs)
+          call nvtxEndRange()
 
        endif
 
@@ -531,19 +559,27 @@ contains
           do ibit = 0, ndim * ilev - 1
 
              ! Init prefix sum
+             call nvtxStartRange("GPU refine", color=2)!yellow
              call init_prefix_sum_bit<<<num_blocks, num_threads>>>(grid, swap_global, prefix_sum, &
                   & head_idx, num_octs, ibit)
+             call nvtxEndRange()
 
              ! Compute prefix sum
+             call nvtxStartRange("GPU refine", color=2)!yellow
              call gpu_scan(head_idx, num_octs, new_noct)
+             call nvtxEndRange()
 
              ! Compute local swap table
+             call nvtxStartRange("GPU refine", color=2)!yellow
              call compute_local_swap_table<<<num_blocks, num_threads>>>(swap_local, swap_global, prefix_sum, &
                   & head_idx, num_octs)
+             call nvtxEndRange()
 
              ! Update global swap table
+             call nvtxStartRange("GPU refine", color=2)!yellow
              call update_global_swap_table<<<num_blocks, num_threads>>>(swap_global, swap_local, &
                   & head_idx, num_octs)
+             call nvtxEndRange()
 
           end do
 
@@ -560,6 +596,7 @@ contains
 
     ! Out-of-place sort of grid, flag1, uold and grav variables using swap table
     if (num_octs > 0) then
+       call nvtxStartRange("GPU refine", color=2)!yellow
        call sort_gather_grid<<<num_blocks, num_threads>>>(flag2, grid, swap_global, head_idx, num_octs)
        call sort_scatter_grid<<<num_blocks, num_threads>>>(grid, flag2, head_idx, num_octs)
        call sort_gather_flag<<<num_blocks, num_threads>>>(flag2, flag1, swap_global, head_idx, num_octs)
@@ -580,12 +617,15 @@ contains
        call sort_gather_phi<<<num_blocks, num_threads>>>(nref, phi_old, swap_global, head_idx, num_octs)
        call sort_scatter_phi<<<num_blocks, num_threads>>>(phi_old, nref, head_idx, num_octs)
 #endif
+       call nvtxEndRange()
     endif
 
     ! Update hash table
     if (num_octs > 0) then
+       call nvtxStartRange("GPU refine", color=2)!yellow
        call update_hash_kernel<<<num_blocks, num_threads>>>(grid, hash_key, hash_val, sim%m%hash_size, &
             & ckey_max, key_off, head_idx, num_octs)
+       call nvtxEndRange()
     end if
 
     info = cudaDeviceSynchronize()
@@ -593,8 +633,10 @@ contains
 
     ! Update father index array (they should always exist without MPI)
     if (num_octs > 0) then
+       call nvtxStartRange("GPU refine", color=2)!yellow
        call update_father_array<<<num_blocks, num_threads>>>(grid, father, hash_key, hash_val, sim%m%hash_size, &
             & ckey_max, key_off, head_idx, num_octs)
+       call nvtxEndRange()
     endif
 
     ! Update nbor index array level by level
@@ -622,14 +664,20 @@ contains
           do ind = 1, subgridsize
 
              ! Get nbor index from hash table
+             call nvtxStartRange("GPU refine", color=2)!yellow
              call update_nbor_array<<<num_blocks, num_threads>>>(nbor, grid, hash_key, hash_val, sim%m%hash_size, &
                   & ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, head_idx, num_subgrids, ind)
+             call nvtxEndRange()
 
              ! Init prefix sum (count non existing nbor index)
+             call nvtxStartRange("GPU refine", color=2)!yellow
              call init_prefix_sum_nbor<<<num_blocks, num_threads>>>(nbor, prefix_sum, head_idx, num_subgrids, ind)
+             call nvtxEndRange()
 
              ! Compute prefix sum
+             call nvtxStartRange("GPU refine", color=2)!yellow
              call gpu_scan(head_idx, num_subgrids, new_noct)
+             call nvtxEndRange()
 
              ! Transfer head index of first free cache oct from device
              head_cache = sim%r%ngridmax + sim%m%ifree_cache
@@ -647,21 +695,28 @@ contains
                 endif
 
                 ! Compute cache swap table
-                call compute_cache_swap_table<<<num_blocks, num_threads>>>(swap_local, prefix_sum, head_idx, num_subgrids)
+                call nvtxStartRange("GPU refine", color=2)!yellow
+                call compute_cache_swap_table<<<num_blocks, num_threads>>>(swap_local, prefix_sum, &
+                     & head_idx, num_subgrids)
+                call nvtxEndRange()
 
                 ! Make new ghost octs in cache
+                call nvtxStartRange("GPU refine", color=2)!yellow
                 call make_cache_octs<<<num_blocks_2, num_threads_2>>>(grid, flag1, &
                      & uold, f, phi, phi_old, swap_local, father, nbor, &
                      & hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, &
                      & head_cache, new_noct, ind)
+                call nvtxEndRange()
 
                 ! Insert new octs in hash table
+                call nvtxStartRange("GPU refine", color=2)!yellow
                 call insert_hash_kernel<<<num_blocks_2, num_threads_2>>>(grid, hash_key, hash_val, sim%m%hash_size, &
                      & ckey_max, key_off, head_cache, new_noct)
+                call nvtxEndRange()
 
              end if
 
-             ! Store new first free cache oct 
+             ! Store new first free cache oct
              sim%m%ifree_cache = new_ifree
 
           end do
@@ -705,7 +760,9 @@ contains
     threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
     if (num_octs > 0) then
+       call nvtxStartRange("GPU init_flag", color=2)!yellow
        call reset_flag1_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(flag1, head_idx, num_octs)
+       call nvtxEndRange()
     endif
 
     head_idx = sim%m%head(ilevel+1)
@@ -713,7 +770,9 @@ contains
     num_threads = 128
     num_blocks = (num_octs + num_threads - 1) / num_threads
     if (num_octs > 0) then
+       call nvtxStartRange("GPU init_flag", color=2)!yellow
        call init_flag_kernel<<<num_blocks, num_threads>>>(flag1, grid, father, head_idx, num_octs)
+       call nvtxEndRange()
     endif
 
     nflag_d = 0
@@ -723,7 +782,9 @@ contains
     num_threads = 256
     num_blocks = (num_octs * twotondim + num_threads - 1 ) / num_threads
     if (num_octs > 0) then
+       call nvtxStartRange("GPU init_flag", color=2)!yellow
        call count_flag1_kernel<<<num_blocks, num_threads>>>(flag1, head_idx, num_octs, nflag_d)
+       call nvtxEndRange()
     endif
 
     nflag_h = nflag_d
@@ -751,9 +812,10 @@ contains
     num_octs = sim%m%noct(ilevel)
     num_threads = 128
     num_blocks = (num_octs + num_threads - 1) / num_threads
-
     if (num_octs > 0) then
+       call nvtxStartRange("GPU enforce_subgrid", color=2)!yellow
        call enforce_subgrid_kernel<<<num_blocks, num_threads>>>(flag1, head_idx, num_octs)
+       call nvtxEndRange()
     endif
 
   end subroutine gpu_enforce_subgrid
@@ -799,8 +861,10 @@ contains
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
 
     if(num_octs > 0)then
+       call nvtxStartRange("GPU user_flag", color=2)!yellow
        call poisson_flag_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(flag1, nref, uold, &
             & head_idx, num_octs, gamma, mass_sph, m_refine, jeans_refine, factG, dx)
+       call nvtxEndRange()
     endif
 
     head_idx = sim%m%head(ilevel)
@@ -810,8 +874,10 @@ contains
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
 
     if(num_octs > 0)then
+       call nvtxStartRange("GPU user_flag", color=2)!yellow
        call hydro_flag_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(flag1, grid, nbor, uold, &
             & head_idx, num_octs, gamma, err_grad_d, err_grad_p, floor_d, floor_p)
+       call nvtxEndRange()
     endif
 
     nflag_d = 0
@@ -822,7 +888,9 @@ contains
     num_blocks = (num_octs * twotondim + num_threads - 1 ) / num_threads
 
     if (num_octs > 0) then
+       call nvtxStartRange("GPU user_flag", color=2)!yellow
        call count_flag1_kernel<<<num_blocks, num_threads>>>(flag1, head_idx, num_octs, nflag_d)
+       call nvtxEndRange()
     endif
 
     nflag_h = nflag_d
@@ -857,10 +925,12 @@ contains
 
     if(num_octs > 0)then
        do idim = 1, ndim ! Loop over steps
+          call nvtxStartRange("GPU smooth_flag", color=2)!yellow
           call count_neighbors<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(flag2, flag1, nbor, &
                & head_idx, num_octs)
           call flag_count_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(flag1, flag2, &
                & head_idx, num_octs, n_nbor(idim))
+          call nvtxEndRange()
        end do
     endif
 
@@ -871,7 +941,9 @@ contains
     num_threads = 256
     num_blocks = (num_octs * twotondim + num_threads - 1 ) / num_threads
     if (num_octs > 0) then
+       call nvtxStartRange("GPU smooth_flag", color=2)!yellow
        call count_flag1_kernel<<<num_blocks, num_threads>>>(flag1, head_idx, num_octs, nflag_d)
+       call nvtxEndRange()
     endif
 
     nflag_h = nflag_d
@@ -901,7 +973,9 @@ contains
     num_threads = 128
     num_blocks = (num_octs + num_threads - 1) / num_threads
     if(num_octs > 0)then
+       call nvtxStartRange("GPU enforce_rules", color=2)!yellow
        call enforce_rules<<<num_blocks, num_threads>>>(flag1, nbor, head_idx, num_octs, sim%m%ngridmax)
+       call nvtxEndRange()
     endif
 
   end subroutine gpu_enforce_rules
@@ -1019,10 +1093,11 @@ contains
     num_octs = sim%m%ifree - 1
     threads_per_block = 128
     num_blocks = (num_octs + threads_per_block - 1) / threads_per_block
-
     if (num_octs > 0) then
+       call nvtxStartRange("GPU reset_hash", color=2)!yellow
        call insert_hash_kernel<<<num_blocks, threads_per_block>>>(grid, hash_key, hash_val, &
             & sim%m%hash_size, ckey_max, key_off, head_idx, num_octs)
+       call nvtxEndRange()
     endif
 
     ! Insert entire cache in the device hash table
@@ -1030,10 +1105,11 @@ contains
     num_octs = sim%m%ifree_cache - 1
     threads_per_block = 128
     num_blocks = (num_octs + threads_per_block - 1) / threads_per_block
-
     if (num_octs > 0) then
+       call nvtxStartRange("GPU reset_hash", color=2)!yellow
        call insert_hash_kernel<<<num_blocks, threads_per_block>>>(grid, hash_key, hash_val, &
             & sim%m%hash_size, ckey_max, key_off, head_idx, num_octs)
+       call nvtxEndRange()
     endif
 
   end subroutine gpu_reset_hash
@@ -1045,6 +1121,7 @@ contains
   !> This is useful for pure particle runs.
   !>
   subroutine gpu_reset_rho(sim, ilevel)
+    use nvtx
     use rho_device, only: reset_rho
     use ramses_commons, only: ramses_t
     type(ramses_t), intent(inout) :: sim
@@ -1058,9 +1135,10 @@ contains
     threadsX_per_block = 8
     threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
-
     if (num_octs > 0) then
+       call nvtxStartRange("GPU reset_rho", color=1)!blue
        call reset_rho<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(rho, nref, head_idx, num_octs)
+       call nvtxEndRange()
     end if
 
   end subroutine gpu_reset_rho
@@ -1072,6 +1150,7 @@ contains
   !> This is used to initialize the multipole upward pass.
   !>
   subroutine gpu_multipole_leaf(sim, ilevel)
+    use nvtx
     use rho_device, only: multipole_leaf
     use ramses_commons, only: ramses_t
     type(ramses_t), intent(inout) :: sim
@@ -1088,10 +1167,11 @@ contains
     threadsX_per_block = 8
     threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
-
     if (num_octs > 0) then
+       call nvtxStartRange("GPU multipole_leaf", color=1)!blue
        call multipole_leaf<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(unew, uold, grid, &
             & head_idx, num_octs, dx)
+       call nvtxEndRange()
     end if
 
   end subroutine gpu_multipole_leaf
@@ -1103,6 +1183,7 @@ contains
   !> Get multipole from children cells to perform the multipole upward pass.
   !>
   subroutine gpu_multipole_split(sim, ilevel)
+    use nvtx
     use rho_device, only: multipole_upload, multipole_tot
     use ramses_commons, only: ramses_t
     implicit none
@@ -1116,9 +1197,10 @@ contains
     num_octs = sim%m%noct(ilevel+1)
     num_threads = 256
     num_blocks = (num_octs + num_threads - 1) / num_threads
-
     if (num_octs > 0) then
+       call nvtxStartRange("GPU multipole_split", color=1)!blue
        call multipole_upload<<<num_blocks, num_threads>>>(grid, father, unew, head_idx, num_octs)
+       call nvtxEndRange()
     end if
 
   end subroutine gpu_multipole_split
@@ -1133,6 +1215,7 @@ contains
   !> @param[in] ilevel : The refinement level to update
   !>
   subroutine gpu_cic_multipole(sim, ilevel)
+    use nvtx
     use rho_device, only: multipole_cic
     use ramses_commons, only: ramses_t
     type(ramses_t), intent(inout)::sim
@@ -1150,10 +1233,11 @@ contains
     num_subgrids = sim%m%noct(ilevel) / nsubgridtondim
     num_blocks = num_subgrids
     num_threads = 64
-
     if (num_subgrids > 0) then
+       call nvtxStartRange("GPU cic_multipole", color=1)!blue
        call multipole_cic<<<num_blocks, num_threads>>>(unew, rho, grid, nbor, &
             & head_idx, num_subgrids, dx, box_size, periodic, sim%r%ngridmax)
+       call nvtxEndRange()
     endif
 
     if (ilevel == sim%r%levelmin) then
@@ -1164,9 +1248,10 @@ contains
        num_octs = sim%m%noct(ilevel)
        num_threads = 256
        num_blocks = (num_octs * twotondim + num_threads - 1 ) / num_threads
-
        if (num_octs > 0) then
+          call nvtxStartRange("GPU cic_multipole", color=1)!blue
           call multipole_tot<<<num_blocks, num_threads>>>(unew, head_idx, num_octs, multipole_d)
+          call nvtxEndRange()
        end if
 
        multipole_h = multipole_d
@@ -1176,6 +1261,51 @@ contains
 
   end subroutine gpu_cic_multipole
 
+  subroutine gpu_cic_multipole2(sim, ilevel)
+    use nvtx
+    use rho_device, only: deposit_rho, multipole_tot
+    use ramses_commons, only: ramses_t
+    implicit none
+    type(ramses_t), intent(inout) :: sim
+    integer, intent(in) :: ilevel
+
+    integer(kind=4) :: head_idx, num_octs, num_blocks, num_threads
+    integer :: threadsX_per_block, threadsY_per_block
+    real(kind=8) :: dx, vol_loc
+    real(kind=8), device :: multipole_d(ndim+1)
+    real(kind=8) :: multipole_h(ndim+1)
+
+    dx      = real(sim%r%boxlen / 2**ilevel, kind=8)
+    vol_loc = dx**ndim
+
+    head_idx           = sim%m%head(ilevel)
+    num_octs           = sim%m%noct(ilevel)
+    threadsX_per_block = twotondim
+    threadsY_per_block = 16
+    num_blocks         = (num_octs + threadsY_per_block - 1) / threadsY_per_block
+
+    if (num_octs > 0) then
+       call nvtxStartRange("GPU cic_multipole2", color=1)!blue
+       call deposit_rho<<<num_blocks, dim3(threadsX_per_block, threadsY_per_block, 1)>>>( &
+            & unew, rho, grid, nbor, head_idx, num_octs, dx, vol_loc, sim%r%ngridmax)
+       call nvtxEndRange()
+    end if
+
+    if (ilevel == sim%r%levelmin) then
+       multipole_d = 0d0
+       num_threads = 256
+       num_blocks  = (num_octs * twotondim + num_threads - 1) / num_threads
+       if (num_octs > 0) then
+          call nvtxStartRange("GPU cic_multipole2 tot", color=1)!blue
+          call multipole_tot<<<num_blocks, num_threads>>>(unew, head_idx, num_octs, multipole_d)
+          call nvtxEndRange()
+       end if
+       multipole_h = multipole_d
+       sim%g%multipole%q = sim%g%multipole%q + multipole_h
+    end if
+
+  end subroutine gpu_cic_multipole2
+
   !> @brief
   !> Save old potential in array phi_old.
   !>
@@ -1183,6 +1313,7 @@ contains
   !> This is useful for potential time extrapolation.
   !>
   subroutine gpu_save_phi_old(sim, ilevel)
+    use nvtx
     use mg_device, only: save_phi_old
     use ramses_commons, only: ramses_t
     type(ramses_t), intent(inout) :: sim
@@ -1198,8 +1329,10 @@ contains
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
 
     if (num_octs > 0) then
+       call nvtxStartRange("GPU save_phi_old", color=1)!blue
        call save_phi_old<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(phi_old, phi, &
             & head_idx, num_octs)
+       call nvtxEndRange()
     end if
 
   end subroutine gpu_save_phi_old
@@ -1213,6 +1346,7 @@ contains
   !> fine level using phi and phi_old.
   !>
   subroutine gpu_init_phi(sim, ilevel, icount)
+    use nvtx
     use mg_device, only: reset_phi, make_initial_phi
     use ramses_commons, only: ramses_t
     type(ramses_t), intent(inout) :: sim
@@ -1239,15 +1373,19 @@ contains
 
     ! Reset phi and 3-components of force to zero
     if (num_octs > 0) then
+       call nvtxStartRange("GPU init_phi", color=1)!blue
        call reset_phi<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(phi, f, &
             & head_idx, num_octs)
+       call nvtxEndRange()
     endif
 
     ! Interpolate phi from coarser level
     if (ilevel > sim%r%levelmin) then
        if (num_octs > 0) then
+          call nvtxStartRange("GPU init_phi", color=1)!blue
           call make_initial_phi<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(grid, father, &
                & nbor, phi, phi_old, tfrac, head_idx, num_octs, sim%m%ngridmax)
+          call nvtxEndRange()
        endif
     endif
 
@@ -1262,8 +1400,10 @@ contains
     ! Interpolate phi from coarser level
     if (ilevel > sim%r%levelmin) then
        if (num_octs > 0) then
+          call nvtxStartRange("GPU init_phi", color=1)!blue
           call make_initial_phi<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(grid, father, &
                & nbor, phi, phi_old, tfrac, head_idx, num_octs, sim%m%ngridmax)
+          call nvtxEndRange()
        endif
     endif
 
@@ -1277,6 +1417,7 @@ contains
   !> So we set 1 in inner domain octs.
   !>
   subroutine gpu_make_mask(sim, ilevel)
+    use nvtx
     use mg_device, only: reset_mask_kernel
     use ramses_commons, only: ramses_t
     type(ramses_t), intent(inout) :: sim
@@ -1285,17 +1426,18 @@ contains
     integer(kind=4) :: head_idx, num_octs
     integer :: threadsX_per_block, threadsY_per_block, num_threads, num_blocks
 
+    ! Set mask to 1 inside domain
+    ! We preserve the force in ghost cells stored in the cache
     head_idx = sim%m%head(ilevel)
     num_octs = sim%m%noct(ilevel)
     threadsX_per_block = 8
     threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
-
-    ! Set mask to 1 inside domain
-    ! We preserve the force in ghost cells stored in the cache
     if (num_octs > 0) then
+       call nvtxStartRange("GPU make_mask", color=1)!blue
        call reset_mask_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(f, &
             & head_idx, num_octs, 1d0)
+       call nvtxEndRange()
     endif
 
   end subroutine gpu_make_mask
@@ -1308,6 +1450,7 @@ contains
   !> the potential at the boundary. The new problem is now phi=0 at the boundary.
   !>
   subroutine gpu_make_rhs(sim, ilevel)
+    use nvtx
     use mg_device, only: reset_rhs_kernel
     use ramses_commons, only: ramses_t
     type(ramses_t), intent(inout) :: sim
@@ -1317,6 +1460,10 @@ contains
     integer :: threadsX_per_block, threadsY_per_block, num_threads, num_blocks
     real(kind=8) :: fourpi, offset, dx, oneoverdx2
 
+    ! Modify the rhs to account for boundary conditions.
+    ! From now on, boundary conditions are phi = 0.
+    ! We preserve phi in the ghost cells stored in the cache.
+    ! Note that the mask is only defined in the inner cells, not in the ghost cells.
     fourpi = 4.D0*ACOS(-1.0D0)
     dx  = sim%r%boxlen/2**ilevel
     oneoverdx2 = 1.0d0/(dx*dx)
@@ -1328,14 +1475,11 @@ contains
     threadsX_per_block = 8
     threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
-
-    ! Modify the rhs to account for boundary conditions.
-    ! From now on, boundary conditions are phi = 0.
-    ! We preserve phi in the ghost cells stored in the cache.
-    ! Note that the mask is only defined in the inner cells, not in the ghost cells.
     if (num_octs > 0) then
+       call nvtxStartRange("GPU make_rhs", color=1)!blue
        call reset_rhs_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(phi, rho, f, nbor, &
             & head_idx, num_octs, sim%m%ngridmax, fourpi, offset, oneoverdx2)
+       call nvtxEndRange()
     end if
 
   end subroutine gpu_make_rhs
@@ -1352,6 +1496,7 @@ contains
   !> @param[in] ilevel : The refinement level to update
   !>
   subroutine gpu_build_mg(sim, ilevel, ifine)
+    use nvtx
     use mg_device
     use refine_device, only: insert_hash_kernel, update_nbor_array
     use ramses_commons, only: ramses_t
@@ -1383,14 +1528,18 @@ contains
     head_mg = sim%m_mg%head(ifine-1)
 
     ! Init prefix sum (count new parent octs)
+    call nvtxStartRange("GPU build_mg", color=1)!blue
     if (ifine == ilevel) then
        call init_prefix_sum_mg<<<num_blocks, num_threads>>>(grid, prefix_sum, head_idx, num_octs)
     else
        call init_prefix_sum_mg<<<num_blocks, num_threads>>>(grid_mg, prefix_sum, head_idx, num_octs)
     endif
+    call nvtxEndRange()
 
     ! Compute prefix sums
+    call nvtxStartRange("GPU build_mg", color=1)!blue
     call gpu_scan(head_idx, num_octs, new_noct)
+    call nvtxEndRange()
 
     if (new_noct > 0) then
 
@@ -1405,9 +1554,12 @@ contains
        endif
 
        ! Compute MG father swap table
+       call nvtxStartRange("GPU build_mg", color=1)!blue
        call compute_father_swap_table<<<num_blocks, num_threads>>>(swap_local, prefix_sum, head_idx, num_octs)
+       call nvtxEndRange()
 
        ! Make new MG octs
+       call nvtxStartRange("GPU build_mg", color=1)!blue
        if (ifine == ilevel) then
           call make_father_octs<<<num_blocks_2, num_threads_2>>>(grid, grid_mg, f_mg, phi_mg, swap_local, &
                & head_mg, new_noct)
@@ -1415,22 +1567,29 @@ contains
           call make_father_octs<<<num_blocks_2, num_threads_2>>>(grid_mg, grid_mg, f_mg, phi_mg, swap_local, &
                & head_mg, new_noct)
        endif
+       call nvtxEndRange()
 
        ! Insert new octs in hash table
+       call nvtxStartRange("GPU build_mg", color=1)!blue
        call insert_hash_kernel<<<num_blocks_2, num_threads_2>>>(grid_mg, hash_key_mg, hash_val_mg, &
             & sim%m_mg%hash_size, ckey_max, key_off, head_mg, new_noct)
+       call nvtxEndRange()
 
     end if
 
     ! Compute final father array
     if (ifine == ilevel) then
+       call nvtxStartRange("GPU build_mg", color=1)!blue
        call update_father_array<<<num_blocks, num_threads>>>(father_mg, grid, grid_mg, &
             & hash_key_mg, hash_val_mg, sim%m_mg%hash_size, &
             & ckey_max, key_off, head_idx, head_father, num_octs)
+       call nvtxEndRange()
     else
+       call nvtxStartRange("GPU build_mg", color=1)!blue
        call update_father_array<<<num_blocks, num_threads>>>(father_mg, grid_mg, grid_mg, &
             & hash_key_mg, hash_val_mg, sim%m_mg%hash_size, &
             & ckey_max, key_off, head_idx, head_father, num_octs)
+       call nvtxEndRange()
     endif
 
     ! Store new first free cache oct
@@ -1447,8 +1606,10 @@ contains
 
     if (num_octs > 0) then
        do ind = 1, threetondim
+          call nvtxStartRange("GPU build_mg", color=1)!blue
           call update_nbor_array<<<num_blocks, num_threads>>>(nbor_mg, grid_mg, hash_key_mg, hash_val_mg, &
                & sim%m_mg%hash_size, ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, head_idx, num_octs, ind)
+          call nvtxEndRange()
        end do
     end if
 
@@ -1464,6 +1625,7 @@ contains
   !> @param[in] ilevel : The refinement level to update
   !>
   subroutine gpu_clean_mg(sim)
+    use nvtx
     use refine_device, only: free_hash_kernel
     use ramses_commons, only: ramses_t
     implicit none
@@ -1475,10 +1637,11 @@ contains
     num_octs = sim%m_mg%tail(sim%r%bound_levelmin)
     num_threads = 128
     num_blocks = (num_octs + num_threads - 1) / num_threads
-
     if (num_octs > 0) then
+       call nvtxStartRange("GPU clean_mg", color=1)!blue
        call free_hash_kernel<<<num_blocks, num_threads>>>(grid_mg, hash_key_mg, hash_val_mg, sim%m_mg%hash_size, &
             & ckey_max, key_off, head_idx, num_octs)
+       call nvtxEndRange()
     endif
 
     sim%m_mg%head=1
@@ -1496,6 +1659,7 @@ contains
   !> @param[in] ilevel : The refinement level to update
   !>
   subroutine gpu_restrict_mask(sim, ilevel, ifine, allmasked)
+    use nvtx
     use mg_device
     use ramses_commons, only: ramses_t
     implicit none
@@ -1518,10 +1682,11 @@ contains
     threadsX_per_block = 8
     threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
-
     if (num_octs > 0) then
+       call nvtxStartRange("GPU restrict_mask", color=1)!blue
        call reset_mask_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(f_mg, &
             & head_idx, num_octs, 0d0)
+       call nvtxEndRange()
     endif
 
     ! Restrict mask from fine level to volume fraction in coarse level
@@ -1536,8 +1701,8 @@ contains
     endif
     num_threads = 256
     num_blocks = (num_octs + num_threads - 1) / num_threads
-
     if (num_octs > 0) then
+       call nvtxStartRange("GPU restrict_mask", color=1)!blue
        if (ifine == ilevel) then
           call restrict_mask<<<num_blocks, num_threads>>>(grid, father_mg, f, f_mg, &
                & head_idx, head_father, num_octs)
@@ -1545,6 +1710,7 @@ contains
           call restrict_mask<<<num_blocks, num_threads>>>(grid_mg, father_mg, f_mg, f_mg, &
                & head_idx, head_father, num_octs)
        endif
+       call nvtxEndRange()
     endif
 
     ! Convert back from volume fraction (0 to 1) to mask (-1 to 1) at coarse level
@@ -1552,11 +1718,12 @@ contains
     num_octs = sim%m_mg%noct(ifine-1)
     num_threads = 256
     num_blocks = (num_octs * twotondim + num_threads - 1 ) / num_threads
-
     if (num_octs > 0) then
+       call nvtxStartRange("GPU restrict_mask", color=1)!blue
        mask_max = -1d0
        call volume_to_mask<<<num_blocks, num_threads>>>(f_mg, head_idx, num_octs, mask_max)
        mask_max_host = mask_max
+       call nvtxEndRange()
        allmasked = (mask_max_host <= 0d0)
     endif
 
@@ -1571,6 +1738,7 @@ contains
   !> @param[in] ilevel : The refinement level to update
   !>
   subroutine gpu_cmp_residual(sim, ilevel, ifine)
+    use nvtx
     use mg_device
     use ramses_commons, only: ramses_t
     implicit none
@@ -1599,8 +1767,8 @@ contains
     threadsX_per_block = 8
     threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
-
     if (num_octs > 0) then
+       call nvtxStartRange("GPU cmp_residual", color=1)!blue
        if (ifine == ilevel) then
           call cmp_residual<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(phi, f, nbor, &
                & head_idx, num_octs, fourpi, offset, oneoverdx2, sim%m%ngridmax)
@@ -1608,6 +1776,7 @@ contains
           call cmp_residual<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(phi_mg, f_mg, nbor_mg, &
                & head_idx, num_octs, fourpi, offset, oneoverdx2, sim%m_mg%ngridmax)
        endif
+       call nvtxEndRange()
     endif
 
   end subroutine gpu_cmp_residual
@@ -1621,6 +1790,7 @@ contains
   !> @param[in] ilevel : The refinement level to update
   !>
   subroutine gpu_gauss_seidel(sim, ilevel, ifine, safe, redstep)
+    use nvtx
     use mg_device
     use ramses_commons, only: ramses_t
     implicit none
@@ -1648,8 +1818,8 @@ contains
     threadsX_per_block = 4
     threadsY_per_block = 32
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
-
     if (num_octs > 0) then
+       call nvtxStartRange("GPU gauss_seidel", color=1)!blue
        if (ifine == ilevel) then
           call gauss_seidel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(phi, f, nbor, &
                & head_idx, num_octs, dx2, safe, redstep, sim%m%ngridmax)
@@ -1657,6 +1827,7 @@ contains
           call gauss_seidel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(phi_mg, f_mg, nbor_mg, &
                & head_idx, num_octs, dx2, safe, redstep, sim%m_mg%ngridmax)
        endif
+       call nvtxEndRange()
     end if
 
   end subroutine gpu_gauss_seidel
@@ -1670,6 +1841,7 @@ contains
   !> @param[in] ilevel : The refinement level to update
   !>
   subroutine gpu_reset_corr(sim, ilevel)
+    use nvtx
     use mg_device
     use ramses_commons, only: ramses_t
     implicit none
@@ -1684,10 +1856,11 @@ contains
     threadsX_per_block = 8
     threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
-
     if (num_octs > 0) then
+       call nvtxStartRange("GPU reset_corr", color=1)!blue
        call reset_phi_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(phi_mg, &
             & head_idx, num_octs, 0d0)
+       call nvtxEndRange()
     endif
 
   end subroutine gpu_reset_corr
@@ -1701,6 +1874,7 @@ contains
   !> @param[in] ilevel : The refinement level to update
   !>
   subroutine gpu_restrict_residual(sim, ilevel, ifine)
+    use nvtx
     use mg_device
     use ramses_commons, only: ramses_t
     implicit none
@@ -1726,6 +1900,7 @@ contains
 
     ! Restrict mask from fine to coarse grid
     if (num_octs > 0) then
+       call nvtxStartRange("GPU restrict_residual", color=1)!blue
        if (ifine == ilevel) then
           call restrict_residual<<<num_blocks, num_threads>>>(grid, father_mg, f, f_mg, &
                & head_idx, head_father, num_octs)
@@ -1733,6 +1908,7 @@ contains
           call restrict_residual<<<num_blocks, num_threads>>>(grid_mg, father_mg, f_mg, f_mg, &
                & head_idx, head_father, num_octs)
        endif
+       call nvtxEndRange()
     end if
 
   end subroutine gpu_restrict_residual
@@ -1746,6 +1922,7 @@ contains
   !> @param[in] ilevel : The refinement level to update
   !>
   subroutine gpu_interpolate_correct(sim, ilevel, ifine)
+    use nvtx
     use mg_device
     use ramses_commons, only: ramses_t
     implicit none
@@ -1771,6 +1948,7 @@ contains
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
 
     if (num_octs > 0) then
+       call nvtxStartRange("GPU interpolate_correct", color=1)!blue
        if (ifine == ilevel) then
           call interpolate_correct<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(grid, &
                & father_mg, nbor_mg, phi, phi_mg, f, head_idx, head_father, num_octs)
@@ -1778,6 +1956,7 @@ contains
           call interpolate_correct<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(grid_mg, &
                & father_mg, nbor_mg, phi_mg, phi_mg, f_mg, head_idx, head_father, num_octs)
        endif
+       call nvtxEndRange()
     end if
 
   end subroutine gpu_interpolate_correct
@@ -1791,6 +1970,7 @@ contains
   !> @param[in] ilevel : The refinement level to update
   !>
   subroutine gpu_residual_norm2(sim, ilevel, norm)
+    use nvtx
     use mg_device
     use ramses_commons, only: ramses_t
     implicit none
@@ -1817,8 +1997,10 @@ contains
 
     ! Compute residual norm
     if (num_octs > 0) then
+       call nvtxStartRange("GPU residual_norm2", color=1)!blue
        call residual_norm<<<num_blocks, num_threads>>>(f, head_idx, num_octs, norm_tot)
        norm_tot_host = norm_tot ! device to host
+       call nvtxEndRange()
        norm = dx2 * norm_tot_host
     end if
 
@@ -1833,6 +2015,7 @@ contains
   !> @param[in] ilevel : The refinement level to update
   !>
   subroutine gpu_gradient_phi(sim, ilevel)
+    use nvtx
     use mg_device
     use ramses_commons, only: ramses_t
     implicit none
@@ -1851,10 +2034,11 @@ contains
     threadsX_per_block = 8
     threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
-
     if (num_octs > 0) then
+       call nvtxStartRange("GPU gradient_phi", color=1)!blue
        call gradient_phi<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(phi, f, nbor, &
             & head_idx, num_octs, dx)
+       call nvtxEndRange()
     end if
 
   end subroutine gpu_gradient_phi
@@ -1868,6 +2052,7 @@ contains
   !> @param[in] ilevel : The refinement level to update
   !>
   subroutine gpu_epot(sim, ilevel, epot)
+    use nvtx
     use mg_device
     use ramses_commons, only: ramses_t
     implicit none
@@ -1897,8 +2082,10 @@ contains
 
     ! Compute residual norm
     if (num_octs > 0) then
+       call nvtxStartRange("GPU epot", color=1)!blue
        call cmp_epot<<<num_blocks, num_threads>>>(f, head_idx, num_octs, epot_tot)
        epot_tot_host = epot_tot ! device to host
+       call nvtxEndRange()
        epot = fact * epot_tot_host
     end if
 
@@ -1913,6 +2100,7 @@ contains
   !> @param[in] ilevel : The refinement level to update
   !>
   subroutine gpu_rhomax(sim, ilevel, rhomax)
+    use nvtx
     use mg_device
     use ramses_commons, only: ramses_t
     implicit none
@@ -1937,8 +2125,10 @@ contains
 
     ! Compute residual norm
     if (num_octs > 0) then
+       call nvtxStartRange("GPU rhomax", color=1)!blue
        call cmp_rhomax<<<num_blocks, num_threads>>>(rho, head_idx, num_octs, rhomax_tot)
        rhomax_tot_host = rhomax_tot ! device to host
+       call nvtxEndRange()
        rhomax = rhomax_tot_host
     end if
 
