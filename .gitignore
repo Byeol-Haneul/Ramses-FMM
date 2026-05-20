@@ -10,7 +10,7 @@ utils/f90/*
 # ignore python cache files
 utils/py/*
 !utils/py/*.py
-*__pycache__*
+__pycache__/
 
 # ignore editor settings
 .vscode
@@ -54,6 +54,8 @@ fmm_hydro_amr
 faster_fmm
 fmm_spheres
 mg_spheres
+fmm_amr
+mg_amr
 
 # Ignore contents of any dot-prefixed directory (e.g. .bitwise_*/)
 .*/**
@@ -62,3 +64,5 @@ mg_spheres
 *.gif
 *.mp4
 analyze/compare_movies.ipynb
+dice_halo/
+analyze/spheres/__pycache__/

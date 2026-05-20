@@ -1779,7 +1779,8 @@ def visu(
     box=None,              # [xmin, xmax, ymin, ymax]
     grid=False,
     log=False,
-    colorbar=True
+    colorbar=True,
+    ax=None,               # NEW
 ):
     import numpy as np
     import matplotlib.pyplot as plt
@@ -1825,23 +1826,19 @@ def visu(
         y0 = y[i] - dx[i] / 2
         y1 = y[i] + dx[i] / 2
 
-        # skip cells completely outside plotting box
         if x1 <= xmin or x0 >= xmax or y1 <= ymin or y0 >= ymax:
             continue
 
-        # clip cell to plotting box
         x0c = max(x0, xmin)
         x1c = min(x1, xmax)
         y0c = max(y0, ymin)
         y1c = min(y1, ymax)
 
-        # convert to pixel indices
         ix0 = int(np.floor((x0c - xmin) * sx))
         ix1 = int(np.ceil((x1c - xmin) * sx))
         iy0 = int(np.floor((y0c - ymin) * sy))
         iy1 = int(np.ceil((y1c - ymin) * sy))
 
-        # clamp to valid image bounds
         ix0 = max(ix0, 0)
         iy0 = max(iy0, 0)
         ix1 = min(ix1, npix)
@@ -1850,14 +1847,20 @@ def visu(
         if ix1 > ix0 and iy1 > iy0:
             img[iy0:iy1, ix0:ix1] = val[i]
 
-    print("subset value range:", np.min(val), np.max(val))
+    print("subset value range:", np.nanmin(val), np.nanmax(val))
     if np.all(np.isnan(img)):
         print("image range: all NaN")
     else:
         print("image range:", np.nanmin(img), np.nanmax(img))
     print("spatial box:", [xmin, xmax, ymin, ymax])
 
-    fig, ax = plt.subplots(figsize=(6, 6), dpi=200)
+    # -----------------------------------
+    # figure / axis handling
+    # -----------------------------------
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(6, 6), dpi=200)
+    else:
+        fig = ax.figure
 
     im = ax.imshow(
         img,
@@ -1866,7 +1869,7 @@ def visu(
         cmap=cmap,
         vmin=vmin,
         vmax=vmax,
-        interpolation="nearest"
+        interpolation="nearest",
     )
 
     ax.set_aspect("equal")
@@ -1895,7 +1898,6 @@ def visu(
             y0 = y[i] - dx[i] / 2
             y1 = y[i] + dx[i] / 2
 
-            # skip cells outside box
             if x1 <= xmin or x0 >= xmax or y1 <= ymin or y0 >= ymax:
                 continue
 
@@ -1904,11 +1906,8 @@ def visu(
             y0c = max(y0, ymin)
             y1c = min(y1, ymax)
 
-            #t = 0.0 if lmax == lmin else (level[i] - lmin) / (lmax - lmin)
-            #lw = 0.5 * (1 - 0.7 * t)
-            
-            lw = 0.8 * 2 ** (-0.4 * (level[i]-1))
-            lw = max(lw, 0.05)
+            lw = 0.4 * 2 ** (-0.4 * (level[i] - 1))
+            lw = max(lw, 0.02)
 
             cell_edges = [
                 ((x0c, y0c), (x1c, y0c)),
@@ -1928,12 +1927,12 @@ def visu(
             lc = LineCollection(
                 segments,
                 colors=(0, 0, 0, 0.7),
-                linewidths=widths
+                linewidths=widths,
             )
             ax.add_collection(lc)
 
     if colorbar:
-        plt.colorbar(im, ax=ax, shrink=0.8)
+        fig.colorbar(im, ax=ax, shrink=0.8)
 
     return fig, ax, im
 
