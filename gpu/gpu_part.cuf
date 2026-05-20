@@ -2307,7 +2307,7 @@ subroutine gpu_kick_drift_part(sim, ilevel, action_part)
   endif
   num_blocks  = (num_parts + num_threads - 1) / num_threads
   if (debug_kick) then
-     write(*,'(A,I0,A,I0,A,I0,A,I0,A,I0,A,I0,A,I0,A,I0,A,1PE15.8,A,1PE15.8)') &
+     write(*,'(A,I0,A,I0,A,I0,A,I0,A,I0,A,I0,A,I0,A,I0,A,1PE15.8,A,1PE15.8,A,I0,A,L1)') &
           ' gpu_kick_drift_part: action=', action_part, &
           ' ilevel=', ilevel, &
           ' head_idx=', head_idx, ' num_parts=', num_parts, &
@@ -2315,7 +2315,9 @@ subroutine gpu_kick_drift_part(sim, ilevel, action_part)
           ' m%head(L+1)=', sim%m%head(min(ilevel+1, sim%r%nlevelmax)), &
           ' m%noct(L+1)=', sim%m%noct(min(ilevel+1, sim%r%nlevelmax)), &
           ' dtnew(L)=', sim%g%dtnew(ilevel), &
-          ' dtold(L)=', sim%g%dtold(ilevel)
+          ' dtold(L)=', sim%g%dtold(ilevel), &
+          ' has_fp=', merge(1, 0, allocated(fp)), &
+          ' allocated_fp=', allocated(fp)
   endif
   if (allocated(fp)) then
      call kick_drift_part_kernel<<<num_blocks, num_threads>>>(xp, vp, fp, levelp, f, &
