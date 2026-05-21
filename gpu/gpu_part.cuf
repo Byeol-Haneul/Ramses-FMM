@@ -1949,7 +1949,8 @@ end subroutine analytic_gravity_part
 
 attributes(device) subroutine gather_cic_force_part(f_d, hash_key_d, hash_val_d, &
      hash_size_d, ckey_max_d, key_off_d, box_ckey_min_d, box_ckey_max_d, periodic_d, &
-     x_in, cell_level, grid_level, ff, ok_level)
+     x_in, cell_level, grid_level, ff, ok_level, &
+     dbg_capture_in, igrid_out, icell_out, vol_out, fc_out)
   real(kind=dp),   device :: f_d(1:twotondim,1:ndim,*)
   integer(kind=8), device :: hash_key_d(*)
   integer(kind=4), device :: hash_val_d(*)
@@ -1962,8 +1963,18 @@ attributes(device) subroutine gather_cic_force_part(f_d, hash_key_d, hash_val_d,
   real(kind=8) :: x_in(1:3), ff(1:3)
   integer(kind=4), intent(in), value :: cell_level, grid_level
   logical :: ok_level
+  ! Debug capture (per-corner gather state). Writes are gated on
+  ! dbg_capture_in /= 0 so the non-capture path adds only a value-arg load and
+  ! a single predicated branch per corner — no per-corner output stores.
+  ! Out shape matches CPU `cic_index`/`cic_weight` ordering
+  ! (ind = 1 + bx + 2*by + 4*bz; see pm/rho_fine.f90:1631-1684).
+  integer(kind=4), intent(in), value :: dbg_capture_in
+  integer(kind=4) :: igrid_out(1:twotondim)
+  integer(kind=4) :: icell_out(1:twotondim)
+  real(kind=8)    :: vol_out(1:twotondim)
+  real(kind=8)    :: fc_out(1:twotondim, 1:ndim)
 
-  integer :: idim, bx, by, bz, igrid, icell
+  integer :: idim, bx, by, bz, igrid, icell, ind
   integer(kind=4) :: il(1:3), ir(1:3), target_ckey(1:3), father_ckey(1:3), ii(1:3)
   integer(kind=4) :: box_min(1:3), box_max(1:3)
   integer(kind=8) :: nx, offset, key, ix8, iy8, iz8
@@ -1972,6 +1983,12 @@ attributes(device) subroutine gather_cic_force_part(f_d, hash_key_d, hash_val_d,
 
   ok_level = .true.
   ff = 0d0
+  if (dbg_capture_in /= 0) then
+     igrid_out = 0
+     icell_out = 0
+     vol_out = 0d0
+     fc_out = 0d0
+  endif
   if (grid_level < 1) then
      ok_level = .false.
      return
@@ -2014,6 +2031,11 @@ attributes(device) subroutine gather_cic_force_part(f_d, hash_key_d, hash_val_d,
               weight = weight * merge(dr(3), dl(3), bz == 1)
            endif
 
+           ind = 1 + bx
+           if (ndim >= 2) ind = ind + 2*by
+           if (ndim >= 3) ind = ind + 4*bz
+           if (dbg_capture_in /= 0) vol_out(ind) = weight
+
            in_domain = .true.
            do idim = 1, ndim
               if (.not. periodic_d(idim)) then
@@ -2032,6 +2054,7 @@ attributes(device) subroutine gather_cic_force_part(f_d, hash_key_d, hash_val_d,
            do idim = 1, ndim
               icell = icell + ii(idim) * (2**(idim-1))
            end do
+           if (dbg_capture_in /= 0) icell_out(ind) = icell
 
            ix8 = int(father_ckey(1), kind=8)
            iy8 = int(father_ckey(2), kind=8)
@@ -2044,9 +2067,11 @@ attributes(device) subroutine gather_cic_force_part(f_d, hash_key_d, hash_val_d,
               ok_level = .false.
               cycle
            endif
+           if (dbg_capture_in /= 0) igrid_out(ind) = igrid
 
            do idim = 1, ndim
               ff(idim) = ff(idim) + real(f_d(icell, idim, igrid), kind=8) * weight
+              if (dbg_capture_in /= 0) fc_out(ind, idim) = real(f_d(icell, idim, igrid), kind=8)
            end do
         end do
      end do
@@ -2129,7 +2154,10 @@ attributes(global) subroutine kick_drift_part_kernel(xp_d, vp_d, fp_d, levelp_d,
      hash_key_d, hash_val_d, hash_size_d, ckey_max_d, key_off_d, &
      box_ckey_min_d, box_ckey_max_d, box_size_d, periodic_d, &
      dtnew_d, dtold_d, skip1, skip2, skip3, dx_loc, &
-     action_part, ilevel, head_idx, num_parts, leading, has_fp)
+     action_part, ilevel, head_idx, num_parts, leading, has_fp, &
+     idp_d, dbg_capture, dbg_idp_lo, dbg_idp_hi, ndbg_max, &
+     dbg_count_d, dbg_idp_d, dbg_ok_fine_d, dbg_ok_coarse_d, dbg_used_coarse_d, &
+     dbg_igrid_d, dbg_icell_d, dbg_vol_d, dbg_fc_d)
   integer(kind=4), intent(in), value :: leading
   real(kind=dp),   device :: xp_d(*)
   real(kind=dp),   device :: vp_d(*)
@@ -2153,11 +2181,31 @@ attributes(global) subroutine kick_drift_part_kernel(xp_d, vp_d, fp_d, levelp_d,
   integer(kind=4), intent(in), value :: head_idx
   integer(kind=4), intent(in), value :: num_parts
   integer(kind=4), intent(in), value :: has_fp
+  ! Per-slot gather-state probe (cluster band only; no control-flow effect).
+  integer(i8b),    device :: idp_d(*)
+  integer(kind=4), intent(in), value :: dbg_capture
+  integer(i8b),    intent(in), value :: dbg_idp_lo, dbg_idp_hi
+  integer(kind=4), intent(in), value :: ndbg_max
+  integer(kind=4), device :: dbg_count_d(*)
+  integer(i8b),    device :: dbg_idp_d(*)
+  integer(kind=4), device :: dbg_ok_fine_d(*)
+  integer(kind=4), device :: dbg_ok_coarse_d(*)
+  integer(kind=4), device :: dbg_used_coarse_d(*)
+  integer(kind=4), device :: dbg_igrid_d(1:twotondim, *)
+  integer(kind=4), device :: dbg_icell_d(1:twotondim, *)
+  real(kind=8),    device :: dbg_vol_d(1:twotondim, *)
+  real(kind=8),    device :: dbg_fc_d(1:twotondim, 1:ndim, *)
 
-  integer :: thread_idx, block_idx, idx, ipart, idim, lp
+  integer :: thread_idx, block_idx, idx, ipart, idim, lp, ind, slot, info
   real(kind=8) :: skip(1:3), x(1:3), x_coarse(1:3), ff(1:3)
   real(kind=8) :: dteff, xnew
-  logical :: ok_level
+  logical :: ok_level, ok_fine, ok_coarse, used_coarse
+  ! Per-corner gather state for capture (filled by gather_cic_force_part).
+  integer(kind=4) :: igrid_used(1:twotondim)
+  integer(kind=4) :: icell_used(1:twotondim)
+  real(kind=8)    :: vol_used(1:twotondim)
+  real(kind=8)    :: fc_used(1:twotondim, 1:ndim)
+  integer(i8b)    :: my_idp
 
   thread_idx = threadIdx%x - 1
   block_idx  = blockIdx%x  - 1
@@ -2178,13 +2226,42 @@ attributes(global) subroutine kick_drift_part_kernel(xp_d, vp_d, fp_d, levelp_d,
 
   call gather_cic_force_part(f_d, hash_key_d, hash_val_d, hash_size_d, ckey_max_d, &
        key_off_d, box_ckey_min_d, box_ckey_max_d, periodic_d, x, ilevel+1, ilevel, &
-       ff, ok_level)
+       ff, ok_level, dbg_capture, igrid_used, icell_used, vol_used, fc_used)
+  ok_fine = ok_level
+  ok_coarse = .false.
+  used_coarse = .false.
 
   if (.not. ok_level) then
+     used_coarse = .true.
      x_coarse = x / 2d0
      call gather_cic_force_part(f_d, hash_key_d, hash_val_d, hash_size_d, ckey_max_d, &
           key_off_d, box_ckey_min_d, box_ckey_max_d, periodic_d, x_coarse, ilevel, ilevel-1, &
-          ff, ok_level)
+          ff, ok_level, dbg_capture, igrid_used, icell_used, vol_used, fc_used)
+     ok_coarse = ok_level
+  endif
+
+  ! Per-slot gather-state capture. No control-flow effect on integration;
+  ! only writes to pre-allocated debug scratch when (idp, dbg flag) match.
+  if (dbg_capture /= 0) then
+     my_idp = idp_d(ipart)
+     if (my_idp >= dbg_idp_lo .and. my_idp <= dbg_idp_hi) then
+        info = atomicadd(dbg_count_d(1), 1)
+        slot = info + 1
+        if (slot <= ndbg_max) then
+           dbg_idp_d(slot) = my_idp
+           dbg_ok_fine_d(slot) = merge(1, 0, ok_fine)
+           dbg_ok_coarse_d(slot) = merge(1, 0, ok_coarse)
+           dbg_used_coarse_d(slot) = merge(1, 0, used_coarse)
+           do ind = 1, twotondim
+              dbg_igrid_d(ind, slot) = igrid_used(ind)
+              dbg_icell_d(ind, slot) = icell_used(ind)
+              dbg_vol_d(ind, slot) = vol_used(ind)
+              do idim = 1, ndim
+                 dbg_fc_d(ind, idim, slot) = fc_used(ind, idim)
+              end do
+           end do
+        endif
+     endif
   endif
 
   if (has_fp /= 0 .and. ok_level) then
@@ -2234,7 +2311,48 @@ subroutine gpu_kick_drift_part(sim, ilevel, action_part)
   integer(kind=4) :: gravity_type
   logical :: any_nonperiodic, debug_kick
 
+  ! Per-slot gather-state probe scratch. Lives across kick fires (save);
+  ! capacity NDBG_KICK slots; cluster band [DBG_IDP_LO, DBG_IDP_HI] mirrors
+  ! the existing dump_kick_window_part idp filter. Allocated once on first
+  ! entry; reused thereafter; count reset to 0 before each capturing launch.
+  integer(kind=4), parameter :: NDBG_KICK = 8
+  integer(i8b),    parameter :: DBG_IDP_LO = 1007296_i8b, DBG_IDP_HI = 1007426_i8b
+  integer(kind=4), device, allocatable, save :: dbg_count_d(:)
+  integer(i8b),    device, allocatable, save :: dbg_idp_d(:)
+  integer(kind=4), device, allocatable, save :: dbg_ok_fine_d(:)
+  integer(kind=4), device, allocatable, save :: dbg_ok_coarse_d(:)
+  integer(kind=4), device, allocatable, save :: dbg_used_coarse_d(:)
+  integer(kind=4), device, allocatable, save :: dbg_igrid_d(:,:)
+  integer(kind=4), device, allocatable, save :: dbg_icell_d(:,:)
+  real(kind=8),    device, allocatable, save :: dbg_vol_d(:,:)
+  real(kind=8),    device, allocatable, save :: dbg_fc_d(:,:,:)
+  integer(kind=4) :: dbg_capture
+  integer(kind=4) :: dbg_count_h
+  integer(kind=4) :: dbg_count_buf(1:1)
+  integer(i8b)    :: dbg_idp_h(1:NDBG_KICK)
+  integer(kind=4) :: dbg_ok_fine_h(1:NDBG_KICK)
+  integer(kind=4) :: dbg_ok_coarse_h(1:NDBG_KICK)
+  integer(kind=4) :: dbg_used_coarse_h(1:NDBG_KICK)
+  integer(kind=4) :: dbg_igrid_h(1:twotondim, 1:NDBG_KICK)
+  integer(kind=4) :: dbg_icell_h(1:twotondim, 1:NDBG_KICK)
+  real(kind=8)    :: dbg_vol_h(1:twotondim, 1:NDBG_KICK)
+  real(kind=8)    :: dbg_fc_h(1:twotondim, 1:ndim, 1:NDBG_KICK)
+  integer(kind=4) :: dbg_slot, dbg_ind, n_print
+
   call nvtxStartRange("gpu_kick_drift_part", color=4) ! purple
+
+  ! Allocate the gather-state probe scratch once (small: ~3 KB total).
+  ! Always-allocated keeps kernel device pointers valid; capture is gated by
+  ! dbg_capture argument so the scratch is touched only on the dump path.
+  if (.not. allocated(dbg_count_d))      allocate(dbg_count_d(1:1))
+  if (.not. allocated(dbg_idp_d))        allocate(dbg_idp_d(1:NDBG_KICK))
+  if (.not. allocated(dbg_ok_fine_d))    allocate(dbg_ok_fine_d(1:NDBG_KICK))
+  if (.not. allocated(dbg_ok_coarse_d))  allocate(dbg_ok_coarse_d(1:NDBG_KICK))
+  if (.not. allocated(dbg_used_coarse_d))allocate(dbg_used_coarse_d(1:NDBG_KICK))
+  if (.not. allocated(dbg_igrid_d))      allocate(dbg_igrid_d(1:twotondim, 1:NDBG_KICK))
+  if (.not. allocated(dbg_icell_d))      allocate(dbg_icell_d(1:twotondim, 1:NDBG_KICK))
+  if (.not. allocated(dbg_vol_d))        allocate(dbg_vol_d(1:twotondim, 1:NDBG_KICK))
+  if (.not. allocated(dbg_fc_d))         allocate(dbg_fc_d(1:twotondim, 1:ndim, 1:NDBG_KICK))
 
   if (.not. allocated(xp)) then
      call nvtxEndRange()
@@ -2319,17 +2437,32 @@ subroutine gpu_kick_drift_part(sim, ilevel, action_part)
           ' has_fp=', merge(1, 0, allocated(fp)), &
           ' allocated_fp=', allocated(fp)
   endif
+  ! Gather-state probe gate: same as existing dump_kick_window_part — only
+  ! capture on the first lev8 kickonly fire targeted by triage 2026-05-20.
+  dbg_capture = 0
+  if (debug_kick .and. ilevel == 8 .and. action_part == 1) then
+     dbg_capture = 1
+     dbg_count_buf(1) = 0
+     dbg_count_d = dbg_count_buf
+  endif
+
   if (allocated(fp)) then
      call kick_drift_part_kernel<<<num_blocks, num_threads>>>(xp, vp, fp, levelp, f, &
           hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, &
           box_ckey_min, box_ckey_max, box_size, periodic, dtnew_part, dtold_part, &
-          skip1, skip2, skip3, dx_loc, action_part, ilevel, head_idx, num_parts, leading, 1)
+          skip1, skip2, skip3, dx_loc, action_part, ilevel, head_idx, num_parts, leading, 1, &
+          idp, dbg_capture, DBG_IDP_LO, DBG_IDP_HI, NDBG_KICK, &
+          dbg_count_d, dbg_idp_d, dbg_ok_fine_d, dbg_ok_coarse_d, dbg_used_coarse_d, &
+          dbg_igrid_d, dbg_icell_d, dbg_vol_d, dbg_fc_d)
   else
      if (.not. allocated(fp_dummy)) allocate(fp_dummy(1))
      call kick_drift_part_kernel<<<num_blocks, num_threads>>>(xp, vp, fp_dummy, levelp, f, &
           hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, &
           box_ckey_min, box_ckey_max, box_size, periodic, dtnew_part, dtold_part, &
-          skip1, skip2, skip3, dx_loc, action_part, ilevel, head_idx, num_parts, leading, 0)
+          skip1, skip2, skip3, dx_loc, action_part, ilevel, head_idx, num_parts, leading, 0, &
+          idp, dbg_capture, DBG_IDP_LO, DBG_IDP_HI, NDBG_KICK, &
+          dbg_count_d, dbg_idp_d, dbg_ok_fine_d, dbg_ok_coarse_d, dbg_used_coarse_d, &
+          dbg_igrid_d, dbg_icell_d, dbg_vol_d, dbg_fc_d)
   endif
   call GPU_Error_Check("gpu/gpu_part.cuf", 0)
 
@@ -2342,6 +2475,46 @@ subroutine gpu_kick_drift_part(sim, ilevel, action_part)
      else
         call dump_kick_window_part("after_kernel", head_idx, num_parts, ilevel, action_part, 0)
      endif
+
+     ! Per-slot gather-state dump: pull captured fields to host, emit one
+     ! `kick_gather_dump:` line per claimed slot. CPU mirror is in
+     ! pm/move_fine.f90 cic_kick_drift_part under the same idp filter.
+     dbg_count_buf = dbg_count_d
+     dbg_count_h = dbg_count_buf(1)
+     n_print = min(dbg_count_h, NDBG_KICK)
+     if (n_print > 0) then
+        dbg_idp_h(1:n_print)         = dbg_idp_d(1:n_print)
+        dbg_ok_fine_h(1:n_print)     = dbg_ok_fine_d(1:n_print)
+        dbg_ok_coarse_h(1:n_print)   = dbg_ok_coarse_d(1:n_print)
+        dbg_used_coarse_h(1:n_print) = dbg_used_coarse_d(1:n_print)
+        dbg_igrid_h(1:twotondim, 1:n_print) = dbg_igrid_d(1:twotondim, 1:n_print)
+        dbg_icell_h(1:twotondim, 1:n_print) = dbg_icell_d(1:twotondim, 1:n_print)
+        dbg_vol_h(1:twotondim, 1:n_print)   = dbg_vol_d(1:twotondim, 1:n_print)
+        dbg_fc_h(1:twotondim, 1:ndim, 1:n_print) = dbg_fc_d(1:twotondim, 1:ndim, 1:n_print)
+     endif
+     do dbg_slot = 1, n_print
+        if (ndim == 3) then
+           write(*,'(A,I0,A,I0,A,I0,A,I0,A,I0,A,8(1X,I0),A,8(1X,I0),A,8(1X,ES15.7),A,8(1X,ES15.7),A,8(1X,ES15.7),A,8(1X,ES15.7))') &
+                ' kick_gather_dump: slot=', dbg_slot, &
+                ' idp=', int(dbg_idp_h(dbg_slot), kind=8), &
+                ' ok_fine=', dbg_ok_fine_h(dbg_slot), &
+                ' ok_coarse=', dbg_ok_coarse_h(dbg_slot), &
+                ' used_coarse=', dbg_used_coarse_h(dbg_slot), &
+                ' igrid=', (dbg_igrid_h(dbg_ind, dbg_slot), dbg_ind=1,twotondim), &
+                ' icell=', (dbg_icell_h(dbg_ind, dbg_slot), dbg_ind=1,twotondim), &
+                ' vol=',   (dbg_vol_h(dbg_ind, dbg_slot),   dbg_ind=1,twotondim), &
+                ' f0=',    (dbg_fc_h(dbg_ind, 1, dbg_slot), dbg_ind=1,twotondim), &
+                ' f1=',    (dbg_fc_h(dbg_ind, 2, dbg_slot), dbg_ind=1,twotondim), &
+                ' f2=',    (dbg_fc_h(dbg_ind, 3, dbg_slot), dbg_ind=1,twotondim)
+        else
+           write(*,'(A,I0,A,I0,A,I0,A,I0,A,I0)') &
+                ' kick_gather_dump: slot=', dbg_slot, &
+                ' idp=', int(dbg_idp_h(dbg_slot), kind=8), &
+                ' ok_fine=', dbg_ok_fine_h(dbg_slot), &
+                ' ok_coarse=', dbg_ok_coarse_h(dbg_slot), &
+                ' used_coarse=', dbg_used_coarse_h(dbg_slot)
+        endif
+     end do
   endif
 
   call nvtxEndRange()
