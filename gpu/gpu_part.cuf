@@ -1,5 +1,5 @@
 !> Particle kernels and dispatchers (module part_device).
-!> Rank-2 arrays (xp, vp, fp, jp) use layout (npart_max, ndim); they are
+!> Rank-2 arrays (xp, vp, jp) use layout (npart_max, ndim); they are
 !> gathered/scattered as ndim independent rank-1 columns. `leading` =
 !> size(xp,1).
 module part_device
@@ -9,7 +9,7 @@ module part_device
   use cudafor
   use gpu_part_state, only: &
        xp, vp, mp, levelp, sortp, workp, idp, &
-       fp, phip, phip_dummy, jp, zp, tp, tm, size_p, charge, idm, idt, &
+       jp, zp, tp, tm, size_p, charge, idm, idt, &
        hkey_part, bucket_part, &
        cell_part_count, cell_part_head, cell_part_idx, &
        src_icell_part, src_igrid_part, &
@@ -20,7 +20,7 @@ module part_device
   use gpu_runner, only: &
        grid, hash_key, hash_val, ckey_max, key_off, &
        box_ckey_min, box_ckey_max, box_size, periodic, &
-       rho, nref, f, phi, &
+       rho, nref, f, &
        swap_local, swap_global, prefix_sum, &
        partial_sums_0, partial_sums_1, partial_sums_2, &
        gpu_scan
@@ -555,21 +555,6 @@ subroutine gpu_split_part(sim, ilevel)
   call sort_scatter_part_i8_1d<<<num_blocks, num_threads>>>(idp, idp_swap, &
        head_idx, num_parts)
 
-  if (allocated(fp)) then
-     do idim = 1, ndim
-        call sort_gather_part_real_col<<<num_blocks, num_threads>>>(xp_swap, fp, &
-             swap_global, head_idx, num_parts, leading, idim)
-        call sort_scatter_part_real_col<<<num_blocks, num_threads>>>(fp, xp_swap, &
-             head_idx, num_parts, leading, idim)
-     end do
-  endif
-  ! phip is per-particle (rank-1) like mp; permute only when allocated.
-  if (allocated(phip)) then
-     call sort_gather_part_real_1d<<<num_blocks, num_threads>>>(mp_swap, phip, &
-          swap_global, head_idx, num_parts)
-     call sort_scatter_part_real_1d<<<num_blocks, num_threads>>>(phip, mp_swap, &
-          head_idx, num_parts)
-  endif
   if (allocated(jp)) then
      do idim = 1, ndim
         call sort_gather_part_real_col<<<num_blocks, num_threads>>>(xp_swap, jp, &
@@ -1378,7 +1363,7 @@ subroutine gpu_cic_part(sim, ilevel, rtype)
 
   call nvtxEndRange()
 end subroutine gpu_cic_part
-!> Kick/drift: CIC gather from f, optional fp, position update.
+!> Kick/drift: CIC gather from f, position update.
 attributes(device) subroutine analytic_gravity_part(x, ff, dx_loc, gravity_type, &
      gp1, gp2, gp3, gp4, gp5, q1, q2, q3, q4)
   real(kind=8) :: x(1:3), ff(1:3)
@@ -1438,11 +1423,10 @@ attributes(device) subroutine analytic_gravity_part(x, ff, dx_loc, gravity_type,
   endif
 end subroutine analytic_gravity_part
 
-attributes(device) subroutine gather_cic_force_part(f_d, phi_d, hash_key_d, hash_val_d, &
+attributes(device) subroutine gather_cic_force_part(f_d, hash_key_d, hash_val_d, &
      hash_size_d, ckey_max_d, key_off_d, box_ckey_min_d, box_ckey_max_d, periodic_d, &
-     x_in, cell_level, grid_level, ff, phip_out, ok_level)
+     x_in, cell_level, grid_level, ff, ok_level)
   real(kind=dp),   device :: f_d(1:twotondim,1:ndim,*)
-  real(kind=dp),   device :: phi_d(1:twotondim,*)
   integer(kind=8), device :: hash_key_d(*)
   integer(kind=4), device :: hash_val_d(*)
   integer(kind=4), intent(in), value :: hash_size_d
@@ -1452,7 +1436,6 @@ attributes(device) subroutine gather_cic_force_part(f_d, phi_d, hash_key_d, hash
   integer(kind=4), device :: box_ckey_max_d(1:3,*)
   logical,         device :: periodic_d(1:3)
   real(kind=8) :: x_in(1:3), ff(1:3)
-  real(kind=8) :: phip_out
   integer(kind=4), intent(in), value :: cell_level, grid_level
   logical :: ok_level
 
@@ -1465,7 +1448,6 @@ attributes(device) subroutine gather_cic_force_part(f_d, phi_d, hash_key_d, hash
 
   ok_level = .true.
   ff = 0d0
-  phip_out = 0d0
   if (grid_level < 1) then
      ok_level = .false.
      return
@@ -1542,14 +1524,12 @@ attributes(device) subroutine gather_cic_force_part(f_d, phi_d, hash_key_d, hash
            do idim = 1, ndim
               ff(idim) = ff(idim) + real(f_d(icell, idim, igrid), kind=8) * weight
            end do
-           phip_out = phip_out + real(phi_d(icell, igrid), kind=8) * weight
         end do
      end do
   end do
 
   if (.not. ok_level) then
      ff = 0d0
-     phip_out = 0d0
   endif
 end subroutine gather_cic_force_part
 
@@ -1623,19 +1603,16 @@ attributes(global) subroutine gravana_preloop_part_kernel(xp_d, vp_d, levelp_d, 
   endif
 end subroutine gravana_preloop_part_kernel
 
-attributes(global) subroutine kick_drift_part_kernel(xp_d, vp_d, fp_d, phip_d, levelp_d, &
-     f_d, phi_d, hash_key_d, hash_val_d, hash_size_d, ckey_max_d, key_off_d, &
+attributes(global) subroutine kick_drift_part_kernel(xp_d, vp_d, levelp_d, &
+     f_d, hash_key_d, hash_val_d, hash_size_d, ckey_max_d, key_off_d, &
      box_ckey_min_d, box_ckey_max_d, box_size_d, periodic_d, &
      dtnew_d, dtold_d, skip1, skip2, skip3, dx_loc, &
-     action_part, ilevel, head_idx, num_parts, leading, has_fp, has_phip)
+     action_part, ilevel, head_idx, num_parts, leading)
   integer(kind=4), intent(in), value :: leading
   real(kind=dp),   device :: xp_d(*)
   real(kind=dp),   device :: vp_d(*)
-  real(kind=dp),   device :: fp_d(*)
-  real(kind=dp),   device :: phip_d(*)
   integer(kind=4), device :: levelp_d(*)
   real(kind=dp),   device :: f_d(1:twotondim,1:ndim,*)
-  real(kind=dp),   device :: phi_d(1:twotondim,*)
   integer(kind=8), device :: hash_key_d(*)
   integer(kind=4), device :: hash_val_d(*)
   integer(kind=4), intent(in), value :: hash_size_d
@@ -1652,10 +1629,9 @@ attributes(global) subroutine kick_drift_part_kernel(xp_d, vp_d, fp_d, phip_d, l
   integer(kind=4), intent(in), value :: ilevel
   integer(kind=4), intent(in), value :: head_idx
   integer(kind=4), intent(in), value :: num_parts
-  integer(kind=4), intent(in), value :: has_fp, has_phip
 
   integer :: thread_idx, block_idx, idx, ipart, idim, lp
-  real(kind=8) :: skip(1:3), x(1:3), x_coarse(1:3), ff(1:3), my_phip
+  real(kind=8) :: skip(1:3), x(1:3), x_coarse(1:3), ff(1:3)
   real(kind=8) :: dteff, xnew
   logical :: ok_level
 
@@ -1666,7 +1642,6 @@ attributes(global) subroutine kick_drift_part_kernel(xp_d, vp_d, fp_d, phip_d, l
 
   ipart = head_idx + idx
   ff = 0d0
-  my_phip = 0d0
 
   skip(1) = skip1
   skip(2) = skip2
@@ -1677,24 +1652,15 @@ attributes(global) subroutine kick_drift_part_kernel(xp_d, vp_d, fp_d, phip_d, l
      x(idim) = (xp_d(ipart + (idim-1)*leading) + skip(idim)) / dx_loc
   end do
 
-  call gather_cic_force_part(f_d, phi_d, hash_key_d, hash_val_d, hash_size_d, &
+  call gather_cic_force_part(f_d, hash_key_d, hash_val_d, hash_size_d, &
        ckey_max_d, key_off_d, box_ckey_min_d, box_ckey_max_d, periodic_d, &
-       x, ilevel+1, ilevel, ff, my_phip, ok_level)
+       x, ilevel+1, ilevel, ff, ok_level)
 
   if (.not. ok_level) then
      x_coarse = x / 2d0
-     call gather_cic_force_part(f_d, phi_d, hash_key_d, hash_val_d, hash_size_d, &
+     call gather_cic_force_part(f_d, hash_key_d, hash_val_d, hash_size_d, &
           ckey_max_d, key_off_d, box_ckey_min_d, box_ckey_max_d, periodic_d, &
-          x_coarse, ilevel, ilevel-1, ff, my_phip, ok_level)
-  endif
-
-  if (has_fp /= 0 .and. ok_level) then
-     do idim = 1, ndim
-        fp_d(ipart + (idim-1)*leading) = ff(idim)
-     end do
-  endif
-  if (has_phip /= 0 .and. ok_level) then
-     phip_d(ipart) = my_phip
+          x_coarse, ilevel, ilevel-1, ff, ok_level)
   endif
 
   if (action_part == 2) then
@@ -1737,7 +1703,6 @@ subroutine gpu_kick_drift_part(sim, ilevel, action_part)
   real(kind=8) :: gp1, gp2, gp3, gp4, gp5, q1, q2, q3, q4
   integer(kind=4) :: gravity_type
   logical :: any_nonperiodic
-  integer(kind=4) :: has_phip_i
 
   call nvtxStartRange("gpu_kick_drift_part", color=4) ! purple
 
@@ -1812,21 +1777,10 @@ subroutine gpu_kick_drift_part(sim, ilevel, action_part)
   endif
   num_blocks  = (num_parts + num_threads - 1) / num_threads
 
-  has_phip_i = 0
-  if (allocated(phip)) then
-     has_phip_i = 1
-     call kick_drift_part_kernel<<<num_blocks, num_threads>>>(xp, vp, fp, phip, levelp, &
-          f, phi, hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, &
-          box_ckey_min, box_ckey_max, box_size, periodic, dtnew_part, dtold_part, &
-          skip1, skip2, skip3, dx_loc, action_part, ilevel, head_idx, num_parts, leading, &
-          1, has_phip_i)
-  else
-     call kick_drift_part_kernel<<<num_blocks, num_threads>>>(xp, vp, fp, phip_dummy, levelp, &
-          f, phi, hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, &
-          box_ckey_min, box_ckey_max, box_size, periodic, dtnew_part, dtold_part, &
-          skip1, skip2, skip3, dx_loc, action_part, ilevel, head_idx, num_parts, leading, &
-          1, has_phip_i)
-  endif
+  call kick_drift_part_kernel<<<num_blocks, num_threads>>>(xp, vp, levelp, &
+       f, hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, &
+       box_ckey_min, box_ckey_max, box_size, periodic, dtnew_part, dtold_part, &
+       skip1, skip2, skip3, dx_loc, action_part, ilevel, head_idx, num_parts, leading)
   call GPU_Error_Check("gpu/gpu_part.cuf", 0)
 
   call nvtxEndRange()

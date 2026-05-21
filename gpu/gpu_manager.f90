@@ -49,8 +49,6 @@ recursive subroutine r_set_grid_device(pst)
         if (allocated(workp))   deallocate(workp)
         if (allocated(idp))     deallocate(idp)
         ! Optional DM fields (allocated only when host has them)
-        if (allocated(fp))      deallocate(fp)
-        if (allocated(phip))    deallocate(phip)
         if (allocated(jp))      deallocate(jp)
         if (allocated(zp))      deallocate(zp)
         if (allocated(tp))      deallocate(tp)
@@ -113,17 +111,6 @@ recursive subroutine r_set_grid_device(pst)
         workp  = pst%s%p%workp
         idp    = pst%s%p%idp
 
-
-        allocate(fp(1:size(pst%s%p%xp, 1), 1:ndim))
-        if (allocated(pst%s%p%fp)) then
-           fp(1:size(pst%s%p%fp, 1), 1:ndim) = pst%s%p%fp
-        else
-           fp = 0d0
-        endif
-        if (allocated(pst%s%p%phip)) then
-           allocate(phip(1:size(pst%s%p%phip)))
-           phip = pst%s%p%phip
-        endif
         if (allocated(pst%s%p%jp)) then
            allocate(jp(1:size(pst%s%p%jp, 1), 1:ndim))
            jp = pst%s%p%jp
@@ -255,8 +242,6 @@ subroutine gpu_to_host_part(pst)
   pst%s%p%workp  = workp
   pst%s%p%idp    = idp
   ! Optional mirrors — copy iff both sides are allocated.
-  if (allocated(fp)     .and. allocated(pst%s%p%fp))     pst%s%p%fp     = fp
-  if (allocated(phip)   .and. allocated(pst%s%p%phip))   pst%s%p%phip   = phip
   if (allocated(jp)     .and. allocated(pst%s%p%jp))     pst%s%p%jp     = jp
   if (allocated(zp)     .and. allocated(pst%s%p%zp))     pst%s%p%zp     = zp
   if (allocated(tp)     .and. allocated(pst%s%p%tp))     pst%s%p%tp     = tp
