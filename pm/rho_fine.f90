@@ -1,6 +1,7 @@
 module rho_fine_module
 #ifdef _CUDA
-  use gpu_runner, only: gpu_multipole_leaf, gpu_multipole_split, gpu_reset_rho, gpu_cic_multipole, gpu_cic_multipole2
+  use gpu_runner, only: gpu_multipole_leaf, gpu_multipole_split, gpu_reset_rho, gpu_cic_multipole2
+  use part_device, only: gpu_split_part, gpu_sort_part, gpu_cic_part
 #endif
 contains
 !###############################################
@@ -518,7 +519,6 @@ recursive subroutine r_cic_multipole(pst,ilevel,input_size)
   else
 #ifdef _CUDA
      if(pst%s%m%data_on_device)then
-!        call gpu_cic_multipole(pst%s, ilevel)
         call gpu_cic_multipole2(pst%s, ilevel)
      else
         call cic_multipole(pst%s,ilevel)
@@ -667,6 +667,9 @@ recursive subroutine r_cic_part(pst,input_array,input_size)
 
   integer::rID
   integer::ilevel,rtype
+#ifdef _CUDA
+  logical,save::warned_dm_dep_gpu=.false.
+#endif
 
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_CIC_PART,pst%iUpper+1,input_size,0,input_array)
@@ -675,6 +678,22 @@ recursive subroutine r_cic_part(pst,input_array,input_size)
   else
      ilevel=input_array(1)
      rtype=input_array(2)
+#ifdef _CUDA
+     if(pst%s%m%data_on_device)then
+        ! DM on device: GPU CIC deposition (TSC/PCS warn once and fall back to CIC).
+        if(pst%s%r%part)then
+           if(pst%s%r%part_mass_deposition_scheme/=1 .and. .not.warned_dm_dep_gpu)then
+              write(*,'(A,I0,A)')' WARNING: r_cic_part: GPU TSC/PCS DM mass deposition (scheme ', &
+                   & pst%s%r%part_mass_deposition_scheme,') unavailable in phase 1; using GPU CIC path instead.'
+              warned_dm_dep_gpu=.true.
+           endif
+           call gpu_cic_part(pst%s, ilevel, rtype)
+        endif
+        if(pst%s%r%star)call cic_part(pst%s,pst%s%star,ilevel,rtype)
+        if(pst%s%r%sink)call cic_part(pst%s,pst%s%sink,ilevel,rtype)
+        return
+     endif
+#endif
      ! Mass deposition for various components (DM particles, star, sink)
      ! based on their respective deposition schemes (CIC 1, TSC 2 or PCS 3)
      if(pst%s%r%part)then
@@ -686,7 +705,7 @@ recursive subroutine r_cic_part(pst,input_array,input_size)
            call pcs_part(pst%s,pst%s%p   ,ilevel,rtype)
         endif
      endif
-     if(pst%s%r%star)then 
+     if(pst%s%r%star)then
         if(pst%s%r%star_mass_deposition_scheme==1)then
            call cic_part(pst%s,pst%s%star,ilevel,rtype)
         elseif(pst%s%r%star_mass_deposition_scheme==2)then
@@ -1206,6 +1225,17 @@ recursive subroutine r_split_part(pst,ilevel,input_size)
      call r_split_part(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
+#ifdef _CUDA
+     if(pst%s%m%data_on_device)then
+        ! GPU split: DM only; other particle types fall through to host split.
+        if(pst%s%r%part)call gpu_split_part(pst%s, ilevel)
+        if(pst%s%r%star)call split_part(pst%s,pst%s%star,ilevel)
+        if(pst%s%r%sink)call split_part(pst%s,pst%s%sink,ilevel)
+        if(pst%s%r%tree)call split_part(pst%s,pst%s%tree,ilevel)
+        if(pst%s%r%trac)call split_part(pst%s,pst%s%trac,ilevel)
+        return
+     endif
+#endif
      if(pst%s%r%part)call split_part(pst%s,pst%s%p   ,ilevel)
      if(pst%s%r%star)call split_part(pst%s,pst%s%star,ilevel)
      if(pst%s%r%sink)call split_part(pst%s,pst%s%sink,ilevel)
@@ -1412,6 +1442,13 @@ subroutine split_part(s,p,ilevel)
            mp_tmp=p%tm(ipart)
            p%tm(ipart)=p%tm(jpart)
            p%tm(jpart)=mp_tmp
+        endif
+        ! Swap potential (per-particle; must move with idp so the
+        ! gathered potential stays attached to its particle).
+        if(allocated(p%phip))then
+           mp_tmp=p%phip(ipart)
+           p%phip(ipart)=p%phip(jpart)
+           p%phip(jpart)=mp_tmp
         endif
         ! Swap levels
         levelp_tmp=p%levelp(ipart)
@@ -1947,6 +1984,17 @@ recursive subroutine r_sort_part(pst,ilevel,input_size)
      call r_sort_part(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
+#ifdef _CUDA
+     if(pst%s%m%data_on_device)then
+        ! GPU sort: DM only; other particle types fall through to host sort.
+        if(pst%s%r%part)call gpu_sort_part(pst%s, ilevel)
+        if(pst%s%r%star)call sort_part(pst%s,pst%s%star,ilevel)
+        if(pst%s%r%sink)call sort_part(pst%s,pst%s%sink,ilevel)
+        if(pst%s%r%tree)call sort_part(pst%s,pst%s%tree,ilevel)
+        if(pst%s%r%trac)call sort_part(pst%s,pst%s%trac,ilevel)
+        return
+     endif
+#endif
      if(pst%s%r%part)call sort_part(pst%s,pst%s%p   ,ilevel)
      if(pst%s%r%star)call sort_part(pst%s,pst%s%star,ilevel)
      if(pst%s%r%sink)call sort_part(pst%s,pst%s%sink,ilevel)

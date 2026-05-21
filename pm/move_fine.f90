@@ -1,5 +1,8 @@
 module move_fine_module
   use rho_fine_module, only: cic_weight, cic_index, tsc_weight, tsc_index, pcs_weight, pcs_index
+#ifdef _CUDA
+  use part_device, only: gpu_kick_drift_part
+#endif
   use rng
   implicit none
   ! Module-level tracer RNG state
@@ -39,6 +42,9 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
+#ifdef _CUDA
+  use pm_parameters, only: PART_TYPE
+#endif
   implicit none
   type(pst_t)::pst
   integer,VALUE::input_size
@@ -49,6 +55,9 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
   integer::ilevel
   integer::action_part
   integer::rID
+#ifdef _CUDA
+  logical,save::warned_dm_kick_gpu=.false.
+#endif
 
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_KICK_DRIFT_PART,pst%iUpper+1,input_size,output_size,input_array)
@@ -57,6 +66,31 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
   else
      ilevel=input_array(1)
      action_part=input_array(2)
+#ifdef _CUDA
+     if(pst%s%m%data_on_device)then
+        ! DM on device: GPU CIC kick-drift (TSC/PCS warn once and fall back to CIC).
+        if(pst%s%r%part)then
+           if(pst%s%p%type/=PART_TYPE)then
+              write(*,*)'r_kick_drift_part: GPU particle kick-drift supports DM PART_TYPE only in phase 1.'
+              call abort
+           endif
+           if(pst%s%r%part_force_interpolation_scheme/=1 .and. .not.warned_dm_kick_gpu)then
+              write(*,'(A,I0,A)')' WARNING: r_kick_drift_part: GPU TSC/PCS DM force interpolation (scheme ', &
+                   & pst%s%r%part_force_interpolation_scheme,') unavailable in phase 1; using GPU CIC kick-drift path instead.'
+              warned_dm_kick_gpu=.true.
+           endif
+           call gpu_kick_drift_part(pst%s, ilevel, action_part)
+        endif
+        if(pst%s%r%star)call cic_kick_drift_part(pst%s,pst%s%star,ilevel,action_part)
+        if(pst%s%r%sink)call cic_kick_drift_part(pst%s,pst%s%sink,ilevel,action_part)
+        if(pst%s%r%tree)call cic_kick_drift_part(pst%s,pst%s%tree,ilevel,action_part)
+        if(pst%s%r%trac.or.pst%s%r%dust)then
+           write(*,*)'r_kick_drift_part: tracers/dust on the GPU path are not supported in phase 1.'
+           call abort
+        endif
+        return
+     endif
+#endif
      ! Force interpolation for various components (DM particles, star, sink, tree)
      ! based on their respective deposition schemes (CIC 1, TSC 2 or PCS 3)
      if(pst%s%r%part)then
@@ -179,7 +213,7 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
   end if
 
   ! Mesh spacing in that level
-  dx_loc=r%boxlen/2**ilevel 
+  dx_loc=r%boxlen/2**ilevel
   vol_loc=dx_loc**ndim
 
   ! Deal with particles that left the computational domain

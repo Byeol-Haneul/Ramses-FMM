@@ -872,17 +872,18 @@ contains
        call nvtxEndRange()
     endif
 
-    head_idx = sim%m%head(ilevel)
-    num_octs = sim%m%noct(ilevel)
-    threadsX_per_block = 8
-    threadsY_per_block = 16
-    num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
-
-    if(num_octs > 0)then
-       call nvtxStartRange("GPU user_flag", color=2)!yellow
-       call hydro_flag_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(flag1, grid, nbor, uold, &
-            & head_idx, num_octs, gamma, err_grad_d, err_grad_p, floor_d, floor_p)
-       call nvtxEndRange()
+    if (sim%r%hydro) then
+       head_idx = sim%m%head(ilevel)
+       num_octs = sim%m%noct(ilevel)
+       threadsX_per_block = 8
+       threadsY_per_block = 16
+       num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
+       if(num_octs > 0)then
+          call nvtxStartRange("GPU user_flag", color=2)!yellow
+          call hydro_flag_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(flag1, grid, nbor, uold, &
+               & head_idx, num_octs, gamma, err_grad_d, err_grad_p, floor_d, floor_p)
+          call nvtxEndRange()
+       endif
     endif
 
     nflag_d = 0
@@ -1472,6 +1473,7 @@ contains
     ! We preserve phi in the ghost cells stored in the cache.
     ! Note that the mask is only defined in the inner cells, not in the ghost cells.
     fourpi = 4.D0*ACOS(-1.0D0)
+    if (sim%r%cosmo) fourpi = 1.5D0 * sim%g%omega_m * sim%g%aexp
     dx  = sim%r%boxlen/2**ilevel
     oneoverdx2 = 1.0d0/(dx*dx)
     offset = sim%g%rho_tot
@@ -1759,6 +1761,7 @@ contains
     real(kind=8) :: fourpi, offset, dx, oneoverdx2
 
     fourpi = 4.D0*ACOS(-1.0D0)
+    if (sim%r%cosmo) fourpi = 1.5D0 * sim%g%omega_m * sim%g%aexp
     dx  = sim%r%boxlen/2**ifine
     oneoverdx2 = 1.0d0/(dx*dx)
     offset = sim%g%rho_tot

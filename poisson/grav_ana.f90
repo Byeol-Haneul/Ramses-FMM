@@ -77,7 +77,7 @@ subroutine gravana(r,g,x,f,dx,ncell)
         f(i,1)=-gmass*rx/rr
 #endif
 #if NDIM==2
-        f(i,1)=-gmass*ry/rr**2
+        f(i,1)=-gmass*rx/rr**2
         f(i,2)=-gmass*ry/rr**2
 #endif
 #if NDIM==3

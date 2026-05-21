@@ -280,8 +280,12 @@ subroutine input_part_zoom(r,g,p,m)
   do ipart=1,p%npart
      do idim=1,ndim
         if(r%periodic(idim))then
-           if(p%xp(ipart,idim)< 0.0d0           )p%xp(ipart,idim)=p%xp(ipart,idim)+r%box_size(idim)
-           if(p%xp(ipart,idim)>=r%box_size(idim))p%xp(ipart,idim)=p%xp(ipart,idim)-r%box_size(idim)
+           do while(p%xp(ipart,idim)< 0.0d0)
+              p%xp(ipart,idim)=p%xp(ipart,idim)+r%box_size(idim)
+           end do
+           do while(p%xp(ipart,idim)>=r%box_size(idim))
+              p%xp(ipart,idim)=p%xp(ipart,idim)-r%box_size(idim)
+           end do
         end if
      end do
   end do
