@@ -1,6 +1,6 @@
 module rho_fine_module
 #ifdef _CUDA
-  use gpu_runner, only: gpu_multipole_leaf, gpu_multipole_split, gpu_reset_rho, gpu_cic_multipole, gpu_cic_multipole2
+  use gpu_runner, only: gpu_multipole_leaf, gpu_multipole_split, gpu_reset_rho, gpu_cic_multipole2
   use part_device, only: gpu_split_part, gpu_sort_part, gpu_cic_part
 #endif
 contains
@@ -519,7 +519,6 @@ recursive subroutine r_cic_multipole(pst,ilevel,input_size)
   else
 #ifdef _CUDA
      if(pst%s%m%data_on_device)then
-!        call gpu_cic_multipole(pst%s, ilevel)
         call gpu_cic_multipole2(pst%s, ilevel)
      else
         call cic_multipole(pst%s,ilevel)

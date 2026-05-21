@@ -1,0 +1,74 @@
+!> DM particle device state (allocatables, scratch, time-step ladders).
+!>
+!> Owns every per-particle / per-cell device array touched by `module
+!> part_device` (kick, sort, split, CIC) and by `gpu_manager` (H<->D copy in
+!> r_set_grid_device / gpu_to_host_part). Split out of `gpu_runner` so the
+!> particle device state lives next to the kernels that read/write it without
+!> dragging in mesh / hydro / MG modules.
+!>
+!> Acyclic build order: gpu_part_state -> {part_device, gpu_manager}.
+!> gpu_runner does NOT `use gpu_part_state` (mesh side has no need to read
+!> particle device arrays). No `use gpu_runner` or `use part_device` here.
+module gpu_part_state
+  use amr_parameters, only: ndim, twotondim, threetondim, dp, i8b, MAXLEVEL
+  use cudafor
+  implicit none
+
+  !> Particle time-step ladders (mirrored from sim%g%dtnew / dtold per kick).
+  real(kind=8), device, dimension(1:MAXLEVEL) :: dtnew_part, dtold_part
+
+  !> Particle arrays on device (DM; allocated in r_set_grid_device).
+  real(kind=dp),   device, allocatable, dimension(:,:) :: xp, vp
+  real(kind=dp),   device, allocatable, dimension(:)   :: mp
+  integer(kind=4), device, allocatable, dimension(:)   :: levelp
+  integer(kind=4), device, allocatable, dimension(:)   :: sortp
+  integer(kind=4), device, allocatable, dimension(:)   :: workp
+  integer(i8b),    device, allocatable, dimension(:)   :: idp
+  !> Optional DM particle fields: device array is allocated iff the host
+  !> counterpart is allocated (mirrors split_part's gating in rho_fine).
+  !> `size_p` mirrors host `p%size`; renamed to avoid shadowing intrinsic size().
+  real(kind=dp),   device, allocatable, dimension(:,:) :: fp
+  !> Per-particle potential (opt-in; allocated iff host p%phip is allocated).
+  real(kind=dp),   device, allocatable, dimension(:)   :: phip
+  !> Placeholder for kick kernel when phip is not allocated (writes gated by has_phip).
+  real(kind=dp),   device :: phip_dummy(1)
+  real(kind=dp),   device, allocatable, dimension(:,:) :: jp
+  real(kind=dp),   device, allocatable, dimension(:)   :: zp, tp, tm, size_p, charge
+  integer(i8b),    device, allocatable, dimension(:)   :: idm
+  integer(kind=4), device, allocatable, dimension(:)   :: idt
+
+  !> Per-particle scratch (split/sort/CIC)
+  integer(kind=8), device, allocatable, dimension(:) :: hkey_part
+  integer(kind=4), device, allocatable, dimension(:) :: bucket_part
+
+  !> Per-cell particle lists for the CIC segmented reduction. count/head are
+  !> rank-2 (twotondim, ngridmax+ncachemax) keyed by level-(ilevel+1) source
+  !> cell (icell, igrid); cell_part_idx is the flat slot->ipart list. The
+  !> per-particle source map (src_icell_part / src_igrid_part) is populated
+  !> once and reused across the threetondim outer iterations.
+  integer(kind=4), device, allocatable, dimension(:,:) :: cell_part_count
+  integer(kind=4), device, allocatable, dimension(:,:) :: cell_part_head
+  integer(kind=4), device, allocatable, dimension(:)   :: cell_part_idx
+  integer(kind=4), device, allocatable, dimension(:)   :: src_icell_part
+  integer(kind=4), device, allocatable, dimension(:)   :: src_igrid_part
+
+  !> Precomputed destination (igrid, icell) for each (source_cell, k) pair,
+  !> built once per gpu_cic_part call. Sentinel (0, 0) = out-of-domain.
+  integer(kind=4), device, allocatable, dimension(:,:,:) :: dest_oct_per_cell
+  integer(kind=4), device, allocatable, dimension(:,:,:) :: dest_icell_per_cell
+
+  !> Per-particle deposition weight scratch (overwritten per outer-loop k):
+  !> weight_part_rho = mp*w/vol_loc; weight_part_nref = gated nref weight.
+  real(kind=dp), device, allocatable, dimension(:) :: weight_part_rho
+  real(kind=dp), device, allocatable, dimension(:) :: weight_part_nref
+
+  !> Device accumulator for the levelmin multipole reduction.
+  !> Length ndim+1: q(1)=sum(mp), q(idim+1)=sum(mp*xp).
+  real(kind=8), device, allocatable, dimension(:) :: multipole_q_dev
+
+  !> Gather/scatter scratch (xp_swap, mp_swap, idp_swap; workp for int4).
+  real(kind=dp),   device, allocatable, dimension(:,:) :: xp_swap
+  real(kind=dp),   device, allocatable, dimension(:)   :: mp_swap
+  integer(i8b),    device, allocatable, dimension(:)   :: idp_swap
+
+end module gpu_part_state

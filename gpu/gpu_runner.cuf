@@ -11,7 +11,6 @@ module gpu_runner
   logical, device, dimension(1:3) :: periodic
   real(kind=8), device, dimension(1:3) :: box_size
   real(kind=8), device, dimension(1:3) :: constant_gravity
-  real(kind=8), device, dimension(1:MAXLEVEL) :: dtnew_part, dtold_part
   integer(kind=4), device, allocatable, dimension(:) :: ckey_max
   integer(kind=8), device, allocatable, dimension(:) :: key_off
   integer(kind=4), device, allocatable, dimension(:,:) :: box_ckey_min, box_ckey_max
@@ -65,70 +64,16 @@ module gpu_runner
   !> The total number of halo and ghost octs
   integer(kind=4) :: num_send, num_recv
 
-  !> Particle arrays on device (DM; allocated in r_set_grid_device).
-  real(kind=dp),   device, allocatable, dimension(:,:) :: xp, vp
-  real(kind=dp),   device, allocatable, dimension(:)   :: mp
-  integer(kind=4), device, allocatable, dimension(:)   :: levelp
-  integer(kind=4), device, allocatable, dimension(:)   :: sortp
-  integer(kind=4), device, allocatable, dimension(:)   :: workp
-  integer(i8b),    device, allocatable, dimension(:)   :: idp
-  !> Optional DM particle fields: device array is allocated iff the host
-  !> counterpart is allocated (mirrors split_part's gating in rho_fine).
-  !> `size_p` mirrors host `p%size`; renamed to avoid shadowing intrinsic size().
-  real(kind=dp),   device, allocatable, dimension(:,:) :: fp
-  !> Per-particle potential (opt-in; allocated iff host p%phip is allocated).
-  real(kind=dp),   device, allocatable, dimension(:)   :: phip
-  !> Placeholder for kick kernel when phip is not allocated (writes gated by has_phip).
-  real(kind=dp),   device :: phip_dummy(1)
-  real(kind=dp),   device, allocatable, dimension(:,:) :: jp
-  real(kind=dp),   device, allocatable, dimension(:)   :: zp, tp, tm, size_p, charge
-  integer(i8b),    device, allocatable, dimension(:)   :: idm
-  integer(kind=4), device, allocatable, dimension(:)   :: idt
-
-  !> Per-particle scratch (split/sort/CIC)
-  integer(kind=8), device, allocatable, dimension(:) :: hkey_part
-  integer(kind=4), device, allocatable, dimension(:) :: bucket_part
-
-  !> Per-cell particle lists for the CIC segmented reduction. count/head are
-  !> rank-2 (twotondim, ngridmax+ncachemax) keyed by level-(ilevel+1) source
-  !> cell (icell, igrid); cell_part_idx is the flat slot->ipart list. The
-  !> per-particle source map (src_icell_part / src_igrid_part) is populated
-  !> once and reused across the threetondim outer iterations.
-  integer(kind=4), device, allocatable, dimension(:,:) :: cell_part_count
-  integer(kind=4), device, allocatable, dimension(:,:) :: cell_part_head
-  integer(kind=4), device, allocatable, dimension(:)   :: cell_part_idx
-  integer(kind=4), device, allocatable, dimension(:)   :: src_icell_part
-  integer(kind=4), device, allocatable, dimension(:)   :: src_igrid_part
-
-  !> Precomputed destination (igrid, icell) for each (source_cell, k) pair,
-  !> built once per gpu_cic_part call. Sentinel (0, 0) = out-of-domain.
-  integer(kind=4), device, allocatable, dimension(:,:,:) :: dest_oct_per_cell
-  integer(kind=4), device, allocatable, dimension(:,:,:) :: dest_icell_per_cell
-
-  !> Per-particle deposition weight scratch (overwritten per outer-loop k):
-  !> weight_part_rho = mp*w/vol_loc; weight_part_nref = gated nref weight.
-  real(kind=dp), device, allocatable, dimension(:) :: weight_part_rho
-  real(kind=dp), device, allocatable, dimension(:) :: weight_part_nref
-
-  !> Device accumulator for the levelmin multipole reduction.
-  !> Length ndim+1: q(1)=sum(mp), q(idim+1)=sum(mp*xp).
-  real(kind=8), device, allocatable, dimension(:) :: multipole_q_dev
-
-  !> Gather/scatter scratch (xp_swap, mp_swap, idp_swap; workp for int4).
-  real(kind=dp),   device, allocatable, dimension(:,:) :: xp_swap
-  real(kind=dp),   device, allocatable, dimension(:)   :: mp_swap
-  integer(i8b),    device, allocatable, dimension(:)   :: idp_swap
-
-  ! hash_get / hilbert_key included here for nordc (private vs refine_device).
-  private :: mix64, fnv64, fnv32, hash_set, hash_get, hash_update, hash_free
-  private :: hilbert_key
+  !> Particle device state (xp/vp/mp/sortp/..., per-cell CIC lists, swap
+  !> scratch, dtnew_part/dtold_part, phip_dummy, multipole_q_dev) lives in
+  !> module gpu_part_state (gpu/gpu_part_state.cuf). gpu_runner intentionally
+  !> does not `use gpu_part_state` because the mesh side has no need to read
+  !> particle device arrays directly; particle kernels (`module part_device`,
+  !> gpu/gpu_part.cuf) and H<->D copies (`gpu_manager`) `use gpu_part_state`.
 
 contains
 
-  include 'gpu_hash.cuf'
-  include 'gpu_hilbert.cuf'
   include 'gpu_scan.cuf'
-  include 'gpu_reduce.cuf'
   ! Particle kernels and dispatchers live in module part_device
   ! (mini-ramses-dev/gpu/gpu_part.cuf), built as its own CUDA Fortran unit.
 

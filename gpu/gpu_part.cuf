@@ -7,7 +7,7 @@ module part_device
   use oct_commons, only: oct
   use gpu_utils
   use cudafor
-  use gpu_runner, only: &
+  use gpu_part_state, only: &
        xp, vp, mp, levelp, sortp, workp, idp, &
        fp, phip, phip_dummy, jp, zp, tp, tm, size_p, charge, idm, idt, &
        hkey_part, bucket_part, &
@@ -16,10 +16,11 @@ module part_device
        dest_oct_per_cell, dest_icell_per_cell, &
        weight_part_rho, weight_part_nref, multipole_q_dev, &
        xp_swap, mp_swap, idp_swap, &
+       dtnew_part, dtold_part
+  use gpu_runner, only: &
        grid, hash_key, hash_val, ckey_max, key_off, &
        box_ckey_min, box_ckey_max, box_size, periodic, &
        rho, nref, f, phi, &
-       dtnew_part, dtold_part, &
        swap_local, swap_global, prefix_sum, &
        partial_sums_0, partial_sums_1, partial_sums_2, &
        gpu_scan
@@ -80,7 +81,7 @@ end subroutine bucket_part_boundary
 attributes(global) subroutine bucket_part_general(xp, bucket_part, &
      grid, hash_key_d, hash_val_d, hash_size_d, ckey_max_d, key_off_d, &
      skip1, skip2, skip3, dx_loc, ilevel, head_idx, num_parts, leading)
-  ! hash_get: same compilation unit as gpu_runner (nordc).
+  ! hash_get: device helper in this module (part_device); nordc requires same compilation unit as callers.
   integer(kind=4), intent(in), value :: leading
   real(kind=dp), device :: xp(*)
   integer(kind=4), device :: bucket_part(*)

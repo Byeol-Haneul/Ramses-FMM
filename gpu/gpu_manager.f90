@@ -3,6 +3,7 @@ module gpu_manager
   use nvtx
   use gpu_utils
   use gpu_runner
+  use gpu_part_state
 contains
 !###########################################################
 !###########################################################
@@ -112,8 +113,7 @@ recursive subroutine r_set_grid_device(pst)
         workp  = pst%s%p%workp
         idp    = pst%s%p%idp
 
-        ! Device `fp` is a GPU-private kick scratch (host `p%fp` is sink-only
-        ! and unallocated on DM/gravana runs). Zero-init when host has none.
+
         allocate(fp(1:size(pst%s%p%xp, 1), 1:ndim))
         if (allocated(pst%s%p%fp)) then
            fp(1:size(pst%s%p%fp, 1), 1:ndim) = pst%s%p%fp
