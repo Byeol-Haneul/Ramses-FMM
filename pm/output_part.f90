@@ -52,7 +52,7 @@ recursive subroutine r_output_part(pst,input_array,input_size,output_array,outpu
         endif
      else !regular output dump
         !only output dark matter particle data if requested
-        if(pst%s%r%part .and. pst%s%r%output_part)then 
+        if(pst%s%r%part)then 
            filename2=TRIM(filename)//'part.'
            call output_part(pst%s,pst%s%p,filename2)
         endif

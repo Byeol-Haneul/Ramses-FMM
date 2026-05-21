@@ -108,12 +108,8 @@ subroutine m_read_params(pst)
   real(kind=8)::bkp_time_hrs=2   ! Backup file frequency in hours
   real(kind=8)::run_time_hrs=0   ! Estimated run time in hrs
   real(kind=8)::bkp_last_min=10  ! Backup file before the end of run in min
-  integer::bkp_modulo=0          ! Use modulo for backup file count
-  integer::nfile=1               ! Number of file per snapshot. Use -1 for nfile=ncpu
-  logical::output_part=.true. ! Output particle data in regular dumps (default: true)
-  logical::output_grav=.true. ! Output gravity data in regular dumps (default: true)
-  logical::output_hydro=.true.! Output hydro data in regular dumps (default: true)
-  logical::output_amr=.true.  ! Output AMR data in regular dumps (default: true)
+  integer::bkp_modulo=0       ! Use modulo for backup file count
+  integer::nfile=1          ! Number of file per snapshot. Use -1 for nfile=ncpu
 
   ! Output times
   real(kind=8),dimension(1:MAXOUT)::aout=1.1  ! Output expansion factors
@@ -126,7 +122,6 @@ subroutine m_read_params(pst)
   ! Movie
   integer::imovout=0     ! Increment for output times
   integer::imov=1        ! Initialize
-  real(kind=8)::tstartmov=0d0,astartmov=0d0
   real(kind=8)::tendmov=0.,aendmov=0.
   logical::movie=.false.
   logical::zoom_only=.false.
@@ -143,25 +138,6 @@ subroutine m_read_params(pst)
   character(LEN=5)::proj_axis='z' ! x->x, y->y, projection along z
   integer,dimension(0:NVAR+2+nrtgrp)::movie_vars=0
   character(len=5),dimension(0:NVAR+2+nrtgrp)::movie_vars_txt=''
-  ! Movie camera and rendering options (per-projection, NMOV=5)
-  real(kind=8),dimension(1:5)::theta_camera=0d0
-  real(kind=8),dimension(1:5)::phi_camera=0d0
-  real(kind=8),dimension(1:5)::dtheta_camera=0d0
-  real(kind=8),dimension(1:5)::dphi_camera=0d0
-  real(kind=8),dimension(1:5)::tstart_theta_camera=0d0
-  real(kind=8),dimension(1:5)::tstart_phi_camera=0d0
-  real(kind=8),dimension(1:5)::tend_theta_camera=0d0
-  real(kind=8),dimension(1:5)::tend_phi_camera=0d0
-  real(kind=8),dimension(1:5)::focal_camera=0d0
-  real(kind=8),dimension(1:5)::dist_camera=0d0
-  real(kind=8),dimension(1:5)::ddist_camera=0d0
-  real(kind=8),dimension(1:5)::smooth_frame=1d0
-  real(kind=8),dimension(1:5)::varmin_frame=-1d60
-  real(kind=8),dimension(1:5)::varmax_frame=1d60
-  logical,dimension(1:5)::perspective_camera=.false.
-  logical,dimension(1:5)::zoom_only_frame=.false.
-  character(LEN=6),dimension(1:5)::shader_frame='square'
-  character(LEN=10),dimension(1:5)::method_frame='mean_mass'
 
   ! Refinement parameters for each level
   integer ,dimension(1:MAXLEVEL)::nexpand = 1 ! Number of mesh expansion
@@ -451,7 +427,6 @@ subroutine m_read_params(pst)
   logical::output_peak_trac=.false.
   logical::output_peak_dust=.false.
   integer::rho_type_clump=1 ! 1: DM, 2: stars, 3: sinks, 4: gas
-  integer::nsteps_per_tree=1 ! Call clump finder for tree formation every n coarse steps
   real(kind=8)::relevance_threshold=2
   real(kind=8)::density_threshold=-1
   real(kind=8)::saddle_threshold=-1
@@ -562,8 +537,7 @@ subroutine m_read_params(pst)
   ! Output parameters
   namelist/output_params/foutput,aout,tout,output_mode &
        & ,tend,delta_tout,aend,delta_aout,gadget_output &
-       & ,run_time_hrs,bkp_time_hrs,bkp_last_min,bkp_modulo,nfile &
-       & ,output_part,output_grav,output_hydro,output_amr
+       & ,run_time_hrs,bkp_time_hrs,bkp_last_min,bkp_modulo,nfile
   ! Trajectory output parameters
   namelist/traj_params/ntrajectories,trajectories
   ! AMR grid basic parameters
@@ -579,14 +553,8 @@ subroutine m_read_params(pst)
   ! Movies parameters
   namelist/movie_params/levelmax_frame,nw_frame,nh_frame,ivar_frame &
        & ,xcentre_frame,ycentre_frame,zcentre_frame &
-       & ,deltax_frame,deltay_frame,deltaz_frame,movie,zoom_only,zoom_only_frame &
-       & ,imovout,imov,tstartmov,astartmov,tendmov,aendmov,proj_axis &
-       & ,movie_vars,movie_vars_txt &
-       & ,theta_camera,phi_camera,dtheta_camera,dphi_camera &
-       & ,tstart_theta_camera,tstart_phi_camera,tend_theta_camera,tend_phi_camera &
-       & ,focal_camera,dist_camera,ddist_camera &
-       & ,perspective_camera,smooth_frame,shader_frame,method_frame &
-       & ,varmin_frame,varmax_frame
+       & ,deltax_frame,deltay_frame,deltaz_frame,movie,zoom_only &
+       & ,imovout,imov,tendmov,aendmov,proj_axis,movie_vars,movie_vars_txt
   ! Initial conditions parameters
   namelist/init_params/filetype,initfile,multiple,nregion,region_type &
        & ,x_center,y_center,z_center,aexp_ini,omega_b,omega_m,omega_l,h0 &
@@ -689,7 +657,7 @@ subroutine m_read_params(pst)
        & ,output_peak_trac,output_peak_dust &
        & ,relevance_threshold,density_threshold,saddle_threshold &
        & ,mass_threshold,purity_threshold,fraction_threshold &
-       & ,merger_tree,orphan,ntreemax,ntreetot,rho_type_clump,nsteps_per_tree
+       & ,merger_tree,orphan,ntreemax,ntreetot,rho_type_clump
   ! Lightcone parameters
   namelist/lightcone_params/lightcone,cone_z_min,cone_z_max,cone_opening_angle_y,cone_opening_angle_z &
        & ,cone_theta,cone_phi,cone_observer
@@ -1253,10 +1221,6 @@ subroutine m_read_params(pst)
   s%r%bkp_last_min=bkp_last_min
   s%r%bkp_modulo=bkp_modulo
   s%r%nfile=nfile
-  s%r%output_part=output_part
-  s%r%output_grav=output_grav
-  s%r%output_hydro=output_hydro
-  s%r%output_amr=output_amr
 
   s%r%levelmin=levelmin
   s%r%nlevelmax=nlevelmax
@@ -1311,32 +1275,12 @@ subroutine m_read_params(pst)
   s%r%deltaz_frame=deltaz_frame
   s%r%movie=movie
   s%r%zoom_only=zoom_only
-  s%r%zoom_only_frame=zoom_only_frame
   s%r%imovout=imovout
   s%r%imov=imov
-  s%r%tstartmov=tstartmov
-  s%r%astartmov=astartmov
   s%r%tendmov=tendmov
   s%r%aendmov=aendmov
   s%r%proj_axis=proj_axis
   s%r%movie_vars_txt=movie_vars_txt
-  s%r%theta_camera=theta_camera
-  s%r%phi_camera=phi_camera
-  s%r%dtheta_camera=dtheta_camera
-  s%r%dphi_camera=dphi_camera
-  s%r%tstart_theta_camera=tstart_theta_camera
-  s%r%tstart_phi_camera=tstart_phi_camera
-  s%r%tend_theta_camera=tend_theta_camera
-  s%r%tend_phi_camera=tend_phi_camera
-  s%r%focal_camera=focal_camera
-  s%r%dist_camera=dist_camera
-  s%r%ddist_camera=ddist_camera
-  s%r%perspective_camera=perspective_camera
-  s%r%smooth_frame=smooth_frame
-  s%r%shader_frame=shader_frame
-  s%r%method_frame=method_frame
-  s%r%varmin_frame=varmin_frame
-  s%r%varmax_frame=varmax_frame
   if(s%r%movie)call set_movie_vars(s%r)
 
   ! Trajectory output params
@@ -1628,7 +1572,6 @@ subroutine m_read_params(pst)
   s%r%purity_threshold=purity_threshold
   s%r%fraction_threshold=fraction_threshold
   s%r%rho_type_clump=rho_type_clump
-  s%r%nsteps_per_tree=nsteps_per_tree
 
   s%r%lightcone = lightcone
   s%r%cone_z_min = cone_z_min

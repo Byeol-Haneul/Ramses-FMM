@@ -1,5 +1,4 @@
 module force_fine_module
-
   use multigrid_fine_coarse, only: level_count_t
 
 #ifdef _CUDA
@@ -205,25 +204,6 @@ subroutine gradient_phi(s,ilevel,icount)
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
-  ! Verbose: CPU mirror of GPU phidump_grad (first N_FDUMP octs).
-  if(r%verbose)then
-     block
-       integer, parameter :: N_FDUMP = 4
-       integer :: n_dump, ioct_pd, ind_pd, gidx_pd
-       n_dump = MIN(N_FDUMP, m%tail(ilevel)-m%head(ilevel)+1)
-       do ioct_pd = 1, n_dump
-          gidx_pd = m%head(ilevel) + ioct_pd - 1
-          do ind_pd = 1, twotondim
-             write(*,'(A,I0,A,I0,A,I0,A,ES23.15)') &
-                  ' phidump_grad: ilevel=', ilevel, &
-                  ' oct=',  gidx_pd, &
-                  ' ind=',  ind_pd, &
-                  ' phi=',  m%phi(ind_pd, gidx_pd)
-          end do
-       end do
-     end block
-  endif
-
   ! Mesh size at level ilevel in code units
   dx=r%boxlen/2**ilevel
 
@@ -355,28 +335,6 @@ subroutine gradient_phi(s,ilevel,icount)
 
   end do
   ! End loop over grids
-
-  ! Verbose: CPU mirror of GPU fdump_grad (first N_FDUMP octs).
-  if(r%verbose)then
-     block
-       integer, parameter :: N_FDUMP = 4
-       integer :: n_dump, ioct_fd, idim_fd, ind_fd, gidx_fd
-       n_dump = MIN(N_FDUMP, m%tail(ilevel)-m%head(ilevel)+1)
-       do ioct_fd = 1, n_dump
-          gidx_fd = m%head(ilevel) + ioct_fd - 1
-          do idim_fd = 1, ndim
-             do ind_fd = 1, twotondim
-                write(*,'(A,I0,A,I0,A,I0,A,I0,A,ES23.15)') &
-                     ' fdump_grad: ilevel=', ilevel, &
-                     ' oct=',  gidx_fd, &
-                     ' idim=', idim_fd, &
-                     ' ind=',  ind_fd, &
-                     ' f=',    m%f(ind_fd, idim_fd, gidx_fd)
-             end do
-          end do
-       end do
-     end block
-  endif
 
   call close_cache(mdl)
 

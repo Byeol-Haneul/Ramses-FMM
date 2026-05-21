@@ -2104,10 +2104,6 @@ contains
     integer(kind=4) :: num_octs, num_blocks, num_threads
     integer :: threadsX_per_block, threadsY_per_block
     real(kind=8) :: dx, dx2
-    integer, parameter :: N_FDUMP = 4
-    integer :: n_dump, ioct_dump, idim_dump, ind_dump
-    real(kind=dp) :: f_host_dump(1:twotondim, 1:ndim, 1:N_FDUMP)
-    real(kind=dp) :: phi_host_dump(1:twotondim, 1:N_FDUMP)
 
     dx  = sim%r%boxlen/2**ilevel
 
@@ -2128,45 +2124,10 @@ contains
             ' threadsX=', threadsX_per_block, ' threadsY=', threadsY_per_block
     endif
 
-    if (sim%r%verbose) then
-       n_dump = MIN(N_FDUMP, num_octs)
-       if (n_dump > 0) then
-          phi_host_dump(:,1:n_dump) = phi(:,head_idx:head_idx+n_dump-1)
-          do ioct_dump = 1, n_dump
-             do ind_dump = 1, twotondim
-                write(*,'(A,I0,A,I0,A,I0,A,ES23.15)') &
-                     ' phidump_grad: ilevel=', ilevel, &
-                     ' oct=',  head_idx+ioct_dump-1, &
-                     ' ind=',  ind_dump, &
-                     ' phi=',  phi_host_dump(ind_dump, ioct_dump)
-             end do
-          end do
-       endif
-    endif
-
     call nvtxStartRange("GPU gradient_phi", color=1)!blue
     call gradient_phi<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(phi, f, nbor, &
          & head_idx, num_octs, dx)
     call nvtxEndRange()
-
-    if (sim%r%verbose) then
-       n_dump = MIN(N_FDUMP, num_octs)
-       if (n_dump > 0) then
-          f_host_dump(:,:,1:n_dump) = f(:,:,head_idx:head_idx+n_dump-1)
-          do ioct_dump = 1, n_dump
-             do idim_dump = 1, ndim
-                do ind_dump = 1, twotondim
-                   write(*,'(A,I0,A,I0,A,I0,A,I0,A,ES23.15)') &
-                        ' fdump_grad: ilevel=', ilevel, &
-                        ' oct=',  head_idx+ioct_dump-1, &
-                        ' idim=', idim_dump, &
-                        ' ind=',  ind_dump, &
-                        ' f=',    f_host_dump(ind_dump, idim_dump, ioct_dump)
-                end do
-             end do
-          end do
-       endif
-    endif
 
   end subroutine gpu_gradient_phi
 

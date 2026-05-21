@@ -53,10 +53,6 @@ module amr_commons
      real(kind=8)::bkp_last_min=10  ! Backup file before the end of run in min
      integer::bkp_modulo=0       ! Use modulo for backup file count
      integer::nfile=1            ! Number of file used per snapshot. Use -1 for nfile=ncpu
-     logical::output_part=.true. ! Output particle data in dumps
-     logical::output_grav=.true. ! Output gravity data in dumps
-     logical::output_hydro=.true.! Output hydro data in dumps
-     logical::output_amr=.true.  ! Output AMR data in dumps
 
      ! Trajectory output parameters (per-step particle traces)
      integer::ntrajectories=0
@@ -120,32 +116,11 @@ module amr_commons
      logical::zoom_only=.false.
      integer::imovout=0    ! Increment for output times
      integer::imov=1       ! Initialize
-     real(kind=8)::tstartmov=0d0
-     real(kind=8)::astartmov=0d0
      real(kind=8)::tendmov=0.
      real(kind=8)::aendmov=0.
      character(LEN=5)::proj_axis='z' ! x->x, y->y, projection along z
      integer,dimension(0:NVAR+2+nrtgrp)::movie_vars=0
      character(len=5),dimension(0:NVAR+2+nrtgrp)::movie_vars_txt=''
-     ! Movie camera and rendering options (per-projection, NMOV=5)
-     real(kind=8),dimension(1:5)::theta_camera=0d0
-     real(kind=8),dimension(1:5)::phi_camera=0d0
-     real(kind=8),dimension(1:5)::dtheta_camera=0d0
-     real(kind=8),dimension(1:5)::dphi_camera=0d0
-     real(kind=8),dimension(1:5)::tstart_theta_camera=0d0
-     real(kind=8),dimension(1:5)::tstart_phi_camera=0d0
-     real(kind=8),dimension(1:5)::tend_theta_camera=0d0
-     real(kind=8),dimension(1:5)::tend_phi_camera=0d0
-     real(kind=8),dimension(1:5)::focal_camera=0d0
-     real(kind=8),dimension(1:5)::dist_camera=0d0
-     real(kind=8),dimension(1:5)::ddist_camera=0d0
-     real(kind=8),dimension(1:5)::smooth_frame=1d0
-     real(kind=8),dimension(1:5)::varmin_frame=-1d60
-     real(kind=8),dimension(1:5)::varmax_frame=1d60
-     logical,dimension(1:5)::perspective_camera=.false.
-     logical,dimension(1:5)::zoom_only_frame=.false.
-     character(LEN=6),dimension(1:5)::shader_frame='square'
-     character(LEN=10),dimension(1:5)::method_frame='mean_mass'
 
      ! Hydro solver parameters
      real(kind=8)::gamma=1.4d0
@@ -375,7 +350,6 @@ module amr_commons
      logical::output_peak_trac=.false.
      logical::output_peak_dust=.false.
      integer::rho_type_clump=1
-     integer::nsteps_per_tree=1
      real(kind=8)::relevance_threshold=2
      real(kind=8)::density_threshold=-1
      real(kind=8)::saddle_threshold=-1
@@ -780,16 +754,10 @@ module amr_commons
 contains
 
   subroutine print_run_parameters(run_p)
-    class(run_t), intent(in)::run_p
+    class(run_t)::run_p
     type(run_t)::run_params
     namelist /run_parameters/ run_params
-    ! gfortran rejects `run_params = run_p` (CLASS to TYPE); use SELECT TYPE.
-    select type (rp => run_p)
-    type is (run_t)
-       run_params = rp
-    class default
-       error stop 'print_run_parameters: dynamic type must be run_t'
-    end select
+    run_params = run_p
     write(*,NML=run_parameters)
   end subroutine print_run_parameters
 

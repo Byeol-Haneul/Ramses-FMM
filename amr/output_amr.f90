@@ -148,39 +148,22 @@ subroutine m_dump_all(pst,write_bkp_file)
      ! Output AMR data
      filename=TRIM(filedir)//'amr.'
      input_array=transfer(filename,input_array)
-     ! Only write AMR data if output_amr is true OR if this is a backup
-     if(r%output_amr .or. write_bkp_file)then
-        if(r%verbose)write(*,*)'Writing AMR files'
-        call r_output_amr(pst,input_array,flen/4,dummy,0)
-     else
-        if(r%verbose)write(*,*)'Skipping AMR files'
-     endif
+     if(r%verbose)write(*,*)'Writing AMR files'
+     call r_output_amr(pst,input_array,flen/4,dummy,0)
      
      ! Output HYDRO data
      if(r%hydro)then
         filename=TRIM(filedir)//'hydro.'
         input_array=transfer(filename,input_array)
-        ! Only write hydro data if output_hydro is true OR if this is a backup
-        if(r%output_hydro .or. write_bkp_file)then
-           if(r%verbose)write(*,*)'Writing hydro files'
-           call r_output_hydro(pst,input_array,flen/4,dummy,0)
-        else
-           if(r%verbose)write(*,*)'Skipping hydro files'
-        endif
+        if(r%verbose)write(*,*)'Writing hydro files'
+        call r_output_hydro(pst,input_array,flen/4,dummy,0)
      end if
 
      ! Output GRAV data
      if(r%poisson)then
-        filename=TRIM(filedir)//'grav.'
-        input_array=transfer(filename,input_array)
         in_output_poisson%filename=TRIM(filedir)//'grav.'
-        ! Only write gravity data if output_grav is true OR if this is a backup
-        if(r%output_grav .or. write_bkp_file)then
-           if(r%verbose)write(*,*)'Writing gravity files'
-           call r_output_poisson(pst,in_output_poisson,storage_size(in_output_poisson)/32)
-        else
-           if(r%verbose)write(*,*)'Skipping gravity files'
-        endif
+        if(r%verbose)write(*,*)'Writing gravity files'
+        call r_output_poisson(pst,in_output_poisson,storage_size(in_output_poisson)/32)
      end if
 
      ! Output PART data
