@@ -631,22 +631,26 @@ contains
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
     
-    integer :: oct_idx, thread_idx, block_idx, old_oct_idx
+    integer :: oct_idx, cell_idx, thread_idx, block_idx, old_oct_idx, ivar
 
-    ! Compute the thread and block idx
-    thread_idx = threadIdx%x - 1
+    ! Compute block idx
     block_idx = blockIdx%x - 1
 
-    ! Compute the new oct idx
-    oct_idx = thread_idx + block_idx * blockDim%x
+    ! Compute oct idx
+    oct_idx = block_idx * blockDim%y + threadIdx%y - 1
     if (oct_idx >= num_octs) return
     oct_idx = head_idx + oct_idx
+
+    ! Compute cell idx
+    cell_idx = threadIdx%x
 
     ! Update the global swap table
     old_oct_idx = swap_global(oct_idx)
 
     ! Gather uold into unew
-    unew(:, :, oct_idx) = uold(:, :, old_oct_idx)
+    do ivar = 1, nvar
+       unew(cell_idx, ivar, oct_idx) = uold(cell_idx, ivar, old_oct_idx)
+    end do
 
   end subroutine sort_gather_hydro
   ! =========================================================================
