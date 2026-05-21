@@ -566,7 +566,7 @@ contains
 
              ! Compute prefix sum
              call nvtxStartRange("GPU refine", color=2)!yellow
-             call gpu_scan(head_idx, num_octs, new_noct)
+             call gpu_scan(head_idx, num_octs)
              call nvtxEndRange()
 
              ! Compute local swap table
@@ -594,6 +594,10 @@ contains
     num_threads = 128
     num_blocks = (num_octs + num_threads - 1) / num_threads
 
+    threadsX_per_block = 8
+    threadsY_per_block = 16
+    num_blocks_2 = (num_octs + threadsY_per_block - 1) / threadsY_per_block
+
     ! Out-of-place sort of grid, flag1, uold and grav variables using swap table
     if (num_octs > 0) then
        call nvtxStartRange("GPU refine", color=2)!yellow
@@ -602,8 +606,9 @@ contains
        call sort_gather_flag<<<num_blocks, num_threads>>>(flag2, flag1, swap_global, head_idx, num_octs)
        call sort_scatter_flag<<<num_blocks, num_threads>>>(flag1, flag2, head_idx, num_octs)
 #ifdef HYDRO
-       call sort_gather_hydro<<<num_blocks, num_threads>>>(unew, uold, swap_global, head_idx, num_octs)
-       call sort_scatter_hydro<<<num_blocks, num_threads>>>(uold, unew, head_idx, num_octs)
+       call sort_gather_hydro<<<num_blocks_2, dim3(threadsX_per_block,threadsY_per_block,1)>>>(unew, uold, &
+            & swap_global, head_idx, num_octs)
+       info = cudaMemcpy(uold(1,1,head_idx), unew(1,1,head_idx), twotondim*nvar*num_octs)
 #endif
 #ifdef GRAV
        call sort_gather_force<<<num_blocks, num_threads>>>(nref, f, 1, swap_global, head_idx, num_octs)
@@ -989,7 +994,7 @@ contains
   subroutine gpu_scan(head_idx, num_octs, total_sum)
     integer(kind=4) :: head_idx
     integer(kind=4) :: num_octs
-    integer(kind=4) :: total_sum
+    integer(kind=4), optional :: total_sum
     !
     integer(kind=4) :: block_size, grid_size_0, grid_size_1, grid_size_2
     integer(kind=4) :: offset, size
@@ -1059,7 +1064,9 @@ contains
 
     endif
 
-    total_sum = total_sum_d
+    if (present(total_sum)) then
+       total_sum = total_sum_d
+    endif
 
   end subroutine gpu_scan
 
