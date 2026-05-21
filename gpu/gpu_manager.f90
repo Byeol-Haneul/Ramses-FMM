@@ -49,7 +49,7 @@ recursive subroutine r_set_grid_device(pst)
         if (allocated(idp))     deallocate(idp)
         ! Optional DM fields (allocated only when host has them)
         if (allocated(fp))      deallocate(fp)
-        if (allocated(fp_dummy)) deallocate(fp_dummy)
+        if (allocated(phip))    deallocate(phip)
         if (allocated(jp))      deallocate(jp)
         if (allocated(zp))      deallocate(zp)
         if (allocated(tp))      deallocate(tp)
@@ -76,10 +76,9 @@ recursive subroutine r_set_grid_device(pst)
         if (allocated(mp_swap))  deallocate(mp_swap)
         if (allocated(idp_swap)) deallocate(idp_swap)
 
-        ! Allocate device mirrors to the host arrays' capacity. The leading
-        ! dim of every rank-2 host particle array (xp/vp/fp/jp) is the same
-        ! r%npartmax; we use size(pst%s%p%xp, 1) as the canonical anchor and
-        ! tie the per-particle scratch to it.
+        ! Allocate device mirrors to host capacity. All rank-2 host particle
+        ! arrays share the same leading dim (r%npartmax); size(p%xp,1) is the
+        ! canonical anchor for the per-particle scratch arrays.
         allocate(xp(1:size(pst%s%p%xp, 1), 1:ndim))
         allocate(vp(1:size(pst%s%p%vp, 1), 1:ndim))
         allocate(mp(1:size(pst%s%p%mp)))
@@ -99,8 +98,7 @@ recursive subroutine r_set_grid_device(pst)
         allocate(weight_part_rho (1:size(pst%s%p%xp, 1)))
         allocate(weight_part_nref(1:size(pst%s%p%xp, 1)))
         allocate(multipole_q_dev (1:ndim+1))
-        ! Gather/scatter scratch — no host->device copy (kernel-overwritten).
-        ! Same shape rule as their typed targets (xp/vp/fp/jp; mp/zp/tp/tm/...; idp/idm).
+        ! Gather/scatter scratch — kernel-overwritten, no host->device copy.
         allocate(xp_swap (1:size(pst%s%p%xp, 1), 1:ndim))
         allocate(mp_swap (1:size(pst%s%p%mp)))
         allocate(idp_swap(1:size(pst%s%p%idp)))
@@ -114,16 +112,21 @@ recursive subroutine r_set_grid_device(pst)
         workp  = pst%s%p%workp
         idp    = pst%s%p%idp
 
-        ! Device `fp` is a GPU-private kick scratch (sized to xp capacity);
-        ! host `p%fp` is sink-only (init_part.f90:151) and unallocated on
-        ! DM/gravana runs, but the kick kernel still needs a real device
-        ! buffer to persist gathered force. Zero-init when host has none, so
-        ! `kick_part_dump`'s `ff_zero` reflects gather success.
+        ! Device `fp` is a GPU-private kick scratch (host `p%fp` is sink-only
+        ! and unallocated on DM/gravana runs). Zero-init when host has none.
         allocate(fp(1:size(pst%s%p%xp, 1), 1:ndim))
         if (allocated(pst%s%p%fp)) then
            fp(1:size(pst%s%p%fp, 1), 1:ndim) = pst%s%p%fp
         else
            fp = 0d0
+        endif
+        ! Device `phip` parallels `fp` (host only allocated under
+        ! OUTPUT_PARTICLE_POTENTIAL); zero-init when host has none.
+        allocate(phip(1:size(pst%s%p%xp, 1)))
+        if (allocated(pst%s%p%phip)) then
+           phip(1:size(pst%s%p%phip)) = pst%s%p%phip
+        else
+           phip = 0d0
         endif
         if (allocated(pst%s%p%jp)) then
            allocate(jp(1:size(pst%s%p%jp, 1), 1:ndim))
@@ -236,9 +239,8 @@ end subroutine r_transfer_grid_host
 !###########################################################
 !###########################################################
 #ifdef _CUDA
-!> Copy device particle arrays to host for PART_DUMP, harness comparison, and
-!> current host-side I/O readers. Steady-state GPU execution should keep
-!> particles resident and call this only at explicit host-consumer boundaries.
+!> Copy device particle arrays back to host for host-side I/O readers.
+!> Call only at explicit host-consumer boundaries.
 subroutine gpu_to_host_part(pst)
   use ramses_commons, only: pst_t
   implicit none
@@ -257,6 +259,7 @@ subroutine gpu_to_host_part(pst)
   pst%s%p%idp    = idp
   ! Optional mirrors — copy iff both sides are allocated.
   if (allocated(fp)     .and. allocated(pst%s%p%fp))     pst%s%p%fp     = fp
+  if (allocated(phip)   .and. allocated(pst%s%p%phip))   pst%s%p%phip   = phip
   if (allocated(jp)     .and. allocated(pst%s%p%jp))     pst%s%p%jp     = jp
   if (allocated(zp)     .and. allocated(pst%s%p%zp))     pst%s%p%zp     = zp
   if (allocated(tp)     .and. allocated(pst%s%p%tp))     pst%s%p%tp     = tp
@@ -274,10 +277,8 @@ end subroutine gpu_to_host_part
 !###########################################################
 !###########################################################
 #ifdef GRAV
-!> Copy device mesh fields written by GPU CIC back to host for host Poisson,
-!> PART_DUMP, and harness comparison. Call only after gpu_cic_part has filled
-!> device rho/nref; steady-state GPU execution should avoid this sync unless a
-!> host consumer follows. (mesh_t rho/nref exist only with GRAV.)
+!> Copy device rho/nref back to host (for host Poisson or other consumers).
+!> Call only after gpu_cic_part has filled them. (GRAV only.)
 subroutine gpu_to_host_mesh(pst)
   use ramses_commons, only: pst_t
   implicit none

@@ -17,9 +17,7 @@ subroutine m_rho_fine(pst,ilevel,rtype)
   use amr_parameters, only: ndim
   use ramses_commons, only: pst_t
   use amr_commons, only: multipole_t
-#ifdef PART_DUMP
   use pm_dump, only: dump_part_state, dump_mesh_state
-#endif
   implicit none
   type(pst_t)::pst
   integer::ilevel
@@ -104,9 +102,7 @@ subroutine m_rho_fine(pst,ilevel,rtype)
      ! For non periodic BC, split particles that left the box
      if(ilevel==r%levelmin.AND.ANY(.not.r%periodic(1:ndim)))then
         call r_split_part(pst,ilevel-1,1)
-#ifdef PART_DUMP
         call dump_part_state(pst%s%p, pst%s%r, "split0", ilevel-1)
-#endif
      endif
 
      ! Loop over all finer levels from coarse to fine
@@ -116,9 +112,7 @@ subroutine m_rho_fine(pst,ilevel,rtype)
         if(m%noct_tot(i)>0)then
            if(r%verbose)write(*,'(" Sort particles for level ",I2)')i
            call r_sort_part(pst,i,1)
-#ifdef PART_DUMP
            call dump_part_state(pst%s%p, pst%s%r, "sort", i)
-#endif
         endif
 
         ! Mass deposition into array rho using all massive particle types
@@ -128,10 +122,8 @@ subroutine m_rho_fine(pst,ilevel,rtype)
            input_array(1)=i
            input_array(2)=rtype
            call r_cic_part(pst,input_array,2)
-#ifdef PART_DUMP
            call dump_part_state(pst%s%p, pst%s%r, "cic",  i)
            call dump_mesh_state(pst%s%m,            "cic",  i)
-#endif
         endif
 #endif
 
@@ -139,9 +131,7 @@ subroutine m_rho_fine(pst,ilevel,rtype)
         if(m%noct_tot(i)>0.AND.i<r%nlevelmax)then
            if(r%verbose)write(*,'(" Split particles for level ",I2)')i
            call r_split_part(pst,i,1)
-#ifdef PART_DUMP
            call dump_part_state(pst%s%p, pst%s%r, "split", i)
-#endif
         endif
 
      end do
@@ -701,7 +691,7 @@ recursive subroutine r_cic_part(pst,input_array,input_size)
      rtype=input_array(2)
 #ifdef _CUDA
      if(pst%s%m%data_on_device)then
-        ! DM on device: GPU CIC deposition; TSC/PCS warn once and use CIC.
+        ! DM on device: GPU CIC deposition (TSC/PCS warn once and fall back to CIC).
         if(pst%s%r%part)then
            if(pst%s%r%part_mass_deposition_scheme/=1 .and. .not.warned_dm_dep_gpu)then
               write(*,'(A,I0,A)')' WARNING: r_cic_part: GPU TSC/PCS DM mass deposition (scheme ', &
@@ -710,15 +700,13 @@ recursive subroutine r_cic_part(pst,input_array,input_size)
            endif
            call gpu_cic_part(pst%s, ilevel, rtype)
 #ifdef GRAV
-           ! Validation/host-consumer sync: host Poisson, PART_DUMP, and the
-           ! harness read pst%s%m%rho/nref. A steady-state GPU path should
-           ! keep these arrays resident until such a host boundary.
+           ! Sync device rho/nref back to host for host Poisson.
            call gpu_to_host_mesh(pst)
 #endif
         endif
         if(pst%s%r%star)call cic_part(pst%s,pst%s%star,ilevel,rtype)
         if(pst%s%r%sink)call cic_part(pst%s,pst%s%sink,ilevel,rtype)
-        ! Validation/host-consumer sync for PART_DUMP, harness, and I/O readers.
+        ! Sync device particles back to host for I/O readers.
         call gpu_to_host_part(pst)
         return
      endif
@@ -1256,13 +1244,13 @@ recursive subroutine r_split_part(pst,ilevel,input_size)
   else
 #ifdef _CUDA
      if(pst%s%m%data_on_device)then
-        ! Phase-1 GPU dispatch: DM only. Other types fall through to host split.
+        ! GPU split: DM only; other particle types fall through to host split.
         if(pst%s%r%part)call gpu_split_part(pst%s, ilevel)
         if(pst%s%r%star)call split_part(pst%s,pst%s%star,ilevel)
         if(pst%s%r%sink)call split_part(pst%s,pst%s%sink,ilevel)
         if(pst%s%r%tree)call split_part(pst%s,pst%s%tree,ilevel)
         if(pst%s%r%trac)call split_part(pst%s,pst%s%trac,ilevel)
-        ! Validation/host-consumer sync for PART_DUMP, harness, and I/O readers.
+        ! Sync device particles back to host for I/O readers.
         call gpu_to_host_part(pst)
         return
      endif
@@ -2010,13 +1998,13 @@ recursive subroutine r_sort_part(pst,ilevel,input_size)
   else
 #ifdef _CUDA
      if(pst%s%m%data_on_device)then
-        ! Phase-1 GPU dispatch: DM only. Other types fall through to host sort.
+        ! GPU sort: DM only; other particle types fall through to host sort.
         if(pst%s%r%part)call gpu_sort_part(pst%s, ilevel)
         if(pst%s%r%star)call sort_part(pst%s,pst%s%star,ilevel)
         if(pst%s%r%sink)call sort_part(pst%s,pst%s%sink,ilevel)
         if(pst%s%r%tree)call sort_part(pst%s,pst%s%tree,ilevel)
         if(pst%s%r%trac)call sort_part(pst%s,pst%s%trac,ilevel)
-        ! Validation/host-consumer sync for PART_DUMP, harness, and I/O readers.
+        ! Sync device particles back to host for I/O readers.
         call gpu_to_host_part(pst)
         return
      endif

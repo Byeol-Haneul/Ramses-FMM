@@ -1,7 +1,7 @@
 module move_fine_module
   use rho_fine_module, only: cic_weight, cic_index, tsc_weight, tsc_index, pcs_weight, pcs_index
 #ifdef _CUDA
-  use gpu_runner, only: gpu_kick_drift_part, gpu_part_env_flag
+  use gpu_runner, only: gpu_kick_drift_part
   use gpu_manager, only: gpu_to_host_part
 #endif
   use rng
@@ -17,9 +17,7 @@ contains
 subroutine m_kick_drift_part(pst,ilevel,action_part)
   use amr_parameters, only: ndim, twotondim
   use ramses_commons, only: pst_t
-#ifdef PART_DUMP
   use pm_dump, only: dump_part_state
-#endif
   implicit none
   type(pst_t)::pst
   integer::ilevel
@@ -37,13 +35,11 @@ subroutine m_kick_drift_part(pst,ilevel,action_part)
   input_array(2)=action_part
   call r_kick_drift_part(pst,input_array,2,dummy,0)
 
-#ifdef PART_DUMP
   if (action_part == 1) then
      call dump_part_state(pst%s%p, pst%s%r, "kickonly",  ilevel)
   else
      call dump_part_state(pst%s%p, pst%s%r, "kickdrift", ilevel)
   end if
-#endif
 
 end subroutine m_kick_drift_part
 !################################################################
@@ -80,7 +76,7 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
      action_part=input_array(2)
 #ifdef _CUDA
      if(pst%s%m%data_on_device)then
-        ! DM on device: GPU CIC kick-drift; TSC/PCS warn once and use CIC.
+        ! DM on device: GPU CIC kick-drift (TSC/PCS warn once and fall back to CIC).
         if(pst%s%r%part)then
            if(pst%s%p%type/=PART_TYPE)then
               write(*,*)'r_kick_drift_part: GPU particle kick-drift supports DM PART_TYPE only in phase 1.'
@@ -100,7 +96,7 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
            write(*,*)'r_kick_drift_part: tracers/dust on the GPU path are not supported in phase 1.'
            call abort
         endif
-        ! Validation/host-consumer sync for PART_DUMP, harness, and I/O readers.
+        ! Sync device particles back to host for I/O readers.
         call gpu_to_host_part(pst)
         return
      endif
@@ -215,14 +211,6 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
   real(kind=8),dimension(1:nvector,1:ndim)::xana
   real(kind=8),dimension(1:nvector,1:ndim)::fana
   type(msg_three_realdp)::dummy_three_realdp
-  ! Per-slot gather-state probe mirror (CPU side). Tracks fine vs coarse pass
-  ! outcome and emits one `_cpu_kick_gather_dump:` line per cluster idp for
-  ! lev8 kickonly. Matches gpu_part.cuf kick_drift_part_kernel capture shape.
-  integer(i8b),parameter::DBG_CPU_IDP_LO = 1007296_i8b
-  integer(i8b),parameter::DBG_CPU_IDP_HI = 1007426_i8b
-  logical::ok_fine_dbg, ok_coarse_dbg, used_coarse_dbg, dbg_kick_active
-  integer::dbg_ok_fine_i, dbg_ok_coarse_i, dbg_used_coarse_i
-  real(kind=8),dimension(1:twotondim, 1:ndim)::dbg_fc_cpu
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
@@ -237,17 +225,6 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
   ! Mesh spacing in that level
   dx_loc=r%boxlen/2**ilevel
   vol_loc=dx_loc**ndim
-
-  ! Gather-state probe gate: same idp band and (ilevel, action) gate as the
-  ! GPU `kick_gather_dump:` block in gpu/gpu_part.cuf. Active only on the
-  ! CPU sister-run (no-op when env flag is off or when ilevel/action mismatch).
-  dbg_kick_active = .false.
-#ifdef _CUDA
-#ifdef GRAV
-  dbg_kick_active = (ilevel == 8) .and. (action_part == action_kick_only) &
-       .and. gpu_part_env_flag('GPU_PART_DEBUG_KICK')
-#endif
-#endif
 
   ! Deal with particles that left the computational domain
   if(ilevel==r%levelmin.and.ANY(.not.r%periodic(1:ndim)))then
@@ -339,14 +316,8 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
         call unlock_cache(m,igrid(ind))
      end do
 
-     ! Snapshot fine-pass outcome before any coarse-fallback overwrites ok_level.
-     ok_fine_dbg = ok_level
-     ok_coarse_dbg = .false.
-     used_coarse_dbg = .false.
-
      ! If cloud is not fully inside level ilevel, re-do CIC at coarser level
      if(.not. ok_level)then
-        used_coarse_dbg = .true.
 
         ! Rescale particle position at level ilevel
         do idim=1,ndim
@@ -387,7 +358,6 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
         do ind=1,twotondim
            call unlock_cache(m,igrid(ind))
         end do
-        ok_coarse_dbg = ok_level
      end if
 
      ! Compute cloud volumes
@@ -413,47 +383,6 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
         endif
 #endif
      endif
-
-#ifdef _CUDA
-#ifdef GRAV
-     ! Per-slot gather-state mirror for the GPU `kick_gather_dump:` line.
-     ! Field shape matches gpu_part.cuf gpu_kick_drift_part write block.
-     ! Per-corner f reads are guarded on igrid/=0 (failed corners print 0).
-     if (dbg_kick_active &
-          .and. p%idp(ipart) >= DBG_CPU_IDP_LO .and. p%idp(ipart) <= DBG_CPU_IDP_HI) then
-        dbg_ok_fine_i    = merge(1, 0, ok_fine_dbg)
-        dbg_ok_coarse_i  = merge(1, 0, ok_coarse_dbg)
-        dbg_used_coarse_i= merge(1, 0, used_coarse_dbg)
-        dbg_fc_cpu = 0d0
-        do ind = 1, twotondim
-           if (igrid(ind) /= 0) then
-              do idim = 1, ndim
-                 dbg_fc_cpu(ind, idim) = m%f(icell(ind), idim, igrid(ind))
-              end do
-           endif
-        end do
-        if (ndim == 3) then
-           write(*,'(A,I0,A,I0,A,I0,A,I0,A,8(1X,I0),A,8(1X,I0),A,8(1X,ES15.7),A,8(1X,ES15.7),A,8(1X,ES15.7),A,8(1X,ES15.7))') &
-                ' _cpu_kick_gather_dump: idp=', int(p%idp(ipart), kind=8), &
-                ' ok_fine=', dbg_ok_fine_i, &
-                ' ok_coarse=', dbg_ok_coarse_i, &
-                ' used_coarse=', dbg_used_coarse_i, &
-                ' igrid=', (igrid(ind), ind=1,twotondim), &
-                ' icell=', (icell(ind), ind=1,twotondim), &
-                ' vol=',   (vol(ind),   ind=1,twotondim), &
-                ' f0=',    (dbg_fc_cpu(ind, 1), ind=1,twotondim), &
-                ' f1=',    (dbg_fc_cpu(ind, 2), ind=1,twotondim), &
-                ' f2=',    (dbg_fc_cpu(ind, 3), ind=1,twotondim)
-        else
-           write(*,'(A,I0,A,I0,A,I0,A,I0)') &
-                ' _cpu_kick_gather_dump: idp=', int(p%idp(ipart), kind=8), &
-                ' ok_fine=', dbg_ok_fine_i, &
-                ' ok_coarse=', dbg_ok_coarse_i, &
-                ' used_coarse=', dbg_used_coarse_i
-        endif
-     endif
-#endif
-#endif
 
      ! Perform kick, or drift, or both
      if(action_part==action_kick_drift)then

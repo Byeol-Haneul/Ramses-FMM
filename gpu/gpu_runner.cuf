@@ -72,13 +72,11 @@ module gpu_runner
   integer(kind=4), device, allocatable, dimension(:)   :: sortp
   integer(kind=4), device, allocatable, dimension(:)   :: workp
   integer(i8b),    device, allocatable, dimension(:)   :: idp
-  !> Optional DM particle fields. split_part (pm/rho_fine.f90:1413-1494)
-  !> physically swaps each one only if its host counterpart is allocated.
-  !> Mirror that gate device-side: allocate iff allocated(pst%s%p%X).
-  !> NB: device array `size_p` mirrors host `pst%s%p%size`; renamed to avoid
-  !> shadowing the Fortran intrinsic `size()` in modules that `use gpu_runner`.
+  !> Optional DM particle fields: device array is allocated iff the host
+  !> counterpart is allocated (mirrors split_part's gating in rho_fine).
+  !> `size_p` mirrors host `p%size`; renamed to avoid shadowing intrinsic size().
   real(kind=dp),   device, allocatable, dimension(:,:) :: fp
-  real(kind=dp),   device, allocatable, dimension(:)   :: fp_dummy
+  real(kind=dp),   device, allocatable, dimension(:)   :: phip
   real(kind=dp),   device, allocatable, dimension(:,:) :: jp
   real(kind=dp),   device, allocatable, dimension(:)   :: zp, tp, tm, size_p, charge
   integer(i8b),    device, allocatable, dimension(:)   :: idm
@@ -88,33 +86,29 @@ module gpu_runner
   integer(kind=8), device, allocatable, dimension(:) :: hkey_part
   integer(kind=4), device, allocatable, dimension(:) :: bucket_part
 
-  !> Per-cell particle lists (CIC / kick-drift). §15.16 segmented-reduction:
-  !> cell_part_count/head are rank-2 (twotondim, ngridmax+ncachemax), keyed by
-  !> the level-(ilevel+1) source cell (icell, igrid) where igrid is the level-
-  !> ilevel parent oct on this rank. cell_part_idx is the flattened per-cell
-  !> particle list (slot -> ipart). src_icell_part / src_igrid_part are the
-  !> per-particle source-cell map, populated once by Step 0 and reused across
-  !> all threetondim outer iterations of the deposit driver (§15.18).
+  !> Per-cell particle lists for the CIC segmented reduction. count/head are
+  !> rank-2 (twotondim, ngridmax+ncachemax) keyed by level-(ilevel+1) source
+  !> cell (icell, igrid); cell_part_idx is the flat slot->ipart list. The
+  !> per-particle source map (src_icell_part / src_igrid_part) is populated
+  !> once and reused across the threetondim outer iterations.
   integer(kind=4), device, allocatable, dimension(:,:) :: cell_part_count
   integer(kind=4), device, allocatable, dimension(:,:) :: cell_part_head
   integer(kind=4), device, allocatable, dimension(:)   :: cell_part_idx
   integer(kind=4), device, allocatable, dimension(:)   :: src_icell_part
   integer(kind=4), device, allocatable, dimension(:)   :: src_igrid_part
 
-  !> Hash-lookup amortization (§15.18): destination (igrid, icell) for each
-  !> (source_cell, k) pair. Built once per gpu_cic_part call, reused across
-  !> all threetondim outer iterations. Sentinel (0, 0) = out-of-domain.
+  !> Precomputed destination (igrid, icell) for each (source_cell, k) pair,
+  !> built once per gpu_cic_part call. Sentinel (0, 0) = out-of-domain.
   integer(kind=4), device, allocatable, dimension(:,:,:) :: dest_oct_per_cell
   integer(kind=4), device, allocatable, dimension(:,:,:) :: dest_icell_per_cell
 
-  !> Per-particle deposition weight scratch (§15.16 / §15.19), overwritten
-  !> per outer-loop iteration k. weight_part_rho holds mp*w/vol_loc;
-  !> weight_part_nref holds the gated nref contribution.
+  !> Per-particle deposition weight scratch (overwritten per outer-loop k):
+  !> weight_part_rho = mp*w/vol_loc; weight_part_nref = gated nref weight.
   real(kind=dp), device, allocatable, dimension(:) :: weight_part_rho
   real(kind=dp), device, allocatable, dimension(:) :: weight_part_nref
 
-  !> Device-scalar accumulator for the level-`ilevel == levelmin` multipole
-  !> reduction (§15.20). Length ndim+1: q(1)=sum(mp), q(idim+1)=sum(mp*xp).
+  !> Device accumulator for the levelmin multipole reduction.
+  !> Length ndim+1: q(1)=sum(mp), q(idim+1)=sum(mp*xp).
   real(kind=8), device, allocatable, dimension(:) :: multipole_q_dev
 
   !> Gather/scatter scratch (xp_swap, mp_swap, idp_swap; workp for int4).

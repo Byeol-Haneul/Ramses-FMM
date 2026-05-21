@@ -93,6 +93,12 @@ contains
     else
        write(u) 0
     end if
+    if (allocated(p%phip)) then
+       write(u) 1
+       write(u) p%phip(1:npart)
+    else
+       write(u) 0
+    end if
     close(u)
   end subroutine dump_part_state
 
