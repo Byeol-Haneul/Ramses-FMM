@@ -17,7 +17,6 @@ subroutine m_rho_fine(pst,ilevel,rtype)
   use amr_parameters, only: ndim
   use ramses_commons, only: pst_t
   use amr_commons, only: multipole_t
-  use pm_dump, only: dump_part_state, dump_mesh_state
   implicit none
   type(pst_t)::pst
   integer::ilevel
@@ -102,7 +101,6 @@ subroutine m_rho_fine(pst,ilevel,rtype)
      ! For non periodic BC, split particles that left the box
      if(ilevel==r%levelmin.AND.ANY(.not.r%periodic(1:ndim)))then
         call r_split_part(pst,ilevel-1,1)
-        call dump_part_state(pst%s%p, pst%s%r, "split0", ilevel-1)
      endif
 
      ! Loop over all finer levels from coarse to fine
@@ -112,7 +110,6 @@ subroutine m_rho_fine(pst,ilevel,rtype)
         if(m%noct_tot(i)>0)then
            if(r%verbose)write(*,'(" Sort particles for level ",I2)')i
            call r_sort_part(pst,i,1)
-           call dump_part_state(pst%s%p, pst%s%r, "sort", i)
         endif
 
         ! Mass deposition into array rho using all massive particle types
@@ -122,8 +119,6 @@ subroutine m_rho_fine(pst,ilevel,rtype)
            input_array(1)=i
            input_array(2)=rtype
            call r_cic_part(pst,input_array,2)
-           call dump_part_state(pst%s%p, pst%s%r, "cic",  i)
-           call dump_mesh_state(pst%s%m,            "cic",  i)
         endif
 #endif
 
@@ -131,7 +126,6 @@ subroutine m_rho_fine(pst,ilevel,rtype)
         if(m%noct_tot(i)>0.AND.i<r%nlevelmax)then
            if(r%verbose)write(*,'(" Split particles for level ",I2)')i
            call r_split_part(pst,i,1)
-           call dump_part_state(pst%s%p, pst%s%r, "split", i)
         endif
 
      end do

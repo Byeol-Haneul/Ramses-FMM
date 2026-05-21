@@ -17,7 +17,6 @@ contains
 subroutine m_kick_drift_part(pst,ilevel,action_part)
   use amr_parameters, only: ndim, twotondim
   use ramses_commons, only: pst_t
-  use pm_dump, only: dump_part_state
   implicit none
   type(pst_t)::pst
   integer::ilevel
@@ -34,12 +33,6 @@ subroutine m_kick_drift_part(pst,ilevel,action_part)
   input_array(1)=ilevel
   input_array(2)=action_part
   call r_kick_drift_part(pst,input_array,2,dummy,0)
-
-  if (action_part == 1) then
-     call dump_part_state(pst%s%p, pst%s%r, "kickonly",  ilevel)
-  else
-     call dump_part_state(pst%s%p, pst%s%r, "kickdrift", ilevel)
-  end if
 
 end subroutine m_kick_drift_part
 !################################################################
