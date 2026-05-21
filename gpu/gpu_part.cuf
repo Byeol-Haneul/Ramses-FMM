@@ -1738,7 +1738,6 @@ subroutine gpu_kick_drift_part(sim, ilevel, action_part)
   integer(kind=4) :: gravity_type
   logical :: any_nonperiodic
   integer(kind=4) :: has_phip_i
-  real(kind=dp), device, pointer :: phip_k(:)
 
   call nvtxStartRange("gpu_kick_drift_part", color=4) ! purple
 
@@ -1816,16 +1815,18 @@ subroutine gpu_kick_drift_part(sim, ilevel, action_part)
   has_phip_i = 0
   if (allocated(phip)) then
      has_phip_i = 1
-     phip_k => phip
+     call kick_drift_part_kernel<<<num_blocks, num_threads>>>(xp, vp, fp, phip, levelp, &
+          f, phi, hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, &
+          box_ckey_min, box_ckey_max, box_size, periodic, dtnew_part, dtold_part, &
+          skip1, skip2, skip3, dx_loc, action_part, ilevel, head_idx, num_parts, leading, &
+          1, has_phip_i)
   else
-     phip_k => phip_dummy
+     call kick_drift_part_kernel<<<num_blocks, num_threads>>>(xp, vp, fp, phip_dummy, levelp, &
+          f, phi, hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, &
+          box_ckey_min, box_ckey_max, box_size, periodic, dtnew_part, dtold_part, &
+          skip1, skip2, skip3, dx_loc, action_part, ilevel, head_idx, num_parts, leading, &
+          1, has_phip_i)
   endif
-
-  call kick_drift_part_kernel<<<num_blocks, num_threads>>>(xp, vp, fp, phip_k, levelp, &
-       f, phi, hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, &
-       box_ckey_min, box_ckey_max, box_size, periodic, dtnew_part, dtold_part, &
-       skip1, skip2, skip3, dx_loc, action_part, ilevel, head_idx, num_parts, leading, &
-       1, has_phip_i)
   call GPU_Error_Check("gpu/gpu_part.cuf", 0)
 
   call nvtxEndRange()

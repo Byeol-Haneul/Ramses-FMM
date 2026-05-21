@@ -24,9 +24,9 @@ module gpu_part_state
   !> `size_p` mirrors host `p%size`; renamed to avoid shadowing intrinsic size().
   real(kind=dp),   device, allocatable, dimension(:,:) :: fp
   !> Per-particle potential (opt-in; allocated iff host p%phip is allocated).
-  real(kind=dp),   device, allocatable, target, dimension(:)   :: phip
+  real(kind=dp),   device, allocatable, dimension(:)   :: phip
   !> Placeholder for kick kernel when phip is not allocated (writes gated by has_phip).
-  real(kind=dp),   device, target :: phip_dummy(1)
+  real(kind=dp),   device :: phip_dummy(1)
   real(kind=dp),   device, allocatable, dimension(:,:) :: jp
   real(kind=dp),   device, allocatable, dimension(:)   :: zp, tp, tm, size_p, charge
   integer(i8b),    device, allocatable, dimension(:)   :: idm
