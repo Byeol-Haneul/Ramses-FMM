@@ -1462,6 +1462,13 @@ subroutine split_part(s,p,ilevel)
            p%tm(ipart)=p%tm(jpart)
            p%tm(jpart)=mp_tmp
         endif
+        ! Swap potential (per-particle; must move with idp so the
+        ! gathered potential stays attached to its particle).
+        if(allocated(p%phip))then
+           mp_tmp=p%phip(ipart)
+           p%phip(ipart)=p%phip(jpart)
+           p%phip(jpart)=mp_tmp
+        endif
         ! Swap levels
         levelp_tmp=p%levelp(ipart)
         p%levelp(ipart)=p%levelp(jpart)
