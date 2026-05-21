@@ -32,7 +32,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   use feedback_module, only: out_feedback_t, r_thermal_feedback, m_mechanical_feedback
   use clump_finder_module, only: m_clump_finder
   use lightcone_module, only: m_output_lightcone
-  use rt_godunov_fine_module, only: r_rt_godunov_fine,r_set_rtunew,r_set_rtuold,r_set_emissivity
+  use rt_godunov_fine_module, only: r_set_rtunew,r_set_emissivity
   use rt_step_module, only: m_rt_step
   use sink_evolution_module, only: r_sink_evolution, out_accretion_t
   use sink_merger_module, only: r_sink_merger
@@ -90,7 +90,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   !--------------------------------
   ! Merging tree particle formation
   !--------------------------------
-  if(r%tree.and.ilevel==r%levelmin)then
+  if(r%tree.and.ilevel==r%levelmin.and.mod(g%nstep_coarse, r%nsteps_per_tree)==0)then
      call m_timer('tree - formation','start')
      call m_tree_formation(pst)
   endif
@@ -149,8 +149,8 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   !--------------------------
   if(r%movie) then
      if(r%imov.le.r%imovout)then 
-        if((r%aendmov>0.and.g%aexp>=r%aendmov*dble(r%imov)/dble(r%imovout)) &
-             & .or.(r%tendmov>0.and.g%t>=r%tendmov*dble(r%imov)/dble(r%imovout)))then
+        if((r%aendmov>0.and.g%aexp>=(r%aendmov-r%astartmov)*dble(r%imov)/dble(r%imovout)+r%astartmov) &
+             & .or.(r%tendmov>0.and.g%t>=(r%tendmov-r%tstartmov)*dble(r%imov)/dble(r%imovout)+r%tstartmov))then
            call m_output_frame(pst)
         endif
      endif
