@@ -67,29 +67,27 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
      ilevel=input_array(1)
      action_part=input_array(2)
 #ifdef _CUDA
-     if(pst%s%m%data_on_device)then
-        ! DM on device: GPU CIC kick-drift (TSC/PCS warn once and fall back to CIC).
-        if(pst%s%r%part)then
-           if(pst%s%p%type/=PART_TYPE)then
-              write(*,*)'r_kick_drift_part: GPU particle kick-drift supports DM PART_TYPE only in phase 1.'
-              call abort
-           endif
-           if(pst%s%r%part_force_interpolation_scheme/=1 .and. .not.warned_dm_kick_gpu)then
-              write(*,'(A,I0,A)')' WARNING: r_kick_drift_part: GPU TSC/PCS DM force interpolation (scheme ', &
-                   & pst%s%r%part_force_interpolation_scheme,') unavailable in phase 1; using GPU CIC kick-drift path instead.'
-              warned_dm_kick_gpu=.true.
-           endif
-           call gpu_kick_drift_part(pst%s, ilevel, action_part)
-        endif
-        if(pst%s%r%star)call cic_kick_drift_part(pst%s,pst%s%star,ilevel,action_part)
-        if(pst%s%r%sink)call cic_kick_drift_part(pst%s,pst%s%sink,ilevel,action_part)
-        if(pst%s%r%tree)call cic_kick_drift_part(pst%s,pst%s%tree,ilevel,action_part)
-        if(pst%s%r%trac.or.pst%s%r%dust)then
-           write(*,*)'r_kick_drift_part: tracers/dust on the GPU path are not supported in phase 1.'
+     ! Kick runs only from amr_step, after r_set_grid_device in adaptive_loop.
+     if(pst%s%r%part)then
+        if(pst%s%p%type/=PART_TYPE)then
+           write(*,*)'r_kick_drift_part: GPU particle kick-drift supports DM PART_TYPE only in phase 1.'
            call abort
         endif
-        return
+        if(pst%s%r%part_force_interpolation_scheme/=1 .and. .not.warned_dm_kick_gpu)then
+           write(*,'(A,I0,A)')' WARNING: r_kick_drift_part: GPU TSC/PCS DM force interpolation (scheme ', &
+                & pst%s%r%part_force_interpolation_scheme,') unavailable in phase 1; using GPU CIC kick-drift path instead.'
+           warned_dm_kick_gpu=.true.
+        endif
+        call gpu_kick_drift_part(pst%s, ilevel, action_part)
      endif
+     if(pst%s%r%star)call cic_kick_drift_part(pst%s,pst%s%star,ilevel,action_part)
+     if(pst%s%r%sink)call cic_kick_drift_part(pst%s,pst%s%sink,ilevel,action_part)
+     if(pst%s%r%tree)call cic_kick_drift_part(pst%s,pst%s%tree,ilevel,action_part)
+     if(pst%s%r%trac.or.pst%s%r%dust)then
+        write(*,*)'r_kick_drift_part: tracers/dust on the GPU path are not supported in phase 1.'
+        call abort
+     endif
+     return
 #endif
      ! Force interpolation for various components (DM particles, star, sink, tree)
      ! based on their respective deposition schemes (CIC 1, TSC 2 or PCS 3)
