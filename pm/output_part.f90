@@ -25,7 +25,7 @@ recursive subroutine r_output_part(pst,input_array,input_size,output_array,outpu
      call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      filename=transfer(input_array,filename)
-     if(index(filename,'output')==0)then !backup dump
+     if(index(filename,'output')==0)then
         if(pst%s%r%part)then
            filename2=TRIM(filename)//'part.'
            call backup_part(pst%s%r,pst%s%g,pst%s%p,filename2)
@@ -50,9 +50,8 @@ recursive subroutine r_output_part(pst,input_array,input_size,output_array,outpu
            filename2=TRIM(filename)//'dust.'
            call backup_part(pst%s%r,pst%s%g,pst%s%dust,filename2)
         endif
-     else !regular output dump
-        !only output dark matter particle data if requested
-        if(pst%s%r%part)then 
+     else
+        if(pst%s%r%part)then
            filename2=TRIM(filename)//'part.'
            call output_part(pst%s,pst%s%p,filename2)
         endif
