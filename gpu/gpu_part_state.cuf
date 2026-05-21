@@ -2,13 +2,8 @@
 !>
 !> Owns every per-particle / per-cell device array touched by `module
 !> part_device` (kick, sort, split, CIC) and by `gpu_manager` (H<->D copy in
-!> r_set_grid_device / gpu_to_host_part). Split out of `gpu_runner` so the
-!> particle device state lives next to the kernels that read/write it without
-!> dragging in mesh / hydro / MG modules.
-!>
-!> Acyclic build order: gpu_part_state -> {part_device, gpu_manager}.
-!> gpu_runner does NOT `use gpu_part_state` (mesh side has no need to read
-!> particle device arrays). No `use gpu_runner` or `use part_device` here.
+!> r_set_grid_device / gpu_to_host_part). 
+
 module gpu_part_state
   use amr_parameters, only: ndim, twotondim, threetondim, dp, i8b, MAXLEVEL
   use cudafor
