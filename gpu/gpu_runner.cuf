@@ -566,7 +566,7 @@ contains
 
              ! Compute prefix sum
              call nvtxStartRange("GPU refine", color=2)!yellow
-             call gpu_scan(head_idx, num_octs, new_noct)
+             call gpu_scan(head_idx, num_octs)
              call nvtxEndRange()
 
              ! Compute local swap table
@@ -989,7 +989,7 @@ contains
   subroutine gpu_scan(head_idx, num_octs, total_sum)
     integer(kind=4) :: head_idx
     integer(kind=4) :: num_octs
-    integer(kind=4) :: total_sum
+    integer(kind=4), optional :: total_sum
     !
     integer(kind=4) :: block_size, grid_size_0, grid_size_1, grid_size_2
     integer(kind=4) :: offset, size
@@ -1059,7 +1059,9 @@ contains
 
     endif
 
-    total_sum = total_sum_d
+    if (present(total_sum)) then
+       total_sum = total_sum_d
+    endif
 
   end subroutine gpu_scan
 
