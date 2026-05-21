@@ -1,5 +1,5 @@
 module gpu_runner
-  use amr_parameters, only: ndim, twotondim, threetondim, dp, i8b, MAXLEVEL
+  use amr_parameters, only: ndim, twotondim, threetondim, dp
   use hydro_parameters, only: nvar
   use oct_commons, only: oct
   use gpu_utils
@@ -64,18 +64,9 @@ module gpu_runner
   !> The total number of halo and ghost octs
   integer(kind=4) :: num_send, num_recv
 
-  !> Particle device state (xp/vp/mp/sortp/..., per-cell CIC lists, swap
-  !> scratch, dtnew_part/dtold_part, phip_dummy, multipole_q_dev) lives in
-  !> module gpu_part_state (gpu/gpu_part_state.cuf). gpu_runner intentionally
-  !> does not `use gpu_part_state` because the mesh side has no need to read
-  !> particle device arrays directly; particle kernels (`module part_device`,
-  !> gpu/gpu_part.cuf) and H<->D copies (`gpu_manager`) `use gpu_part_state`.
-
 contains
 
   include 'gpu_scan.cuf'
-  ! Particle kernels and dispatchers live in module part_device
-  ! (mini-ramses-dev/gpu/gpu_part.cuf), built as its own CUDA Fortran unit.
 
   !> @brief
   !> Compute the new time step on a GPU
