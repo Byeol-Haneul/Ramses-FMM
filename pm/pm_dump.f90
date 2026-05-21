@@ -1,7 +1,12 @@
 ! Diagnostic dump hooks for the CPU<->GPU particle-pipeline diff harness.
-! Active only when built with -DPART_DUMP.
-! Output is written to ${PART_DUMP_DIR} (default: ./part_dump) as
-! stream-access unformatted binary files, one per dump call.
+! Always on in the default build: dump_part_state / dump_mesh_state are
+! invoked unconditionally from pm/rho_fine.f90 and pm/move_fine.f90, with
+! no -DPART_DUMP build-time gate. Output is written to ${PART_DUMP_DIR}
+! (default: ./part_dump) as stream-access unformatted binary files, one
+! per dump call. The companion reader is gpu_part_diff_harness/diff_dumps.py;
+! the on-disk layout is documented in gpu_part_diff_harness/README.md and
+! any change here must land lockstep with that reader, inspect_part_dump.py,
+! and the README.
 
 module pm_dump
   use amr_parameters, only: ndim, dp, i8b

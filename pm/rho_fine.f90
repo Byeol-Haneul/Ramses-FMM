@@ -1,7 +1,7 @@
 module rho_fine_module
 #ifdef _CUDA
-  use gpu_runner, only: gpu_multipole_leaf, gpu_multipole_split, gpu_reset_rho, gpu_cic_multipole, &
-       & gpu_split_part, gpu_sort_part, gpu_cic_part
+  use gpu_runner, only: gpu_multipole_leaf, gpu_multipole_split, gpu_reset_rho, gpu_cic_multipole
+  use part_device, only: gpu_split_part, gpu_sort_part, gpu_cic_part
 #ifdef GRAV
   use gpu_manager, only: gpu_to_host_part, gpu_to_host_mesh
 #else

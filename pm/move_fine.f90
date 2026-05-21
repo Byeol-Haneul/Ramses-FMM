@@ -1,7 +1,7 @@
 module move_fine_module
   use rho_fine_module, only: cic_weight, cic_index, tsc_weight, tsc_index, pcs_weight, pcs_index
 #ifdef _CUDA
-  use gpu_runner, only: gpu_kick_drift_part
+  use part_device, only: gpu_kick_drift_part
   use gpu_manager, only: gpu_to_host_part
 #endif
   use rng

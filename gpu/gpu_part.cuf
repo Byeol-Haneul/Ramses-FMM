@@ -1,7 +1,44 @@
-!> Particle kernels and dispatchers (included from gpu_runner).
+!> Particle kernels and dispatchers (module part_device).
 !> Rank-2 arrays (xp, vp, fp, jp) use layout (npart_max, ndim); they are
 !> gathered/scattered as ndim independent rank-1 columns. `leading` =
 !> size(xp,1).
+module part_device
+  use amr_parameters, only: ndim, twotondim, threetondim, dp, i8b, MAXLEVEL
+  use oct_commons, only: oct
+  use gpu_utils
+  use cudafor
+  use gpu_runner, only: &
+       xp, vp, mp, levelp, sortp, workp, idp, &
+       fp, phip, jp, zp, tp, tm, size_p, charge, idm, idt, &
+       hkey_part, bucket_part, &
+       cell_part_count, cell_part_head, cell_part_idx, &
+       src_icell_part, src_igrid_part, &
+       dest_oct_per_cell, dest_icell_per_cell, &
+       weight_part_rho, weight_part_nref, multipole_q_dev, &
+       xp_swap, mp_swap, idp_swap, &
+       grid, hash_key, hash_val, ckey_max, key_off, &
+       box_ckey_min, box_ckey_max, box_size, periodic, &
+       rho, nref, f, phi, &
+       dtnew_part, dtold_part, &
+       swap_local, swap_global, prefix_sum, &
+       partial_sums_0, partial_sums_1, partial_sums_2, &
+       gpu_scan
+  implicit none
+
+  ! Device helpers below (hash, hilbert, reduce) are private copies inside
+  ! this module so it does not depend on gpu_runner's private helpers.
+  private :: mix64, fnv64, fnv32, hash_set, hash_get, hash_update, hash_free
+  private :: hilbert_key
+  private :: warp_reduce_int_sum, block_reduce_int_sum
+  private :: warp_reduce_sum,     block_reduce_sum
+  private :: warp_reduce_min,     block_reduce_min
+  private :: warp_reduce_max,     block_reduce_max
+
+contains
+
+  include 'gpu_hash.cuf'
+  include 'gpu_hilbert.cuf'
+  include 'gpu_reduce.cuf'
 
 !> Bucket 0/1 for ilevel == levelmin-1 (domain test).
 attributes(global) subroutine bucket_part_boundary(xp, bucket_part, &
@@ -132,10 +169,12 @@ attributes(global) subroutine init_prefix_sum_part(bucket_part, prefix_sum_d, &
   prefix_sum_d(idx) = bucket_part(idx)
 end subroutine init_prefix_sum_part
 
-!> prefix_sum(h) := 1 if Hilbert-rank-h's particle is COARSE, else 0.
-!> Used by the Hilbert-order second pass that re-orders gpu_split_part's
-!> coarse bucket to match the CPU's Hilbert ordering of demoted particles.
-attributes(global) subroutine init_prefix_sum_part_hilbert_coarse( &
+!> prefix_sum(h) := bucket_part(sortp(h)) for Hilbert-order partition.
+!> h is the Hilbert-ranked slot (head_idx..head_idx+num_parts-1); the
+!> particle currently at that Hilbert position is `ipart = sortp(h)`.
+!> Inclusive scan over this array gives, at each h, the number of fine
+!> particles in Hilbert-prefix [head_idx..h]; the last value is n_fine.
+attributes(global) subroutine init_prefix_sum_part_hilbert_fine( &
      bucket_part_d, sortp_d, prefix_sum_d, head_idx, num_parts)
   integer(kind=4), device :: bucket_part_d(*)
   integer(kind=4), device :: sortp_d(*)
@@ -150,35 +189,42 @@ attributes(global) subroutine init_prefix_sum_part_hilbert_coarse( &
   if (idx >= num_parts) return
   idx = head_idx + idx
   ipart = sortp_d(idx)
-  prefix_sum_d(idx) = 1 - bucket_part_d(ipart)
-end subroutine init_prefix_sum_part_hilbert_coarse
+  prefix_sum_d(idx) = bucket_part_d(ipart)
+end subroutine init_prefix_sum_part_hilbert_fine
 
-!> Overwrite swap_global's coarse range with Hilbert-ordered coarse particles.
-!> Mirrors CPU split_part's coarse loop, which assigns workp in sortp/Hilbert
-!> order. Fine positions skip the write (fine range already in slot order).
-!> No race: the inclusive scan is strictly monotonic on the coarse subset,
-!> so each thread writes a unique coarse slot.
-attributes(global) subroutine write_swap_global_coarse_hilbert( &
-     swap_global_d, bucket_part_d, sortp_d, prefix_sum_d, head_idx, num_parts)
+!> Build swap_global(new_slot) = old_particle_slot directly in one pass,
+!> using sortp's Hilbert traversal of the active range. Coarse particles
+!> land in [head_idx, head_idx+n_coarse-1] and fine particles in
+!> [head_idx+n_coarse, head_idx+num_parts-1]; within each bucket the
+!> ordering follows the parent-level Hilbert key. No race: each Hilbert
+!> slot h writes exactly one new_slot, derived from disjoint rank counters.
+attributes(global) subroutine write_swap_global_hilbert_partition( &
+     swap_global_d, bucket_part_d, sortp_d, prefix_sum_d, &
+     head_idx, num_parts, n_coarse)
   integer(kind=4), device :: swap_global_d(*)
   integer(kind=4), device :: bucket_part_d(*)
   integer(kind=4), device :: sortp_d(*)
   integer(kind=4), device :: prefix_sum_d(*)
   integer(kind=4), intent(in), value :: head_idx
   integer(kind=4), intent(in), value :: num_parts
+  integer(kind=4), intent(in), value :: n_coarse
 
-  integer :: thread_idx, block_idx, idx, ipart, coarse_rank
+  integer :: thread_idx, block_idx, idx, h, ipart, seen, fine_rank, coarse_rank
   thread_idx = threadIdx%x - 1
   block_idx  = blockIdx%x  - 1
   idx = thread_idx + block_idx * blockDim%x
   if (idx >= num_parts) return
-  idx = head_idx + idx
-  ipart = sortp_d(idx)
+  h = head_idx + idx
+  ipart = sortp_d(h)
+  fine_rank = prefix_sum_d(h)
+  seen = h - head_idx + 1
+  coarse_rank = seen - fine_rank
   if (bucket_part_d(ipart) == 0) then
-     coarse_rank = prefix_sum_d(idx)
      swap_global_d(head_idx + coarse_rank - 1) = ipart
+  else
+     swap_global_d(head_idx + n_coarse + fine_rank - 1) = ipart
   endif
-end subroutine write_swap_global_coarse_hilbert
+end subroutine write_swap_global_hilbert_partition
 
 !> Gather/scatter one column of a rank-2 real(dp) field.
 !> `leading` = size(xp,1); `idim` selects the column (1..ndim).
@@ -401,7 +447,7 @@ subroutine gpu_split_part(sim, ilevel)
   type(ramses_t), intent(inout) :: sim
   integer, intent(in) :: ilevel
 
-  integer(kind=4) :: head_idx, num_parts, n_fine, n_coarse, n_coarse_hilbert, ilev, leading
+  integer(kind=4) :: head_idx, num_parts, n_fine, n_coarse, ilev, leading
   integer :: num_threads, num_blocks, idim
   real(kind=8) :: dx_loc, skip1, skip2, skip3
 
@@ -433,9 +479,29 @@ subroutine gpu_split_part(sim, ilevel)
   num_blocks  = (num_parts + num_threads - 1) / num_threads
 
   if (ilevel == sim%r%levelmin - 1) then
+     ! Boundary split: predates the per-level gpu_sort_part for this range,
+     ! so we cannot use sortp here. Slot-stable coarse/fine partition.
      call bucket_part_boundary<<<num_blocks, num_threads>>>(xp, bucket_part, &
           box_size, periodic, head_idx, num_parts, leading)
+     call GPU_Error_Check("gpu/gpu_part.cuf", 0)
+
+     call init_global_swap_table_kernel<<<num_blocks, num_threads>>>(swap_global, &
+          head_idx, num_parts)
+     call init_prefix_sum_part<<<num_blocks, num_threads>>>(bucket_part, prefix_sum, &
+          head_idx, num_parts)
+     call gpu_scan(head_idx, num_parts, n_fine)
+     n_coarse = num_parts - n_fine
+     call compute_local_swap_table<<<num_blocks, num_threads>>>(swap_local, &
+          swap_global, prefix_sum, head_idx, num_parts)
+     call update_global_swap_table<<<num_blocks, num_threads>>>(swap_global, &
+          swap_local, head_idx, num_parts)
+     call GPU_Error_Check("gpu/gpu_part.cuf", 0)
   else
+     ! Normal AMR split: per the call order, gpu_sort_part(ilevel) ran first,
+     ! so sortp is a valid Hilbert ordering of [head_idx, head_idx+num_parts-1].
+     ! Walk sortp to build swap_global directly: coarse/fine partition with
+     ! each bucket in Hilbert order. The next gpu_sort_part(ilevel+1) will
+     ! re-sort the resulting fine bucket before its CIC.
      dx_loc = sim%r%boxlen / 2d0**ilevel
      skip1 = 0d0
      skip2 = 0d0
@@ -447,33 +513,17 @@ subroutine gpu_split_part(sim, ilevel)
           grid, hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, &
           skip1, skip2, skip3, dx_loc, ilevel, head_idx, num_parts, &
           leading)
+     call GPU_Error_Check("gpu/gpu_part.cuf", 0)
+
+     call init_prefix_sum_part_hilbert_fine<<<num_blocks, num_threads>>>( &
+          bucket_part, sortp, prefix_sum, head_idx, num_parts)
+     call gpu_scan(head_idx, num_parts, n_fine)
+     n_coarse = num_parts - n_fine
+     call write_swap_global_hilbert_partition<<<num_blocks, num_threads>>>( &
+          swap_global, bucket_part, sortp, prefix_sum, &
+          head_idx, num_parts, n_coarse)
+     call GPU_Error_Check("gpu/gpu_part.cuf", 0)
   endif
-  call GPU_Error_Check("gpu/gpu_part.cuf", 0)
-
-  call init_global_swap_table_kernel<<<num_blocks, num_threads>>>(swap_global, &
-       head_idx, num_parts)
-
-  call init_prefix_sum_part<<<num_blocks, num_threads>>>(bucket_part, prefix_sum, &
-       head_idx, num_parts)
-
-  call gpu_scan(head_idx, num_parts, n_fine)
-  n_coarse = num_parts - n_fine
-
-  call compute_local_swap_table<<<num_blocks, num_threads>>>(swap_local, &
-       swap_global, prefix_sum, head_idx, num_parts)
-
-  call update_global_swap_table<<<num_blocks, num_threads>>>(swap_global, &
-       swap_local, head_idx, num_parts)
-  call GPU_Error_Check("gpu/gpu_part.cuf", 0)
-
-  ! Re-order the coarse range of swap_global into Hilbert order of demoted
-  ! particles (CPU parity); fine range is already slot-ordered.
-  call init_prefix_sum_part_hilbert_coarse<<<num_blocks, num_threads>>>( &
-       bucket_part, sortp, prefix_sum, head_idx, num_parts)
-  call gpu_scan(head_idx, num_parts, n_coarse_hilbert)
-  call write_swap_global_coarse_hilbert<<<num_blocks, num_threads>>>( &
-       swap_global, bucket_part, sortp, prefix_sum, head_idx, num_parts)
-  call GPU_Error_Check("gpu/gpu_part.cuf", 0)
 
   do idim = 1, ndim
      call sort_gather_part_real_col<<<num_blocks, num_threads>>>(xp_swap, xp, &
@@ -1765,3 +1815,5 @@ subroutine gpu_kick_drift_part(sim, ilevel, action_part)
 
   call nvtxEndRange()
 end subroutine gpu_kick_drift_part
+
+end module part_device

@@ -126,7 +126,8 @@ contains
   include 'gpu_hilbert.cuf'
   include 'gpu_scan.cuf'
   include 'gpu_reduce.cuf'
-  include 'gpu_part.cuf'
+  ! Particle kernels and dispatchers live in module part_device
+  ! (mini-ramses-dev/gpu/gpu_part.cuf), built as its own CUDA Fortran unit.
 
   !> @brief
   !> Compute the new time step on a GPU
