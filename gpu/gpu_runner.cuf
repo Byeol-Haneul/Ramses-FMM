@@ -76,7 +76,10 @@ module gpu_runner
   !> counterpart is allocated (mirrors split_part's gating in rho_fine).
   !> `size_p` mirrors host `p%size`; renamed to avoid shadowing intrinsic size().
   real(kind=dp),   device, allocatable, dimension(:,:) :: fp
+  !> Per-particle potential (opt-in; allocated iff host p%phip is allocated).
   real(kind=dp),   device, allocatable, dimension(:)   :: phip
+  !> Placeholder for kick kernel when phip is not allocated (writes gated by has_phip).
+  real(kind=dp),   device :: phip_dummy(1)
   real(kind=dp),   device, allocatable, dimension(:,:) :: jp
   real(kind=dp),   device, allocatable, dimension(:)   :: zp, tp, tm, size_p, charge
   integer(i8b),    device, allocatable, dimension(:)   :: idm
@@ -1589,13 +1592,6 @@ contains
        head_father = sim%m%noct(ilevel) + sim%m_mg%head(ifine)
     endif
 
-    if (sim%r%verbose) then
-       write(*,'(A,I0,A,I0,A,I0,A,I0,A,I0)') &
-            ' gpu_build_mg: ilevel=', ilevel, ' ifine=', ifine, &
-            ' head_idx=', head_idx, ' num_octs=', num_octs, &
-            ' head_father=', head_father
-    endif
-
     if (num_octs == 0) return
 
     num_threads = 128
@@ -2109,25 +2105,15 @@ contains
 
     head_idx = sim%m%head(ilevel)
     num_octs = sim%m%noct(ilevel)
-
-    if (num_octs == 0) return
-
-    ! threadIdx%x must cover all twotondim cells per oct (8 in 3D).
     threadsX_per_block = 8
-    threadsY_per_block = 32
+    threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
-
-    if (sim%r%verbose) then
-       write(*,'(A,I0,A,I0,A,I0,A,I0,A,I0)') &
-            ' gpu_gradient_phi: ilevel=', ilevel, &
-            ' head_idx=', head_idx, ' num_octs=', num_octs, &
-            ' threadsX=', threadsX_per_block, ' threadsY=', threadsY_per_block
-    endif
-
-    call nvtxStartRange("GPU gradient_phi", color=1)!blue
-    call gradient_phi<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(phi, f, nbor, &
-         & head_idx, num_octs, dx)
-    call nvtxEndRange()
+    if (num_octs > 0) then
+       call nvtxStartRange("GPU gradient_phi", color=1)!blue
+       call gradient_phi<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(phi, f, nbor, &
+            & head_idx, num_octs, dx)
+       call nvtxEndRange()
+    end if
 
   end subroutine gpu_gradient_phi
 

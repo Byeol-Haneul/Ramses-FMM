@@ -2,11 +2,6 @@ module rho_fine_module
 #ifdef _CUDA
   use gpu_runner, only: gpu_multipole_leaf, gpu_multipole_split, gpu_reset_rho, gpu_cic_multipole, gpu_cic_multipole2
   use part_device, only: gpu_split_part, gpu_sort_part, gpu_cic_part
-#ifdef GRAV
-  use gpu_manager, only: gpu_to_host_part, gpu_to_host_mesh
-#else
-  use gpu_manager, only: gpu_to_host_part
-#endif
 #endif
 contains
 !###############################################
@@ -694,15 +689,9 @@ recursive subroutine r_cic_part(pst,input_array,input_size)
               warned_dm_dep_gpu=.true.
            endif
            call gpu_cic_part(pst%s, ilevel, rtype)
-#ifdef GRAV
-           ! Sync device rho/nref back to host for host Poisson.
-           call gpu_to_host_mesh(pst)
-#endif
         endif
         if(pst%s%r%star)call cic_part(pst%s,pst%s%star,ilevel,rtype)
         if(pst%s%r%sink)call cic_part(pst%s,pst%s%sink,ilevel,rtype)
-        ! Sync device particles back to host for I/O readers.
-        call gpu_to_host_part(pst)
         return
      endif
 #endif
@@ -1245,8 +1234,6 @@ recursive subroutine r_split_part(pst,ilevel,input_size)
         if(pst%s%r%sink)call split_part(pst%s,pst%s%sink,ilevel)
         if(pst%s%r%tree)call split_part(pst%s,pst%s%tree,ilevel)
         if(pst%s%r%trac)call split_part(pst%s,pst%s%trac,ilevel)
-        ! Sync device particles back to host for I/O readers.
-        call gpu_to_host_part(pst)
         return
      endif
 #endif
@@ -2006,8 +1993,6 @@ recursive subroutine r_sort_part(pst,ilevel,input_size)
         if(pst%s%r%sink)call sort_part(pst%s,pst%s%sink,ilevel)
         if(pst%s%r%tree)call sort_part(pst%s,pst%s%tree,ilevel)
         if(pst%s%r%trac)call sort_part(pst%s,pst%s%trac,ilevel)
-        ! Sync device particles back to host for I/O readers.
-        call gpu_to_host_part(pst)
         return
      endif
 #endif

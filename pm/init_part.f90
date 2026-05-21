@@ -69,11 +69,6 @@ subroutine init_part(r,g,p)
   allocate(p%phip  (r%npartmax))
   p%nvaralloc=p%nvaralloc+1
 #endif
-  ! DM p%fp: zero-init; kick write-back and gpu_to_host_part both gate on
-  ! allocated(p%fp).
-  allocate(p%fp    (r%npartmax,ndim))
-  p%fp=0.0d0
-  p%nvaralloc=p%nvaralloc+ndim
   ! ALlocate workspace variables
   allocate(p%sortp (r%npartmax))
   allocate(p%workp (r%npartmax))

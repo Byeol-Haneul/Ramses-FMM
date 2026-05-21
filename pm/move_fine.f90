@@ -2,7 +2,6 @@ module move_fine_module
   use rho_fine_module, only: cic_weight, cic_index, tsc_weight, tsc_index, pcs_weight, pcs_index
 #ifdef _CUDA
   use part_device, only: gpu_kick_drift_part
-  use gpu_manager, only: gpu_to_host_part
 #endif
   use rng
   implicit none
@@ -89,8 +88,6 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
            write(*,*)'r_kick_drift_part: tracers/dust on the GPU path are not supported in phase 1.'
            call abort
         endif
-        ! Sync device particles back to host for I/O readers.
-        call gpu_to_host_part(pst)
         return
      endif
 #endif
@@ -176,7 +173,7 @@ end subroutine r_kick_drift_part
 !################################################################
 !################################################################
 subroutine cic_kick_drift_part(s,p,ilevel,action_part)
-  use amr_parameters, only: ndim, twotondim, nvector, i8b
+  use amr_parameters, only: ndim, twotondim, nvector
   use pm_parameters
   use pm_commons, only: part_t
   use ramses_commons, only: ramses_t

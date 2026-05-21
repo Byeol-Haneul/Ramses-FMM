@@ -120,13 +120,9 @@ recursive subroutine r_set_grid_device(pst)
         else
            fp = 0d0
         endif
-        ! Device `phip` parallels `fp` (host only allocated under
-        ! OUTPUT_PARTICLE_POTENTIAL); zero-init when host has none.
-        allocate(phip(1:size(pst%s%p%xp, 1)))
         if (allocated(pst%s%p%phip)) then
-           phip(1:size(pst%s%p%phip)) = pst%s%p%phip
-        else
-           phip = 0d0
+           allocate(phip(1:size(pst%s%p%phip)))
+           phip = pst%s%p%phip
         endif
         if (allocated(pst%s%p%jp)) then
            allocate(jp(1:size(pst%s%p%jp, 1), 1:ndim))
@@ -273,26 +269,6 @@ subroutine gpu_to_host_part(pst)
   call nvtxEndRange()
 
 end subroutine gpu_to_host_part
-!###########################################################
-!###########################################################
-!###########################################################
-!###########################################################
-#ifdef GRAV
-!> Copy device rho/nref back to host (for host Poisson or other consumers).
-!> Call only after gpu_cic_part has filled them. (GRAV only.)
-subroutine gpu_to_host_mesh(pst)
-  use ramses_commons, only: pst_t
-  implicit none
-  type(pst_t)::pst
-
-  call nvtxStartRange("Copy rho/nref from device to host", color=5)!red
-  if (allocated(rho))  pst%s%m%rho  = rho
-  if (allocated(nref)) pst%s%m%nref = nref
-  call GPU_Error_Check(__FILE__, __LINE__)
-  call nvtxEndRange()
-
-end subroutine gpu_to_host_mesh
-#endif
 #endif
 !###########################################################
 !###########################################################

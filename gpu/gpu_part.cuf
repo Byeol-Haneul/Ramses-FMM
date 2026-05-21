@@ -9,7 +9,7 @@ module part_device
   use cudafor
   use gpu_runner, only: &
        xp, vp, mp, levelp, sortp, workp, idp, &
-       fp, phip, jp, zp, tp, tm, size_p, charge, idm, idt, &
+       fp, phip, phip_dummy, jp, zp, tp, tm, size_p, charge, idm, idt, &
        hkey_part, bucket_part, &
        cell_part_count, cell_part_head, cell_part_idx, &
        src_icell_part, src_igrid_part, &
@@ -562,10 +562,7 @@ subroutine gpu_split_part(sim, ilevel)
              head_idx, num_parts, leading, idim)
      end do
   endif
-  ! phip is per-particle (rank-1) like mp; must be permuted with idp so the
-  ! gathered potential stays attached to its particle across split. Device
-  ! phip is always allocated by r_set_grid_device (zero-init when host has
-  ! none); the allocated() gate mirrors the rank-1 real fields below.
+  ! phip is per-particle (rank-1) like mp; permute only when allocated.
   if (allocated(phip)) then
      call sort_gather_part_real_1d<<<num_blocks, num_threads>>>(mp_swap, phip, &
           swap_global, head_idx, num_parts)
@@ -1739,6 +1736,8 @@ subroutine gpu_kick_drift_part(sim, ilevel, action_part)
   real(kind=8) :: gp1, gp2, gp3, gp4, gp5, q1, q2, q3, q4
   integer(kind=4) :: gravity_type
   logical :: any_nonperiodic
+  integer(kind=4) :: has_phip_i
+  real(kind=dp), device, pointer :: phip_k(:)
 
   call nvtxStartRange("gpu_kick_drift_part", color=4) ! purple
 
@@ -1813,14 +1812,19 @@ subroutine gpu_kick_drift_part(sim, ilevel, action_part)
   endif
   num_blocks  = (num_parts + num_threads - 1) / num_threads
 
-  ! fp and phip are always allocated by r_set_grid_device (DM fp is
-  ! zero-init when host has none; same for phip). has_* gates remain
-  ! in the kernel signature for future paths that may skip those outputs.
-  call kick_drift_part_kernel<<<num_blocks, num_threads>>>(xp, vp, fp, phip, levelp, &
+  has_phip_i = 0
+  if (allocated(phip)) then
+     has_phip_i = 1
+     phip_k => phip
+  else
+     phip_k => phip_dummy
+  endif
+
+  call kick_drift_part_kernel<<<num_blocks, num_threads>>>(xp, vp, fp, phip_k, levelp, &
        f, phi, hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, &
        box_ckey_min, box_ckey_max, box_size, periodic, dtnew_part, dtold_part, &
        skip1, skip2, skip3, dx_loc, action_part, ilevel, head_idx, num_parts, leading, &
-       1, 1)
+       1, has_phip_i)
   call GPU_Error_Check("gpu/gpu_part.cuf", 0)
 
   call nvtxEndRange()
