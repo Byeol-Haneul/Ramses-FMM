@@ -1000,25 +1000,26 @@ attributes(global) subroutine multipole_q_kernel(xp_d, mp_d, multipole_q_d, &
   endif
 end subroutine multipole_q_kernel
 
-!> Per-source-cell reduction + leader write, with CIC weight and the
-!> destination-oct lookup BOTH fused inline. One block per active source cell
-!> (count > 0); each thread reads its own particle's xp/mp, computes wx/wy/wz
-!> and the offset-k weight on the spot, contributes to block_reduce_sum,
-!> leader writes. No global atomics: within outer k, distinct source cells
-!> map to distinct destinations (offset_k is a lattice bijection mod periodic
-!> wrap); cross-k accumulation is serialized by the host loop.
+!> Per-source-cell reduction + leader write, with the outer k=1..threetondim
+!> loop, the CIC weight, and the destination-oct lookup ALL fused inline. One
+!> block per active source cell (count > 0); each thread reads its particle's
+!> xp/mp ONCE per chunk and reuses wx/wy/wz across all threetondim k values.
+!> The host formerly serialized k via threetondim separate kernel launches and
+!> relied on the per-k destination bijection to avoid races; that serialization
+!> is now replaced by atomicAdd on rho_d / nref_d (one atomic per (dest, k)
+!> contribution from the block's lane 0). CIC physics is bit-identical.
 !>
-!> tid==0 computes the destination via one hash_get and stores it in shared
-!> memory; a syncthreads broadcasts to the rest of the block, avoiding
-!> blockDim.x redundant hash lookups per block per k.
+!> tid==0 computes the threetondim destinations via hash_get once per block
+!> (broadcast via shared); lane 0 also holds the threetondim per-k chunk
+!> sums in shared memory and issues the final atomicAdd burst.
 attributes(global) subroutine cic_block_reduce_kernel(active_cells_d, n_active, &
      cell_part_count_d, cell_part_head_d, cell_part_idx_d, grid_d, &
      hash_key_d, hash_val_d, hash_size_d, ckey_max_d, key_off_d, &
      box_ckey_min_d, box_ckey_max_d, periodic_d, &
      xp_d, mp_d, rho_d, nref_d, &
      skip1, skip2, skip3, dx_loc, vol_loc, &
-     m_refine_at_level, mass_cut_refine, k_outer, ilevel, leading)
-  integer(kind=4), intent(in), value :: k_outer, n_active, leading, ilevel
+     m_refine_at_level, mass_cut_refine, ilevel, leading)
+  integer(kind=4), intent(in), value :: n_active, leading, ilevel
   integer(kind=4), device :: active_cells_d(*)
   integer(kind=4), device :: cell_part_count_d(1:twotondim, *)
   integer(kind=4), device :: cell_part_head_d (1:twotondim, *)
@@ -1040,18 +1041,24 @@ attributes(global) subroutine cic_block_reduce_kernel(active_cells_d, n_active, 
   real(kind=8), intent(in), value :: m_refine_at_level, mass_cut_refine
 
   integer :: block_idx_flat, flat_idx, icell_src, igrid_src, count, head
-  integer :: tid, block_size, chunk_start, chunk_size, slot, ipart, idim
-  integer :: ox, oy, oz
+  integer :: tid, block_size, chunk_start, chunk_size, slot, ipart, idim, k
+  integer :: ox, oy, oz, info
   integer(kind=4) :: src_full_ckey(1:3), target_ckey(1:3), father_ckey(1:3), ii(1:3)
   integer(kind=4) :: ii_src(1:3), box_min(1:3), box_max(1:3)
   integer(kind=8) :: nx, hkey_offset, key, ix8, iy8, iz8
   logical :: in_domain
-  real(kind=8) :: my_rho, my_nref, total_rho, total_nref
+  real(kind=8) :: my_rho, my_nref
   real(kind=8) :: skip(1:3), xs, frac(1:3)
   real(kind=8) :: wx(0:2), wy(0:2), wz(0:2), w, mp_i
-  ! Broadcast slots for the destination (computed once per block by tid==0).
-  integer, shared :: dst_igrid_sh, dst_icell_sh
-  integer :: dst_igrid, dst_icell
+  ! Per-k destinations and per-k chunk-sum accumulators, broadcast/owned via
+  ! shared. dst_*_sh: filled once by tid==0 (same hash_get as before, just
+  ! looped over k). total_*_sh: written only by lane 0, read only by lane 0
+  ! at the atomicAdd burst; in shared so the kernel does not pay per-thread
+  ! storage for a lane-0-only array.
+  integer,       shared :: dst_igrid_sh(1:threetondim)
+  integer,       shared :: dst_icell_sh(1:threetondim)
+  real(kind=dp), shared :: total_rho_sh (1:threetondim)
+  real(kind=dp), shared :: total_nref_sh(1:threetondim)
 
   block_idx_flat = blockIdx%x - 1
   if (block_idx_flat >= n_active) return
@@ -1067,13 +1074,9 @@ attributes(global) subroutine cic_block_reduce_kernel(active_cells_d, n_active, 
   block_size = blockDim%x
   tid = threadIdx%x - 1
 
-  ! Decode offset-k once per block; same value for every particle in this cell.
-  ox = mod(k_outer - 1, 3) - 1
-  oy = mod((k_outer - 1) / 3, 3) - 1
-  oz = (k_outer - 1) / 9 - 1
-
-  ! Destination lookup, fused from the former build_dest_oct_per_cell_kernel.
-  ! Identical arithmetic; only tid==0 does the hash_get, broadcast via shared.
+  ! Per-block destination precompute for every k. tid==0 owns the threetondim
+  ! hash_get calls; the rest of the block waits on syncthreads. Same arithmetic
+  ! as the former per-launch single-k path -- just hoisted into one block.
   if (tid == 0) then
      ii_src = 0
      do idim = 1, ndim
@@ -1083,50 +1086,53 @@ attributes(global) subroutine cic_block_reduce_kernel(active_cells_d, n_active, 
      do idim = 1, ndim
         src_full_ckey(idim) = 2 * grid_d(igrid_src)%ckey(idim) + ii_src(idim)
      end do
-     target_ckey = 0
-     target_ckey(1) = src_full_ckey(1) + ox
-     if (ndim >= 2) target_ckey(2) = src_full_ckey(2) + oy
-     if (ndim >= 3) target_ckey(3) = src_full_ckey(3) + oz
      box_min = 0
      box_max = 0
      do idim = 1, ndim
         box_min(idim) = box_ckey_min_d(idim, ilevel+1)
         box_max(idim) = box_ckey_max_d(idim, ilevel+1)
      end do
-     in_domain = .true.
-     do idim = 1, ndim
-        if (periodic_d(idim)) then
-           if (target_ckey(idim) < box_min(idim))  target_ckey(idim) = box_max(idim) - 1
-           if (target_ckey(idim) >= box_max(idim)) target_ckey(idim) = box_min(idim)
-        else
-           if (target_ckey(idim) < box_min(idim))  in_domain = .false.
-           if (target_ckey(idim) >= box_max(idim)) in_domain = .false.
-        endif
-     end do
-     if (.not. in_domain) then
-        dst_igrid_sh = 0
-        dst_icell_sh = 0
-     else
-        father_ckey = target_ckey / 2
-        ii = target_ckey - 2 * father_ckey
-        dst_icell = 1
+     nx          = int(ckey_max_d(ilevel), kind=8)
+     hkey_offset = key_off_d(ilevel)
+     do k = 1, threetondim
+        ox = mod(k - 1, 3) - 1
+        oy = mod((k - 1) / 3, 3) - 1
+        oz = (k - 1) / 9 - 1
+        target_ckey = 0
+        target_ckey(1) = src_full_ckey(1) + ox
+        if (ndim >= 2) target_ckey(2) = src_full_ckey(2) + oy
+        if (ndim >= 3) target_ckey(3) = src_full_ckey(3) + oz
+        in_domain = .true.
         do idim = 1, ndim
-           dst_icell = dst_icell + ii(idim) * (2**(idim-1))
+           if (periodic_d(idim)) then
+              if (target_ckey(idim) < box_min(idim))  target_ckey(idim) = box_max(idim) - 1
+              if (target_ckey(idim) >= box_max(idim)) target_ckey(idim) = box_min(idim)
+           else
+              if (target_ckey(idim) < box_min(idim))  in_domain = .false.
+              if (target_ckey(idim) >= box_max(idim)) in_domain = .false.
+           endif
         end do
-        ix8 = int(father_ckey(1), kind=8)
-        iy8 = int(father_ckey(2), kind=8)
-        iz8 = int(father_ckey(3), kind=8)
-        nx  = int(ckey_max_d(ilevel), kind=8)
-        hkey_offset = key_off_d(ilevel)
-        key = hkey_offset + ix8 + iy8*nx + iz8*nx*nx
-        dst_igrid_sh = hash_get(hash_key_d, hash_val_d, hash_size_d, key)
-        dst_icell_sh = dst_icell
-     endif
+        if (.not. in_domain) then
+           dst_igrid_sh(k) = 0
+           dst_icell_sh(k) = 0
+        else
+           father_ckey = target_ckey / 2
+           ii = target_ckey - 2 * father_ckey
+           dst_icell_sh(k) = 1
+           do idim = 1, ndim
+              dst_icell_sh(k) = dst_icell_sh(k) + ii(idim) * (2**(idim-1))
+           end do
+           ix8 = int(father_ckey(1), kind=8)
+           iy8 = int(father_ckey(2), kind=8)
+           iz8 = int(father_ckey(3), kind=8)
+           key = hkey_offset + ix8 + iy8*nx + iz8*nx*nx
+           dst_igrid_sh(k) = hash_get(hash_key_d, hash_val_d, hash_size_d, key)
+        endif
+        total_rho_sh (k) = 0d0
+        total_nref_sh(k) = 0d0
+     end do
   endif
   call syncthreads()
-  dst_igrid = dst_igrid_sh
-  dst_icell = dst_icell_sh
-  if (dst_igrid == 0) return    ! destination out-of-domain
 
   head = cell_part_head_d(icell_src, igrid_src)
 
@@ -1134,10 +1140,10 @@ attributes(global) subroutine cic_block_reduce_kernel(active_cells_d, n_active, 
   skip(2) = skip2
   skip(3) = skip3
 
-  total_rho  = 0d0
-  total_nref = 0d0
-
-  ! Chunked inner loop handles cells with count > block_size.
+  ! Chunked particle loop: read xp/mp ONCE per chunk and reuse the resulting
+  ! mp_i / wx / wy / wz across the inner k loop in registers. For each k,
+  ! warp_reduce_sum yields the chunk sum in lane 0, which folds into the
+  ! per-k accumulator total_*_sh(k).
   chunk_start = 0
   do while (chunk_start < count)
      chunk_size = min(block_size, count - chunk_start)
@@ -1169,54 +1175,66 @@ attributes(global) subroutine cic_block_reduce_kernel(active_cells_d, n_active, 
            wz(1) = 1d0 - abs(frac(3) - 0.5d0)
            wz(2) = max(0d0, frac(3) - 0.5d0)
         endif
+     endif
 
-        w      = wx(ox+1) * wy(oy+1) * wz(oz+1)
-        my_rho = mp_i * w / vol_loc
-
-        if (m_refine_at_level >= 0d0) then
-           if (mass_cut_refine > 0d0) then
-              if (mp_i < mass_cut_refine) then
-                 my_nref = w
+     do k = 1, threetondim
+        ox = mod(k - 1, 3) - 1
+        oy = mod((k - 1) / 3, 3) - 1
+        oz = (k - 1) / 9 - 1
+        if (tid < chunk_size) then
+           w      = wx(ox+1) * wy(oy+1) * wz(oz+1)
+           my_rho = mp_i * w / vol_loc
+           if (m_refine_at_level >= 0d0) then
+              if (mass_cut_refine > 0d0) then
+                 if (mp_i < mass_cut_refine) then
+                    my_nref = w
+                 else
+                    my_nref = 0d0
+                 endif
               else
-                 my_nref = 0d0
+                 my_nref = w
               endif
            else
-              my_nref = w
+              my_nref = 0d0
            endif
         else
+           my_rho  = 0d0
            my_nref = 0d0
         endif
-     else
-        my_rho  = 0d0
-        my_nref = 0d0
-     endif
-     ! Single-warp block: warp_reduce_sum is pure shfl_down, no shared memory
-     ! or syncthreads. After the call, lane 0 holds the chunk sum.
-     call warp_reduce_sum(my_rho)
-     call warp_reduce_sum(my_nref)
-     if (tid == 0) then
-        total_rho  = total_rho  + my_rho
-        total_nref = total_nref + my_nref
-     endif
+        ! Single-warp block: warp_reduce_sum is pure shfl_down, no shared
+        ! memory or syncthreads. After the call, lane 0 holds the chunk sum.
+        call warp_reduce_sum(my_rho)
+        call warp_reduce_sum(my_nref)
+        if (tid == 0) then
+           total_rho_sh (k) = total_rho_sh (k) + my_rho
+           total_nref_sh(k) = total_nref_sh(k) + my_nref
+        endif
+     end do
      chunk_start = chunk_start + block_size
   end do
 
+  ! After all chunks: lane 0 issues one atomicAdd per (dest, k). Cross-k races
+  ! on rho_d / nref_d are resolved by the atomic; CIC physics is unchanged.
   if (tid == 0) then
-     rho_d(dst_icell, dst_igrid) = rho_d(dst_icell, dst_igrid) + total_rho
-     if (m_refine_at_level >= 0d0) then
-        nref_d(dst_icell, dst_igrid) = nref_d(dst_icell, dst_igrid) + total_nref
-     endif
+     do k = 1, threetondim
+        if (dst_igrid_sh(k) == 0) cycle    ! destination out-of-domain
+        info = atomicadd(rho_d(dst_icell_sh(k), dst_igrid_sh(k)), total_rho_sh(k))
+        if (m_refine_at_level >= 0d0) then
+           info = atomicadd(nref_d(dst_icell_sh(k), dst_igrid_sh(k)), total_nref_sh(k))
+        endif
+     end do
   endif
 end subroutine cic_block_reduce_kernel
 
 !> Host CIC dispatcher: per-cell segmented reduction with inline weight and
-!> inline destination-oct lookup (no global atomics on rho/nref). Pipeline:
-!> build cell-list at level (ilevel+1) (counts, heads, idx, per-particle
-!> source-cell map); compact source cells with count > 0 into swap_global
-!> (n_active); at coarsest active level run the GPU multipole_q reduction;
-!> then loop k=1..threetondim launching cic_block_reduce_kernel over the
-!> n_active blocks (which computes per-particle weights AND the (k, source)
-!> -> destination lookup inline — no separate precompute or scratch arrays).
+!> inline destination-oct lookup. Pipeline: build cell-list at level
+!> (ilevel+1) (counts, heads, idx, per-particle source-cell map); compact
+!> source cells with count > 0 into swap_global (n_active); at coarsest
+!> active level run the GPU multipole_q reduction; then ONE launch of
+!> cic_block_reduce_kernel over n_active blocks. The kernel now fuses the
+!> outer k=1..threetondim loop in registers, reads each particle once, and
+!> uses atomicAdd to resolve cross-k races (the host loop is gone; rho/nref
+!> deposits are bit-identical).
 subroutine gpu_cic_part(sim, ilevel, rtype)
   use nvtx
   use ramses_commons, only: ramses_t
@@ -1226,7 +1244,7 @@ subroutine gpu_cic_part(sim, ilevel, rtype)
 
   integer(kind=4) :: head_idx, num_parts, leading, num_grids, total_cells
   integer(kind=4) :: total_sum_unused, n_active
-  integer :: num_threads, num_blocks, k, idim
+  integer :: num_threads, num_blocks, idim
   integer :: deposit_block_size, deposit_num_blocks
   real(kind=8) :: dx_loc, vol_loc, skip1, skip2, skip3
   real(kind=8) :: q_host(1:ndim+1)
@@ -1326,10 +1344,11 @@ subroutine gpu_cic_part(sim, ilevel, rtype)
   call GPU_Error_Check("gpu/gpu_part.cuf", 0)
 
   if (n_active > 0) then
-     ! Segmented deposit with fused inline CIC weight AND fused inline
-     ! destination-oct lookup: one block per active source cell, outer loop
-     ! k=1..threetondim. No global atomics on rho/nref (within outer k
-     ! destinations are unique; across k the host serializes).
+     ! Segmented deposit with fused inline CIC weight, fused inline
+     ! destination-oct lookup, AND a fused inner k=1..threetondim loop:
+     ! one block per active source cell, particles read once across all k.
+     ! Cross-k races on rho/nref are resolved by atomicAdd in the kernel
+     ! (the host loop over k that used to serialize them is gone).
      !
      ! Block size = 32 (single warp): DMO cells average 1-8 particles per
      ! source cell, so 256-thread blocks would idle ~97% of threads behind
@@ -1339,15 +1358,13 @@ subroutine gpu_cic_part(sim, ilevel, rtype)
      ! >32 particles still work — the chunked loop just runs more iterations.
      deposit_block_size = 32
      deposit_num_blocks = n_active
-     do k = 1, threetondim
-        call cic_block_reduce_kernel<<<deposit_num_blocks, deposit_block_size>>>(&
-             swap_global, n_active, cell_part_count, cell_part_head, cell_part_idx, &
-             grid, hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, &
-             box_ckey_min, box_ckey_max, periodic, &
-             xp, mp, rho, nref, &
-             skip1, skip2, skip3, dx_loc, vol_loc, &
-             sim%r%m_refine(ilevel), sim%r%mass_cut_refine, k, ilevel, leading)
-     end do
+     call cic_block_reduce_kernel<<<deposit_num_blocks, deposit_block_size>>>(&
+          swap_global, n_active, cell_part_count, cell_part_head, cell_part_idx, &
+          grid, hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, &
+          box_ckey_min, box_ckey_max, periodic, &
+          xp, mp, rho, nref, &
+          skip1, skip2, skip3, dx_loc, vol_loc, &
+          sim%r%m_refine(ilevel), sim%r%mass_cut_refine, ilevel, leading)
      call GPU_Error_Check("gpu/gpu_part.cuf", 0)
   endif
 
