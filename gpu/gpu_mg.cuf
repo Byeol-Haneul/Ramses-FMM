@@ -648,9 +648,7 @@ contains
     phi_c = phi(cell_idx, oct_idx)
     dis_c = f(cell_idx, 3, oct_idx)
 
-    ! Initialize residual to zero
-    f(cell_idx, 1, oct_idx) = 0d0
-
+    ! Compute residual for inner cells
     if (dis_c > 0d0) then
 
        nb_sum = 0d0
@@ -696,6 +694,10 @@ contains
        end do
 
        f(cell_idx, 1, oct_idx) = - oneoverdx2 * (nb_sum - dble(twondim)*phi_c) + f(cell_idx, 2, oct_idx)
+
+    else
+
+       f(cell_idx, 1, oct_idx) = 0d0
 
     end if
 
