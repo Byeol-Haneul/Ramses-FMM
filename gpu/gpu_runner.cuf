@@ -1596,8 +1596,7 @@ contains
     if (num_octs > 0) then
        call nvtxStartRange("GPU build_mg", color=2)!yellow
        call update_nbor_array_mg<<<num_blocks, num_threads>>>(nbor_mg, grid_mg, hash_key_mg, hash_val_mg, &
-            & sim%m_mg%hash_size, ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, &
-            & head_idx, num_octs)
+            & sim%m_mg%hash_size, ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, head_idx, num_octs)
        call nvtxEndRange()
     end if
 
