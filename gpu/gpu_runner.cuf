@@ -1451,6 +1451,7 @@ contains
     ! We preserve phi in the ghost cells stored in the cache.
     ! Note that the mask is only defined in the inner cells, not in the ghost cells.
     fourpi = 4.D0*ACOS(-1.0D0)
+    if (sim%r%cosmo) fourpi = 1.5D0 * sim%g%omega_m * sim%g%aexp
     dx  = sim%r%boxlen/2**ilevel
     oneoverdx2 = 1.0d0/(dx*dx)
     offset = sim%g%rho_tot
@@ -1741,6 +1742,7 @@ contains
     real(kind=8) :: fourpi, offset, dx, oneoverdx2
 
     fourpi = 4.D0*ACOS(-1.0D0)
+    if (sim%r%cosmo) fourpi = 1.5D0 * sim%g%omega_m * sim%g%aexp
     dx  = sim%r%boxlen/2**ifine
     oneoverdx2 = 1.0d0/(dx*dx)
     offset = sim%g%rho_tot
