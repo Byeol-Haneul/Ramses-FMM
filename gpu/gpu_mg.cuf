@@ -89,8 +89,6 @@ module mg_device
 contains
 
   include 'gpu_hash.cuf'
-  include 'gpu_hilbert.cuf'
-  include 'gpu_scan.cuf'
   include 'gpu_reduce.cuf'
   include 'gpu_nbor.cuf'
 
