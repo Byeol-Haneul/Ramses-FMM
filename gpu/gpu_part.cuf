@@ -1190,8 +1190,10 @@ attributes(global) subroutine cic_block_reduce_kernel(active_cells_d, n_active, 
         my_rho  = 0d0
         my_nref = 0d0
      endif
-     my_rho  = block_reduce_sum(my_rho)
-     my_nref = block_reduce_sum(my_nref)
+     ! Single-warp block: warp_reduce_sum is pure shfl_down, no shared memory
+     ! or syncthreads. After the call, lane 0 holds the chunk sum.
+     call warp_reduce_sum(my_rho)
+     call warp_reduce_sum(my_nref)
      if (tid == 0) then
         total_rho  = total_rho  + my_rho
         total_nref = total_nref + my_nref
@@ -1328,7 +1330,14 @@ subroutine gpu_cic_part(sim, ilevel, rtype)
      ! destination-oct lookup: one block per active source cell, outer loop
      ! k=1..threetondim. No global atomics on rho/nref (within outer k
      ! destinations are unique; across k the host serializes).
-     deposit_block_size = 256
+     !
+     ! Block size = 32 (single warp): DMO cells average 1-8 particles per
+     ! source cell, so 256-thread blocks would idle ~97% of threads behind
+     ! the block_reduce_sum's two __syncthreads. Single-warp blocks let us
+     ! use warp_reduce_sum (pure shfl_down, no shared memory, no syncthreads)
+     ! and get ~100% useful-work density on the common case. Cells with
+     ! >32 particles still work — the chunked loop just runs more iterations.
+     deposit_block_size = 32
      deposit_num_blocks = n_active
      do k = 1, threetondim
         call cic_block_reduce_kernel<<<deposit_num_blocks, deposit_block_size>>>(&
