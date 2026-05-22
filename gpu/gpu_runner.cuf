@@ -1485,7 +1485,7 @@ contains
   subroutine gpu_build_mg(sim, ilevel, ifine)
     use nvtx
     use mg_device
-    use refine_device, only: insert_hash_kernel, update_nbor_array
+    use refine_device, only: insert_hash_kernel
     use ramses_commons, only: ramses_t
     implicit none
     type(ramses_t), intent(inout) :: sim
@@ -1594,13 +1594,11 @@ contains
     num_blocks = (num_octs + num_threads - 1) / num_threads
 
     if (num_octs > 0) then
-       do ind = 1, threetondim
-          call nvtxStartRange("GPU build_mg", color=2)!yellow
-          call update_nbor_array<<<num_blocks, num_threads>>>(nbor_mg, grid_mg, hash_key_mg, hash_val_mg, &
-               & sim%m_mg%hash_size, ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, &
-               & head_idx, num_octs, ind)
-          call nvtxEndRange()
-       end do
+       call nvtxStartRange("GPU build_mg", color=2)!yellow
+       call update_nbor_array_mg<<<num_blocks, num_threads>>>(nbor_mg, grid_mg, hash_key_mg, hash_val_mg, &
+            & sim%m_mg%hash_size, ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, &
+            & head_idx, num_octs)
+       call nvtxEndRange()
     end if
 
   end subroutine gpu_build_mg
