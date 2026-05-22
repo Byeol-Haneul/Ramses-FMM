@@ -1935,7 +1935,7 @@ contains
        head_father = sim%m%noct(ilevel) + sim%m_mg%head(ifine)
     endif
     threadsX_per_block = 8
-    threadsY_per_block = 16
+    threadsY_per_block = nthreads_y
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
 
     if (num_octs > 0) then

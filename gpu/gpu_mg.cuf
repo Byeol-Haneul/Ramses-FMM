@@ -2,7 +2,7 @@ module mg_device
   use amr_parameters, only: dp, ndim, twondim, twotondim, threetondim, nhilbert
   use hydro_parameters, only: nvar
   use oct_commons, only: oct
-  use gpu_utils, only: nsubgrid, nsubgridsq, nsubgridtondim, nsubgridp2, nsubgridp2sq, subgridsize
+  use gpu_utils, only: nsubgrid, nsubgridsq, nsubgridtondim, nsubgridp2, nsubgridp2sq, subgridsize, nthreads_y
   use cudafor
   implicit none
 
@@ -845,6 +845,7 @@ contains
 
     integer :: tid, bid, cell_idx, oct_idx, mg_idx
     integer :: ind, father_idx, i, j, k
+    real(kind=dp) :: local_sum, dis_father
 
     ! Thread and block id
     tid = threadIdx%x - 1
@@ -865,15 +866,23 @@ contains
     k = grid(oct_idx)%ckey(3) - 2 * (grid(oct_idx)%ckey(3) / 2)
     cell_idx = 1 + i + 2*j + 4*k
 
-    ! Reset residual
-    f_mg(cell_idx, 2, father_idx) = 0_dp
+    ! Mask in the father cell
+    dis_father = f_mg(cell_idx, 3, father_idx)
+
+    ! Set restricted value to zero
+    local_sum  = 0d0
 
     ! Average children variables
-    do ind = 1, twotondim
-       if (f(ind, 3, oct_idx) > 0d0 .and. f_mg(cell_idx, 3, father_idx) > 0d0) then
-          f_mg(cell_idx, 2, father_idx) = f_mg(cell_idx, 2, father_idx) + f(ind, 1, oct_idx) / dble(twotondim)
-       end if
-    end do
+    if (dis_father > 0d0) then
+       do ind = 1, twotondim
+          if (f(ind, 3, oct_idx) > 0d0) then
+             local_sum = local_sum + f(ind, 1, oct_idx)
+          end if
+       end do
+    end if
+
+    ! Store back the result
+    f_mg(cell_idx, 2, father_idx) = local_sum / dble(twotondim)
 
   end subroutine restrict_residual
   ! =========================================================================
@@ -892,26 +901,35 @@ contains
     integer, value :: head_father
     integer, value :: num_octs
 
-    integer(4) :: cell_idx, oct_idx, mg_idx, block_idx, father_idx
-    integer(4) :: igrid_nbor(1:threetondim)
-    integer(4) :: icell_nbor(1:threetondim)
-    integer(4) :: ind_average, ind_father
-    integer(4) :: igrid_nbr, ind_nbr, i, j, k
+    integer(kind=4), shared :: igrid_nbor(1:threetondim,1:nthreads_y)
+    integer(kind=4), shared :: icell_nbor(1:threetondim,1:nthreads_y)
+    integer(kind=4) :: igrid_nbor_tmp(1:threetondim)
+    integer(kind=4) :: icell_nbor_tmp(1:threetondim)
+    integer(kind=4) :: cell_idx, oct_idx, mg_idx, block_idx
+    integer(kind=4) :: ind_average, ind_father
+    integer(kind=4) :: igrid_nbr, ind_nbr
     real(kind=dp) :: corr, coeff
 
     block_idx = blockIdx%x - 1
 
-    ! Map thread -> oct
+    ! Compute oct index
     oct_idx = block_idx * blockDim%y + threadIdx%y - 1
-    if (oct_idx >= num_octs) return
     mg_idx = head_father + oct_idx
-    oct_idx = head_idx + oct_idx
 
-    ! Map thread -> fine cell (1..8)
+    ! Compute cell index
     cell_idx = threadIdx%x
 
     ! Get 3x3x3 neighboring father cells of this oct
-    call nbor_father_cells_mg(grid, father, nbor, oct_idx, mg_idx, igrid_nbor, icell_nbor)
+    if (cell_idx == 1 .and. oct_idx < num_octs) then
+       call nbor_father_cells_mg(grid, father, nbor, head_idx + oct_idx, mg_idx, igrid_nbor_tmp, icell_nbor_tmp)
+       igrid_nbor(:, threadIdx%y) = igrid_nbor_tmp
+       icell_nbor(:, threadIdx%y) = icell_nbor_tmp
+    endif
+    call syncthreads()
+
+    ! Compute oct index
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
 
     ! CIC interpolation
     corr = 0d0
@@ -919,8 +937,8 @@ contains
        ind_father = ccc(ind_average, cell_idx)
        coeff      = bbb(ind_average)
 
-       igrid_nbr  = igrid_nbor(ind_father)
-       ind_nbr    = icell_nbor(ind_father)
+       igrid_nbr  = igrid_nbor(ind_father, threadIdx%y)
+       ind_nbr    = icell_nbor(ind_father, threadIdx%y)
 
        if ((igrid_nbr > 0) .and. (f(cell_idx, 3, oct_idx) > 0d0)) then
           corr = corr + coeff * phi_mg(ind_nbr, igrid_nbr)
