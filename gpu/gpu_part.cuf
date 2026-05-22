@@ -916,18 +916,66 @@ attributes(global) subroutine place_cell_part_idx_kernel(cell_part_count_d, &
   cell_part_idx_d(slot) = ipart
 end subroutine place_cell_part_idx_kernel
 
-!> For each non-empty source cell and each k in 1..threetondim, precompute
+!> Mark each (icell_src, igrid_src) cell as active (count > 0) by writing
+!> 1/0 into prefix_sum_d. A subsequent inclusive scan yields the 1-based
+!> rank of each active cell. flat_idx = (icell-1) + (igrid-1)*twotondim,
+!> stored 1-based as flat_idx+1 into prefix_sum_d.
+attributes(global) subroutine init_active_cell_flag_kernel(cell_part_count_d, &
+     prefix_sum_d, num_grids)
+  integer(kind=4), intent(in), value :: num_grids
+  integer(kind=4), device :: cell_part_count_d(1:twotondim, *)
+  integer(kind=4), device :: prefix_sum_d(*)
+
+  integer :: thread_idx, block_idx, idx, icell, igrid
+  thread_idx = threadIdx%x - 1
+  block_idx  = blockIdx%x  - 1
+  idx = thread_idx + block_idx * blockDim%x
+  if (idx >= twotondim * num_grids) return
+  icell = mod(idx, twotondim) + 1
+  igrid = idx / twotondim + 1
+  if (cell_part_count_d(icell, igrid) > 0) then
+     prefix_sum_d(idx + 1) = 1
+  else
+     prefix_sum_d(idx + 1) = 0
+  endif
+end subroutine init_active_cell_flag_kernel
+
+!> Compact stream: write the flat cell index (1-based) of each active source
+!> cell into active_cells_d at the rank slot produced by the inclusive scan
+!> of the active flag. Inactive cells skip the write.
+attributes(global) subroutine write_active_cells_kernel(cell_part_count_d, &
+     prefix_sum_d, active_cells_d, num_grids)
+  integer(kind=4), intent(in), value :: num_grids
+  integer(kind=4), device :: cell_part_count_d(1:twotondim, *)
+  integer(kind=4), device :: prefix_sum_d(*)
+  integer(kind=4), device :: active_cells_d(*)
+
+  integer :: thread_idx, block_idx, idx, icell, igrid, rank
+  thread_idx = threadIdx%x - 1
+  block_idx  = blockIdx%x  - 1
+  idx = thread_idx + block_idx * blockDim%x
+  if (idx >= twotondim * num_grids) return
+  icell = mod(idx, twotondim) + 1
+  igrid = idx / twotondim + 1
+  if (cell_part_count_d(icell, igrid) > 0) then
+     rank = prefix_sum_d(idx + 1)
+     active_cells_d(rank) = idx + 1
+  endif
+end subroutine write_active_cells_kernel
+
+!> For each active source cell (compacted into active_cells_d) and each k
+!> in 1..threetondim, precompute
 !> the destination (igrid_dst, icell_dst) reached by the k-th stencil offset
 !> at level (ilevel+1). Periodic wrap per dim; out-of-domain or hash-miss
 !> destinations are flagged with sentinel (dst_igrid=0, dst_icell=0) and the
 !> weight kernel zeroes their contribution.
-attributes(global) subroutine build_dest_oct_per_cell_kernel(grid_d, cell_part_count_d, &
-     dest_oct_d, dest_icell_d, hash_key_d, hash_val_d, hash_size_d, &
+attributes(global) subroutine build_dest_oct_per_cell_kernel(grid_d, active_cells_d, &
+     n_active, dest_oct_d, dest_icell_d, hash_key_d, hash_val_d, hash_size_d, &
      ckey_max_d, key_off_d, box_ckey_min_d, box_ckey_max_d, periodic_d, &
-     ilevel, num_grids)
-  integer(kind=4), intent(in), value :: ilevel, num_grids
+     ilevel)
+  integer(kind=4), intent(in), value :: ilevel, n_active
   type(oct),       device :: grid_d(*)
-  integer(kind=4), device :: cell_part_count_d(1:twotondim, *)
+  integer(kind=4), device :: active_cells_d(*)
   integer(kind=4), device :: dest_oct_d  (1:threetondim, 1:twotondim, *)
   integer(kind=4), device :: dest_icell_d(1:threetondim, 1:twotondim, *)
   integer(kind=8), device :: hash_key_d(*)
@@ -939,7 +987,8 @@ attributes(global) subroutine build_dest_oct_per_cell_kernel(grid_d, cell_part_c
   integer(kind=4), device :: box_ckey_max_d(1:3, *)
   logical,         device :: periodic_d(1:3)
 
-  integer :: thread_idx, block_idx, idx, k, icell_src, igrid_src, idim
+  integer :: thread_idx, block_idx, idx, k, active_idx, flat_idx, idim
+  integer :: icell_src, igrid_src
   integer :: ox, oy, oz, igrid_dst, icell_dst
   integer(kind=4) :: src_full_ckey(1:3), target_ckey(1:3), father_ckey(1:3), ii(1:3)
   integer(kind=4) :: ii_src(1:3), box_min(1:3), box_max(1:3)
@@ -949,18 +998,14 @@ attributes(global) subroutine build_dest_oct_per_cell_kernel(grid_d, cell_part_c
   thread_idx = threadIdx%x - 1
   block_idx  = blockIdx%x  - 1
   idx = thread_idx + block_idx * blockDim%x
-  if (idx >= threetondim * twotondim * num_grids) return
+  if (idx >= threetondim * n_active) return
 
-  ! Unflatten idx -> (k, icell_src, igrid_src). twotondim is the inner stride.
-  k         = mod(idx, threetondim) + 1
-  icell_src = mod(idx / threetondim, twotondim) + 1
-  igrid_src = idx / (threetondim * twotondim) + 1
-
-  if (cell_part_count_d(icell_src, igrid_src) == 0) then
-     dest_oct_d  (k, icell_src, igrid_src) = 0
-     dest_icell_d(k, icell_src, igrid_src) = 0
-     return
-  endif
+  ! Unflatten idx -> (k, active_idx); pull source cell from compact list.
+  k          = mod(idx, threetondim) + 1
+  active_idx = idx / threetondim + 1
+  flat_idx   = active_cells_d(active_idx)
+  icell_src  = mod(flat_idx - 1, twotondim) + 1
+  igrid_src  = (flat_idx - 1) / twotondim + 1
 
   ! Decode (icell_src - 1) -> ii_src(1:ndim) in {0,1}.
   ii_src = 0
@@ -1152,16 +1197,17 @@ attributes(global) subroutine cic_weight_kernel(xp_d, mp_d, &
   endif
 end subroutine cic_weight_kernel
 
-!> Per-source-cell reduction + leader write. One block per source cell;
-!> threads cooperate via block_reduce_sum on rho and nref. No global atomics:
-!> within outer k, distinct source cells map to distinct destinations
-!> (offset_k is a lattice bijection mod periodic wrap); cross-k accumulation
-!> is serialized by the host loop.
-attributes(global) subroutine cic_block_reduce_kernel(cell_part_count_d, &
-     cell_part_head_d, cell_part_idx_d, dest_oct_d, dest_icell_d, &
+!> Per-source-cell reduction + leader write. One block per active source
+!> cell (count > 0); threads cooperate via block_reduce_sum on rho and nref.
+!> No global atomics: within outer k, distinct source cells map to distinct
+!> destinations (offset_k is a lattice bijection mod periodic wrap); cross-k
+!> accumulation is serialized by the host loop.
+attributes(global) subroutine cic_block_reduce_kernel(active_cells_d, n_active, &
+     cell_part_count_d, cell_part_head_d, cell_part_idx_d, dest_oct_d, dest_icell_d, &
      weight_rho_d, weight_nref_d, rho_d, nref_d, &
-     m_refine_at_level, k_outer, num_grids)
-  integer(kind=4), intent(in), value :: k_outer, num_grids
+     m_refine_at_level, k_outer)
+  integer(kind=4), intent(in), value :: k_outer, n_active
+  integer(kind=4), device :: active_cells_d(*)
   integer(kind=4), device :: cell_part_count_d(1:twotondim, *)
   integer(kind=4), device :: cell_part_head_d (1:twotondim, *)
   integer(kind=4), device :: cell_part_idx_d(*)
@@ -1173,18 +1219,20 @@ attributes(global) subroutine cic_block_reduce_kernel(cell_part_count_d, &
   real(kind=dp),   device :: nref_d(1:twotondim, *)
   real(kind=8), intent(in), value :: m_refine_at_level
 
-  integer :: block_idx_flat, icell_src, igrid_src, count, head
+  integer :: block_idx_flat, flat_idx, icell_src, igrid_src, count, head
   integer :: tid, block_size, chunk_start, chunk_size, slot, ipart
   integer :: dst_igrid, dst_icell
   real(kind=8) :: my_rho, my_nref, total_rho, total_nref
 
   block_idx_flat = blockIdx%x - 1
-  if (block_idx_flat >= twotondim * num_grids) return
+  if (block_idx_flat >= n_active) return
 
-  icell_src = mod(block_idx_flat, twotondim) + 1
-  igrid_src = block_idx_flat / twotondim + 1
+  flat_idx  = active_cells_d(block_idx_flat + 1)
+  icell_src = mod(flat_idx - 1, twotondim) + 1
+  igrid_src = (flat_idx - 1) / twotondim + 1
 
   count = cell_part_count_d(icell_src, igrid_src)
+  ! count > 0 by construction of active_cells; defensive check kept.
   if (count == 0) return
 
   dst_igrid = dest_oct_d  (k_outer, icell_src, igrid_src)
@@ -1230,9 +1278,11 @@ end subroutine cic_block_reduce_kernel
 
 !> Host CIC dispatcher: per-cell segmented reduction (no global atomics on
 !> rho/nref). Pipeline: build cell-list at level (ilevel+1) (counts, heads,
-!> idx, per-particle source-cell map); precompute dest_oct_per_cell; at
-!> coarsest active level run the GPU multipole_q reduction; then loop
-!> k=1..threetondim launching cic_weight_kernel + cic_block_reduce_kernel.
+!> idx, per-particle source-cell map); compact source cells with count > 0
+!> into swap_global (n_active); precompute dest_oct_per_cell over those
+!> active cells; at coarsest active level run the GPU multipole_q reduction;
+!> then loop k=1..threetondim launching cic_weight_kernel +
+!> cic_block_reduce_kernel over the n_active blocks.
 subroutine gpu_cic_part(sim, ilevel, rtype)
   use nvtx
   use ramses_commons, only: ramses_t
@@ -1241,7 +1291,7 @@ subroutine gpu_cic_part(sim, ilevel, rtype)
   integer, intent(in) :: rtype
 
   integer(kind=4) :: head_idx, num_parts, leading, num_grids, total_cells
-  integer(kind=4) :: total_dest_entries, total_sum_unused
+  integer(kind=4) :: total_dest_entries, total_sum_unused, n_active
   integer :: num_threads, num_blocks, k, idim
   integer :: deposit_block_size, deposit_num_blocks
   real(kind=8) :: dx_loc, vol_loc, skip1, skip2, skip3
@@ -1329,37 +1379,51 @@ subroutine gpu_cic_part(sim, ilevel, rtype)
        head_idx, num_parts)
   call GPU_Error_Check("gpu/gpu_part.cuf", 0)
 
-  ! Precompute dest_oct_per_cell.
-  total_dest_entries = threetondim * total_cells
+  ! Compact active source cells (count > 0) into swap_global. swap_global is
+  ! sized >= total_cells by ensure_scan_capacity_part above and is unused
+  ! elsewhere in gpu_cic_part. Active flag -> inclusive scan -> compact write.
   num_threads = 256
-  num_blocks  = (total_dest_entries + num_threads - 1) / num_threads
-  call build_dest_oct_per_cell_kernel<<<num_blocks, num_threads>>>(grid, &
-       cell_part_count, dest_oct_per_cell, dest_icell_per_cell, &
-       hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, &
-       box_ckey_min, box_ckey_max, periodic, ilevel, num_grids)
+  num_blocks  = (total_cells + num_threads - 1) / num_threads
+  call init_active_cell_flag_kernel<<<num_blocks, num_threads>>>(cell_part_count, &
+       prefix_sum, num_grids)
+  call gpu_scan(1, total_cells, n_active)
+  call write_active_cells_kernel<<<num_blocks, num_threads>>>(cell_part_count, &
+       prefix_sum, swap_global, num_grids)
   call GPU_Error_Check("gpu/gpu_part.cuf", 0)
 
-  ! Segmented deposit: one block per source cell, outer loop k=1..threetondim.
-  ! No global atomics on rho/nref (within outer k destinations are unique;
-  ! across k the host serializes).
-  deposit_block_size = 256
-  deposit_num_blocks = total_cells
-  num_threads = 128
-  num_blocks  = (num_parts + num_threads - 1) / num_threads
-  do k = 1, threetondim
-     call cic_weight_kernel<<<num_blocks, num_threads>>>(xp, mp, &
-          src_icell_part, src_igrid_part, dest_oct_per_cell, &
-          weight_part_rho, weight_part_nref, &
-          skip1, skip2, skip3, dx_loc, vol_loc, &
-          sim%r%m_refine(ilevel), sim%r%mass_cut_refine, &
-          k, head_idx, num_parts, leading)
-     call cic_block_reduce_kernel<<<deposit_num_blocks, deposit_block_size>>>(&
-          cell_part_count, cell_part_head, cell_part_idx, &
-          dest_oct_per_cell, dest_icell_per_cell, &
-          weight_part_rho, weight_part_nref, rho, nref, &
-          sim%r%m_refine(ilevel), k, num_grids)
-  end do
-  call GPU_Error_Check("gpu/gpu_part.cuf", 0)
+  if (n_active > 0) then
+     ! Precompute dest_oct_per_cell only for active source cells.
+     total_dest_entries = threetondim * n_active
+     num_threads = 256
+     num_blocks  = (total_dest_entries + num_threads - 1) / num_threads
+     call build_dest_oct_per_cell_kernel<<<num_blocks, num_threads>>>(grid, &
+          swap_global, n_active, dest_oct_per_cell, dest_icell_per_cell, &
+          hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, &
+          box_ckey_min, box_ckey_max, periodic, ilevel)
+     call GPU_Error_Check("gpu/gpu_part.cuf", 0)
+
+     ! Segmented deposit: one block per active source cell, outer loop
+     ! k=1..threetondim. No global atomics on rho/nref (within outer k
+     ! destinations are unique; across k the host serializes).
+     deposit_block_size = 256
+     deposit_num_blocks = n_active
+     num_threads = 128
+     num_blocks  = (num_parts + num_threads - 1) / num_threads
+     do k = 1, threetondim
+        call cic_weight_kernel<<<num_blocks, num_threads>>>(xp, mp, &
+             src_icell_part, src_igrid_part, dest_oct_per_cell, &
+             weight_part_rho, weight_part_nref, &
+             skip1, skip2, skip3, dx_loc, vol_loc, &
+             sim%r%m_refine(ilevel), sim%r%mass_cut_refine, &
+             k, head_idx, num_parts, leading)
+        call cic_block_reduce_kernel<<<deposit_num_blocks, deposit_block_size>>>(&
+             swap_global, n_active, cell_part_count, cell_part_head, cell_part_idx, &
+             dest_oct_per_cell, dest_icell_per_cell, &
+             weight_part_rho, weight_part_nref, rho, nref, &
+             sim%r%m_refine(ilevel), k)
+     end do
+     call GPU_Error_Check("gpu/gpu_part.cuf", 0)
+  endif
 
   call nvtxEndRange()
 end subroutine gpu_cic_part
