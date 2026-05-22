@@ -37,68 +37,12 @@ recursive subroutine r_set_grid_device(pst)
      call nvtxEndRange()
 
 #ifdef _CUDA
-     ! Copy particle arrays host→device (size = host array capacity, not npart_max).
-     if (pst%s%r%part .and. allocated(pst%s%p%xp)) then
+     ! Copy particle arrays host→device. Device arrays themselves are
+     ! allocated in init_part (mirroring init_amr's side-by-side host+device
+     ! allocation for the mesh); this block does data movement only.
+     if (pst%s%r%part .and. allocated(pst%s%p%xp) .and. allocated(xp)) then
         call nvtxStartRange("Copy particles from host to device", color=5)!red
-        ! Mandatory arrays (always allocated when host xp is allocated)
-        if (allocated(xp))      deallocate(xp)
-        if (allocated(vp))      deallocate(vp)
-        if (allocated(mp))      deallocate(mp)
-        if (allocated(levelp))  deallocate(levelp)
-        if (allocated(sortp))   deallocate(sortp)
-        if (allocated(workp))   deallocate(workp)
-        if (allocated(idp))     deallocate(idp)
-        ! Optional DM fields (allocated only when host has them)
-        if (allocated(jp))      deallocate(jp)
-        if (allocated(zp))      deallocate(zp)
-        if (allocated(tp))      deallocate(tp)
-        if (allocated(tm))      deallocate(tm)
-        if (allocated(size_p))  deallocate(size_p)
-        if (allocated(charge))  deallocate(charge)
-        if (allocated(idm))     deallocate(idm)
-        if (allocated(idt))     deallocate(idt)
-        ! Per-particle / per-cell scratch
-        if (allocated(hkey_part))   deallocate(hkey_part)
-        if (allocated(bucket_part)) deallocate(bucket_part)
-        if (allocated(cell_part_count)) deallocate(cell_part_count)
-        if (allocated(cell_part_head))  deallocate(cell_part_head)
-        if (allocated(cell_part_idx))   deallocate(cell_part_idx)
-        if (allocated(src_icell_part))  deallocate(src_icell_part)
-        if (allocated(src_igrid_part))  deallocate(src_igrid_part)
-        if (allocated(dest_oct_per_cell))   deallocate(dest_oct_per_cell)
-        if (allocated(dest_icell_per_cell)) deallocate(dest_icell_per_cell)
-        if (allocated(multipole_q_dev))  deallocate(multipole_q_dev)
-        ! Gather/scatter scratch for split/sort.
-        if (allocated(xp_swap))  deallocate(xp_swap)
-        if (allocated(mp_swap))  deallocate(mp_swap)
-        if (allocated(idp_swap)) deallocate(idp_swap)
-
-        ! Allocate device mirrors to host capacity. All rank-2 host particle
-        ! arrays share the same leading dim (r%npartmax); size(p%xp,1) is the
-        ! canonical anchor for the per-particle scratch arrays.
-        allocate(xp(1:size(pst%s%p%xp, 1), 1:ndim))
-        allocate(vp(1:size(pst%s%p%vp, 1), 1:ndim))
-        allocate(mp(1:size(pst%s%p%mp)))
-        allocate(levelp(1:size(pst%s%p%levelp)))
-        allocate(sortp(1:size(pst%s%p%sortp)))
-        allocate(workp(1:size(pst%s%p%workp)))
-        allocate(idp(1:size(pst%s%p%idp)))
-        allocate(hkey_part  (1:size(pst%s%p%xp, 1)))
-        allocate(bucket_part(1:size(pst%s%p%xp, 1)))
-        allocate(cell_part_count(1:twotondim, 1:pst%s%m%ngridmax+pst%s%m%ncachemax))
-        allocate(cell_part_head (1:twotondim, 1:pst%s%m%ngridmax+pst%s%m%ncachemax))
-        allocate(cell_part_idx  (1:size(pst%s%p%xp, 1)))
-        allocate(src_icell_part (1:size(pst%s%p%xp, 1)))
-        allocate(src_igrid_part (1:size(pst%s%p%xp, 1)))
-        allocate(dest_oct_per_cell   (1:threetondim, 1:twotondim, 1:pst%s%m%ngridmax+pst%s%m%ncachemax))
-        allocate(dest_icell_per_cell (1:threetondim, 1:twotondim, 1:pst%s%m%ngridmax+pst%s%m%ncachemax))
-        allocate(multipole_q_dev (1:ndim+1))
-        ! Gather/scatter scratch — kernel-overwritten, no host->device copy.
-        allocate(xp_swap (1:size(pst%s%p%xp, 1), 1:ndim))
-        allocate(mp_swap (1:size(pst%s%p%mp)))
-        allocate(idp_swap(1:size(pst%s%p%idp)))
-
-        ! Mandatory host -> device copies (shapes match by construction above)
+        ! Mandatory host -> device copies.
         xp     = pst%s%p%xp
         vp     = pst%s%p%vp
         mp     = pst%s%p%mp
@@ -106,39 +50,17 @@ recursive subroutine r_set_grid_device(pst)
         sortp  = pst%s%p%sortp
         workp  = pst%s%p%workp
         idp    = pst%s%p%idp
-
-        if (allocated(pst%s%p%jp)) then
-           allocate(jp(1:size(pst%s%p%jp, 1), 1:ndim))
-           jp = pst%s%p%jp
-        endif
-        if (allocated(pst%s%p%zp)) then
-           allocate(zp(1:size(pst%s%p%zp)))
-           zp = pst%s%p%zp
-        endif
-        if (allocated(pst%s%p%tp)) then
-           allocate(tp(1:size(pst%s%p%tp)))
-           tp = pst%s%p%tp
-        endif
-        if (allocated(pst%s%p%tm)) then
-           allocate(tm(1:size(pst%s%p%tm)))
-           tm = pst%s%p%tm
-        endif
-        if (allocated(pst%s%p%size)) then
-           allocate(size_p(1:size(pst%s%p%size)))
-           size_p = pst%s%p%size
-        endif
-        if (allocated(pst%s%p%charge)) then
-           allocate(charge(1:size(pst%s%p%charge)))
-           charge = pst%s%p%charge
-        endif
-        if (allocated(pst%s%p%idm)) then
-           allocate(idm(1:size(pst%s%p%idm)))
-           idm = pst%s%p%idm
-        endif
-        if (allocated(pst%s%p%idt)) then
-           allocate(idt(1:size(pst%s%p%idt)))
-           idt = pst%s%p%idt
-        endif
+        ! Optional DM fields: copy iff both host and device counterparts are
+        ! allocated (init_part allocates the device side when the host side
+        ! is already allocated at init time).
+        if (allocated(pst%s%p%jp)     .and. allocated(jp))     jp     = pst%s%p%jp
+        if (allocated(pst%s%p%zp)     .and. allocated(zp))     zp     = pst%s%p%zp
+        if (allocated(pst%s%p%tp)     .and. allocated(tp))     tp     = pst%s%p%tp
+        if (allocated(pst%s%p%tm)     .and. allocated(tm))     tm     = pst%s%p%tm
+        if (allocated(pst%s%p%size)   .and. allocated(size_p)) size_p = pst%s%p%size
+        if (allocated(pst%s%p%charge) .and. allocated(charge)) charge = pst%s%p%charge
+        if (allocated(pst%s%p%idm)    .and. allocated(idm))    idm    = pst%s%p%idm
+        if (allocated(pst%s%p%idt)    .and. allocated(idt))    idt    = pst%s%p%idt
         call GPU_Error_Check(__FILE__, __LINE__)
         call nvtxEndRange()
      endif
