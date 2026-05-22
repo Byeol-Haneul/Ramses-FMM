@@ -1425,7 +1425,7 @@ end subroutine analytic_gravity_part
 
 attributes(device) subroutine gather_cic_force_part(f_d, hash_key_d, hash_val_d, &
      hash_size_d, ckey_max_d, key_off_d, box_ckey_min_d, box_ckey_max_d, periodic_d, &
-     x_in, cell_level, grid_level, ff, ok_level)
+     ngridmax_d, x_in, cell_level, grid_level, ff, ok_level)
   real(kind=dp),   device :: f_d(1:twotondim,1:ndim,*)
   integer(kind=8), device :: hash_key_d(*)
   integer(kind=4), device :: hash_val_d(*)
@@ -1435,6 +1435,7 @@ attributes(device) subroutine gather_cic_force_part(f_d, hash_key_d, hash_val_d,
   integer(kind=4), device :: box_ckey_min_d(1:3,*)
   integer(kind=4), device :: box_ckey_max_d(1:3,*)
   logical,         device :: periodic_d(1:3)
+  integer(kind=4), intent(in), value :: ngridmax_d
   real(kind=8) :: x_in(1:3), ff(1:3)
   integer(kind=4), intent(in), value :: cell_level, grid_level
   logical :: ok_level
@@ -1516,7 +1517,14 @@ attributes(device) subroutine gather_cic_force_part(f_d, hash_key_d, hash_val_d,
            offset = key_off_d(grid_level)
            key = offset + ix8 + iy8*nx + iz8*nx*nx
            igrid = hash_get(hash_key_d, hash_val_d, hash_size_d, key)
-           if (igrid == 0) then
+           ! Reject missing octs (igrid==0) and cache/ghost octs (igrid>ngridmax).
+           ! The hash table also resolves to cache octs created in make_cache_octs,
+           ! but those carry only parent-level-injected f and are not updated by
+           ! gpu_gradient_phi. CPU get_grid under WITHOUTMPI returns child=0 for
+           ! the same in-domain misses, triggering the coarse fallback. Mirror that
+           ! semantics here so GPU and CPU agree on fine-pass validity at AMR
+           ! refinement boundaries. (Same igrid<=ngridmax convention used in gpu_mg.cuf.)
+           if (igrid == 0 .or. igrid > ngridmax_d) then
               ok_level = .false.
               cycle
            endif
@@ -1605,7 +1613,7 @@ end subroutine gravana_preloop_part_kernel
 
 attributes(global) subroutine kick_drift_part_kernel(xp_d, vp_d, levelp_d, &
      f_d, hash_key_d, hash_val_d, hash_size_d, ckey_max_d, key_off_d, &
-     box_ckey_min_d, box_ckey_max_d, box_size_d, periodic_d, &
+     box_ckey_min_d, box_ckey_max_d, box_size_d, periodic_d, ngridmax_d, &
      dtnew_d, dtold_d, skip1, skip2, skip3, dx_loc, &
      action_part, ilevel, head_idx, num_parts, leading)
   integer(kind=4), intent(in), value :: leading
@@ -1622,6 +1630,7 @@ attributes(global) subroutine kick_drift_part_kernel(xp_d, vp_d, levelp_d, &
   integer(kind=4), device :: box_ckey_max_d(1:3,*)
   real(kind=8),    device :: box_size_d(1:3)
   logical,         device :: periodic_d(1:3)
+  integer(kind=4), intent(in), value :: ngridmax_d
   real(kind=8),    device :: dtnew_d(*)
   real(kind=8),    device :: dtold_d(*)
   real(kind=8), intent(in), value :: skip1, skip2, skip3, dx_loc
@@ -1654,13 +1663,13 @@ attributes(global) subroutine kick_drift_part_kernel(xp_d, vp_d, levelp_d, &
 
   call gather_cic_force_part(f_d, hash_key_d, hash_val_d, hash_size_d, &
        ckey_max_d, key_off_d, box_ckey_min_d, box_ckey_max_d, periodic_d, &
-       x, ilevel+1, ilevel, ff, ok_level)
+       ngridmax_d, x, ilevel+1, ilevel, ff, ok_level)
 
   if (.not. ok_level) then
      x_coarse = x / 2d0
      call gather_cic_force_part(f_d, hash_key_d, hash_val_d, hash_size_d, &
           ckey_max_d, key_off_d, box_ckey_min_d, box_ckey_max_d, periodic_d, &
-          x_coarse, ilevel, ilevel-1, ff, ok_level)
+          ngridmax_d, x_coarse, ilevel, ilevel-1, ff, ok_level)
   endif
 
   if (action_part == 2) then
@@ -1779,7 +1788,8 @@ subroutine gpu_kick_drift_part(sim, ilevel, action_part)
 
   call kick_drift_part_kernel<<<num_blocks, num_threads>>>(xp, vp, levelp, &
        f, hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, &
-       box_ckey_min, box_ckey_max, box_size, periodic, dtnew_part, dtold_part, &
+       box_ckey_min, box_ckey_max, box_size, periodic, sim%r%ngridmax, &
+       dtnew_part, dtold_part, &
        skip1, skip2, skip3, dx_loc, action_part, ilevel, head_idx, num_parts, leading)
   call GPU_Error_Check("gpu/gpu_part.cuf", 0)
 
