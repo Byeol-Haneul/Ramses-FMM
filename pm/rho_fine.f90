@@ -691,9 +691,37 @@ recursive subroutine r_cic_part(pst,input_array,input_size)
         endif
         if(pst%s%r%star)call cic_part(pst%s,pst%s%star,ilevel,rtype)
         if(pst%s%r%sink)call cic_part(pst%s,pst%s%sink,ilevel,rtype)
-        return
+     else
+        ! Data on host: full CPU mass deposition (DM, star, sink) with per-scheme dispatch.
+        if(pst%s%r%part)then
+           if(pst%s%r%part_mass_deposition_scheme==1)then
+              call cic_part(pst%s,pst%s%p   ,ilevel,rtype)
+           else if(pst%s%r%part_mass_deposition_scheme==2)then
+              call tsc_part(pst%s,pst%s%p   ,ilevel,rtype)
+           else if(pst%s%r%part_mass_deposition_scheme==3)then
+              call pcs_part(pst%s,pst%s%p   ,ilevel,rtype)
+           endif
+        endif
+        if(pst%s%r%star)then
+           if(pst%s%r%star_mass_deposition_scheme==1)then
+              call cic_part(pst%s,pst%s%star,ilevel,rtype)
+           elseif(pst%s%r%star_mass_deposition_scheme==2)then
+              call tsc_part(pst%s,pst%s%star,ilevel,rtype)
+           elseif(pst%s%r%star_mass_deposition_scheme==3)then
+              call pcs_part(pst%s,pst%s%star,ilevel,rtype)
+           endif
+        endif
+        if(pst%s%r%sink)then
+           if(pst%s%r%sink_mass_deposition_scheme==1)then
+              call cic_part(pst%s,pst%s%sink,ilevel,rtype)
+           elseif(pst%s%r%sink_mass_deposition_scheme==2)then
+              call tsc_part(pst%s,pst%s%sink,ilevel,rtype)
+           elseif(pst%s%r%sink_mass_deposition_scheme==3)then
+              call pcs_part(pst%s,pst%s%sink,ilevel,rtype)
+           endif
+        endif
      endif
-#endif
+#else
      ! Mass deposition for various components (DM particles, star, sink)
      ! based on their respective deposition schemes (CIC 1, TSC 2 or PCS 3)
      if(pst%s%r%part)then
@@ -723,6 +751,7 @@ recursive subroutine r_cic_part(pst,input_array,input_size)
            call pcs_part(pst%s,pst%s%sink,ilevel,rtype)
         endif
      endif
+#endif
   endif
 
 end subroutine r_cic_part
@@ -1233,14 +1262,21 @@ recursive subroutine r_split_part(pst,ilevel,input_size)
         if(pst%s%r%sink)call split_part(pst%s,pst%s%sink,ilevel)
         if(pst%s%r%tree)call split_part(pst%s,pst%s%tree,ilevel)
         if(pst%s%r%trac)call split_part(pst%s,pst%s%trac,ilevel)
-        return
+     else
+        ! Data on host: full CPU split for all particle types.
+        if(pst%s%r%part)call split_part(pst%s,pst%s%p   ,ilevel)
+        if(pst%s%r%star)call split_part(pst%s,pst%s%star,ilevel)
+        if(pst%s%r%sink)call split_part(pst%s,pst%s%sink,ilevel)
+        if(pst%s%r%tree)call split_part(pst%s,pst%s%tree,ilevel)
+        if(pst%s%r%trac)call split_part(pst%s,pst%s%trac,ilevel)
      endif
-#endif
+#else
      if(pst%s%r%part)call split_part(pst%s,pst%s%p   ,ilevel)
      if(pst%s%r%star)call split_part(pst%s,pst%s%star,ilevel)
      if(pst%s%r%sink)call split_part(pst%s,pst%s%sink,ilevel)
      if(pst%s%r%tree)call split_part(pst%s,pst%s%tree,ilevel)
      if(pst%s%r%trac)call split_part(pst%s,pst%s%trac,ilevel)
+#endif
   endif
 
 end subroutine r_split_part
@@ -1992,14 +2028,21 @@ recursive subroutine r_sort_part(pst,ilevel,input_size)
         if(pst%s%r%sink)call sort_part(pst%s,pst%s%sink,ilevel)
         if(pst%s%r%tree)call sort_part(pst%s,pst%s%tree,ilevel)
         if(pst%s%r%trac)call sort_part(pst%s,pst%s%trac,ilevel)
-        return
+     else
+        ! Data on host: full CPU sort for all particle types.
+        if(pst%s%r%part)call sort_part(pst%s,pst%s%p   ,ilevel)
+        if(pst%s%r%star)call sort_part(pst%s,pst%s%star,ilevel)
+        if(pst%s%r%sink)call sort_part(pst%s,pst%s%sink,ilevel)
+        if(pst%s%r%tree)call sort_part(pst%s,pst%s%tree,ilevel)
+        if(pst%s%r%trac)call sort_part(pst%s,pst%s%trac,ilevel)
      endif
-#endif
+#else
      if(pst%s%r%part)call sort_part(pst%s,pst%s%p   ,ilevel)
      if(pst%s%r%star)call sort_part(pst%s,pst%s%star,ilevel)
      if(pst%s%r%sink)call sort_part(pst%s,pst%s%sink,ilevel)
      if(pst%s%r%tree)call sort_part(pst%s,pst%s%tree,ilevel)
      if(pst%s%r%trac)call sort_part(pst%s,pst%s%trac,ilevel)
+#endif
   endif
 
 end subroutine r_sort_part
