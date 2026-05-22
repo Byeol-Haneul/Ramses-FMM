@@ -48,10 +48,11 @@ module gpu_part_state
   !> Gather/scatter scratch. xp_swap is 1D (npart_max) double-precision and
   !> serves every per-column dp permutation in gpu_split_part (one column of
   !> xp/vp/jp at a time, plus the rank-1 mp/zp/tp/tm/size_p/charge — none
-  !> live simultaneously, so a single scratch suffices). The i8 analogue is
-  !> hkey_part (declared above), reused here because its sort-phase role has
-  !> finished by the time gpu_split_part's gather/scatter runs. bucket_part
-  !> serves the same role for i4 fields.
+  !> live simultaneously, so a single scratch suffices). bucket_part doubles
+  !> as the i4 scratch (dead during this phase). idp_swap is the i8b scratch
+  !> for idp/idm; cannot reuse hkey_part since i8b may be kind=4 (default)
+  !> while hkey_part is always kind=8 (Hilbert keys need 64 bits).
   real(kind=dp),   device, allocatable, dimension(:)   :: xp_swap
+  integer(i8b),    device, allocatable, dimension(:)   :: idp_swap
 
 end module gpu_part_state

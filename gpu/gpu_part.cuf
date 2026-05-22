@@ -14,7 +14,7 @@ module part_device
        cell_part_count, cell_part_head, cell_part_idx, &
        src_icell_part, src_igrid_part, &
        multipole_q_dev, &
-       xp_swap, &
+       xp_swap, idp_swap, &
        dtnew_part, dtold_part
   use gpu_runner, only: &
        grid, hash_key, hash_val, ckey_max, key_off, &
@@ -551,9 +551,9 @@ subroutine gpu_split_part(sim, ilevel)
   call sort_scatter_part_i4_1d<<<num_blocks, num_threads>>>(levelp, bucket_part, &
        head_idx, num_parts)
 
-  call sort_gather_part_i8_1d<<<num_blocks, num_threads>>>(hkey_part, idp, &
+  call sort_gather_part_i8_1d<<<num_blocks, num_threads>>>(idp_swap, idp, &
        swap_global, head_idx, num_parts)
-  call sort_scatter_part_i8_1d<<<num_blocks, num_threads>>>(idp, hkey_part, &
+  call sort_scatter_part_i8_1d<<<num_blocks, num_threads>>>(idp, idp_swap, &
        head_idx, num_parts)
 
   if (allocated(jp)) then
@@ -595,9 +595,9 @@ subroutine gpu_split_part(sim, ilevel)
           head_idx, num_parts)
   endif
   if (allocated(idm)) then
-     call sort_gather_part_i8_1d<<<num_blocks, num_threads>>>(hkey_part, idm, &
+     call sort_gather_part_i8_1d<<<num_blocks, num_threads>>>(idp_swap, idm, &
           swap_global, head_idx, num_parts)
-     call sort_scatter_part_i8_1d<<<num_blocks, num_threads>>>(idm, hkey_part, &
+     call sort_scatter_part_i8_1d<<<num_blocks, num_threads>>>(idm, idp_swap, &
           head_idx, num_parts)
   endif
   if (allocated(idt)) then

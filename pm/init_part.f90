@@ -110,10 +110,12 @@ subroutine init_part(r,g,m,p)
   allocate(src_igrid_part (1:r%npartmax))
   allocate(multipole_q_dev (1:ndim+1))
   ! Gather/scatter scratch — kernel-overwritten, no host->device copy.
-  ! xp_swap is 1D and shared across every dp permutation. The i8 analogue
-  ! is hkey_part (allocated above, sort-phase-only, reused as scratch in
-  ! the gpu_split_part gather/scatter chain). The i4 analogue is bucket_part.
+  ! xp_swap is 1D and shared across every dp permutation. The i4 analogue
+  ! is bucket_part (allocated above). idp_swap is the i8b (kind=4 or 8 per
+  ! LONGINT) analogue — separate from hkey_part because hkey_part is fixed
+  ! at kind=8 for Hilbert keys and may not match i8b in non-LONGINT builds.
   allocate(xp_swap (1:r%npartmax))
+  allocate(idp_swap(1:r%npartmax))
   ! Optional DM device mirrors: allocated iff the host counterpart is
   ! allocated by the time init_part runs. init_part for DM does not allocate
   ! these host fields today, so these conditionals do not fire — but keeping
