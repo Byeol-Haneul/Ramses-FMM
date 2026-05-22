@@ -302,12 +302,8 @@ subroutine input_part_grafic(r,g,p,npart_tot)
   do ipart=1,p%npart
      do idim=1,ndim
         if(r%periodic(idim))then
-           do while(p%xp(ipart,idim)< 0.0d0)
-              p%xp(ipart,idim)=p%xp(ipart,idim)+r%box_size(idim)
-           end do
-           do while(p%xp(ipart,idim)>=r%box_size(idim))
-              p%xp(ipart,idim)=p%xp(ipart,idim)-r%box_size(idim)
-           end do
+           if(p%xp(ipart,idim)< 0.0d0           )p%xp(ipart,idim)=p%xp(ipart,idim)+r%box_size(idim)
+           if(p%xp(ipart,idim)>=r%box_size(idim))p%xp(ipart,idim)=p%xp(ipart,idim)-r%box_size(idim)
         end if
      end do
   end do
@@ -548,12 +544,8 @@ subroutine input_trac_grafic(r,g,p,npart_tot)
   do ipart=1,p%npart
      do idim=1,ndim
         if(r%periodic(idim))then
-           do while(p%xp(ipart,idim)< 0.0d0)
-              p%xp(ipart,idim)=p%xp(ipart,idim)+r%box_size(idim)
-           end do
-           do while(p%xp(ipart,idim)>=r%box_size(idim))
-              p%xp(ipart,idim)=p%xp(ipart,idim)-r%box_size(idim)
-           end do
+           if(p%xp(ipart,idim)< 0.0d0           )p%xp(ipart,idim)=p%xp(ipart,idim)+r%box_size(idim)
+           if(p%xp(ipart,idim)>=r%box_size(idim))p%xp(ipart,idim)=p%xp(ipart,idim)-r%box_size(idim)
         end if
      end do
   end do
@@ -792,12 +784,8 @@ subroutine input_dust_grafic(r,g,p,npart_tot)
   do ipart=1,p%npart
      do idim=1,ndim
         if(r%periodic(idim))then
-           do while(p%xp(ipart,idim)< 0.0d0)
-              p%xp(ipart,idim)=p%xp(ipart,idim)+r%boxlen
-           end do
-           do while(p%xp(ipart,idim)>=r%boxlen)
-              p%xp(ipart,idim)=p%xp(ipart,idim)-r%boxlen
-           end do
+           if(p%xp(ipart,idim)<   0.0d0 )p%xp(ipart,idim)=p%xp(ipart,idim)+r%boxlen
+           if(p%xp(ipart,idim)>=r%boxlen)p%xp(ipart,idim)=p%xp(ipart,idim)-r%boxlen
         endif
      end do
   end do

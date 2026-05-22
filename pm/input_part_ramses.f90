@@ -499,12 +499,8 @@ subroutine input_part_ramses(r,g,p,ncpu_file,npart_file,mpart_loc)
   do ipart=1,p%npart
      do idim=1,ndim
         if(r%periodic(idim))then
-           do while(p%xp(ipart,idim)< 0.0d0)
-              p%xp(ipart,idim)=p%xp(ipart,idim)+r%box_size(idim)
-           end do
-           do while(p%xp(ipart,idim)>=r%box_size(idim))
-              p%xp(ipart,idim)=p%xp(ipart,idim)-r%box_size(idim)
-           end do
+           if(p%xp(ipart,idim)< 0.0d0           )p%xp(ipart,idim)=p%xp(ipart,idim)+r%box_size(idim)
+           if(p%xp(ipart,idim)>=r%box_size(idim))p%xp(ipart,idim)=p%xp(ipart,idim)-r%box_size(idim)
         endif
      end do
   end do
