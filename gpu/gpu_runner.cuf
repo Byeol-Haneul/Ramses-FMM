@@ -1516,7 +1516,7 @@ contains
     head_mg = sim%m_mg%head(ifine-1)
 
     ! Init prefix sum (count new parent octs)
-    call nvtxStartRange("GPU build_mg", color=1)!blue
+    call nvtxStartRange("GPU build_mg", color=2)!yellow
     if (ifine == ilevel) then
        call init_prefix_sum_mg<<<num_blocks, num_threads>>>(grid, prefix_sum, head_idx, num_octs)
     else
@@ -1525,7 +1525,7 @@ contains
     call nvtxEndRange()
 
     ! Compute prefix sums
-    call nvtxStartRange("GPU build_mg", color=1)!blue
+    call nvtxStartRange("GPU build_mg", color=2)!yellow
     call gpu_scan(head_idx, num_octs, new_noct_d)
     new_noct = new_noct_d
     call nvtxEndRange()
@@ -1543,12 +1543,12 @@ contains
        endif
 
        ! Compute MG father swap table
-       call nvtxStartRange("GPU build_mg", color=1)!blue
+       call nvtxStartRange("GPU build_mg", color=2)!yellow
        call compute_father_swap_table<<<num_blocks, num_threads>>>(swap_local, prefix_sum, head_idx, num_octs)
        call nvtxEndRange()
 
        ! Make new MG octs
-       call nvtxStartRange("GPU build_mg", color=1)!blue
+       call nvtxStartRange("GPU build_mg", color=2)!yellow
        if (ifine == ilevel) then
           call make_father_octs<<<num_blocks_2, num_threads_2>>>(grid, grid_mg, f_mg, phi_mg, swap_local, &
                & head_mg, new_noct)
@@ -1559,7 +1559,7 @@ contains
        call nvtxEndRange()
 
        ! Insert new octs in hash table
-       call nvtxStartRange("GPU build_mg", color=1)!blue
+       call nvtxStartRange("GPU build_mg", color=2)!yellow
        call insert_hash_kernel<<<num_blocks_2, num_threads_2>>>(grid_mg, hash_key_mg, hash_val_mg, &
             & sim%m_mg%hash_size, ckey_max, key_off, head_mg, new_noct)
        call nvtxEndRange()
@@ -1568,13 +1568,13 @@ contains
 
     ! Compute final father array
     if (ifine == ilevel) then
-       call nvtxStartRange("GPU build_mg", color=1)!blue
+       call nvtxStartRange("GPU build_mg", color=2)!yellow
        call update_father_array<<<num_blocks, num_threads>>>(father_mg, grid, grid_mg, &
             & hash_key_mg, hash_val_mg, sim%m_mg%hash_size, &
             & ckey_max, key_off, head_idx, head_father, num_octs)
        call nvtxEndRange()
     else
-       call nvtxStartRange("GPU build_mg", color=1)!blue
+       call nvtxStartRange("GPU build_mg", color=2)!yellow
        call update_father_array<<<num_blocks, num_threads>>>(father_mg, grid_mg, grid_mg, &
             & hash_key_mg, hash_val_mg, sim%m_mg%hash_size, &
             & ckey_max, key_off, head_idx, head_father, num_octs)
@@ -1595,7 +1595,7 @@ contains
 
     if (num_octs > 0) then
        do ind = 1, threetondim
-          call nvtxStartRange("GPU build_mg", color=1)!blue
+          call nvtxStartRange("GPU build_mg", color=2)!yellow
           call update_nbor_array<<<num_blocks, num_threads>>>(nbor_mg, grid_mg, hash_key_mg, hash_val_mg, &
                & sim%m_mg%hash_size, ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, &
                & head_idx, num_octs, ind)
@@ -1628,7 +1628,7 @@ contains
     num_threads = 128
     num_blocks = (num_octs + num_threads - 1) / num_threads
     if (num_octs > 0) then
-       call nvtxStartRange("GPU clean_mg", color=1)!blue
+       call nvtxStartRange("GPU clean_mg", color=2)!yellow
        call free_hash_kernel<<<num_blocks, num_threads>>>(grid_mg, hash_key_mg, hash_val_mg, sim%m_mg%hash_size, &
             & ckey_max, key_off, head_idx, num_octs)
        call nvtxEndRange()
