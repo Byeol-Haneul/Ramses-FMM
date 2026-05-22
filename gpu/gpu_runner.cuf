@@ -1613,23 +1613,14 @@ contains
   !>
   subroutine gpu_clean_mg(sim)
     use nvtx
-    use refine_device, only: free_hash_kernel
     use ramses_commons, only: ramses_t
     implicit none
     type(ramses_t), intent(inout) :: sim
     !
-    integer(kind=4) :: head_idx, num_octs, num_blocks, num_threads
-
-    head_idx = 1
-    num_octs = sim%m_mg%tail(sim%r%bound_levelmin)
-    num_threads = 128
-    num_blocks = (num_octs + num_threads - 1) / num_threads
-    if (num_octs > 0) then
-       call nvtxStartRange("GPU clean_mg", color=2)!yellow
-       call free_hash_kernel<<<num_blocks, num_threads>>>(grid_mg, hash_key_mg, hash_val_mg, sim%m_mg%hash_size, &
-            & ckey_max, key_off, head_idx, num_octs)
-       call nvtxEndRange()
-    endif
+    call nvtxStartRange("GPU clean_mg", color=2)!yellow
+    hash_key_mg=0
+    hash_val_mg=0
+    call nvtxEndRange()
 
     sim%m_mg%head=1
     sim%m_mg%tail=0
