@@ -17,7 +17,6 @@ module gpu_part_state
   real(kind=dp),   device, allocatable, dimension(:)   :: mp
   integer(kind=4), device, allocatable, dimension(:)   :: levelp
   integer(kind=4), device, allocatable, dimension(:)   :: sortp
-  integer(kind=4), device, allocatable, dimension(:)   :: workp
   integer(i8b),    device, allocatable, dimension(:)   :: idp
   !> Optional DM particle fields: device array is allocated iff the host
   !> counterpart is allocated (mirrors split_part's gating in rho_fine).
@@ -42,18 +41,17 @@ module gpu_part_state
   integer(kind=4), device, allocatable, dimension(:)   :: src_icell_part
   integer(kind=4), device, allocatable, dimension(:)   :: src_igrid_part
 
-  !> Precomputed destination (igrid, icell) for each (source_cell, k) pair,
-  !> built once per gpu_cic_part call. Sentinel (0, 0) = out-of-domain.
-  integer(kind=4), device, allocatable, dimension(:,:,:) :: dest_oct_per_cell
-  integer(kind=4), device, allocatable, dimension(:,:,:) :: dest_icell_per_cell
-
   !> Device accumulator for the levelmin multipole reduction.
   !> Length ndim+1: q(1)=sum(mp), q(idim+1)=sum(mp*xp).
   real(kind=8), device, allocatable, dimension(:) :: multipole_q_dev
 
-  !> Gather/scatter scratch (xp_swap, mp_swap, idp_swap; workp for int4).
-  real(kind=dp),   device, allocatable, dimension(:,:) :: xp_swap
-  real(kind=dp),   device, allocatable, dimension(:)   :: mp_swap
-  integer(i8b),    device, allocatable, dimension(:)   :: idp_swap
+  !> Gather/scatter scratch. xp_swap is 1D (npart_max) double-precision and
+  !> serves every per-column dp permutation in gpu_split_part (one column of
+  !> xp/vp/jp at a time, plus the rank-1 mp/zp/tp/tm/size_p/charge — none
+  !> live simultaneously, so a single scratch suffices). The i8 analogue is
+  !> hkey_part (declared above), reused here because its sort-phase role has
+  !> finished by the time gpu_split_part's gather/scatter runs. bucket_part
+  !> serves the same role for i4 fields.
+  real(kind=dp),   device, allocatable, dimension(:)   :: xp_swap
 
 end module gpu_part_state

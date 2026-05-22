@@ -48,7 +48,6 @@ recursive subroutine r_set_grid_device(pst)
         mp     = pst%s%p%mp
         levelp = pst%s%p%levelp
         sortp  = pst%s%p%sortp
-        workp  = pst%s%p%workp
         idp    = pst%s%p%idp
         ! Optional DM fields: copy iff both host and device counterparts are
         ! allocated (init_part allocates the device side when the host side
@@ -157,7 +156,6 @@ subroutine gpu_to_host_part(pst)
   pst%s%p%mp     = mp
   pst%s%p%levelp = levelp
   pst%s%p%sortp  = sortp
-  pst%s%p%workp  = workp
   pst%s%p%idp    = idp
   ! Optional mirrors — copy iff both sides are allocated.
   if (allocated(jp)     .and. allocated(pst%s%p%jp))     pst%s%p%jp     = jp

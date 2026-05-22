@@ -99,7 +99,6 @@ subroutine init_part(r,g,m,p)
   allocate(mp(1:r%npartmax))
   allocate(levelp(1:r%npartmax))
   allocate(sortp(1:r%npartmax))
-  allocate(workp(1:r%npartmax))
   allocate(idp(1:r%npartmax))
   ! Per-particle / per-cell scratch (CIC + sort + split).
   allocate(hkey_part  (1:r%npartmax))
@@ -109,13 +108,12 @@ subroutine init_part(r,g,m,p)
   allocate(cell_part_idx  (1:r%npartmax))
   allocate(src_icell_part (1:r%npartmax))
   allocate(src_igrid_part (1:r%npartmax))
-  allocate(dest_oct_per_cell   (1:threetondim, 1:twotondim, 1:m%ngridmax+m%ncachemax))
-  allocate(dest_icell_per_cell (1:threetondim, 1:twotondim, 1:m%ngridmax+m%ncachemax))
   allocate(multipole_q_dev (1:ndim+1))
   ! Gather/scatter scratch — kernel-overwritten, no host->device copy.
-  allocate(xp_swap (1:r%npartmax, 1:ndim))
-  allocate(mp_swap (1:r%npartmax))
-  allocate(idp_swap(1:r%npartmax))
+  ! xp_swap is 1D and shared across every dp permutation. The i8 analogue
+  ! is hkey_part (allocated above, sort-phase-only, reused as scratch in
+  ! the gpu_split_part gather/scatter chain). The i4 analogue is bucket_part.
+  allocate(xp_swap (1:r%npartmax))
   ! Optional DM device mirrors: allocated iff the host counterpart is
   ! allocated by the time init_part runs. init_part for DM does not allocate
   ! these host fields today, so these conditionals do not fire — but keeping
