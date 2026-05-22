@@ -14,7 +14,7 @@ module part_device
        cell_part_count, cell_part_head, cell_part_idx, &
        src_icell_part, src_igrid_part, &
        dest_oct_per_cell, dest_icell_per_cell, &
-       weight_part_rho, weight_part_nref, multipole_q_dev, &
+       multipole_q_dev, &
        xp_swap, mp_swap, idp_swap, &
        dtnew_part, dtold_part
   use gpu_runner, only: &
@@ -1108,121 +1108,38 @@ attributes(global) subroutine multipole_q_kernel(xp_d, mp_d, multipole_q_d, &
   endif
 end subroutine multipole_q_kernel
 
-!> Per-particle CIC weight for outer iteration k: each thread reads its
-!> source cell from the per-particle map, looks up the destination via
-!> dest_oct_per_cell(k,...), and writes weight_part_rho = mp*w/vol_loc plus
-!> the gated nref weight. Sentinel destinations -> weight = 0.
-attributes(global) subroutine cic_weight_kernel(xp_d, mp_d, &
-     src_icell_part_d, src_igrid_part_d, dest_oct_d, &
-     weight_rho_d, weight_nref_d, &
-     skip1, skip2, skip3, dx_loc, vol_loc, m_refine_at_level, mass_cut_refine, &
-     k_outer, head_idx, num_parts, leading)
-  integer(kind=4), intent(in), value :: leading, k_outer, head_idx, num_parts
-  real(kind=dp),   device :: xp_d(*)
-  real(kind=dp),   device :: mp_d(*)
-  integer(kind=4), device :: src_icell_part_d(*)
-  integer(kind=4), device :: src_igrid_part_d(*)
-  integer(kind=4), device :: dest_oct_d(1:threetondim, 1:twotondim, *)
-  real(kind=dp),   device :: weight_rho_d (*)
-  real(kind=dp),   device :: weight_nref_d(*)
-  real(kind=8), intent(in), value :: skip1, skip2, skip3, dx_loc, vol_loc
-  real(kind=8), intent(in), value :: m_refine_at_level, mass_cut_refine
-
-  integer :: thread_idx, block_idx, idx, ipart, idim, icell_src, igrid_src
-  integer :: ox, oy, oz, dst_igrid
-  real(kind=8) :: skip(1:3), xs, frac(1:3)
-  real(kind=8) :: wx(0:2), wy(0:2), wz(0:2), w, nref_add
-
-  thread_idx = threadIdx%x - 1
-  block_idx  = blockIdx%x  - 1
-  idx = thread_idx + block_idx * blockDim%x
-  if (idx >= num_parts) return
-  ipart = head_idx + idx
-
-  weight_rho_d (ipart) = 0d0
-  weight_nref_d(ipart) = 0d0
-
-  icell_src = src_icell_part_d(ipart)
-  igrid_src = src_igrid_part_d(ipart)
-  if (igrid_src == 0) return    ! source out-of-domain: contributes nothing
-
-  dst_igrid = dest_oct_d(k_outer, icell_src, igrid_src)
-  if (dst_igrid == 0) return    ! destination out-of-domain
-
-  skip(1) = skip1
-  skip(2) = skip2
-  skip(3) = skip3
-  frac = 0d0
-  do idim = 1, ndim
-     xs = (xp_d(ipart + (idim-1)*leading) + skip(idim)) / dx_loc
-     frac(idim) = xs - floor(xs)
-  end do
-
-  wx(0) = max(0d0, 0.5d0 - frac(1))
-  wx(1) = 1d0 - abs(frac(1) - 0.5d0)
-  wx(2) = max(0d0, frac(1) - 0.5d0)
-  wy = 0d0
-  wz = 0d0
-  wy(1) = 1d0
-  wz(1) = 1d0
-  if (ndim >= 2) then
-     wy(0) = max(0d0, 0.5d0 - frac(2))
-     wy(1) = 1d0 - abs(frac(2) - 0.5d0)
-     wy(2) = max(0d0, frac(2) - 0.5d0)
-  endif
-  if (ndim >= 3) then
-     wz(0) = max(0d0, 0.5d0 - frac(3))
-     wz(1) = 1d0 - abs(frac(3) - 0.5d0)
-     wz(2) = max(0d0, frac(3) - 0.5d0)
-  endif
-
-  ox = mod(k_outer - 1, 3) - 1
-  oy = mod((k_outer - 1) / 3, 3) - 1
-  oz = (k_outer - 1) / 9 - 1
-  w = wx(ox+1) * wy(oy+1) * wz(oz+1)
-
-  weight_rho_d(ipart) = mp_d(ipart) * w / vol_loc
-
-  if (m_refine_at_level >= 0d0) then
-     if (mass_cut_refine > 0d0) then
-        if (mp_d(ipart) < mass_cut_refine) then
-           nref_add = w
-        else
-           nref_add = 0d0
-        endif
-     else
-        nref_add = w
-     endif
-     weight_nref_d(ipart) = nref_add
-  endif
-end subroutine cic_weight_kernel
-
-!> Per-source-cell reduction + leader write. One block per active source
-!> cell (count > 0); threads cooperate via block_reduce_sum on rho and nref.
-!> No global atomics: within outer k, distinct source cells map to distinct
-!> destinations (offset_k is a lattice bijection mod periodic wrap); cross-k
-!> accumulation is serialized by the host loop.
+!> Per-source-cell reduction + leader write, with CIC weight fused inline.
+!> One block per active source cell (count > 0); each thread reads its own
+!> particle's xp/mp, computes wx/wy/wz and the offset-k weight on the spot,
+!> contributes to block_reduce_sum, leader writes. No global atomics: within
+!> outer k, distinct source cells map to distinct destinations (offset_k is a
+!> lattice bijection mod periodic wrap); cross-k accumulation is serialized by
+!> the host loop.
 attributes(global) subroutine cic_block_reduce_kernel(active_cells_d, n_active, &
      cell_part_count_d, cell_part_head_d, cell_part_idx_d, dest_oct_d, dest_icell_d, &
-     weight_rho_d, weight_nref_d, rho_d, nref_d, &
-     m_refine_at_level, k_outer)
-  integer(kind=4), intent(in), value :: k_outer, n_active
+     xp_d, mp_d, rho_d, nref_d, &
+     skip1, skip2, skip3, dx_loc, vol_loc, &
+     m_refine_at_level, mass_cut_refine, k_outer, leading)
+  integer(kind=4), intent(in), value :: k_outer, n_active, leading
   integer(kind=4), device :: active_cells_d(*)
   integer(kind=4), device :: cell_part_count_d(1:twotondim, *)
   integer(kind=4), device :: cell_part_head_d (1:twotondim, *)
   integer(kind=4), device :: cell_part_idx_d(*)
   integer(kind=4), device :: dest_oct_d  (1:threetondim, 1:twotondim, *)
   integer(kind=4), device :: dest_icell_d(1:threetondim, 1:twotondim, *)
-  real(kind=dp),   device :: weight_rho_d (*)
-  real(kind=dp),   device :: weight_nref_d(*)
+  real(kind=dp),   device :: xp_d(*)
+  real(kind=dp),   device :: mp_d(*)
   real(kind=dp),   device :: rho_d (1:twotondim, *)
   real(kind=dp),   device :: nref_d(1:twotondim, *)
-  real(kind=8), intent(in), value :: m_refine_at_level
+  real(kind=8), intent(in), value :: skip1, skip2, skip3, dx_loc, vol_loc
+  real(kind=8), intent(in), value :: m_refine_at_level, mass_cut_refine
 
   integer :: block_idx_flat, flat_idx, icell_src, igrid_src, count, head
-  integer :: tid, block_size, chunk_start, chunk_size, slot, ipart
-  integer :: dst_igrid, dst_icell
+  integer :: tid, block_size, chunk_start, chunk_size, slot, ipart, idim
+  integer :: dst_igrid, dst_icell, ox, oy, oz
   real(kind=8) :: my_rho, my_nref, total_rho, total_nref
+  real(kind=8) :: skip(1:3), xs, frac(1:3)
+  real(kind=8) :: wx(0:2), wy(0:2), wz(0:2), w, mp_i
 
   block_idx_flat = blockIdx%x - 1
   if (block_idx_flat >= n_active) return
@@ -1243,6 +1160,15 @@ attributes(global) subroutine cic_block_reduce_kernel(active_cells_d, n_active, 
   block_size = blockDim%x
   tid = threadIdx%x - 1
 
+  skip(1) = skip1
+  skip(2) = skip2
+  skip(3) = skip3
+
+  ! Decode offset-k once per block; same value for every particle in this cell.
+  ox = mod(k_outer - 1, 3) - 1
+  oy = mod((k_outer - 1) / 3, 3) - 1
+  oz = (k_outer - 1) / 9 - 1
+
   total_rho  = 0d0
   total_nref = 0d0
 
@@ -1253,8 +1179,48 @@ attributes(global) subroutine cic_block_reduce_kernel(active_cells_d, n_active, 
      if (tid < chunk_size) then
         slot = head + chunk_start + tid + 1
         ipart = cell_part_idx_d(slot)
-        my_rho  = weight_rho_d (ipart)
-        my_nref = weight_nref_d(ipart)
+        mp_i  = mp_d(ipart)
+
+        frac = 0d0
+        do idim = 1, ndim
+           xs = (xp_d(ipart + (idim-1)*leading) + skip(idim)) / dx_loc
+           frac(idim) = xs - floor(xs)
+        end do
+
+        wx(0) = max(0d0, 0.5d0 - frac(1))
+        wx(1) = 1d0 - abs(frac(1) - 0.5d0)
+        wx(2) = max(0d0, frac(1) - 0.5d0)
+        wy = 0d0
+        wz = 0d0
+        wy(1) = 1d0
+        wz(1) = 1d0
+        if (ndim >= 2) then
+           wy(0) = max(0d0, 0.5d0 - frac(2))
+           wy(1) = 1d0 - abs(frac(2) - 0.5d0)
+           wy(2) = max(0d0, frac(2) - 0.5d0)
+        endif
+        if (ndim >= 3) then
+           wz(0) = max(0d0, 0.5d0 - frac(3))
+           wz(1) = 1d0 - abs(frac(3) - 0.5d0)
+           wz(2) = max(0d0, frac(3) - 0.5d0)
+        endif
+
+        w      = wx(ox+1) * wy(oy+1) * wz(oz+1)
+        my_rho = mp_i * w / vol_loc
+
+        if (m_refine_at_level >= 0d0) then
+           if (mass_cut_refine > 0d0) then
+              if (mp_i < mass_cut_refine) then
+                 my_nref = w
+              else
+                 my_nref = 0d0
+              endif
+           else
+              my_nref = w
+           endif
+        else
+           my_nref = 0d0
+        endif
      else
         my_rho  = 0d0
         my_nref = 0d0
@@ -1276,13 +1242,13 @@ attributes(global) subroutine cic_block_reduce_kernel(active_cells_d, n_active, 
   endif
 end subroutine cic_block_reduce_kernel
 
-!> Host CIC dispatcher: per-cell segmented reduction (no global atomics on
-!> rho/nref). Pipeline: build cell-list at level (ilevel+1) (counts, heads,
-!> idx, per-particle source-cell map); compact source cells with count > 0
-!> into swap_global (n_active); precompute dest_oct_per_cell over those
-!> active cells; at coarsest active level run the GPU multipole_q reduction;
-!> then loop k=1..threetondim launching cic_weight_kernel +
-!> cic_block_reduce_kernel over the n_active blocks.
+!> Host CIC dispatcher: per-cell segmented reduction with inline weight (no
+!> global atomics on rho/nref). Pipeline: build cell-list at level (ilevel+1)
+!> (counts, heads, idx, per-particle source-cell map); compact source cells
+!> with count > 0 into swap_global (n_active); precompute dest_oct_per_cell
+!> over those active cells; at coarsest active level run the GPU multipole_q
+!> reduction; then loop k=1..threetondim launching cic_block_reduce_kernel
+!> over the n_active blocks (which computes per-particle weights inline).
 subroutine gpu_cic_part(sim, ilevel, rtype)
   use nvtx
   use ramses_commons, only: ramses_t
@@ -1402,25 +1368,18 @@ subroutine gpu_cic_part(sim, ilevel, rtype)
           box_ckey_min, box_ckey_max, periodic, ilevel)
      call GPU_Error_Check("gpu/gpu_part.cuf", 0)
 
-     ! Segmented deposit: one block per active source cell, outer loop
-     ! k=1..threetondim. No global atomics on rho/nref (within outer k
-     ! destinations are unique; across k the host serializes).
+     ! Segmented deposit with fused inline CIC weight: one block per active
+     ! source cell, outer loop k=1..threetondim. No global atomics on rho/nref
+     ! (within outer k destinations are unique; across k the host serializes).
      deposit_block_size = 256
      deposit_num_blocks = n_active
-     num_threads = 128
-     num_blocks  = (num_parts + num_threads - 1) / num_threads
      do k = 1, threetondim
-        call cic_weight_kernel<<<num_blocks, num_threads>>>(xp, mp, &
-             src_icell_part, src_igrid_part, dest_oct_per_cell, &
-             weight_part_rho, weight_part_nref, &
-             skip1, skip2, skip3, dx_loc, vol_loc, &
-             sim%r%m_refine(ilevel), sim%r%mass_cut_refine, &
-             k, head_idx, num_parts, leading)
         call cic_block_reduce_kernel<<<deposit_num_blocks, deposit_block_size>>>(&
              swap_global, n_active, cell_part_count, cell_part_head, cell_part_idx, &
              dest_oct_per_cell, dest_icell_per_cell, &
-             weight_part_rho, weight_part_nref, rho, nref, &
-             sim%r%m_refine(ilevel), k)
+             xp, mp, rho, nref, &
+             skip1, skip2, skip3, dx_loc, vol_loc, &
+             sim%r%m_refine(ilevel), sim%r%mass_cut_refine, k, leading)
      end do
      call GPU_Error_Check("gpu/gpu_part.cuf", 0)
   endif

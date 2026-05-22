@@ -47,11 +47,6 @@ module gpu_part_state
   integer(kind=4), device, allocatable, dimension(:,:,:) :: dest_oct_per_cell
   integer(kind=4), device, allocatable, dimension(:,:,:) :: dest_icell_per_cell
 
-  !> Per-particle deposition weight scratch (overwritten per outer-loop k):
-  !> weight_part_rho = mp*w/vol_loc; weight_part_nref = gated nref weight.
-  real(kind=dp), device, allocatable, dimension(:) :: weight_part_rho
-  real(kind=dp), device, allocatable, dimension(:) :: weight_part_nref
-
   !> Device accumulator for the levelmin multipole reduction.
   !> Length ndim+1: q(1)=sum(mp), q(idim+1)=sum(mp*xp).
   real(kind=8), device, allocatable, dimension(:) :: multipole_q_dev
