@@ -6,9 +6,12 @@ contains
 !#########################################################################
 subroutine m_init_refine_basegrid(pst)
   use ramses_commons, only: pst_t
-  use flag_utils, only: m_flag_fine
-#ifdef GRAV
+#ifdef _CUDA
+  use rho_fine_module, only: m_rho_fine_host
+  use flag_utils, only: m_flag_fine_host
+#else
   use rho_fine_module, only: m_rho_fine
+  use flag_utils, only: m_flag_fine
 #endif
   use input_hydro_grafic_module, only: r_input_refmap_grafic
   implicit none
@@ -48,12 +51,20 @@ subroutine m_init_refine_basegrid(pst)
   ! Compute total mass density from gas and particles on the base grid
 #ifdef GRAV
   if(pst%s%r%filetype.NE.'grafic_zoom')then
+#ifdef _CUDA
+     call m_rho_fine_host(pst,r%levelmin,0)
+#else
      call m_rho_fine(pst,r%levelmin,0)
+#endif
   endif
 #endif
 
   ! Flag coarse level cells for refinement
+#ifdef _CUDA
+  call m_flag_fine_host(pst,r%levelmin,2)
+#else
   call m_flag_fine(pst,r%levelmin,2)
+#endif
 
   end associate
 

@@ -6,12 +6,22 @@ contains
 !#########################################################################
 subroutine m_init_refine_adaptive(pst)
   use ramses_commons, only: pst_t
+#ifdef _CUDA
+  use flag_utils, only: m_flag_fine_host
+  use refine_utils, only: m_refine_fine_host
+  use upload_module, only: m_upload_fine_host
+#else
   use flag_utils, only: m_flag_fine
   use refine_utils, only: m_refine_fine
   use upload_module, only: m_upload_fine
+#endif
   use rt_upload_module, only: m_rt_upload_fine
 #ifdef GRAV
+#ifdef _CUDA
+  use rho_fine_module, only: m_rho_fine_host
+#else
   use rho_fine_module, only: m_rho_fine
+#endif
 #endif
   use init_part_module, only: r_deallocate_gas
   use input_part_zoom_module, only: m_input_part_zoom
@@ -43,7 +53,11 @@ subroutine m_init_refine_adaptive(pst)
      endif
 
      ! Refine all level cells from levelmin
+#ifdef _CUDA
+     call m_refine_fine_host(pst,pst%s%r%levelmin)
+#else
      call m_refine_fine(pst,pst%s%r%levelmin)
+#endif
 
      ! Initialize hydro variables on the fine grids
      if(pst%s%r%hydro)then
@@ -51,7 +65,11 @@ subroutine m_init_refine_adaptive(pst)
            call m_init_flow_fine(pst,ilevel)
         end do
         do ilevel=pst%s%r%nlevelmax-1,pst%s%r%levelmin,-1
+#ifdef _CUDA
+           call m_upload_fine_host(pst,ilevel)
+#else
            call m_upload_fine(pst,ilevel)
+#endif
         end do
      endif
 
@@ -75,13 +93,21 @@ subroutine m_init_refine_adaptive(pst)
      ! Compute total mass density from gas and particles on the fine grids
 #ifdef GRAV
      if(pst%s%r%filetype.NE.'grafic_zoom')then
+#ifdef _CUDA
+        call m_rho_fine_host(pst,pst%s%r%levelmin,0)
+#else
         call m_rho_fine(pst,pst%s%r%levelmin,0)
+#endif
      endif
 #endif
 
      ! Flag all level cells for refinement
      do ilevel=pst%s%r%nlevelmax-1,pst%s%r%levelmin,-1
+#ifdef _CUDA
+        call m_flag_fine_host(pst,ilevel,2)
+#else
         call m_flag_fine(pst,ilevel,2)
+#endif
      end do
 
   end do

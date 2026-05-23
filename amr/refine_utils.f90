@@ -110,17 +110,78 @@ recursive subroutine r_refine_fine(pst,ilevel,input_size,output,output_size)
      output%kill = output%kill + next_output%kill
   else
 #ifdef _CUDA
-     if(pst%s%m%data_on_device)then
-        call gpu_refine(pst%s,ilevel,output%make,output%kill)
-     else
-        call refine_fine(pst%s,ilevel,output%make,output%kill)
-     endif
+     call gpu_refine(pst%s,ilevel,output%make,output%kill)
 #else
      call refine_fine(pst%s,ilevel,output%make,output%kill)
 #endif
   endif
 
 end subroutine r_refine_fine
+#ifdef _CUDA
+recursive subroutine r_refine_fine_host(pst,ilevel,input_size,output,output_size)
+  use mdl_module
+  use ramses_commons, only: pst_t
+  use mdl_parameters
+  implicit none
+  type(pst_t)::pst
+  integer,VALUE::input_size
+  integer::output_size
+  integer::ilevel
+  type(out_refine_fine_t)::output
+  type(out_refine_fine_t)::next_output
+  integer::rID
+
+  if(pst%nLower>0)then
+     rID = mdl_send_request(pst%s%mdl,MDL_REFINE_FINE,pst%iUpper+1,input_size,output_size,ilevel)
+     call r_refine_fine_host(pst%pLower,ilevel,input_size,output,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_output)
+     output%make = output%make + next_output%make
+     output%kill = output%kill + next_output%kill
+  else
+     call refine_fine(pst%s,ilevel,output%make,output%kill)
+  endif
+
+end subroutine r_refine_fine_host
+
+subroutine m_refine_fine_host(pst,ilevel)
+  use ramses_commons, only: pst_t
+  use init_refine_basegrid_module, only:r_noct_max,r_noct_min,r_noct_tot,r_noct_used_max
+  use load_balance_module, only: m_load_balance
+  use mdl_module
+  implicit none
+  type(pst_t)::pst
+  integer::ilevel
+  integer::ilev
+  type(out_refine_fine_t)::out_refine_fine
+
+  associate(s=>pst%s)
+
+  if(ilevel==s%r%nlevelmax)return
+  if(s%m%noct_tot(ilevel)==0)return
+
+  if(s%r%verbose)write(*,111)ilevel
+111 format('   Entering refine_fine (host) for level ',I2)
+
+  call r_refine_fine_host(pst,ilevel,1,out_refine_fine,2)
+
+  do ilev=ilevel+1,s%r%nlevelmax
+     call r_noct_tot(pst,ilev,1,s%m%noct_tot(ilev),2)
+     call r_noct_min(pst,ilev,1,s%m%noct_min(ilev),1)
+     call r_noct_max(pst,ilev,1,s%m%noct_max(ilev),1)
+  end do
+  call r_noct_used_max(pst,ilevel,1,s%m%noct_used_max,1)
+  call m_load_balance(pst,ilevel)
+  do ilev=ilevel+1,s%r%nlevelmax
+     call r_noct_tot(pst,ilev,1,s%m%noct_tot(ilev),2)
+     call r_noct_min(pst,ilev,1,s%m%noct_min(ilev),1)
+     call r_noct_max(pst,ilev,1,s%m%noct_max(ilev),1)
+  end do
+  call r_noct_used_max(pst,ilevel,1,s%m%noct_used_max,1)
+
+  end associate
+
+end subroutine m_refine_fine_host
+#endif
 !###############################################################
 !###############################################################
 !###############################################################

@@ -10,7 +10,11 @@ subroutine m_init_xion(pst)
 ! density and temperature in the cells, assuming chemical equilibrium.
 !-------------------------------------------------------------------------
   use ramses_commons, only: pst_t
+#ifdef _CUDA
+  use upload_module, only: m_upload_fine_host
+#else
   use upload_module, only: m_upload_fine
+#endif
   implicit none
   type(pst_t)::pst
   integer::ilevel
@@ -19,7 +23,11 @@ subroutine m_init_xion(pst)
             write(*,*) 'Initialising to CIE ionisation fractions'
   do ilevel=pst%s%r%nlevelmax,pst%s%r%levelmin,-1
       call r_init_xion(pst,ilevel,1)
+#ifdef _CUDA
+      call m_upload_fine_host(pst,ilevel)
+#else
       call m_upload_fine(pst,ilevel)
+#endif
   end do
 
 end subroutine m_init_xion

@@ -90,8 +90,6 @@ recursive subroutine r_set_grid_device(pst)
      call GPU_Error_Check(__FILE__, __LINE__)
      call nvtxEndRange()
 
-     pst%s%m%data_on_device=.true.
-
   endif
 
 end subroutine r_set_grid_device

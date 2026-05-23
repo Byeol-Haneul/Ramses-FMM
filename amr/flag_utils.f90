@@ -68,6 +68,53 @@ subroutine m_flag_fine(pst,ilevel,icount)
   end associate
 
 end subroutine m_flag_fine
+#ifdef _CUDA
+! Host-mesh variant for grid setup before the first H→D copy in adaptive_loop.
+subroutine m_flag_fine_host(pst,ilevel,icount)
+  use ramses_commons, only: pst_t
+  use smooth_module, only: r_smooth_fine_host
+  implicit none
+  type(pst_t)::pst
+  integer::ilevel,icount
+  integer::iexpand
+  integer::nflag_tot
+
+  associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,mdl=>pst%s%mdl)
+
+  if(ilevel==r%nlevelmax)return
+  if(ilevel<r%levelmin)return
+  if(m%noct_tot(ilevel)==0)return
+  if(r%verbose)write(*,111)ilevel
+111 format('   Entering flag_fine (host) for level ',I2)
+
+  call r_init_flag_host(pst,ilevel,1,nflag_tot,1)
+  if(r%verbose)write(*,*) '  ==> end step 1',nflag_tot
+
+  call r_smooth_fine_host(pst,ilevel,1,nflag_tot,1)
+  if(r%verbose)write(*,*) '  ==> end step 2',nflag_tot
+
+  call r_user_flag_host(pst,ilevel,1,nflag_tot,1)
+  if(r%verbose)write(*,*) '  ==> end step 3',nflag_tot
+
+  do iexpand=1,r%nexpand(ilevel)
+     call r_smooth_fine_host(pst,ilevel,1,nflag_tot,1)
+  end do
+  if(r%verbose)write(*,*) '  ==> end step 4',nflag_tot
+
+  if (nsubgrid > 1)then
+     call r_ensure_subgrid_host(pst,ilevel,1)
+  endif
+
+  if(ilevel>r%levelmin)then
+     if(icount<r%nsubcycle(ilevel-1))then
+        call r_ensure_ref_rules_host(pst,ilevel,1)
+     end if
+  end if
+
+  end associate
+
+end subroutine m_flag_fine_host
+#endif
 !################################################################
 !################################################################
 !################################################################
@@ -93,13 +140,9 @@ recursive subroutine r_init_flag(pst,ilevel,input_size,noct,output_size)
      noct=noct+next_noct
   else
 #ifdef _CUDA
-     if(pst%s%m%data_on_device)then
-        call nvtxStartRange("GPU Initflag", color=6)!teal
-        call gpu_init_flag(pst%s, ilevel, nflag)
-        call nvtxEndRange()
-     else
-        call init_flag(pst%s,ilevel,nflag)
-     endif
+     call nvtxStartRange("GPU Initflag", color=6)!teal
+     call gpu_init_flag(pst%s, ilevel, nflag)
+     call nvtxEndRange()
 #else
      call init_flag(pst%s,ilevel,nflag)
 #endif
@@ -107,6 +150,32 @@ recursive subroutine r_init_flag(pst,ilevel,input_size,noct,output_size)
   endif
 
 end subroutine r_init_flag
+#ifdef _CUDA
+recursive subroutine r_init_flag_host(pst,ilevel,input_size,noct,output_size)
+  use mdl_module
+  use ramses_commons, only: pst_t
+  use mdl_parameters
+  implicit none
+  type(pst_t)::pst
+  integer,VALUE::input_size
+  integer::output_size
+  integer::ilevel,noct
+  integer::next_noct
+  integer::nflag
+  integer::rID
+
+  if(pst%nLower>0)then
+     rID = mdl_send_request(pst%s%mdl,MDL_INIT_FLAG,pst%iUpper+1,input_size,output_size,ilevel)
+     call r_init_flag_host(pst%pLower,ilevel,input_size,noct,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_noct)
+     noct=noct+next_noct
+  else
+     call init_flag(pst%s,ilevel,nflag)
+     noct=nflag
+  endif
+
+end subroutine r_init_flag_host
+#endif
 !################################################################
 !################################################################
 !################################################################
@@ -192,19 +261,36 @@ recursive subroutine r_ensure_subgrid(pst,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
 #ifdef _CUDA
-     if(pst%s%m%data_on_device)then
-        call nvtxStartRange("GPU Enforce subgrid", color=6)!teal
-        call gpu_enforce_subgrid(pst%s, ilevel)
-        call nvtxEndRange()
-     else
-        call ensure_subgrid(pst%s,ilevel)
-     endif
+     call nvtxStartRange("GPU Enforce subgrid", color=6)!teal
+     call gpu_enforce_subgrid(pst%s, ilevel)
+     call nvtxEndRange()
 #else
      call ensure_subgrid(pst%s,ilevel)
 #endif
   endif
 
 end subroutine r_ensure_subgrid
+#ifdef _CUDA
+recursive subroutine r_ensure_subgrid_host(pst,ilevel,input_size)
+  use mdl_module
+  use ramses_commons, only: pst_t
+  use mdl_parameters
+  implicit none
+  type(pst_t)::pst
+  integer,VALUE::input_size
+  integer::ilevel
+  integer::rID
+
+  if(pst%nLower>0)then
+     rID = mdl_send_request(pst%s%mdl,MDL_ENSURE_SUBGRID,pst%iUpper+1,input_size,0,ilevel)
+     call r_ensure_subgrid_host(pst%pLower,ilevel,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
+  else
+     call ensure_subgrid(pst%s,ilevel)
+  endif
+
+end subroutine r_ensure_subgrid_host
+#endif
 !################################################################
 !################################################################
 !################################################################
@@ -336,13 +422,9 @@ recursive subroutine r_user_flag(pst,ilevel,input_size,noct,output_size)
      noct=noct+next_noct
   else
 #ifdef _CUDA
-     if(pst%s%m%data_on_device)then
-        call nvtxStartRange("GPU Userflag", color=6)!teal
-        call gpu_user_flag(pst%s, ilevel, nflag)
-        call nvtxEndRange()
-     else
-        call user_flag(pst%s,ilevel,nflag)
-     endif
+     call nvtxStartRange("GPU Userflag", color=6)!teal
+     call gpu_user_flag(pst%s, ilevel, nflag)
+     call nvtxEndRange()
 #else
      call user_flag(pst%s,ilevel,nflag)
 #endif
@@ -350,6 +432,32 @@ recursive subroutine r_user_flag(pst,ilevel,input_size,noct,output_size)
   endif
 
 end subroutine r_user_flag
+#ifdef _CUDA
+recursive subroutine r_user_flag_host(pst,ilevel,input_size,noct,output_size)
+  use mdl_module
+  use ramses_commons, only: pst_t
+  use mdl_parameters
+  implicit none
+  type(pst_t)::pst
+  integer,VALUE::input_size
+  integer::output_size
+  integer::ilevel,noct
+  integer::next_noct
+  integer::nflag
+  integer::rID
+
+  if(pst%nLower>0)then
+     rID = mdl_send_request(pst%s%mdl,MDL_USER_FLAG,pst%iUpper+1,input_size,output_size,ilevel)
+     call r_user_flag_host(pst%pLower,ilevel,input_size,noct,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_noct)
+     noct=noct+next_noct
+  else
+     call user_flag(pst%s,ilevel,nflag)
+     noct=nflag
+  endif
+
+end subroutine r_user_flag_host
+#endif
 !###############################################################
 !###############################################################
 !###############################################################
@@ -414,19 +522,36 @@ recursive subroutine r_ensure_ref_rules(pst,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
 #ifdef _CUDA
-     if(pst%s%m%data_on_device)then
-        call nvtxStartRange("GPU enforce rules", color=6)!teal
-        call gpu_enforce_rules(pst%s, ilevel)
-        call nvtxEndRange()
-     else
-        call ensure_ref_rules(pst%s,ilevel)
-     endif
+     call nvtxStartRange("GPU enforce rules", color=6)!teal
+     call gpu_enforce_rules(pst%s, ilevel)
+     call nvtxEndRange()
 #else
      call ensure_ref_rules(pst%s,ilevel)
 #endif
   endif
 
 end subroutine r_ensure_ref_rules
+#ifdef _CUDA
+recursive subroutine r_ensure_ref_rules_host(pst,ilevel,input_size)
+  use mdl_module
+  use ramses_commons, only: pst_t
+  use mdl_parameters
+  implicit none
+  type(pst_t)::pst
+  integer::ilevel
+  integer,VALUE::input_size
+  integer::rID
+
+  if(pst%nLower>0)then
+     rID = mdl_send_request(pst%s%mdl,MDL_ENSURE_REF_RULES,pst%iUpper+1,input_size,0,ilevel)
+     call r_ensure_ref_rules_host(pst%pLower,ilevel,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
+  else
+     call ensure_ref_rules(pst%s,ilevel)
+  endif
+
+end subroutine r_ensure_ref_rules_host
+#endif
 !############################################################
 !############################################################
 !############################################################
