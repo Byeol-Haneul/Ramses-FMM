@@ -8,14 +8,13 @@ module part_device
   use gpu_utils
   use cudafor
   use gpu_part_state, only: &
-       xp, vp, mp, levelp, sortp, workp, idp, &
+       xp, vp, mp, levelp, sortp, idp, &
        jp, zp, tp, tm, size_p, charge, idm, idt, &
        hkey_part, bucket_part, &
        cell_part_count, cell_part_head, cell_part_idx, &
        src_icell_part, src_igrid_part, &
-       dest_oct_per_cell, dest_icell_per_cell, &
        multipole_q_dev, &
-       xp_swap, mp_swap, idp_swap, &
+       xp_swap, idp_swap, &
        dtnew_part, dtold_part
   use gpu_runner, only: &
        grid, hash_key, hash_val, ckey_max, key_off, &
@@ -227,10 +226,10 @@ attributes(global) subroutine write_swap_global_hilbert_partition( &
   endif
 end subroutine write_swap_global_hilbert_partition
 
-!> Gather/scatter one column of a rank-2 real(dp) field.
-!> `leading` = size(xp,1); `idim` selects the column (1..ndim).
-!> One call per column; a unified rank-2 kernel that loops over idim
-!> internally is incorrect (in-place permutation requires per-column passes).
+!> Gather/scatter one column of a rank-2 real(dp) field through a flat 1D
+!> scratch buffer `buf`. `leading` = size(xp,1); `idim` selects the column
+!> (1..ndim). One call per column; the scratch is reused across columns
+!> since only one column is live in `buf` at a time.
 attributes(global) subroutine sort_gather_part_real_col(buf, src, swap_global_d, &
      head_idx, num_parts, leading, idim)
   integer(kind=4), intent(in), value :: leading
@@ -249,7 +248,7 @@ attributes(global) subroutine sort_gather_part_real_col(buf, src, swap_global_d,
   idx = head_idx + idx
   old_idx = swap_global_d(idx)
   off = (idim - 1) * leading
-  buf(idx + off) = src(old_idx + off)
+  buf(idx) = src(old_idx + off)
 end subroutine sort_gather_part_real_col
 
 attributes(global) subroutine sort_scatter_part_real_col(dst, buf, &
@@ -268,7 +267,7 @@ attributes(global) subroutine sort_scatter_part_real_col(dst, buf, &
   if (idx >= num_parts) return
   idx = head_idx + idx
   off = (idim - 1) * leading
-  dst(idx + off) = buf(idx + off)
+  dst(idx + off) = buf(idx)
 end subroutine sort_scatter_part_real_col
 
 !> Gather/scatter rank-1 real(dp).
@@ -339,7 +338,9 @@ attributes(global) subroutine sort_scatter_part_i8_1d(dst, buf, head_idx, num_pa
   dst(idx) = buf(idx)
 end subroutine sort_scatter_part_i8_1d
 
-!> Gather/scatter int4; workp used as scratch.
+!> Gather/scatter int4; bucket_part is reused as scratch (dead by the time
+!> the gather/scatter chain runs — its bucketing role finishes earlier in
+!> gpu_split_part when write_swap_global_hilbert_partition consumes it).
 attributes(global) subroutine sort_gather_part_i4_1d(buf, src, swap_global_d, &
      head_idx, num_parts)
   integer(kind=4), device :: buf(*)
@@ -540,14 +541,14 @@ subroutine gpu_split_part(sim, ilevel)
           head_idx, num_parts, leading, idim)
   end do
 
-  call sort_gather_part_real_1d<<<num_blocks, num_threads>>>(mp_swap, mp, &
+  call sort_gather_part_real_1d<<<num_blocks, num_threads>>>(xp_swap, mp, &
        swap_global, head_idx, num_parts)
-  call sort_scatter_part_real_1d<<<num_blocks, num_threads>>>(mp, mp_swap, &
+  call sort_scatter_part_real_1d<<<num_blocks, num_threads>>>(mp, xp_swap, &
        head_idx, num_parts)
 
-  call sort_gather_part_i4_1d<<<num_blocks, num_threads>>>(workp, levelp, &
+  call sort_gather_part_i4_1d<<<num_blocks, num_threads>>>(bucket_part, levelp, &
        swap_global, head_idx, num_parts)
-  call sort_scatter_part_i4_1d<<<num_blocks, num_threads>>>(levelp, workp, &
+  call sort_scatter_part_i4_1d<<<num_blocks, num_threads>>>(levelp, bucket_part, &
        head_idx, num_parts)
 
   call sort_gather_part_i8_1d<<<num_blocks, num_threads>>>(idp_swap, idp, &
@@ -564,33 +565,33 @@ subroutine gpu_split_part(sim, ilevel)
      end do
   endif
   if (allocated(zp)) then
-     call sort_gather_part_real_1d<<<num_blocks, num_threads>>>(mp_swap, zp, &
+     call sort_gather_part_real_1d<<<num_blocks, num_threads>>>(xp_swap, zp, &
           swap_global, head_idx, num_parts)
-     call sort_scatter_part_real_1d<<<num_blocks, num_threads>>>(zp, mp_swap, &
+     call sort_scatter_part_real_1d<<<num_blocks, num_threads>>>(zp, xp_swap, &
           head_idx, num_parts)
   endif
   if (allocated(tp)) then
-     call sort_gather_part_real_1d<<<num_blocks, num_threads>>>(mp_swap, tp, &
+     call sort_gather_part_real_1d<<<num_blocks, num_threads>>>(xp_swap, tp, &
           swap_global, head_idx, num_parts)
-     call sort_scatter_part_real_1d<<<num_blocks, num_threads>>>(tp, mp_swap, &
+     call sort_scatter_part_real_1d<<<num_blocks, num_threads>>>(tp, xp_swap, &
           head_idx, num_parts)
   endif
   if (allocated(tm)) then
-     call sort_gather_part_real_1d<<<num_blocks, num_threads>>>(mp_swap, tm, &
+     call sort_gather_part_real_1d<<<num_blocks, num_threads>>>(xp_swap, tm, &
           swap_global, head_idx, num_parts)
-     call sort_scatter_part_real_1d<<<num_blocks, num_threads>>>(tm, mp_swap, &
+     call sort_scatter_part_real_1d<<<num_blocks, num_threads>>>(tm, xp_swap, &
           head_idx, num_parts)
   endif
   if (allocated(size_p)) then
-     call sort_gather_part_real_1d<<<num_blocks, num_threads>>>(mp_swap, size_p, &
+     call sort_gather_part_real_1d<<<num_blocks, num_threads>>>(xp_swap, size_p, &
           swap_global, head_idx, num_parts)
-     call sort_scatter_part_real_1d<<<num_blocks, num_threads>>>(size_p, mp_swap, &
+     call sort_scatter_part_real_1d<<<num_blocks, num_threads>>>(size_p, xp_swap, &
           head_idx, num_parts)
   endif
   if (allocated(charge)) then
-     call sort_gather_part_real_1d<<<num_blocks, num_threads>>>(mp_swap, charge, &
+     call sort_gather_part_real_1d<<<num_blocks, num_threads>>>(xp_swap, charge, &
           swap_global, head_idx, num_parts)
-     call sort_scatter_part_real_1d<<<num_blocks, num_threads>>>(charge, mp_swap, &
+     call sort_scatter_part_real_1d<<<num_blocks, num_threads>>>(charge, xp_swap, &
           head_idx, num_parts)
   endif
   if (allocated(idm)) then
@@ -600,9 +601,9 @@ subroutine gpu_split_part(sim, ilevel)
           head_idx, num_parts)
   endif
   if (allocated(idt)) then
-     call sort_gather_part_i4_1d<<<num_blocks, num_threads>>>(workp, idt, &
+     call sort_gather_part_i4_1d<<<num_blocks, num_threads>>>(bucket_part, idt, &
           swap_global, head_idx, num_parts)
-     call sort_scatter_part_i4_1d<<<num_blocks, num_threads>>>(idt, workp, &
+     call sort_scatter_part_i4_1d<<<num_blocks, num_threads>>>(idt, bucket_part, &
           head_idx, num_parts)
   endif
   call GPU_Error_Check("gpu/gpu_part.cuf", 0)
@@ -916,162 +917,6 @@ attributes(global) subroutine place_cell_part_idx_kernel(cell_part_count_d, &
   cell_part_idx_d(slot) = ipart
 end subroutine place_cell_part_idx_kernel
 
-!> Mark each (icell_src, igrid_src) cell as active (count > 0) by writing
-!> 1/0 into prefix_sum_d. A subsequent inclusive scan yields the 1-based
-!> rank of each active cell. flat_idx = (icell-1) + (igrid-1)*twotondim,
-!> stored 1-based as flat_idx+1 into prefix_sum_d.
-attributes(global) subroutine init_active_cell_flag_kernel(cell_part_count_d, &
-     prefix_sum_d, num_grids)
-  integer(kind=4), intent(in), value :: num_grids
-  integer(kind=4), device :: cell_part_count_d(1:twotondim, *)
-  integer(kind=4), device :: prefix_sum_d(*)
-
-  integer :: thread_idx, block_idx, idx, icell, igrid
-  thread_idx = threadIdx%x - 1
-  block_idx  = blockIdx%x  - 1
-  idx = thread_idx + block_idx * blockDim%x
-  if (idx >= twotondim * num_grids) return
-  icell = mod(idx, twotondim) + 1
-  igrid = idx / twotondim + 1
-  if (cell_part_count_d(icell, igrid) > 0) then
-     prefix_sum_d(idx + 1) = 1
-  else
-     prefix_sum_d(idx + 1) = 0
-  endif
-end subroutine init_active_cell_flag_kernel
-
-!> Compact stream: write the flat cell index (1-based) of each active source
-!> cell into active_cells_d at the rank slot produced by the inclusive scan
-!> of the active flag. Inactive cells skip the write.
-attributes(global) subroutine write_active_cells_kernel(cell_part_count_d, &
-     prefix_sum_d, active_cells_d, num_grids)
-  integer(kind=4), intent(in), value :: num_grids
-  integer(kind=4), device :: cell_part_count_d(1:twotondim, *)
-  integer(kind=4), device :: prefix_sum_d(*)
-  integer(kind=4), device :: active_cells_d(*)
-
-  integer :: thread_idx, block_idx, idx, icell, igrid, rank
-  thread_idx = threadIdx%x - 1
-  block_idx  = blockIdx%x  - 1
-  idx = thread_idx + block_idx * blockDim%x
-  if (idx >= twotondim * num_grids) return
-  icell = mod(idx, twotondim) + 1
-  igrid = idx / twotondim + 1
-  if (cell_part_count_d(icell, igrid) > 0) then
-     rank = prefix_sum_d(idx + 1)
-     active_cells_d(rank) = idx + 1
-  endif
-end subroutine write_active_cells_kernel
-
-!> For each active source cell (compacted into active_cells_d) and each k
-!> in 1..threetondim, precompute
-!> the destination (igrid_dst, icell_dst) reached by the k-th stencil offset
-!> at level (ilevel+1). Periodic wrap per dim; out-of-domain or hash-miss
-!> destinations are flagged with sentinel (dst_igrid=0, dst_icell=0) and the
-!> weight kernel zeroes their contribution.
-attributes(global) subroutine build_dest_oct_per_cell_kernel(grid_d, active_cells_d, &
-     n_active, dest_oct_d, dest_icell_d, hash_key_d, hash_val_d, hash_size_d, &
-     ckey_max_d, key_off_d, box_ckey_min_d, box_ckey_max_d, periodic_d, &
-     ilevel)
-  integer(kind=4), intent(in), value :: ilevel, n_active
-  type(oct),       device :: grid_d(*)
-  integer(kind=4), device :: active_cells_d(*)
-  integer(kind=4), device :: dest_oct_d  (1:threetondim, 1:twotondim, *)
-  integer(kind=4), device :: dest_icell_d(1:threetondim, 1:twotondim, *)
-  integer(kind=8), device :: hash_key_d(*)
-  integer(kind=4), device :: hash_val_d(*)
-  integer(kind=4), intent(in), value :: hash_size_d
-  integer(kind=4), device :: ckey_max_d(*)
-  integer(kind=8), device :: key_off_d(*)
-  integer(kind=4), device :: box_ckey_min_d(1:3, *)
-  integer(kind=4), device :: box_ckey_max_d(1:3, *)
-  logical,         device :: periodic_d(1:3)
-
-  integer :: thread_idx, block_idx, idx, k, active_idx, flat_idx, idim
-  integer :: icell_src, igrid_src
-  integer :: ox, oy, oz, igrid_dst, icell_dst
-  integer(kind=4) :: src_full_ckey(1:3), target_ckey(1:3), father_ckey(1:3), ii(1:3)
-  integer(kind=4) :: ii_src(1:3), box_min(1:3), box_max(1:3)
-  integer(kind=8) :: nx, offset, key, ix8, iy8, iz8
-  logical :: in_domain
-
-  thread_idx = threadIdx%x - 1
-  block_idx  = blockIdx%x  - 1
-  idx = thread_idx + block_idx * blockDim%x
-  if (idx >= threetondim * n_active) return
-
-  ! Unflatten idx -> (k, active_idx); pull source cell from compact list.
-  k          = mod(idx, threetondim) + 1
-  active_idx = idx / threetondim + 1
-  flat_idx   = active_cells_d(active_idx)
-  icell_src  = mod(flat_idx - 1, twotondim) + 1
-  igrid_src  = (flat_idx - 1) / twotondim + 1
-
-  ! Decode (icell_src - 1) -> ii_src(1:ndim) in {0,1}.
-  ii_src = 0
-  do idim = 1, ndim
-     ii_src(idim) = mod((icell_src - 1) / (2**(idim-1)), 2)
-  end do
-
-  ! Source cell's level-(ilevel+1) full Cartesian key.
-  src_full_ckey = 0
-  do idim = 1, ndim
-     src_full_ckey(idim) = 2 * grid_d(igrid_src)%ckey(idim) + ii_src(idim)
-  end do
-
-  ! Decode (k-1) -> (ox, oy, oz) in {-1, 0, +1}. 3D layout: oz outermost.
-  ox = mod(k - 1, 3) - 1
-  oy = mod((k - 1) / 3, 3) - 1
-  oz = (k - 1) / 9 - 1
-
-  target_ckey = 0
-  target_ckey(1) = src_full_ckey(1) + ox
-  if (ndim >= 2) target_ckey(2) = src_full_ckey(2) + oy
-  if (ndim >= 3) target_ckey(3) = src_full_ckey(3) + oz
-
-  box_min = 0
-  box_max = 0
-  do idim = 1, ndim
-     box_min(idim) = box_ckey_min_d(idim, ilevel+1)
-     box_max(idim) = box_ckey_max_d(idim, ilevel+1)
-  end do
-
-  in_domain = .true.
-  do idim = 1, ndim
-     if (periodic_d(idim)) then
-        if (target_ckey(idim) < box_min(idim))  target_ckey(idim) = box_max(idim) - 1
-        if (target_ckey(idim) >= box_max(idim)) target_ckey(idim) = box_min(idim)
-     else
-        if (target_ckey(idim) < box_min(idim))  in_domain = .false.
-        if (target_ckey(idim) >= box_max(idim)) in_domain = .false.
-     endif
-  end do
-
-  if (.not. in_domain) then
-     dest_oct_d  (k, icell_src, igrid_src) = 0
-     dest_icell_d(k, icell_src, igrid_src) = 0
-     return
-  endif
-
-  father_ckey = target_ckey / 2
-  ii = target_ckey - 2 * father_ckey
-  icell_dst = 1
-  do idim = 1, ndim
-     icell_dst = icell_dst + ii(idim) * (2**(idim-1))
-  end do
-
-  ix8 = int(father_ckey(1), kind=8)
-  iy8 = int(father_ckey(2), kind=8)
-  iz8 = int(father_ckey(3), kind=8)
-  nx  = int(ckey_max_d(ilevel), kind=8)
-  offset = key_off_d(ilevel)
-  key = offset + ix8 + iy8*nx + iz8*nx*nx
-  igrid_dst = hash_get(hash_key_d, hash_val_d, hash_size_d, key)
-
-  dest_oct_d  (k, icell_src, igrid_src) = igrid_dst
-  dest_icell_d(k, icell_src, igrid_src) = icell_dst
-end subroutine build_dest_oct_per_cell_kernel
-
 !> GPU multipole_q reduction over the full particle slice [1, npart].
 !> Mirrors gpu_rho.cuf:multipole_tot (per-thread load, block_reduce_sum on
 !> each of ndim+1 components, one atomicadd per block to the device accumulator).
@@ -1108,25 +953,46 @@ attributes(global) subroutine multipole_q_kernel(xp_d, mp_d, multipole_q_d, &
   endif
 end subroutine multipole_q_kernel
 
-!> Per-source-cell reduction + leader write, with CIC weight fused inline.
-!> One block per active source cell (count > 0); each thread reads its own
-!> particle's xp/mp, computes wx/wy/wz and the offset-k weight on the spot,
-!> contributes to block_reduce_sum, leader writes. No global atomics: within
-!> outer k, distinct source cells map to distinct destinations (offset_k is a
-!> lattice bijection mod periodic wrap); cross-k accumulation is serialized by
-!> the host loop.
-attributes(global) subroutine cic_block_reduce_kernel(active_cells_d, n_active, &
-     cell_part_count_d, cell_part_head_d, cell_part_idx_d, dest_oct_d, dest_icell_d, &
+!> Particle-parallel CIC deposit with warp-coarsened atomics.
+!>
+!> Each warp owns 32 contiguous slots of cell_part_idx (sorted so particles
+!> in the same source cell are adjacent). Two paths inside the same kernel,
+!> chosen per-warp via shfl:
+!>
+!>  - Uniform warp (all 32 lanes share the same (icell_src, igrid_src), the
+!>    common case once a cell holds >= 32 particles): lane 0 computes the
+!>    destination (icell_dst, igrid_dst) for each k via one hash_get and
+!>    broadcasts via shfl; every lane forms its CIC weight, warp_reduce_sum
+!>    folds the 32 contributions into lane 0, lane 0 issues one atomicAdd
+!>    to rho_d / nref_d per (dest, k).
+!>
+!>  - Mixed warp at a cell boundary: each valid lane does its own hash_get
+!>    and atomicAdd. Same CIC math, no broadcast, no reduction.
+!>
+!> The outer k=1..threetondim loop is fused inside the kernel. One launch
+!> per gpu_cic_part call; grid sized to (num_placed + block_size - 1) /
+!> block_size with 256-thread blocks (8 warps per block). Block count drops
+!> from ~num_source_cells (~2M at L7) to ~num_parts/256 (~8k at L7).
+attributes(global) subroutine cic_part_warp_kernel(cell_part_idx_d, &
+     src_icell_part_d, src_igrid_part_d, num_placed, &
+     grid_d, hash_key_d, hash_val_d, hash_size_d, ckey_max_d, key_off_d, &
+     box_ckey_min_d, box_ckey_max_d, periodic_d, &
      xp_d, mp_d, rho_d, nref_d, &
      skip1, skip2, skip3, dx_loc, vol_loc, &
-     m_refine_at_level, mass_cut_refine, k_outer, leading)
-  integer(kind=4), intent(in), value :: k_outer, n_active, leading
-  integer(kind=4), device :: active_cells_d(*)
-  integer(kind=4), device :: cell_part_count_d(1:twotondim, *)
-  integer(kind=4), device :: cell_part_head_d (1:twotondim, *)
+     m_refine_at_level, mass_cut_refine, ilevel, leading)
+  integer(kind=4), intent(in), value :: num_placed, leading, ilevel
   integer(kind=4), device :: cell_part_idx_d(*)
-  integer(kind=4), device :: dest_oct_d  (1:threetondim, 1:twotondim, *)
-  integer(kind=4), device :: dest_icell_d(1:threetondim, 1:twotondim, *)
+  integer(kind=4), device :: src_icell_part_d(*)
+  integer(kind=4), device :: src_igrid_part_d(*)
+  type(oct),       device :: grid_d(*)
+  integer(kind=8), device :: hash_key_d(*)
+  integer(kind=4), device :: hash_val_d(*)
+  integer(kind=4), intent(in), value :: hash_size_d
+  integer(kind=4), device :: ckey_max_d(*)
+  integer(kind=8), device :: key_off_d(*)
+  integer(kind=4), device :: box_ckey_min_d(1:3, *)
+  integer(kind=4), device :: box_ckey_max_d(1:3, *)
+  logical,         device :: periodic_d(1:3)
   real(kind=dp),   device :: xp_d(*)
   real(kind=dp),   device :: mp_d(*)
   real(kind=dp),   device :: rho_d (1:twotondim, *)
@@ -1134,121 +1000,259 @@ attributes(global) subroutine cic_block_reduce_kernel(active_cells_d, n_active, 
   real(kind=8), intent(in), value :: skip1, skip2, skip3, dx_loc, vol_loc
   real(kind=8), intent(in), value :: m_refine_at_level, mass_cut_refine
 
-  integer :: block_idx_flat, flat_idx, icell_src, igrid_src, count, head
-  integer :: tid, block_size, chunk_start, chunk_size, slot, ipart, idim
-  integer :: dst_igrid, dst_icell, ox, oy, oz
-  real(kind=8) :: my_rho, my_nref, total_rho, total_nref
+  integer :: tid_local, lane, warp_local, warps_per_block, warp_global, slot_global
+  integer :: ipart, idim, k, info
+  integer :: icell_src_lane, igrid_src_lane, ref_icell, ref_igrid
+  integer :: match_int, n_match
+  integer :: ox, oy, oz, dst_igrid_lane, dst_icell_lane
+  integer(kind=4) :: src_full_ckey(1:3), target_ckey(1:3), father_ckey(1:3), ii(1:3)
+  integer(kind=4) :: ii_src(1:3), box_min(1:3), box_max(1:3)
+  integer(kind=8) :: nx, hkey_offset, key, ix8, iy8, iz8
+  logical :: valid_lane, in_domain
+  real(kind=8) :: my_rho, my_nref, mp_i
   real(kind=8) :: skip(1:3), xs, frac(1:3)
-  real(kind=8) :: wx(0:2), wy(0:2), wz(0:2), w, mp_i
+  real(kind=8) :: wx(0:2), wy(0:2), wz(0:2), w
 
-  block_idx_flat = blockIdx%x - 1
-  if (block_idx_flat >= n_active) return
+  tid_local       = threadIdx%x - 1
+  warps_per_block = blockDim%x / warpsize
+  warp_local      = tid_local / warpsize
+  lane            = mod(tid_local, warpsize)
+  warp_global     = (blockIdx%x - 1) * warps_per_block + warp_local
+  slot_global     = warp_global * warpsize + lane + 1
 
-  flat_idx  = active_cells_d(block_idx_flat + 1)
-  icell_src = mod(flat_idx - 1, twotondim) + 1
-  igrid_src = (flat_idx - 1) / twotondim + 1
+  valid_lane = (slot_global <= num_placed)
 
-  count = cell_part_count_d(icell_src, igrid_src)
-  ! count > 0 by construction of active_cells; defensive check kept.
-  if (count == 0) return
-
-  dst_igrid = dest_oct_d  (k_outer, icell_src, igrid_src)
-  if (dst_igrid == 0) return    ! destination out-of-domain
-  dst_icell = dest_icell_d(k_outer, icell_src, igrid_src)
-
-  head = cell_part_head_d(icell_src, igrid_src)
-  block_size = blockDim%x
-  tid = threadIdx%x - 1
+  ipart          = 0
+  icell_src_lane = 0
+  igrid_src_lane = 0
+  if (valid_lane) then
+     ipart          = cell_part_idx_d(slot_global)
+     icell_src_lane = src_icell_part_d(ipart)
+     igrid_src_lane = src_igrid_part_d(ipart)
+     ! place_cell_part_idx_kernel only writes slots for igrid /= 0, but be
+     ! defensive: drop any lane that somehow landed on a sentinel.
+     if (igrid_src_lane == 0) valid_lane = .false.
+  endif
 
   skip(1) = skip1
   skip(2) = skip2
   skip(3) = skip3
 
-  ! Decode offset-k once per block; same value for every particle in this cell.
-  ox = mod(k_outer - 1, 3) - 1
-  oy = mod((k_outer - 1) / 3, 3) - 1
-  oz = (k_outer - 1) / 9 - 1
+  ! Per-lane CIC weights (unconditionally evaluated so the wx/wy/wz registers
+  ! are well-defined for invalid lanes; mp_i = 0 makes the contribution 0).
+  mp_i = 0d0
+  frac = 0d0
+  if (valid_lane) then
+     mp_i = mp_d(ipart)
+     do idim = 1, ndim
+        xs = (xp_d(ipart + (idim-1)*leading) + skip(idim)) / dx_loc
+        frac(idim) = xs - floor(xs)
+     end do
+  endif
+  wx(0) = max(0d0, 0.5d0 - frac(1))
+  wx(1) = 1d0 - abs(frac(1) - 0.5d0)
+  wx(2) = max(0d0, frac(1) - 0.5d0)
+  wy = 0d0
+  wz = 0d0
+  wy(1) = 1d0
+  wz(1) = 1d0
+  if (ndim >= 2) then
+     wy(0) = max(0d0, 0.5d0 - frac(2))
+     wy(1) = 1d0 - abs(frac(2) - 0.5d0)
+     wy(2) = max(0d0, frac(2) - 0.5d0)
+  endif
+  if (ndim >= 3) then
+     wz(0) = max(0d0, 0.5d0 - frac(3))
+     wz(1) = 1d0 - abs(frac(3) - 0.5d0)
+     wz(2) = max(0d0, frac(3) - 0.5d0)
+  endif
 
-  total_rho  = 0d0
-  total_nref = 0d0
+  ! Warp-uniformity test. Reference (icell, igrid) = lane 0's. Each lane
+  ! reports match=1 (invalid lanes match trivially since they contribute 0).
+  ! XOR butterfly all-reduces the count into every lane.
+  ref_icell = __shfl(icell_src_lane, 0)
+  ref_igrid = __shfl(igrid_src_lane, 0)
+  match_int = 1
+  if (valid_lane) then
+     if (icell_src_lane /= ref_icell .or. igrid_src_lane /= ref_igrid) match_int = 0
+  endif
+  n_match = match_int
+  n_match = n_match + __shfl_xor(n_match, 1)
+  n_match = n_match + __shfl_xor(n_match, 2)
+  n_match = n_match + __shfl_xor(n_match, 4)
+  n_match = n_match + __shfl_xor(n_match, 8)
+  n_match = n_match + __shfl_xor(n_match, 16)
 
-  ! Chunked inner loop handles cells with count > block_size.
-  chunk_start = 0
-  do while (chunk_start < count)
-     chunk_size = min(block_size, count - chunk_start)
-     if (tid < chunk_size) then
-        slot = head + chunk_start + tid + 1
-        ipart = cell_part_idx_d(slot)
-        mp_i  = mp_d(ipart)
+  ! Box / hash offsets at level (ilevel+1) -- the deposit level.
+  box_min = 0
+  box_max = 0
+  do idim = 1, ndim
+     box_min(idim) = box_ckey_min_d(idim, ilevel+1)
+     box_max(idim) = box_ckey_max_d(idim, ilevel+1)
+  end do
+  nx          = int(ckey_max_d(ilevel), kind=8)
+  hkey_offset = key_off_d(ilevel)
 
-        frac = 0d0
-        do idim = 1, ndim
-           xs = (xp_d(ipart + (idim-1)*leading) + skip(idim)) / dx_loc
-           frac(idim) = xs - floor(xs)
-        end do
+  if (n_match == warpsize .and. ref_igrid /= 0) then
+     ! ---------------- Uniform warp: lane-0 hash + warp reduction ----------------
+     ii_src = 0
+     do idim = 1, ndim
+        ii_src(idim) = mod((ref_icell - 1) / (2**(idim-1)), 2)
+     end do
+     src_full_ckey = 0
+     do idim = 1, ndim
+        src_full_ckey(idim) = 2 * grid_d(ref_igrid)%ckey(idim) + ii_src(idim)
+     end do
 
-        wx(0) = max(0d0, 0.5d0 - frac(1))
-        wx(1) = 1d0 - abs(frac(1) - 0.5d0)
-        wx(2) = max(0d0, frac(1) - 0.5d0)
-        wy = 0d0
-        wz = 0d0
-        wy(1) = 1d0
-        wz(1) = 1d0
-        if (ndim >= 2) then
-           wy(0) = max(0d0, 0.5d0 - frac(2))
-           wy(1) = 1d0 - abs(frac(2) - 0.5d0)
-           wy(2) = max(0d0, frac(2) - 0.5d0)
-        endif
-        if (ndim >= 3) then
-           wz(0) = max(0d0, 0.5d0 - frac(3))
-           wz(1) = 1d0 - abs(frac(3) - 0.5d0)
-           wz(2) = max(0d0, frac(3) - 0.5d0)
-        endif
+     do k = 1, threetondim
+        ox = mod(k - 1, 3) - 1
+        oy = mod((k - 1) / 3, 3) - 1
+        oz = (k - 1) / 9 - 1
 
-        w      = wx(ox+1) * wy(oy+1) * wz(oz+1)
-        my_rho = mp_i * w / vol_loc
-
-        if (m_refine_at_level >= 0d0) then
-           if (mass_cut_refine > 0d0) then
-              if (mp_i < mass_cut_refine) then
-                 my_nref = w
+        dst_igrid_lane = 0
+        dst_icell_lane = 0
+        if (lane == 0) then
+           target_ckey = 0
+           target_ckey(1) = src_full_ckey(1) + ox
+           if (ndim >= 2) target_ckey(2) = src_full_ckey(2) + oy
+           if (ndim >= 3) target_ckey(3) = src_full_ckey(3) + oz
+           in_domain = .true.
+           do idim = 1, ndim
+              if (periodic_d(idim)) then
+                 if (target_ckey(idim) < box_min(idim))  target_ckey(idim) = box_max(idim) - 1
+                 if (target_ckey(idim) >= box_max(idim)) target_ckey(idim) = box_min(idim)
               else
-                 my_nref = 0d0
+                 if (target_ckey(idim) < box_min(idim))  in_domain = .false.
+                 if (target_ckey(idim) >= box_max(idim)) in_domain = .false.
+              endif
+           end do
+           if (in_domain) then
+              father_ckey = target_ckey / 2
+              ii = target_ckey - 2 * father_ckey
+              dst_icell_lane = 1
+              do idim = 1, ndim
+                 dst_icell_lane = dst_icell_lane + ii(idim) * (2**(idim-1))
+              end do
+              ix8 = int(father_ckey(1), kind=8)
+              iy8 = int(father_ckey(2), kind=8)
+              iz8 = int(father_ckey(3), kind=8)
+              key = hkey_offset + ix8 + iy8*nx + iz8*nx*nx
+              dst_igrid_lane = hash_get(hash_key_d, hash_val_d, hash_size_d, key)
+           endif
+        endif
+        ! All lanes pick up lane 0's destination.
+        dst_igrid_lane = __shfl(dst_igrid_lane, 0)
+        dst_icell_lane = __shfl(dst_icell_lane, 0)
+
+        if (valid_lane) then
+           w      = wx(ox+1) * wy(oy+1) * wz(oz+1)
+           my_rho = mp_i * w / vol_loc
+           if (m_refine_at_level >= 0d0) then
+              if (mass_cut_refine > 0d0) then
+                 if (mp_i < mass_cut_refine) then
+                    my_nref = w
+                 else
+                    my_nref = 0d0
+                 endif
+              else
+                 my_nref = w
               endif
            else
-              my_nref = w
+              my_nref = 0d0
            endif
         else
+           my_rho  = 0d0
            my_nref = 0d0
         endif
-     else
-        my_rho  = 0d0
-        my_nref = 0d0
+        call warp_reduce_sum(my_rho)
+        call warp_reduce_sum(my_nref)
+        if (lane == 0 .and. dst_igrid_lane /= 0) then
+           info = atomicadd(rho_d(dst_icell_lane, dst_igrid_lane), my_rho)
+           if (m_refine_at_level >= 0d0) then
+              info = atomicadd(nref_d(dst_icell_lane, dst_igrid_lane), my_nref)
+           endif
+        endif
+     end do
+  else
+     ! ---------------- Mixed warp: per-lane hash + per-lane atomicAdd ----------------
+     src_full_ckey = 0
+     if (valid_lane) then
+        ii_src = 0
+        do idim = 1, ndim
+           ii_src(idim) = mod((icell_src_lane - 1) / (2**(idim-1)), 2)
+        end do
+        do idim = 1, ndim
+           src_full_ckey(idim) = 2 * grid_d(igrid_src_lane)%ckey(idim) + ii_src(idim)
+        end do
      endif
-     my_rho  = block_reduce_sum(my_rho)
-     my_nref = block_reduce_sum(my_nref)
-     if (tid == 0) then
-        total_rho  = total_rho  + my_rho
-        total_nref = total_nref + my_nref
-     endif
-     chunk_start = chunk_start + block_size
-  end do
 
-  if (tid == 0) then
-     rho_d(dst_icell, dst_igrid) = rho_d(dst_icell, dst_igrid) + total_rho
-     if (m_refine_at_level >= 0d0) then
-        nref_d(dst_icell, dst_igrid) = nref_d(dst_icell, dst_igrid) + total_nref
-     endif
+     do k = 1, threetondim
+        ox = mod(k - 1, 3) - 1
+        oy = mod((k - 1) / 3, 3) - 1
+        oz = (k - 1) / 9 - 1
+        if (valid_lane) then
+           target_ckey = 0
+           target_ckey(1) = src_full_ckey(1) + ox
+           if (ndim >= 2) target_ckey(2) = src_full_ckey(2) + oy
+           if (ndim >= 3) target_ckey(3) = src_full_ckey(3) + oz
+           in_domain = .true.
+           do idim = 1, ndim
+              if (periodic_d(idim)) then
+                 if (target_ckey(idim) < box_min(idim))  target_ckey(idim) = box_max(idim) - 1
+                 if (target_ckey(idim) >= box_max(idim)) target_ckey(idim) = box_min(idim)
+              else
+                 if (target_ckey(idim) < box_min(idim))  in_domain = .false.
+                 if (target_ckey(idim) >= box_max(idim)) in_domain = .false.
+              endif
+           end do
+           dst_igrid_lane = 0
+           dst_icell_lane = 0
+           if (in_domain) then
+              father_ckey = target_ckey / 2
+              ii = target_ckey - 2 * father_ckey
+              dst_icell_lane = 1
+              do idim = 1, ndim
+                 dst_icell_lane = dst_icell_lane + ii(idim) * (2**(idim-1))
+              end do
+              ix8 = int(father_ckey(1), kind=8)
+              iy8 = int(father_ckey(2), kind=8)
+              iz8 = int(father_ckey(3), kind=8)
+              key = hkey_offset + ix8 + iy8*nx + iz8*nx*nx
+              dst_igrid_lane = hash_get(hash_key_d, hash_val_d, hash_size_d, key)
+           endif
+           if (dst_igrid_lane /= 0) then
+              w      = wx(ox+1) * wy(oy+1) * wz(oz+1)
+              my_rho = mp_i * w / vol_loc
+              info   = atomicadd(rho_d(dst_icell_lane, dst_igrid_lane), my_rho)
+              if (m_refine_at_level >= 0d0) then
+                 if (mass_cut_refine > 0d0) then
+                    if (mp_i < mass_cut_refine) then
+                       my_nref = w
+                    else
+                       my_nref = 0d0
+                    endif
+                 else
+                    my_nref = w
+                 endif
+                 info = atomicadd(nref_d(dst_icell_lane, dst_igrid_lane), my_nref)
+              endif
+           endif
+        endif
+     end do
   endif
-end subroutine cic_block_reduce_kernel
+end subroutine cic_part_warp_kernel
 
-!> Host CIC dispatcher: per-cell segmented reduction with inline weight (no
-!> global atomics on rho/nref). Pipeline: build cell-list at level (ilevel+1)
-!> (counts, heads, idx, per-particle source-cell map); compact source cells
-!> with count > 0 into swap_global (n_active); precompute dest_oct_per_cell
-!> over those active cells; at coarsest active level run the GPU multipole_q
-!> reduction; then loop k=1..threetondim launching cic_block_reduce_kernel
-!> over the n_active blocks (which computes per-particle weights inline).
+!> Host CIC dispatcher: particle-parallel deposit with warp-coarsened
+!> atomics. Pipeline: build cell-list at level (ilevel+1) (counts, heads,
+!> idx, per-particle source-cell map) so cell_part_idx is sorted by source
+!> cell; at the coarsest active level run the GPU multipole_q reduction;
+!> then ONE launch of cic_part_warp_kernel over (num_placed + 255) / 256
+!> blocks of 256 threads. Each warp owns 32 contiguous slots of
+!> cell_part_idx; warps inside a single large cell pick the uniform path
+!> (lane-0 hash_get + warp_reduce_sum + 1 atomicAdd per dest k), and warps
+!> straddling a cell boundary fall back to per-lane hash + per-lane
+!> atomicAdd inside the same kernel. CIC weights and the 27-point stencil
+!> are unchanged.
 subroutine gpu_cic_part(sim, ilevel, rtype)
   use nvtx
   use ramses_commons, only: ramses_t
@@ -1257,8 +1261,8 @@ subroutine gpu_cic_part(sim, ilevel, rtype)
   integer, intent(in) :: rtype
 
   integer(kind=4) :: head_idx, num_parts, leading, num_grids, total_cells
-  integer(kind=4) :: total_dest_entries, total_sum_unused, n_active
-  integer :: num_threads, num_blocks, k, idim
+  integer(kind=4) :: total_sum_unused
+  integer :: num_threads, num_blocks, idim
   integer :: deposit_block_size, deposit_num_blocks
   real(kind=8) :: dx_loc, vol_loc, skip1, skip2, skip3
   real(kind=8) :: q_host(1:ndim+1)
@@ -1345,42 +1349,26 @@ subroutine gpu_cic_part(sim, ilevel, rtype)
        head_idx, num_parts)
   call GPU_Error_Check("gpu/gpu_part.cuf", 0)
 
-  ! Compact active source cells (count > 0) into swap_global. swap_global is
-  ! sized >= total_cells by ensure_scan_capacity_part above and is unused
-  ! elsewhere in gpu_cic_part. Active flag -> inclusive scan -> compact write.
-  num_threads = 256
-  num_blocks  = (total_cells + num_threads - 1) / num_threads
-  call init_active_cell_flag_kernel<<<num_blocks, num_threads>>>(cell_part_count, &
-       prefix_sum, num_grids)
-  call gpu_scan(1, total_cells, n_active)
-  call write_active_cells_kernel<<<num_blocks, num_threads>>>(cell_part_count, &
-       prefix_sum, swap_global, num_grids)
-  call GPU_Error_Check("gpu/gpu_part.cuf", 0)
-
-  if (n_active > 0) then
-     ! Precompute dest_oct_per_cell only for active source cells.
-     total_dest_entries = threetondim * n_active
-     num_threads = 256
-     num_blocks  = (total_dest_entries + num_threads - 1) / num_threads
-     call build_dest_oct_per_cell_kernel<<<num_blocks, num_threads>>>(grid, &
-          swap_global, n_active, dest_oct_per_cell, dest_icell_per_cell, &
-          hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, &
-          box_ckey_min, box_ckey_max, periodic, ilevel)
-     call GPU_Error_Check("gpu/gpu_part.cuf", 0)
-
-     ! Segmented deposit with fused inline CIC weight: one block per active
-     ! source cell, outer loop k=1..threetondim. No global atomics on rho/nref
-     ! (within outer k destinations are unique; across k the host serializes).
+  ! num_placed = total_sum_unused: count of particles written into
+  ! cell_part_idx (== num_parts minus any OOD particles, which place_cell_*
+  ! drops). Active-cell compaction is no longer needed -- the deposit is
+  ! particle-parallel, not source-cell-parallel.
+  if (total_sum_unused > 0) then
+     ! Particle-parallel deposit. 256 threads / 8 warps per block, each warp
+     ! owns 32 contiguous slots of cell_part_idx (sorted, so warps inside a
+     ! large cell are uniform). Block count is ~num_placed/256 -- ~8k at L7
+     ! vs. ~2M blocks under the old per-source-cell layout. One launch fuses
+     ! all 27 stencil directions; race-safety comes from atomicAdd on
+     ! rho_d / nref_d. CIC physics unchanged.
      deposit_block_size = 256
-     deposit_num_blocks = n_active
-     do k = 1, threetondim
-        call cic_block_reduce_kernel<<<deposit_num_blocks, deposit_block_size>>>(&
-             swap_global, n_active, cell_part_count, cell_part_head, cell_part_idx, &
-             dest_oct_per_cell, dest_icell_per_cell, &
-             xp, mp, rho, nref, &
-             skip1, skip2, skip3, dx_loc, vol_loc, &
-             sim%r%m_refine(ilevel), sim%r%mass_cut_refine, k, leading)
-     end do
+     deposit_num_blocks = (total_sum_unused + deposit_block_size - 1) / deposit_block_size
+     call cic_part_warp_kernel<<<deposit_num_blocks, deposit_block_size>>>(&
+          cell_part_idx, src_icell_part, src_igrid_part, total_sum_unused, &
+          grid, hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, &
+          box_ckey_min, box_ckey_max, periodic, &
+          xp, mp, rho, nref, &
+          skip1, skip2, skip3, dx_loc, vol_loc, &
+          sim%r%m_refine(ilevel), sim%r%mass_cut_refine, ilevel, leading)
      call GPU_Error_Check("gpu/gpu_part.cuf", 0)
   endif
 
