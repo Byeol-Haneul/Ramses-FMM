@@ -12,11 +12,7 @@ subroutine m_init_refine_ramses(pst)
   use init_refine_basegrid_module, only:r_init_refine_basegrid,r_noct_max,r_noct_min,r_noct_tot,r_noct_used_max
   use load_balance_module, only: r_broadcast_bound_key
 #ifdef GRAV
-#ifdef _CUDA
-  use rho_fine_module, only: m_rho_fine_host
-#else
   use rho_fine_module, only: m_rho_fine
-#endif
 #endif
   use output_amr_module, only: input_params
   implicit none
@@ -158,11 +154,7 @@ subroutine m_init_refine_ramses(pst)
 
 #ifdef GRAV
   ! Compute total mass density from gas and particles on the grid
-#ifdef _CUDA
-  call m_rho_fine_host(pst,r%levelmin,0)
-#else
   call m_rho_fine(pst,r%levelmin,0)
-#endif
 #endif
 
   end associate

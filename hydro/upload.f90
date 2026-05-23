@@ -49,52 +49,19 @@ recursive subroutine r_upload_fine(pst,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
 #ifdef _CUDA
-     call nvtxStartRange("GPU Upload", color=6)!teal
-     call gpu_upload(pst%s,ilevel)
-     call nvtxEndRange()
+     if(pst%s%m%data_on_device)then
+        call nvtxStartRange("GPU Upload", color=6)!teal
+        call gpu_upload(pst%s,ilevel)
+        call nvtxEndRange()
+     else
+        call upload_fine(pst%s,ilevel)
+     endif
 #else
      call upload_fine(pst%s,ilevel)
 #endif
   endif
 
 end subroutine r_upload_fine
-#ifdef _CUDA
-recursive subroutine r_upload_fine_host(pst,ilevel,input_size)
-  use mdl_module
-  use ramses_commons, only: pst_t
-  use mdl_parameters
-  implicit none
-  type(pst_t)::pst
-  integer,VALUE::input_size
-  integer::ilevel
-  integer::rID
-
-  if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_UPLOAD_FINE,pst%iUpper+1,input_size,0,ilevel)
-     call r_upload_fine_host(pst%pLower,ilevel,input_size)
-     call mdl_get_reply(pst%s%mdl,rID,0)
-  else
-     call upload_fine(pst%s,ilevel)
-  endif
-
-end subroutine r_upload_fine_host
-
-subroutine m_upload_fine_host(pst,ilevel)
-  use ramses_commons, only: pst_t
-  implicit none
-  type(pst_t)::pst
-  integer::ilevel
-
-  if(ilevel==pst%s%r%nlevelmax)return
-  if(pst%s%m%noct_tot(ilevel)==0)return
-  if(pst%s%m%noct_tot(ilevel+1)==0)return
-  if(pst%s%r%verbose)write(*,111)ilevel
-111 format('   Entering upload_fine (host) for level',i2)
-
-  call r_upload_fine_host(pst,ilevel,1)
-
-end subroutine m_upload_fine_host
-#endif
 !###########################################################
 !########################################################### 
 !###########################################################

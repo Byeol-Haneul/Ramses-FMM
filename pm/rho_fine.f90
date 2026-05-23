@@ -145,93 +145,6 @@ subroutine m_rho_fine(pst,ilevel,rtype)
   end associate
 
 end subroutine m_rho_fine
-#ifdef _CUDA
-! Host-mesh variant for grid setup before the first H→D copy in adaptive_loop.
-subroutine m_rho_fine_host(pst,ilevel,rtype)
-  use amr_parameters, only: ndim
-  use ramses_commons, only: pst_t
-  use amr_commons, only: multipole_t
-  implicit none
-  type(pst_t)::pst
-  integer::ilevel
-  integer::rtype
-  type(multipole_t)::multipole_tot
-  integer::i,input_size
-  integer,dimension(1:2)::input_array
-  associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
-
-  if(m%noct_tot(ilevel)==0)return
-  if(.not. r%poisson .and. .not. r%pic)return
-
-  if(r%verbose)write(*,'("   Entering rho_fine (host) for level ",I2)')ilevel
-
-#ifdef GRAV
-  if(r%poisson)then
-     if(ilevel==r%levelmin)then
-        multipole_tot%q=0d0
-        input_size=storage_size(multipole_tot)/32
-        call r_broadcast_multipole(pst,multipole_tot,input_size)
-     endif
-     do i=r%nlevelmax,ilevel,-1
-        if(r%hydro)then
-           if(m%noct_tot(i)>0)then
-              if(r%verbose)write(*,'(" Compute leaf multipoles for level ",I2)')i
-              call r_multipole_leaf_cells_host(pst,i,1)
-           endif
-           if(i<r%nlevelmax)then
-              if(m%noct_tot(i+1)>0)then
-                 if(r%verbose)write(*,'(" Compute split multipoles for level ",I2)')i
-                 call r_multipole_split_cells_host(pst,i,1)
-              endif
-           endif
-        endif
-        if(m%noct_tot(i)>0)then
-           call r_reset_rho_host(pst,i,1)
-        endif
-        if(r%hydro)then
-           if(m%noct_tot(i)>0.AND.(rtype==0 .or. rtype==4))then
-              if(r%verbose)write(*,'(" Compute rho from multipoles for level ",I2)')i
-              call r_cic_multipole_host(pst,i,1)
-           endif
-        endif
-     end do
-  endif
-#endif
-  if(r%pic)then
-     if(ilevel==r%levelmin.AND.ANY(.not.r%periodic(1:ndim)))then
-        call r_split_part_host(pst,ilevel-1,1)
-     endif
-     do i=ilevel,r%nlevelmax
-        if(m%noct_tot(i)>0)then
-           if(r%verbose)write(*,'(" Sort particles for level ",I2)')i
-           call r_sort_part_host(pst,i,1)
-        endif
-#ifdef GRAV
-        if(m%noct_tot(i)>0 .and. r%poisson)then
-           if(r%verbose)write(*,'(" Compute rho from particles for level ",I2)')i
-           input_array(1)=i
-           input_array(2)=rtype
-           call r_cic_part_host(pst,input_array,2)
-        endif
-#endif
-        if(m%noct_tot(i)>0.AND.i<r%nlevelmax)then
-           if(r%verbose)write(*,'(" Split particles for level ",I2)')i
-           call r_split_part_host(pst,i,1)
-        endif
-     end do
-  endif
-#ifdef GRAV
-  if(ilevel==r%levelmin .and. r%poisson)then
-     call r_collect_multipole(pst,ilevel,1,multipole_tot,storage_size(multipole_tot)/32)
-     call r_broadcast_multipole(pst,multipole_tot,storage_size(multipole_tot)/32)
-     if(r%verbose)write(*,*)'rho_average=',g%rho_tot
-  endif
-#endif
-
-  end associate
-
-end subroutine m_rho_fine_host
-#endif
 !################################################################
 !################################################################
 !################################################################
@@ -261,28 +174,6 @@ recursive subroutine r_multipole_leaf_cells(pst,ilevel,input_size)
   endif
 
 end subroutine r_multipole_leaf_cells
-#ifdef _CUDA
-! Host-only leaf dispatch for mesh setup before first H→D copy.
-recursive subroutine r_multipole_leaf_cells_host(pst,ilevel,input_size)
-  use mdl_module
-  use ramses_commons, only: pst_t
-  use mdl_parameters
-  implicit none
-  type(pst_t)::pst
-  integer,VALUE::input_size
-  integer::ilevel
-  integer::rID
-
-  if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_MULTIPOLE_LEAF_CELLS,pst%iUpper+1,input_size,0,ilevel)
-     call r_multipole_leaf_cells_host(pst%pLower,ilevel,input_size)
-     call mdl_get_reply(pst%s%mdl,rID,0)
-  else
-     call multipole_leaf_cells(pst%s%r,pst%s%g,pst%s%m,ilevel)
-  endif
-
-end subroutine r_multipole_leaf_cells_host
-#endif
 !###########################################################
 !###########################################################
 !###########################################################
@@ -393,27 +284,6 @@ recursive subroutine r_multipole_split_cells(pst,ilevel,input_size)
   endif
 
 end subroutine r_multipole_split_cells
-#ifdef _CUDA
-recursive subroutine r_multipole_split_cells_host(pst,ilevel,input_size)
-  use mdl_module
-  use ramses_commons, only: pst_t
-  use mdl_parameters
-  implicit none
-  type(pst_t)::pst
-  integer,VALUE::input_size
-  integer::ilevel
-  integer::rID
-
-  if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_MULTIPOLE_SPLIT_CELLS,pst%iUpper+1,input_size,0,ilevel)
-     call r_multipole_split_cells_host(pst%pLower,ilevel,input_size)
-     call mdl_get_reply(pst%s%mdl,rID,0)
-  else
-     call multipole_split_cells(pst%s,ilevel)
-  endif
-
-end subroutine r_multipole_split_cells_host
-#endif
 !###########################################################
 !###########################################################
 !###########################################################
@@ -583,27 +453,6 @@ recursive subroutine r_reset_rho(pst,ilevel,input_size)
   endif
 
 end subroutine r_reset_rho
-#ifdef _CUDA
-recursive subroutine r_reset_rho_host(pst,ilevel,input_size)
-  use mdl_module
-  use ramses_commons, only: pst_t
-  use mdl_parameters
-  implicit none
-  type(pst_t)::pst
-  integer,VALUE::input_size
-  integer::ilevel
-  integer::rID
-
-  if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_RESET_RHO,pst%iUpper+1,input_size,0,ilevel)
-     call r_reset_rho_host(pst%pLower,ilevel,input_size)
-     call mdl_get_reply(pst%s%mdl,rID,0)
-  else
-     call reset_rho(pst%s%r,pst%s%g,pst%s%m,ilevel)
-  endif
-
-end subroutine r_reset_rho_host
-#endif
 !###########################################################
 !###########################################################
 !###########################################################
@@ -664,27 +513,6 @@ recursive subroutine r_cic_multipole(pst,ilevel,input_size)
   endif
 
 end subroutine r_cic_multipole
-#ifdef _CUDA
-recursive subroutine r_cic_multipole_host(pst,ilevel,input_size)
-  use mdl_module
-  use ramses_commons, only: pst_t
-  use mdl_parameters
-  implicit none
-  type(pst_t)::pst
-  integer,VALUE::input_size
-  integer::ilevel
-  integer::rID
-
-  if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_CIC_MULTIPOLE,pst%iUpper+1,input_size,0,ilevel)
-     call r_cic_multipole_host(pst%pLower,ilevel,input_size)
-     call mdl_get_reply(pst%s%mdl,rID,0)
-  else
-     call cic_multipole(pst%s,ilevel)
-  endif
-
-end subroutine r_cic_multipole_host
-#endif
 !###########################################################
 !###########################################################
 !###########################################################
@@ -880,56 +708,6 @@ recursive subroutine r_cic_part(pst,input_array,input_size)
   endif
 
 end subroutine r_cic_part
-#ifdef _CUDA
-recursive subroutine r_cic_part_host(pst,input_array,input_size)
-  use mdl_module
-  use ramses_commons, only: pst_t
-  use mdl_parameters
-  implicit none
-  type(pst_t)::pst
-  integer,VALUE::input_size
-  integer,dimension(1:input_size)::input_array
-  integer::rID
-  integer::ilevel,rtype
-
-  if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_CIC_PART,pst%iUpper+1,input_size,0,input_array)
-     call r_cic_part_host(pst%pLower,input_array,input_size)
-     call mdl_get_reply(pst%s%mdl,rID,0)
-  else
-     ilevel=input_array(1)
-     rtype=input_array(2)
-     if(pst%s%r%part)then
-        if(pst%s%r%part_mass_deposition_scheme==1)then
-           call cic_part(pst%s,pst%s%p   ,ilevel,rtype)
-        else if(pst%s%r%part_mass_deposition_scheme==2)then
-           call tsc_part(pst%s,pst%s%p   ,ilevel,rtype)
-        else if(pst%s%r%part_mass_deposition_scheme==3)then
-           call pcs_part(pst%s,pst%s%p   ,ilevel,rtype)
-        endif
-     endif
-     if(pst%s%r%star)then
-        if(pst%s%r%star_mass_deposition_scheme==1)then
-           call cic_part(pst%s,pst%s%star,ilevel,rtype)
-        elseif(pst%s%r%star_mass_deposition_scheme==2)then
-           call tsc_part(pst%s,pst%s%star,ilevel,rtype)
-        elseif(pst%s%r%star_mass_deposition_scheme==3)then
-           call pcs_part(pst%s,pst%s%star,ilevel,rtype)
-        endif
-     endif
-     if(pst%s%r%sink)then
-        if(pst%s%r%sink_mass_deposition_scheme==1)then
-           call cic_part(pst%s,pst%s%sink,ilevel,rtype)
-        elseif(pst%s%r%sink_mass_deposition_scheme==2)then
-           call tsc_part(pst%s,pst%s%sink,ilevel,rtype)
-        elseif(pst%s%r%sink_mass_deposition_scheme==3)then
-           call pcs_part(pst%s,pst%s%sink,ilevel,rtype)
-        endif
-     endif
-  endif
-
-end subroutine r_cic_part_host
-#endif
 !##############################################################################
 !##############################################################################
 !##############################################################################
@@ -1446,31 +1224,6 @@ recursive subroutine r_split_part(pst,ilevel,input_size)
   endif
 
 end subroutine r_split_part
-#ifdef _CUDA
-recursive subroutine r_split_part_host(pst,ilevel,input_size)
-  use mdl_module
-  use ramses_commons, only: pst_t
-  use mdl_parameters
-  implicit none
-  type(pst_t)::pst
-  integer,VALUE::input_size
-  integer::ilevel
-  integer::rID
-
-  if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_SPLIT_PART,pst%iUpper+1,input_size,0,ilevel)
-     call r_split_part_host(pst%pLower,ilevel,input_size)
-     call mdl_get_reply(pst%s%mdl,rID,0)
-  else
-     if(pst%s%r%part)call split_part(pst%s,pst%s%p   ,ilevel)
-     if(pst%s%r%star)call split_part(pst%s,pst%s%star,ilevel)
-     if(pst%s%r%sink)call split_part(pst%s,pst%s%sink,ilevel)
-     if(pst%s%r%tree)call split_part(pst%s,pst%s%tree,ilevel)
-     if(pst%s%r%trac)call split_part(pst%s,pst%s%trac,ilevel)
-  endif
-
-end subroutine r_split_part_host
-#endif
 !##############################################################################
 !##############################################################################
 !##############################################################################
@@ -2228,31 +1981,6 @@ recursive subroutine r_sort_part(pst,ilevel,input_size)
   endif
 
 end subroutine r_sort_part
-#ifdef _CUDA
-recursive subroutine r_sort_part_host(pst,ilevel,input_size)
-  use mdl_module
-  use ramses_commons, only: pst_t
-  use mdl_parameters
-  implicit none
-  type(pst_t)::pst
-  integer,VALUE::input_size
-  integer::ilevel
-  integer::rID
-
-  if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_SORT_PART,pst%iUpper+1,input_size,0,ilevel)
-     call r_sort_part_host(pst%pLower,ilevel,input_size)
-     call mdl_get_reply(pst%s%mdl,rID,0)
-  else
-     if(pst%s%r%part)call sort_part(pst%s,pst%s%p   ,ilevel)
-     if(pst%s%r%star)call sort_part(pst%s,pst%s%star,ilevel)
-     if(pst%s%r%sink)call sort_part(pst%s,pst%s%sink,ilevel)
-     if(pst%s%r%tree)call sort_part(pst%s,pst%s%tree,ilevel)
-     if(pst%s%r%trac)call sort_part(pst%s,pst%s%trac,ilevel)
-  endif
-
-end subroutine r_sort_part_host
-#endif
 !##############################################################################
 !##############################################################################
 !##############################################################################

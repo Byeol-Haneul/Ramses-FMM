@@ -674,6 +674,9 @@ module amr_commons
   end type global_t
 
   type mesh_t
+     ! For GPU, is data on device
+     logical::data_on_device=.false.
+
      ! Level related arrays
      integer(kind=4),allocatable,dimension(:)::head      ! Starting index for each level
      integer(kind=4),allocatable,dimension(:)::tail      ! Final index for each level
