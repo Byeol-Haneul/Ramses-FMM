@@ -1,7 +1,6 @@
-!> Particle kernels and dispatchers (module part_device).
-!> Rank-2 arrays (xp, vp, jp) use layout (npart_max, ndim); they are
-!> gathered/scattered as ndim independent rank-1 columns. `leading` =
-!> size(xp,1).
+!> Particle kernels and dispatchers.
+!> Rank-2 arrays (xp, vp, jp) are laid out (npart_max, ndim) and
+!> gathered/scattered one column at a time; `leading = size(xp,1)`.
 module part_device
   use amr_parameters, only: ndim, twotondim, threetondim, dp, i8b, MAXLEVEL
   use oct_commons, only: oct
@@ -25,8 +24,8 @@ module part_device
        gpu_scan
   implicit none
 
-  ! Device helpers below (hash, hilbert, reduce) are private copies inside
-  ! this module so it does not depend on gpu_runner's private helpers.
+  ! Module-private copies of hash/hilbert/reduce so part_device does not
+  ! depend on gpu_runner's private helpers.
   private :: mix64, fnv64, fnv32, hash_set, hash_get, hash_update, hash_free
   private :: hilbert_key
   private :: warp_reduce_int_sum, block_reduce_int_sum
@@ -40,7 +39,7 @@ contains
   include 'gpu_hilbert.cuf'
   include 'gpu_reduce.cuf'
 
-!> Bucket 0/1 for ilevel == levelmin-1 (domain test).
+!> Domain-test partition for the levelmin-1 boundary range.
 attributes(global) subroutine bucket_part_boundary(xp, bucket_part, &
      box_size_d, periodic_d, head_idx, num_parts, leading)
   integer(kind=4), intent(in), value :: leading
@@ -70,9 +69,9 @@ attributes(global) subroutine bucket_part_boundary(xp, bucket_part, &
   end do
 
   if (in_domain) then
-     bucket_part(ipart) = 1   ! fine: stays at finer level
+     bucket_part(ipart) = 1
   else
-     bucket_part(ipart) = 0   ! coarse: out-of-box, demoted
+     bucket_part(ipart) = 0
   endif
 end subroutine bucket_part_boundary
 
@@ -80,7 +79,6 @@ end subroutine bucket_part_boundary
 attributes(global) subroutine bucket_part_general(xp, bucket_part, &
      grid, hash_key_d, hash_val_d, hash_size_d, ckey_max_d, key_off_d, &
      skip1, skip2, skip3, dx_loc, ilevel, head_idx, num_parts, leading)
-  ! hash_get: device helper in this module (part_device); nordc requires same compilation unit as callers.
   integer(kind=4), intent(in), value :: leading
   real(kind=dp), device :: xp(*)
   integer(kind=4), device :: bucket_part(*)
@@ -119,7 +117,6 @@ attributes(global) subroutine bucket_part_general(xp, bucket_part, &
      ix(idim) = floor(xs * inv_2dx_loc)
   end do
 
-  ! Build Cartesian-key encoding identical to insert_hash_kernel.
   ix8 = int(ix(1), kind=8)
   iy8 = int(ix(2), kind=8)
   iz8 = int(ix(3), kind=8)
@@ -130,12 +127,10 @@ attributes(global) subroutine bucket_part_general(xp, bucket_part, &
   igrid = hash_get(hash_key_d, hash_val_d, hash_size_d, key)
 
   if (igrid == 0) then
-     bucket_part(ipart) = 0    ! coarse: hash miss
+     bucket_part(ipart) = 0
      return
   endif
 
-  ! Compute in-cell index inside the parent (igrid) oct.
-  ! Runtime ndim loops (no #if in this included file).
   do idim = 1, ndim
      x(idim) = (xp(ipart + (idim-1)*leading) + skip(idim)) * inv_dx_loc
      ii(idim) = int(x(idim) - 2*ix(idim))
@@ -146,13 +141,12 @@ attributes(global) subroutine bucket_part_general(xp, bucket_part, &
   end do
 
   if (.not. grid(igrid)%refined(icell)) then
-     bucket_part(ipart) = 0    ! coarse: leaf cell
+     bucket_part(ipart) = 0
   else
-     bucket_part(ipart) = 1    ! fine: refined cell
+     bucket_part(ipart) = 1
   endif
 end subroutine bucket_part_general
 
-!> prefix_sum(idx) := bucket_part(idx) for stable 0/1 partition.
 attributes(global) subroutine init_prefix_sum_part(bucket_part, prefix_sum_d, &
      head_idx, num_parts)
   integer(kind=4), device :: bucket_part(*)
@@ -169,11 +163,8 @@ attributes(global) subroutine init_prefix_sum_part(bucket_part, prefix_sum_d, &
   prefix_sum_d(idx) = bucket_part(idx)
 end subroutine init_prefix_sum_part
 
-!> prefix_sum(h) := bucket_part(sortp(h)) for Hilbert-order partition.
-!> h is the Hilbert-ranked slot (head_idx..head_idx+num_parts-1); the
-!> particle currently at that Hilbert position is `ipart = sortp(h)`.
-!> Inclusive scan over this array gives, at each h, the number of fine
-!> particles in Hilbert-prefix [head_idx..h]; the last value is n_fine.
+!> prefix_sum(h) := bucket_part(sortp(h)); inclusive scan yields the
+!> Hilbert-prefix fine count, and the last value is n_fine.
 attributes(global) subroutine init_prefix_sum_part_hilbert_fine( &
      bucket_part_d, sortp_d, prefix_sum_d, head_idx, num_parts)
   integer(kind=4), device :: bucket_part_d(*)
@@ -192,12 +183,9 @@ attributes(global) subroutine init_prefix_sum_part_hilbert_fine( &
   prefix_sum_d(idx) = bucket_part_d(ipart)
 end subroutine init_prefix_sum_part_hilbert_fine
 
-!> Build swap_global(new_slot) = old_particle_slot directly in one pass,
-!> using sortp's Hilbert traversal of the active range. Coarse particles
-!> land in [head_idx, head_idx+n_coarse-1] and fine particles in
-!> [head_idx+n_coarse, head_idx+num_parts-1]; within each bucket the
-!> ordering follows the parent-level Hilbert key. No race: each Hilbert
-!> slot h writes exactly one new_slot, derived from disjoint rank counters.
+!> One-pass Hilbert-ordered coarse/fine partition into swap_global: coarse
+!> in [head_idx, head_idx+n_coarse-1], fine after. Race-free because each
+!> Hilbert slot h writes a distinct destination derived from its own ranks.
 attributes(global) subroutine write_swap_global_hilbert_partition( &
      swap_global_d, bucket_part_d, sortp_d, prefix_sum_d, &
      head_idx, num_parts, n_coarse)
@@ -226,10 +214,8 @@ attributes(global) subroutine write_swap_global_hilbert_partition( &
   endif
 end subroutine write_swap_global_hilbert_partition
 
-!> Gather/scatter one column of a rank-2 real(dp) field through a flat 1D
-!> scratch buffer `buf`. `leading` = size(xp,1); `idim` selects the column
-!> (1..ndim). One call per column; the scratch is reused across columns
-!> since only one column is live in `buf` at a time.
+!> One-column gather/scatter through a flat dp scratch. Scratch is reused
+!> across columns -- only one column is live at a time.
 attributes(global) subroutine sort_gather_part_real_col(buf, src, swap_global_d, &
      head_idx, num_parts, leading, idim)
   integer(kind=4), intent(in), value :: leading
@@ -270,7 +256,6 @@ attributes(global) subroutine sort_scatter_part_real_col(dst, buf, &
   dst(idx + off) = buf(idx)
 end subroutine sort_scatter_part_real_col
 
-!> Gather/scatter rank-1 real(dp).
 attributes(global) subroutine sort_gather_part_real_1d(buf, src, swap_global_d, &
      head_idx, num_parts)
   real(kind=dp), device :: buf(*)
@@ -304,7 +289,6 @@ attributes(global) subroutine sort_scatter_part_real_1d(dst, buf, head_idx, num_
   dst(idx) = buf(idx)
 end subroutine sort_scatter_part_real_1d
 
-!> Gather/scatter particle ids (kind=i8b).
 attributes(global) subroutine sort_gather_part_i8_1d(buf, src, swap_global_d, &
      head_idx, num_parts)
   integer(i8b),    device :: buf(*)
@@ -338,9 +322,8 @@ attributes(global) subroutine sort_scatter_part_i8_1d(dst, buf, head_idx, num_pa
   dst(idx) = buf(idx)
 end subroutine sort_scatter_part_i8_1d
 
-!> Gather/scatter int4; bucket_part is reused as scratch (dead by the time
-!> the gather/scatter chain runs — its bucketing role finishes earlier in
-!> gpu_split_part when write_swap_global_hilbert_partition consumes it).
+!> bucket_part is reused as the i4 scratch -- its bucketing role finishes
+!> before the gather/scatter chain begins.
 attributes(global) subroutine sort_gather_part_i4_1d(buf, src, swap_global_d, &
      head_idx, num_parts)
   integer(kind=4), device :: buf(*)
@@ -374,7 +357,7 @@ attributes(global) subroutine sort_scatter_part_i4_1d(dst, buf, head_idx, num_pa
   dst(idx) = buf(idx)
 end subroutine sort_scatter_part_i4_1d
 
-!> Grow scan buffers to at least npart_max if needed.
+!> Grow scan buffers to at least min_capacity.
 subroutine ensure_scan_capacity_part(min_capacity)
   integer(kind=4), intent(in) :: min_capacity
   integer(kind=4), parameter :: block_size = 256
@@ -440,7 +423,7 @@ subroutine ensure_scan_capacity_part(min_capacity)
 end subroutine ensure_scan_capacity_part
 
 
-!> Partition particles coarse/fine and permute (host split_part).
+!> GPU port of host split_part: coarse/fine partition + permute.
 subroutine gpu_split_part(sim, ilevel)
   use nvtx
   use ramses_commons, only: ramses_t
@@ -481,8 +464,8 @@ subroutine gpu_split_part(sim, ilevel)
   num_blocks  = (num_parts + num_threads - 1) / num_threads
 
   if (ilevel == sim%r%levelmin - 1) then
-     ! Boundary split: predates the per-level gpu_sort_part for this range,
-     ! so we cannot use sortp here. Slot-stable coarse/fine partition.
+     ! Boundary range has not been Hilbert-sorted yet, so sortp is unusable
+     ! here; use a slot-stable coarse/fine partition instead.
      call bucket_part_boundary<<<num_blocks, num_threads>>>(xp, bucket_part, &
           box_size, periodic, head_idx, num_parts, leading)
      call GPU_Error_Check("gpu/gpu_part.cuf", 0)
@@ -499,11 +482,8 @@ subroutine gpu_split_part(sim, ilevel)
           swap_local, head_idx, num_parts)
      call GPU_Error_Check("gpu/gpu_part.cuf", 0)
   else
-     ! Normal AMR split: per the call order, gpu_sort_part(ilevel) ran first,
-     ! so sortp is a valid Hilbert ordering of [head_idx, head_idx+num_parts-1].
-     ! Walk sortp to build swap_global directly: coarse/fine partition with
-     ! each bucket in Hilbert order. The next gpu_sort_part(ilevel+1) will
-     ! re-sort the resulting fine bucket before its CIC.
+     ! sortp is a valid Hilbert ordering at this point; walk it to build
+     ! swap_global with each bucket in Hilbert order.
      dx_loc = sim%r%boxlen / 2d0**ilevel
      skip1 = 0d0
      skip2 = 0d0
@@ -617,7 +597,6 @@ subroutine gpu_split_part(sim, ilevel)
   call nvtxEndRange()
 end subroutine gpu_split_part
 
-!> Hilbert key at oct level ilevel-1 (matches host sort_hilbert).
 attributes(global) subroutine compute_hkey_part_kernel(xp, hkey_part_d, &
      skip1, skip2, skip3, dx_inv, head_idx, num_parts, leading, level)
   integer(kind=4), intent(in), value :: leading
@@ -651,7 +630,7 @@ attributes(global) subroutine compute_hkey_part_kernel(xp, hkey_part_d, &
   hkey_part_d(ipart) = hilbert_key(ix, level)
 end subroutine compute_hkey_part_kernel
 
-!> Radix digit (1 bit) for hkey_part (stable LSD sort).
+!> One radix digit of hkey_part for the LSD sort.
 attributes(global) subroutine init_prefix_sum_part_bit(hkey_part_d, swap_global_d, &
      prefix_sum_d, head_idx, num_parts, ibit)
   integer(kind=8), device :: hkey_part_d(*)
@@ -672,7 +651,6 @@ attributes(global) subroutine init_prefix_sum_part_bit(hkey_part_d, swap_global_
   prefix_sum_d(idx) = int(ibits(hkey_part_d(old_idx), ibit, 1), kind=4)
 end subroutine init_prefix_sum_part_bit
 
-!> sortp(i) := original index at position i after radix sort.
 attributes(global) subroutine write_sortp_part(sortp_d, swap_global_d, &
      head_idx, num_parts)
   integer(kind=4), device :: sortp_d(*)
@@ -689,7 +667,7 @@ attributes(global) subroutine write_sortp_part(sortp_d, swap_global_d, &
   sortp_d(idx) = swap_global_d(idx)
 end subroutine write_sortp_part
 
-!> Hilbert-sort particles; updates sortp only (host sort_part).
+!> GPU port of host sort_part: Hilbert-sort particles into sortp.
 subroutine gpu_sort_part(sim, ilevel)
   use nvtx
   use ramses_commons, only: ramses_t
@@ -767,7 +745,6 @@ subroutine gpu_sort_part(sim, ilevel)
   call nvtxEndRange()
 end subroutine gpu_sort_part
 
-!> Zero cell_part_count(twotondim, igrid) for the deposit igrid range.
 attributes(global) subroutine reset_cell_part_count_kernel(cell_part_count_d, num_grids)
   integer(kind=4), intent(in), value :: num_grids
   integer(kind=4), device :: cell_part_count_d(1:twotondim, *)
@@ -782,10 +759,9 @@ attributes(global) subroutine reset_cell_part_count_kernel(cell_part_count_d, nu
   cell_part_count_d(icell, igrid) = 0
 end subroutine reset_cell_part_count_kernel
 
-!> Count pass: for each particle compute its level-(ilevel+1) host cell
-!> (icell_src, igrid_src), atomically bump cell_part_count, and cache the
-!> per-particle source-cell map so the weight kernel does not repeat the
-!> hash_get for each outer-k. Hash-miss -> igrid_src=0 (dropped downstream).
+!> Per-particle (icell_src, igrid_src) at level (ilevel+1); bump
+!> cell_part_count and cache the source map so the deposit kernel skips
+!> the per-k hash_get repeat. Hash-miss returns igrid_src=0.
 attributes(global) subroutine build_cell_part_count_kernel(xp_d, &
      cell_part_count_d, src_icell_part_d, src_igrid_part_d, &
      hash_key_d, hash_val_d, hash_size_d, ckey_max_d, key_off_d, &
@@ -843,13 +819,11 @@ attributes(global) subroutine build_cell_part_count_kernel(xp_d, &
   src_icell_part_d(ipart) = icell
   src_igrid_part_d(ipart) = igrid
 
-  if (igrid == 0) return    ! sentinel: drop out-of-domain particle
+  if (igrid == 0) return    ! out-of-domain sentinel
 
   old = atomicadd(cell_part_count_d(icell, igrid), 1)
 end subroutine build_cell_part_count_kernel
 
-!> Flatten cell_part_count(icell, igrid) into the 1D prefix_sum scratch so
-!> we can hand it to gpu_scan. One thread per flat slot.
 attributes(global) subroutine flatten_cell_count_kernel(cell_part_count_d, &
      prefix_sum_d, num_grids)
   integer(kind=4), intent(in), value :: num_grids
@@ -866,9 +840,7 @@ attributes(global) subroutine flatten_cell_count_kernel(cell_part_count_d, &
   prefix_sum_d(idx + 1) = cell_part_count_d(icell, igrid)
 end subroutine flatten_cell_count_kernel
 
-!> After gpu_scan, prefix_sum holds the INCLUSIVE scan of cell_part_count.
-!> Write cell_part_head = prefix_sum - count (exclusive scan, so it points
-!> at the first slot of the cell in cell_part_idx) AND re-zero
+!> Write cell_part_head = (inclusive scan) - count, and re-zero
 !> cell_part_count so it can serve as the per-cell place-pass counter.
 attributes(global) subroutine compute_cell_part_head_kernel(cell_part_count_d, &
      cell_part_head_d, prefix_sum_d, num_grids)
@@ -890,9 +862,9 @@ attributes(global) subroutine compute_cell_part_head_kernel(cell_part_count_d, &
   cell_part_count_d(icell, igrid) = 0
 end subroutine compute_cell_part_head_kernel
 
-!> Place pass: write ipart into the per-cell segment of cell_part_idx at
-!> slot = head + atomicAdd(count, 1). cell_part_count ends restored to the
-!> original counts; cell_part_idx is the slot->ipart map.
+!> Place ipart into the per-cell segment of cell_part_idx at slot =
+!> head + atomicAdd(count, 1). cell_part_count is left restored to its
+!> pre-place values.
 attributes(global) subroutine place_cell_part_idx_kernel(cell_part_count_d, &
      cell_part_head_d, cell_part_idx_d, src_icell_part_d, src_igrid_part_d, &
      head_idx, num_parts)
@@ -917,9 +889,7 @@ attributes(global) subroutine place_cell_part_idx_kernel(cell_part_count_d, &
   cell_part_idx_d(slot) = ipart
 end subroutine place_cell_part_idx_kernel
 
-!> GPU multipole_q reduction over the full particle slice [1, npart].
-!> Mirrors gpu_rho.cuf:multipole_tot (per-thread load, block_reduce_sum on
-!> each of ndim+1 components, one atomicadd per block to the device accumulator).
+!> Multipole reduction over [1, npart]: q(1)=sum(mp), q(idim+1)=sum(mp*xp).
 attributes(global) subroutine multipole_q_kernel(xp_d, mp_d, multipole_q_d, &
      num_parts, leading)
   integer(kind=4), intent(in), value :: leading, num_parts
@@ -953,26 +923,12 @@ attributes(global) subroutine multipole_q_kernel(xp_d, mp_d, multipole_q_d, &
   endif
 end subroutine multipole_q_kernel
 
-!> Particle-parallel CIC deposit with warp-coarsened atomics.
-!>
-!> Each warp owns 32 contiguous slots of cell_part_idx (sorted so particles
-!> in the same source cell are adjacent). Two paths inside the same kernel,
-!> chosen per-warp via shfl:
-!>
-!>  - Uniform warp (all 32 lanes share the same (icell_src, igrid_src), the
-!>    common case once a cell holds >= 32 particles): lane 0 computes the
-!>    destination (icell_dst, igrid_dst) for each k via one hash_get and
-!>    broadcasts via shfl; every lane forms its CIC weight, warp_reduce_sum
-!>    folds the 32 contributions into lane 0, lane 0 issues one atomicAdd
-!>    to rho_d / nref_d per (dest, k).
-!>
-!>  - Mixed warp at a cell boundary: each valid lane does its own hash_get
-!>    and atomicAdd. Same CIC math, no broadcast, no reduction.
-!>
-!> The outer k=1..threetondim loop is fused inside the kernel. One launch
-!> per gpu_cic_part call; grid sized to (num_placed + block_size - 1) /
-!> block_size with 256-thread blocks (8 warps per block). Block count drops
-!> from ~num_source_cells (~2M at L7) to ~num_parts/256 (~8k at L7).
+!> Particle-parallel CIC deposit. Each warp owns 32 contiguous slots of
+!> cell_part_idx (sorted by source cell). When all 32 lanes share the same
+!> source cell, lane 0 does one hash_get per k and a warp_reduce_sum
+!> collapses contributions to a single atomicAdd; otherwise (cell-boundary
+!> warps) each lane does its own hash_get and atomicAdd. The outer
+!> k=1..threetondim loop is fused inside the kernel.
 attributes(global) subroutine cic_part_warp_kernel(cell_part_idx_d, &
      src_icell_part_d, src_igrid_part_d, num_placed, &
      grid_d, hash_key_d, hash_val_d, hash_size_d, ckey_max_d, key_off_d, &
@@ -1029,8 +985,8 @@ attributes(global) subroutine cic_part_warp_kernel(cell_part_idx_d, &
      ipart          = cell_part_idx_d(slot_global)
      icell_src_lane = src_icell_part_d(ipart)
      igrid_src_lane = src_igrid_part_d(ipart)
-     ! place_cell_part_idx_kernel only writes slots for igrid /= 0, but be
-     ! defensive: drop any lane that somehow landed on a sentinel.
+     ! Defensive: place_cell_part_idx_kernel skips OOD particles, so a
+     ! sentinel here would indicate a build-pipeline bug.
      if (igrid_src_lane == 0) valid_lane = .false.
   endif
 
@@ -1038,8 +994,7 @@ attributes(global) subroutine cic_part_warp_kernel(cell_part_idx_d, &
   skip(2) = skip2
   skip(3) = skip3
 
-  ! Per-lane CIC weights (unconditionally evaluated so the wx/wy/wz registers
-  ! are well-defined for invalid lanes; mp_i = 0 makes the contribution 0).
+  ! Invalid lanes keep mp_i = 0 so any weight they later form contributes 0.
   mp_i = 0d0
   frac = 0d0
   if (valid_lane) then
@@ -1067,9 +1022,8 @@ attributes(global) subroutine cic_part_warp_kernel(cell_part_idx_d, &
      wz(2) = max(0d0, frac(3) - 0.5d0)
   endif
 
-  ! Warp-uniformity test. Reference (icell, igrid) = lane 0's. Each lane
-  ! reports match=1 (invalid lanes match trivially since they contribute 0).
-  ! XOR butterfly all-reduces the count into every lane.
+  ! Reference cell = lane 0's; XOR butterfly all-reduces the per-lane
+  ! match count so every lane sees the same n_match.
   ref_icell = __shfl(icell_src_lane, 0)
   ref_igrid = __shfl(igrid_src_lane, 0)
   match_int = 1
@@ -1083,7 +1037,7 @@ attributes(global) subroutine cic_part_warp_kernel(cell_part_idx_d, &
   n_match = n_match + __shfl_xor(n_match, 8)
   n_match = n_match + __shfl_xor(n_match, 16)
 
-  ! Box / hash offsets at level (ilevel+1) -- the deposit level.
+  ! Box bounds live at the deposit level (ilevel+1).
   box_min = 0
   box_max = 0
   do idim = 1, ndim
@@ -1094,7 +1048,7 @@ attributes(global) subroutine cic_part_warp_kernel(cell_part_idx_d, &
   hkey_offset = key_off_d(ilevel)
 
   if (n_match == warpsize .and. ref_igrid /= 0) then
-     ! ---------------- Uniform warp: lane-0 hash + warp reduction ----------------
+     ! Uniform warp: lane-0 hash, warp-reduce, one atomicAdd per dest.
      ii_src = 0
      do idim = 1, ndim
         ii_src(idim) = mod((ref_icell - 1) / (2**(idim-1)), 2)
@@ -1140,7 +1094,6 @@ attributes(global) subroutine cic_part_warp_kernel(cell_part_idx_d, &
               dst_igrid_lane = hash_get(hash_key_d, hash_val_d, hash_size_d, key)
            endif
         endif
-        ! All lanes pick up lane 0's destination.
         dst_igrid_lane = __shfl(dst_igrid_lane, 0)
         dst_icell_lane = __shfl(dst_icell_lane, 0)
 
@@ -1174,7 +1127,7 @@ attributes(global) subroutine cic_part_warp_kernel(cell_part_idx_d, &
         endif
      end do
   else
-     ! ---------------- Mixed warp: per-lane hash + per-lane atomicAdd ----------------
+     ! Mixed warp: per-lane hash + per-lane atomicAdd.
      src_full_ckey = 0
      if (valid_lane) then
         ii_src = 0
@@ -1242,17 +1195,12 @@ attributes(global) subroutine cic_part_warp_kernel(cell_part_idx_d, &
   endif
 end subroutine cic_part_warp_kernel
 
-!> Host CIC dispatcher: particle-parallel deposit with warp-coarsened
-!> atomics. Pipeline: build cell-list at level (ilevel+1) (counts, heads,
-!> idx, per-particle source-cell map) so cell_part_idx is sorted by source
-!> cell; at the coarsest active level run the GPU multipole_q reduction;
-!> then ONE launch of cic_part_warp_kernel over (num_placed + 255) / 256
-!> blocks of 256 threads. Each warp owns 32 contiguous slots of
-!> cell_part_idx; warps inside a single large cell pick the uniform path
-!> (lane-0 hash_get + warp_reduce_sum + 1 atomicAdd per dest k), and warps
-!> straddling a cell boundary fall back to per-lane hash + per-lane
-!> atomicAdd inside the same kernel. CIC weights and the 27-point stencil
-!> are unchanged.
+!> Host CIC dispatcher. Pipeline:
+!>   1. Build cell-list at level (ilevel+1) so cell_part_idx is sorted by
+!>      source cell.
+!>   2. At the coarsest active level, run the multipole_q reduction.
+!>   3. ONE launch of cic_part_warp_kernel over (num_placed + 255) / 256
+!>      blocks of 256 threads.
 subroutine gpu_cic_part(sim, ilevel, rtype)
   use nvtx
   use ramses_commons, only: ramses_t
@@ -1278,8 +1226,7 @@ subroutine gpu_cic_part(sim, ilevel, rtype)
      return
   endif
 
-  ! GPU multipole_q reduction at the coarsest active level.
-  ! Slice is [1, sim%p%npart] to match host semantics in cic_part.
+  ! Slice [1, sim%p%npart] matches host semantics in cic_part.
   if (ilevel == sim%r%levelmin .and. sim%p%npart > 0) then
      leading = size(xp, 1)
      multipole_q_dev = 0d0
@@ -1314,7 +1261,8 @@ subroutine gpu_cic_part(sim, ilevel, rtype)
   num_grids   = size(cell_part_count, 2)
   total_cells = twotondim * num_grids
 
-  ! Build cell-list at level (ilevel+1).
+  ! Cell-list at level (ilevel+1): reset counts, count + cache source map,
+  ! exclusive scan into heads, place ipart into sorted slots.
   num_threads = 256
   num_blocks  = (total_cells + num_threads - 1) / num_threads
   call reset_cell_part_count_kernel<<<num_blocks, num_threads>>>(cell_part_count, num_grids)
@@ -1349,17 +1297,9 @@ subroutine gpu_cic_part(sim, ilevel, rtype)
        head_idx, num_parts)
   call GPU_Error_Check("gpu/gpu_part.cuf", 0)
 
-  ! num_placed = total_sum_unused: count of particles written into
-  ! cell_part_idx (== num_parts minus any OOD particles, which place_cell_*
-  ! drops). Active-cell compaction is no longer needed -- the deposit is
-  ! particle-parallel, not source-cell-parallel.
+  ! total_sum_unused is the count of slots place_cell_part_idx wrote
+  ! (num_parts minus OOD drops).
   if (total_sum_unused > 0) then
-     ! Particle-parallel deposit. 256 threads / 8 warps per block, each warp
-     ! owns 32 contiguous slots of cell_part_idx (sorted, so warps inside a
-     ! large cell are uniform). Block count is ~num_placed/256 -- ~8k at L7
-     ! vs. ~2M blocks under the old per-source-cell layout. One launch fuses
-     ! all 27 stencil directions; race-safety comes from atomicAdd on
-     ! rho_d / nref_d. CIC physics unchanged.
      deposit_block_size = 256
      deposit_num_blocks = (total_sum_unused + deposit_block_size - 1) / deposit_block_size
      call cic_part_warp_kernel<<<deposit_num_blocks, deposit_block_size>>>(&
@@ -1374,7 +1314,7 @@ subroutine gpu_cic_part(sim, ilevel, rtype)
 
   call nvtxEndRange()
 end subroutine gpu_cic_part
-!> Kick/drift: CIC gather from f, position update.
+
 attributes(device) subroutine analytic_gravity_part(x, ff, dx_loc, gravity_type, &
      gp1, gp2, gp3, gp4, gp5, q1, q2, q3, q4)
   real(kind=8) :: x(1:3), ff(1:3)
@@ -1528,13 +1468,9 @@ attributes(device) subroutine gather_cic_force_part(f_d, hash_key_d, hash_val_d,
            offset = key_off_d(grid_level)
            key = offset + ix8 + iy8*nx + iz8*nx*nx
            igrid = hash_get(hash_key_d, hash_val_d, hash_size_d, key)
-           ! Reject missing octs (igrid==0) and cache/ghost octs (igrid>ngridmax).
-           ! The hash table also resolves to cache octs created in make_cache_octs,
-           ! but those carry only parent-level-injected f and are not updated by
-           ! gpu_gradient_phi. CPU get_grid under WITHOUTMPI returns child=0 for
-           ! the same in-domain misses, triggering the coarse fallback. Mirror that
-           ! semantics here so GPU and CPU agree on fine-pass validity at AMR
-           ! refinement boundaries. (Same igrid<=ngridmax convention used in gpu_mg.cuf.)
+           ! Skip cache/ghost octs (igrid > ngridmax): gpu_gradient_phi does
+           ! not update them, so f there is stale. CPU mirrors this by
+           ! returning child=0 in get_grid; same convention as gpu_mg.cuf.
            if (igrid == 0 .or. igrid > ngridmax_d) then
               ok_level = .false.
               cycle
@@ -1755,7 +1691,7 @@ subroutine gpu_kick_drift_part(sim, ilevel, action_part)
      return
   endif
 
-  ! Non-periodic coarse-particle gravana pre-loop (multipole-based).
+  ! Non-periodic coarse particles get a multipole-based analytic kick.
   any_nonperiodic = any(.not. sim%r%periodic(1:ndim))
   if (ilevel == sim%r%levelmin .and. any_nonperiodic) then
      head_coarse = sim%p%headp(ilevel-1)
@@ -1790,7 +1726,6 @@ subroutine gpu_kick_drift_part(sim, ilevel, action_part)
      return
   endif
 
-  ! Analytic gravity: copy host f to device before kick.
   if (sim%r%gravity_type > 0) then
      f = sim%m%f
      call GPU_Error_Check("gpu/gpu_part.cuf", 0)

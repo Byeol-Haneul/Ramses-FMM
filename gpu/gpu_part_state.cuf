@@ -1,57 +1,39 @@
-!> DM particle device state (allocatables, scratch, time-step ladders).
-!>
-!> Owns every per-particle / per-cell device array touched by `module
-!> part_device` (kick, sort, split, CIC) and by `gpu_manager` (H<->D copy in
-!> r_set_grid_device / gpu_to_host_part). 
-
+!> Device-resident DM particle state.
 module gpu_part_state
   use amr_parameters, only: ndim, twotondim, threetondim, dp, i8b, MAXLEVEL
   use cudafor
   implicit none
 
-  !> Particle time-step ladders (mirrored from sim%g%dtnew / dtold per kick).
   real(kind=8), device, dimension(1:MAXLEVEL) :: dtnew_part, dtold_part
 
-  !> Particle arrays on device (DM; allocated in r_set_grid_device).
   real(kind=dp),   device, allocatable, dimension(:,:) :: xp, vp
   real(kind=dp),   device, allocatable, dimension(:)   :: mp
   integer(kind=4), device, allocatable, dimension(:)   :: levelp
   integer(kind=4), device, allocatable, dimension(:)   :: sortp
   integer(i8b),    device, allocatable, dimension(:)   :: idp
-  !> Optional DM particle fields: device array is allocated iff the host
-  !> counterpart is allocated (mirrors split_part's gating in rho_fine).
-  !> `size_p` mirrors host `p%size`; renamed to avoid shadowing intrinsic size().
+  !> `size_p` renamed from host `p%size` to avoid shadowing intrinsic size().
   real(kind=dp),   device, allocatable, dimension(:,:) :: jp
   real(kind=dp),   device, allocatable, dimension(:)   :: zp, tp, tm, size_p, charge
   integer(i8b),    device, allocatable, dimension(:)   :: idm
   integer(kind=4), device, allocatable, dimension(:)   :: idt
 
-  !> Per-particle scratch (split/sort/CIC)
   integer(kind=8), device, allocatable, dimension(:) :: hkey_part
   integer(kind=4), device, allocatable, dimension(:) :: bucket_part
 
-  !> Per-cell particle lists for the CIC segmented reduction. count/head are
-  !> rank-2 (twotondim, ngridmax+ncachemax) keyed by level-(ilevel+1) source
-  !> cell (icell, igrid); cell_part_idx is the flat slot->ipart list. The
-  !> per-particle source map (src_icell_part / src_igrid_part) is populated
-  !> once and reused across the threetondim outer iterations.
   integer(kind=4), device, allocatable, dimension(:,:) :: cell_part_count
   integer(kind=4), device, allocatable, dimension(:,:) :: cell_part_head
   integer(kind=4), device, allocatable, dimension(:)   :: cell_part_idx
   integer(kind=4), device, allocatable, dimension(:)   :: src_icell_part
   integer(kind=4), device, allocatable, dimension(:)   :: src_igrid_part
 
-  !> Device accumulator for the levelmin multipole reduction.
-  !> Length ndim+1: q(1)=sum(mp), q(idim+1)=sum(mp*xp).
   real(kind=8), device, allocatable, dimension(:) :: multipole_q_dev
 
-  !> Gather/scatter scratch. xp_swap is 1D (npart_max) double-precision and
-  !> serves every per-column dp permutation in gpu_split_part (one column of
-  !> xp/vp/jp at a time, plus the rank-1 mp/zp/tp/tm/size_p/charge — none
-  !> live simultaneously, so a single scratch suffices). bucket_part doubles
-  !> as the i4 scratch (dead during this phase). idp_swap is the i8b scratch
-  !> for idp/idm; cannot reuse hkey_part since i8b may be kind=4 (default)
-  !> while hkey_part is always kind=8 (Hilbert keys need 64 bits).
+  !> xp_swap is the sole dp gather/scatter scratch -- reused across every
+  !> per-column dp permutation in gpu_split_part (xp/vp/jp columns and the
+  !> rank-1 mp/zp/tp/tm/size_p/charge fields, none simultaneously live).
+  !> bucket_part doubles as the i4 scratch in the same chain (bucketing
+  !> finishes before gather/scatter starts). idp_swap stays separate: i8b
+  !> may be kind=4 (default) while hkey_part is unconditionally kind=8.
   real(kind=dp),   device, allocatable, dimension(:)   :: xp_swap
   integer(i8b),    device, allocatable, dimension(:)   :: idp_swap
 
