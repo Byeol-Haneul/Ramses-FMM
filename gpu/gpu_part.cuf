@@ -1,0 +1,1720 @@
+!> DM particle CUDA kernels.
+module part_device
+  use amr_parameters, only: ndim, twotondim, threetondim, dp, i8b, MAXLEVEL
+  use oct_commons, only: oct
+  use gpu_utils
+  use cudafor
+  use gpu_part_state, only: &
+       xp, vp, mp, levelp, sortp, idp, &
+       jp, zp, tp, tm, size_p, charge, idm, idt, &
+       hkey_part, bucket_part, &
+       cell_part_count, cell_part_head, cell_part_idx, &
+       src_part, &
+       multipole_q_dev, &
+       xp_swap, idp_swap, &
+       dtnew_part, dtold_part
+  use gpu_runner, only: &
+       grid, hash_key, hash_val, ckey_max, key_off, &
+       box_ckey_min, box_ckey_max, box_size, periodic, &
+       rho, nref, f, &
+       swap_local, swap_global, prefix_sum, &
+       partial_sums_0, partial_sums_1, partial_sums_2, &
+       gpu_scan
+  implicit none
+
+  ! Local hash/hilbert/reduce includes.
+  private :: mix64, fnv64, fnv32, hash_set, hash_get, hash_update, hash_free
+  private :: hilbert_key
+  private :: warp_reduce_int_sum, block_reduce_int_sum
+  private :: warp_reduce_sum,     block_reduce_sum
+  private :: warp_reduce_min,     block_reduce_min
+  private :: warp_reduce_max,     block_reduce_max
+
+contains
+
+  include 'gpu_hash.cuf'
+  include 'gpu_hilbert.cuf'
+  include 'gpu_reduce.cuf'
+
+!> Domain-test partition for the levelmin-1 boundary range.
+attributes(global) subroutine bucket_part_boundary(xp, bucket_part, &
+     box_size_d, periodic_d, head_idx, num_parts, leading)
+  integer(kind=4), intent(in), value :: leading
+  real(kind=dp), device :: xp(*)
+  integer(kind=4), device :: bucket_part(*)
+  real(kind=8), device :: box_size_d(1:3)
+  logical, device :: periodic_d(1:3)
+  integer(kind=4), intent(in), value :: head_idx
+  integer(kind=4), intent(in), value :: num_parts
+
+  integer :: thread_idx, block_idx, idx, ipart, idim
+  logical :: in_domain
+  real(kind=8) :: x_idim
+
+  thread_idx = threadIdx%x - 1
+  block_idx  = blockIdx%x  - 1
+  idx = thread_idx + block_idx * blockDim%x
+  if (idx >= num_parts) return
+  ipart = head_idx + idx
+
+  in_domain = .true.
+  do idim = 1, ndim
+     if (.not. periodic_d(idim)) then
+        x_idim = xp(ipart + (idim-1)*leading)
+        if (x_idim < 0d0 .or. x_idim >= box_size_d(idim)) in_domain = .false.
+     endif
+  end do
+
+  if (in_domain) then
+     bucket_part(ipart) = 1
+  else
+     bucket_part(ipart) = 0
+  endif
+end subroutine bucket_part_boundary
+
+!> Bucket 0/1 from hash lookup and leaf/refined test.
+attributes(global) subroutine bucket_part_general(xp, bucket_part, &
+     grid, hash_key_d, hash_val_d, hash_size_d, ckey_max_d, key_off_d, &
+     skip1, skip2, skip3, dx_loc, ilevel, head_idx, num_parts, leading)
+  integer(kind=4), intent(in), value :: leading
+  real(kind=dp), device :: xp(*)
+  integer(kind=4), device :: bucket_part(*)
+  type(oct), device :: grid(*)
+  integer(kind=8), device :: hash_key_d(*)
+  integer(kind=4), device :: hash_val_d(*)
+  integer(kind=4), intent(in), value :: hash_size_d
+  integer(kind=4), device :: ckey_max_d(*)
+  integer(kind=8), device :: key_off_d(*)
+  real(kind=8), intent(in), value :: skip1, skip2, skip3
+  real(kind=8), intent(in), value :: dx_loc
+  integer(kind=4), intent(in), value :: ilevel
+  integer(kind=4), intent(in), value :: head_idx
+  integer(kind=4), intent(in), value :: num_parts
+
+  integer :: thread_idx, block_idx, idx, ipart, idim, igrid, icell
+  integer(kind=4) :: ix(1:3), ii(1:3)
+  integer(kind=8) :: ix8, iy8, iz8, nx, offset, key
+  real(kind=8) :: skip(1:3), x(1:3), xs, inv_dx_loc, inv_2dx_loc
+
+  thread_idx = threadIdx%x - 1
+  block_idx  = blockIdx%x  - 1
+  idx = thread_idx + block_idx * blockDim%x
+  if (idx >= num_parts) return
+  ipart = head_idx + idx
+
+  skip(1) = skip1
+  skip(2) = skip2
+  skip(3) = skip3
+  inv_dx_loc  = 1d0 / dx_loc
+  inv_2dx_loc = 0.5d0 * inv_dx_loc
+
+  ix = 0
+  do idim = 1, ndim
+     xs = xp(ipart + (idim-1)*leading) + skip(idim)
+     ix(idim) = floor(xs * inv_2dx_loc)
+  end do
+
+  ix8 = int(ix(1), kind=8)
+  iy8 = int(ix(2), kind=8)
+  iz8 = int(ix(3), kind=8)
+  nx  = int(ckey_max_d(ilevel), kind=8)
+  offset = key_off_d(ilevel)
+  key = offset + ix8 + iy8*nx + iz8*nx*nx
+
+  igrid = hash_get(hash_key_d, hash_val_d, hash_size_d, key)
+
+  if (igrid == 0) then
+     bucket_part(ipart) = 0
+     return
+  endif
+
+  do idim = 1, ndim
+     x(idim) = (xp(ipart + (idim-1)*leading) + skip(idim)) * inv_dx_loc
+     ii(idim) = int(x(idim) - 2*ix(idim))
+  end do
+  icell = 1
+  do idim = 1, ndim
+     icell = icell + ii(idim) * (2**(idim-1))
+  end do
+
+  if (.not. grid(igrid)%refined(icell)) then
+     bucket_part(ipart) = 0
+  else
+     bucket_part(ipart) = 1
+  endif
+end subroutine bucket_part_general
+
+attributes(global) subroutine init_prefix_sum_part(bucket_part, prefix_sum_d, &
+     head_idx, num_parts)
+  integer(kind=4), device :: bucket_part(*)
+  integer(kind=4), device :: prefix_sum_d(*)
+  integer(kind=4), intent(in), value :: head_idx
+  integer(kind=4), intent(in), value :: num_parts
+
+  integer :: thread_idx, block_idx, idx
+  thread_idx = threadIdx%x - 1
+  block_idx  = blockIdx%x  - 1
+  idx = thread_idx + block_idx * blockDim%x
+  if (idx >= num_parts) return
+  idx = head_idx + idx
+  prefix_sum_d(idx) = bucket_part(idx)
+end subroutine init_prefix_sum_part
+
+!> prefix_sum of bucket_part(sortp); last value is n_fine.
+attributes(global) subroutine init_prefix_sum_part_hilbert_fine( &
+     bucket_part_d, sortp_d, prefix_sum_d, head_idx, num_parts)
+  integer(kind=4), device :: bucket_part_d(*)
+  integer(kind=4), device :: sortp_d(*)
+  integer(kind=4), device :: prefix_sum_d(*)
+  integer(kind=4), intent(in), value :: head_idx
+  integer(kind=4), intent(in), value :: num_parts
+
+  integer :: thread_idx, block_idx, idx, ipart
+  thread_idx = threadIdx%x - 1
+  block_idx  = blockIdx%x  - 1
+  idx = thread_idx + block_idx * blockDim%x
+  if (idx >= num_parts) return
+  idx = head_idx + idx
+  ipart = sortp_d(idx)
+  prefix_sum_d(idx) = bucket_part_d(ipart)
+end subroutine init_prefix_sum_part_hilbert_fine
+
+!> Hilbert coarse/fine partition into swap_global (one writer per slot).
+attributes(global) subroutine write_swap_global_hilbert_partition( &
+     swap_global_d, bucket_part_d, sortp_d, prefix_sum_d, &
+     head_idx, num_parts, n_coarse)
+  integer(kind=4), device :: swap_global_d(*)
+  integer(kind=4), device :: bucket_part_d(*)
+  integer(kind=4), device :: sortp_d(*)
+  integer(kind=4), device :: prefix_sum_d(*)
+  integer(kind=4), intent(in), value :: head_idx
+  integer(kind=4), intent(in), value :: num_parts
+  integer(kind=4), intent(in), value :: n_coarse
+
+  integer :: thread_idx, block_idx, idx, h, ipart, seen, fine_rank, coarse_rank
+  thread_idx = threadIdx%x - 1
+  block_idx  = blockIdx%x  - 1
+  idx = thread_idx + block_idx * blockDim%x
+  if (idx >= num_parts) return
+  h = head_idx + idx
+  ipart = sortp_d(h)
+  fine_rank = prefix_sum_d(h)
+  seen = h - head_idx + 1
+  coarse_rank = seen - fine_rank
+  if (bucket_part_d(ipart) == 0) then
+     swap_global_d(head_idx + coarse_rank - 1) = ipart
+  else
+     swap_global_d(head_idx + n_coarse + fine_rank - 1) = ipart
+  endif
+end subroutine write_swap_global_hilbert_partition
+
+!> Column gather/scatter via xp_swap.
+attributes(global) subroutine sort_gather_part_real_col(buf, src, swap_global_d, &
+     head_idx, num_parts, leading, idim)
+  integer(kind=4), intent(in), value :: leading
+  integer(kind=4), intent(in), value :: idim
+  real(kind=dp), device :: buf(*)
+  real(kind=dp), device :: src(*)
+  integer(kind=4), device :: swap_global_d(*)
+  integer(kind=4), intent(in), value :: head_idx
+  integer(kind=4), intent(in), value :: num_parts
+
+  integer :: thread_idx, block_idx, idx, old_idx, off
+  thread_idx = threadIdx%x - 1
+  block_idx  = blockIdx%x  - 1
+  idx = thread_idx + block_idx * blockDim%x
+  if (idx >= num_parts) return
+  idx = head_idx + idx
+  old_idx = swap_global_d(idx)
+  off = (idim - 1) * leading
+  buf(idx) = src(old_idx + off)
+end subroutine sort_gather_part_real_col
+
+attributes(global) subroutine sort_scatter_part_real_col(dst, buf, &
+     head_idx, num_parts, leading, idim)
+  integer(kind=4), intent(in), value :: leading
+  integer(kind=4), intent(in), value :: idim
+  real(kind=dp), device :: dst(*)
+  real(kind=dp), device :: buf(*)
+  integer(kind=4), intent(in), value :: head_idx
+  integer(kind=4), intent(in), value :: num_parts
+
+  integer :: thread_idx, block_idx, idx, off
+  thread_idx = threadIdx%x - 1
+  block_idx  = blockIdx%x  - 1
+  idx = thread_idx + block_idx * blockDim%x
+  if (idx >= num_parts) return
+  idx = head_idx + idx
+  off = (idim - 1) * leading
+  dst(idx + off) = buf(idx)
+end subroutine sort_scatter_part_real_col
+
+attributes(global) subroutine sort_gather_part_real_1d(buf, src, swap_global_d, &
+     head_idx, num_parts)
+  real(kind=dp), device :: buf(*)
+  real(kind=dp), device :: src(*)
+  integer(kind=4), device :: swap_global_d(*)
+  integer(kind=4), intent(in), value :: head_idx
+  integer(kind=4), intent(in), value :: num_parts
+
+  integer :: thread_idx, block_idx, idx, old_idx
+  thread_idx = threadIdx%x - 1
+  block_idx  = blockIdx%x  - 1
+  idx = thread_idx + block_idx * blockDim%x
+  if (idx >= num_parts) return
+  idx = head_idx + idx
+  old_idx = swap_global_d(idx)
+  buf(idx) = src(old_idx)
+end subroutine sort_gather_part_real_1d
+
+attributes(global) subroutine sort_scatter_part_real_1d(dst, buf, head_idx, num_parts)
+  real(kind=dp), device :: dst(*)
+  real(kind=dp), device :: buf(*)
+  integer(kind=4), intent(in), value :: head_idx
+  integer(kind=4), intent(in), value :: num_parts
+
+  integer :: thread_idx, block_idx, idx
+  thread_idx = threadIdx%x - 1
+  block_idx  = blockIdx%x  - 1
+  idx = thread_idx + block_idx * blockDim%x
+  if (idx >= num_parts) return
+  idx = head_idx + idx
+  dst(idx) = buf(idx)
+end subroutine sort_scatter_part_real_1d
+
+attributes(global) subroutine sort_gather_part_i8_1d(buf, src, swap_global_d, &
+     head_idx, num_parts)
+  integer(i8b),    device :: buf(*)
+  integer(i8b),    device :: src(*)
+  integer(kind=4), device :: swap_global_d(*)
+  integer(kind=4), intent(in), value :: head_idx
+  integer(kind=4), intent(in), value :: num_parts
+
+  integer :: thread_idx, block_idx, idx, old_idx
+  thread_idx = threadIdx%x - 1
+  block_idx  = blockIdx%x  - 1
+  idx = thread_idx + block_idx * blockDim%x
+  if (idx >= num_parts) return
+  idx = head_idx + idx
+  old_idx = swap_global_d(idx)
+  buf(idx) = src(old_idx)
+end subroutine sort_gather_part_i8_1d
+
+attributes(global) subroutine sort_scatter_part_i8_1d(dst, buf, head_idx, num_parts)
+  integer(i8b),    device :: dst(*)
+  integer(i8b),    device :: buf(*)
+  integer(kind=4), intent(in), value :: head_idx
+  integer(kind=4), intent(in), value :: num_parts
+
+  integer :: thread_idx, block_idx, idx
+  thread_idx = threadIdx%x - 1
+  block_idx  = blockIdx%x  - 1
+  idx = thread_idx + block_idx * blockDim%x
+  if (idx >= num_parts) return
+  idx = head_idx + idx
+  dst(idx) = buf(idx)
+end subroutine sort_scatter_part_i8_1d
+
+attributes(global) subroutine sort_gather_part_i4_1d(buf, src, swap_global_d, &
+     head_idx, num_parts)
+  integer(kind=4), device :: buf(*)
+  integer(kind=4), device :: src(*)
+  integer(kind=4), device :: swap_global_d(*)
+  integer(kind=4), intent(in), value :: head_idx
+  integer(kind=4), intent(in), value :: num_parts
+
+  integer :: thread_idx, block_idx, idx, old_idx
+  thread_idx = threadIdx%x - 1
+  block_idx  = blockIdx%x  - 1
+  idx = thread_idx + block_idx * blockDim%x
+  if (idx >= num_parts) return
+  idx = head_idx + idx
+  old_idx = swap_global_d(idx)
+  buf(idx) = src(old_idx)
+end subroutine sort_gather_part_i4_1d
+
+attributes(global) subroutine sort_scatter_part_i4_1d(dst, buf, head_idx, num_parts)
+  integer(kind=4), device :: dst(*)
+  integer(kind=4), device :: buf(*)
+  integer(kind=4), intent(in), value :: head_idx
+  integer(kind=4), intent(in), value :: num_parts
+
+  integer :: thread_idx, block_idx, idx
+  thread_idx = threadIdx%x - 1
+  block_idx  = blockIdx%x  - 1
+  idx = thread_idx + block_idx * blockDim%x
+  if (idx >= num_parts) return
+  idx = head_idx + idx
+  dst(idx) = buf(idx)
+end subroutine sort_scatter_part_i4_1d
+
+!> Grow scan buffers to at least min_capacity.
+subroutine ensure_scan_capacity_part(min_capacity)
+  integer(kind=4), intent(in) :: min_capacity
+  integer(kind=4), parameter :: block_size = 256
+  integer(kind=4) :: gs0, gs1, gs2
+
+  if (min_capacity <= 0) return
+
+  if (allocated(swap_local)) then
+     if (size(swap_local) < min_capacity) then
+        deallocate(swap_local)
+        allocate(swap_local(1:min_capacity))
+     endif
+  else
+     allocate(swap_local(1:min_capacity))
+  endif
+
+  if (allocated(swap_global)) then
+     if (size(swap_global) < min_capacity) then
+        deallocate(swap_global)
+        allocate(swap_global(1:min_capacity))
+     endif
+  else
+     allocate(swap_global(1:min_capacity))
+  endif
+
+  if (allocated(prefix_sum)) then
+     if (size(prefix_sum) < min_capacity) then
+        deallocate(prefix_sum)
+        allocate(prefix_sum(1:min_capacity))
+     endif
+  else
+     allocate(prefix_sum(1:min_capacity))
+  endif
+
+  gs0 = max(1, (min_capacity + block_size - 1) / block_size)
+  gs1 = max(1, (gs0 + block_size - 1) / block_size)
+  gs2 = max(1, (gs1 + block_size - 1) / block_size)
+
+  if (allocated(partial_sums_0)) then
+     if (size(partial_sums_0) < gs0) then
+        deallocate(partial_sums_0)
+        allocate(partial_sums_0(1:gs0))
+     endif
+  else
+     allocate(partial_sums_0(1:gs0))
+  endif
+  if (allocated(partial_sums_1)) then
+     if (size(partial_sums_1) < gs1) then
+        deallocate(partial_sums_1)
+        allocate(partial_sums_1(1:gs1))
+     endif
+  else
+     allocate(partial_sums_1(1:gs1))
+  endif
+  if (allocated(partial_sums_2)) then
+     if (size(partial_sums_2) < gs2) then
+        deallocate(partial_sums_2)
+        allocate(partial_sums_2(1:gs2))
+     endif
+  else
+     allocate(partial_sums_2(1:gs2))
+  endif
+end subroutine ensure_scan_capacity_part
+
+
+!> GPU split_part.
+subroutine gpu_split_part(sim, ilevel)
+  use nvtx
+  use ramses_commons, only: ramses_t
+  use refine_device, only: init_global_swap_table_kernel, &
+       compute_local_swap_table, update_global_swap_table
+  type(ramses_t), intent(inout) :: sim
+  integer, intent(in) :: ilevel
+
+  integer(kind=4) :: head_idx, num_parts, n_fine, n_coarse, ilev, leading
+  integer(kind=4), device :: n_fine_dev
+  integer :: num_threads, num_blocks, idim
+  real(kind=8) :: dx_loc, skip1, skip2, skip3
+
+  call nvtxStartRange("gpu_split_part", color=4) ! purple
+
+  head_idx = sim%p%headp(ilevel)
+  num_parts = sim%p%tailp(sim%r%nlevelmax) - head_idx + 1
+
+  if (num_parts <= 0) then
+        sim%p%tailp(ilevel) = sim%p%headp(ilevel) - 1
+     do ilev = ilevel + 1, sim%r%nlevelmax
+        sim%p%headp(ilev) = sim%p%tailp(ilevel) + 1
+        sim%p%tailp(ilev) = sim%p%npart
+     end do
+     call nvtxEndRange()
+     return
+  endif
+
+  if (.not. allocated(xp)) then
+     call nvtxEndRange()
+     return
+  endif
+
+  leading = size(xp, 1)
+
+  call ensure_scan_capacity_part(leading)
+
+  num_threads = 128
+  num_blocks  = (num_parts + num_threads - 1) / num_threads
+
+  if (ilevel == sim%r%levelmin - 1) then
+     ! levelmin-1: slot partition (sortp not valid yet).
+     call bucket_part_boundary<<<num_blocks, num_threads>>>(xp, bucket_part, &
+          box_size, periodic, head_idx, num_parts, leading)
+     call GPU_Error_Check("gpu/gpu_part.cuf", 0)
+
+     call init_global_swap_table_kernel<<<num_blocks, num_threads>>>(swap_global, &
+          head_idx, num_parts)
+     call init_prefix_sum_part<<<num_blocks, num_threads>>>(bucket_part, prefix_sum, &
+          head_idx, num_parts)
+     call gpu_scan(head_idx, num_parts, n_fine_dev)
+     n_fine = n_fine_dev
+     n_coarse = num_parts - n_fine
+     call compute_local_swap_table<<<num_blocks, num_threads>>>(swap_local, &
+          swap_global, prefix_sum, head_idx, num_parts)
+     call update_global_swap_table<<<num_blocks, num_threads>>>(swap_global, &
+          swap_local, head_idx, num_parts)
+     call GPU_Error_Check("gpu/gpu_part.cuf", 0)
+  else
+     ! Hilbert partition via sortp.
+     dx_loc = sim%r%boxlen / 2d0**ilevel
+     skip1 = 0d0
+     skip2 = 0d0
+     skip3 = 0d0
+     if (ndim >= 1) skip1 = sim%m%skip(1)
+     if (ndim >= 2) skip2 = sim%m%skip(2)
+     if (ndim >= 3) skip3 = sim%m%skip(3)
+     call bucket_part_general<<<num_blocks, num_threads>>>(xp, bucket_part, &
+          grid, hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, &
+          skip1, skip2, skip3, dx_loc, ilevel, head_idx, num_parts, &
+          leading)
+     call GPU_Error_Check("gpu/gpu_part.cuf", 0)
+
+     call init_prefix_sum_part_hilbert_fine<<<num_blocks, num_threads>>>( &
+          bucket_part, sortp, prefix_sum, head_idx, num_parts)
+     call gpu_scan(head_idx, num_parts, n_fine_dev)
+     n_fine = n_fine_dev
+     n_coarse = num_parts - n_fine
+     call write_swap_global_hilbert_partition<<<num_blocks, num_threads>>>( &
+          swap_global, bucket_part, sortp, prefix_sum, &
+          head_idx, num_parts, n_coarse)
+     call GPU_Error_Check("gpu/gpu_part.cuf", 0)
+  endif
+
+  do idim = 1, ndim
+     call sort_gather_part_real_col<<<num_blocks, num_threads>>>(xp_swap, xp, &
+          swap_global, head_idx, num_parts, leading, idim)
+     call sort_scatter_part_real_col<<<num_blocks, num_threads>>>(xp, xp_swap, &
+          head_idx, num_parts, leading, idim)
+  end do
+
+  do idim = 1, ndim
+     call sort_gather_part_real_col<<<num_blocks, num_threads>>>(xp_swap, vp, &
+          swap_global, head_idx, num_parts, leading, idim)
+     call sort_scatter_part_real_col<<<num_blocks, num_threads>>>(vp, xp_swap, &
+          head_idx, num_parts, leading, idim)
+  end do
+
+  call sort_gather_part_real_1d<<<num_blocks, num_threads>>>(xp_swap, mp, &
+       swap_global, head_idx, num_parts)
+  call sort_scatter_part_real_1d<<<num_blocks, num_threads>>>(mp, xp_swap, &
+       head_idx, num_parts)
+
+  call sort_gather_part_i4_1d<<<num_blocks, num_threads>>>(bucket_part, levelp, &
+       swap_global, head_idx, num_parts)
+  call sort_scatter_part_i4_1d<<<num_blocks, num_threads>>>(levelp, bucket_part, &
+       head_idx, num_parts)
+
+  call sort_gather_part_i8_1d<<<num_blocks, num_threads>>>(idp_swap, idp, &
+       swap_global, head_idx, num_parts)
+  call sort_scatter_part_i8_1d<<<num_blocks, num_threads>>>(idp, idp_swap, &
+       head_idx, num_parts)
+
+  if (allocated(jp)) then
+     do idim = 1, ndim
+        call sort_gather_part_real_col<<<num_blocks, num_threads>>>(xp_swap, jp, &
+             swap_global, head_idx, num_parts, leading, idim)
+        call sort_scatter_part_real_col<<<num_blocks, num_threads>>>(jp, xp_swap, &
+             head_idx, num_parts, leading, idim)
+     end do
+  endif
+  if (allocated(zp)) then
+     call sort_gather_part_real_1d<<<num_blocks, num_threads>>>(xp_swap, zp, &
+          swap_global, head_idx, num_parts)
+     call sort_scatter_part_real_1d<<<num_blocks, num_threads>>>(zp, xp_swap, &
+          head_idx, num_parts)
+  endif
+  if (allocated(tp)) then
+     call sort_gather_part_real_1d<<<num_blocks, num_threads>>>(xp_swap, tp, &
+          swap_global, head_idx, num_parts)
+     call sort_scatter_part_real_1d<<<num_blocks, num_threads>>>(tp, xp_swap, &
+          head_idx, num_parts)
+  endif
+  if (allocated(tm)) then
+     call sort_gather_part_real_1d<<<num_blocks, num_threads>>>(xp_swap, tm, &
+          swap_global, head_idx, num_parts)
+     call sort_scatter_part_real_1d<<<num_blocks, num_threads>>>(tm, xp_swap, &
+          head_idx, num_parts)
+  endif
+  if (allocated(size_p)) then
+     call sort_gather_part_real_1d<<<num_blocks, num_threads>>>(xp_swap, size_p, &
+          swap_global, head_idx, num_parts)
+     call sort_scatter_part_real_1d<<<num_blocks, num_threads>>>(size_p, xp_swap, &
+          head_idx, num_parts)
+  endif
+  if (allocated(charge)) then
+     call sort_gather_part_real_1d<<<num_blocks, num_threads>>>(xp_swap, charge, &
+          swap_global, head_idx, num_parts)
+     call sort_scatter_part_real_1d<<<num_blocks, num_threads>>>(charge, xp_swap, &
+          head_idx, num_parts)
+  endif
+  if (allocated(idm)) then
+     call sort_gather_part_i8_1d<<<num_blocks, num_threads>>>(idp_swap, idm, &
+          swap_global, head_idx, num_parts)
+     call sort_scatter_part_i8_1d<<<num_blocks, num_threads>>>(idm, idp_swap, &
+          head_idx, num_parts)
+  endif
+  if (allocated(idt)) then
+     call sort_gather_part_i4_1d<<<num_blocks, num_threads>>>(bucket_part, idt, &
+          swap_global, head_idx, num_parts)
+     call sort_scatter_part_i4_1d<<<num_blocks, num_threads>>>(idt, bucket_part, &
+          head_idx, num_parts)
+  endif
+  call GPU_Error_Check("gpu/gpu_part.cuf", 0)
+
+  sim%p%tailp(ilevel) = sim%p%headp(ilevel) + n_coarse - 1
+  do ilev = ilevel + 1, sim%r%nlevelmax
+     sim%p%headp(ilev) = sim%p%tailp(ilevel) + 1
+     sim%p%tailp(ilev) = sim%p%npart
+  end do
+
+  call nvtxEndRange()
+end subroutine gpu_split_part
+
+attributes(global) subroutine compute_hkey_part_kernel(xp, hkey_part_d, &
+     skip1, skip2, skip3, dx_inv, head_idx, num_parts, leading, level)
+  integer(kind=4), intent(in), value :: leading
+  real(kind=dp),   device :: xp(*)
+  integer(kind=8), device :: hkey_part_d(*)
+  real(kind=8), intent(in), value :: skip1, skip2, skip3
+  real(kind=8), intent(in), value :: dx_inv
+  integer(kind=4), intent(in), value :: head_idx
+  integer(kind=4), intent(in), value :: num_parts
+  integer(kind=4), intent(in), value :: level
+
+  integer :: thread_idx, block_idx, idx, ipart, idim
+  integer(kind=4) :: ix(1:ndim)
+  real(kind=8) :: skip(1:3), xs
+
+  thread_idx = threadIdx%x - 1
+  block_idx  = blockIdx%x  - 1
+  idx = thread_idx + block_idx * blockDim%x
+  if (idx >= num_parts) return
+  ipart = head_idx + idx
+
+  skip(1) = skip1
+  skip(2) = skip2
+  skip(3) = skip3
+
+  do idim = 1, ndim
+     xs = xp(ipart + (idim-1)*leading) + skip(idim)
+     ix(idim) = floor(xs * dx_inv)
+  end do
+
+  hkey_part_d(ipart) = hilbert_key(ix, level)
+end subroutine compute_hkey_part_kernel
+
+!> One radix digit of hkey_part for the LSD sort.
+attributes(global) subroutine init_prefix_sum_part_bit(hkey_part_d, swap_global_d, &
+     prefix_sum_d, head_idx, num_parts, ibit)
+  integer(kind=8), device :: hkey_part_d(*)
+  integer(kind=4), device :: swap_global_d(*)
+  integer(kind=4), device :: prefix_sum_d(*)
+  integer(kind=4), intent(in), value :: head_idx
+  integer(kind=4), intent(in), value :: num_parts
+  integer(kind=4), intent(in), value :: ibit
+
+  integer :: thread_idx, block_idx, idx, old_idx
+  thread_idx = threadIdx%x - 1
+  block_idx  = blockIdx%x  - 1
+  idx = thread_idx + block_idx * blockDim%x
+  if (idx >= num_parts) return
+  idx = head_idx + idx
+
+  old_idx = swap_global_d(idx)
+  prefix_sum_d(idx) = int(ibits(hkey_part_d(old_idx), ibit, 1), kind=4)
+end subroutine init_prefix_sum_part_bit
+
+attributes(global) subroutine write_sortp_part(sortp_d, swap_global_d, &
+     head_idx, num_parts)
+  integer(kind=4), device :: sortp_d(*)
+  integer(kind=4), device :: swap_global_d(*)
+  integer(kind=4), intent(in), value :: head_idx
+  integer(kind=4), intent(in), value :: num_parts
+
+  integer :: thread_idx, block_idx, idx
+  thread_idx = threadIdx%x - 1
+  block_idx  = blockIdx%x  - 1
+  idx = thread_idx + block_idx * blockDim%x
+  if (idx >= num_parts) return
+  idx = head_idx + idx
+  sortp_d(idx) = swap_global_d(idx)
+end subroutine write_sortp_part
+
+!> GPU sort_part.
+subroutine gpu_sort_part(sim, ilevel)
+  use nvtx
+  use ramses_commons, only: ramses_t
+  use refine_device, only: init_global_swap_table_kernel, &
+       compute_local_swap_table, update_global_swap_table
+  type(ramses_t), intent(inout) :: sim
+  integer, intent(in) :: ilevel
+
+  integer(kind=4) :: head_idx, num_parts, leading
+  integer :: num_threads, num_blocks
+  integer :: ibit, level
+  real(kind=8) :: dx_inv, skip1, skip2, skip3
+
+  call nvtxStartRange("gpu_sort_part", color=4) ! purple
+
+  head_idx  = sim%p%headp(ilevel)
+  num_parts = sim%p%tailp(sim%r%nlevelmax) - head_idx + 1
+
+  if (num_parts <= 0) then
+     call nvtxEndRange()
+     return
+  endif
+
+  if (.not. allocated(xp)) then
+     call nvtxEndRange()
+     return
+  endif
+
+  leading = size(xp, 1)
+  call ensure_scan_capacity_part(leading)
+
+  num_threads = 128
+  num_blocks  = (num_parts + num_threads - 1) / num_threads
+
+  level = ilevel - 1
+  if (level <= 0) then
+     call init_global_swap_table_kernel<<<num_blocks, num_threads>>>(swap_global, &
+          head_idx, num_parts)
+     call write_sortp_part<<<num_blocks, num_threads>>>(sortp, swap_global, &
+          head_idx, num_parts)
+     call GPU_Error_Check("gpu/gpu_part.cuf", 0)
+     call nvtxEndRange()
+     return
+  endif
+
+  dx_inv = 2.0d0**(ilevel-1) / sim%r%boxlen
+  skip1 = 0d0
+  skip2 = 0d0
+  skip3 = 0d0
+  if (ndim >= 1) skip1 = sim%m%skip(1)
+  if (ndim >= 2) skip2 = sim%m%skip(2)
+  if (ndim >= 3) skip3 = sim%m%skip(3)
+  call compute_hkey_part_kernel<<<num_blocks, num_threads>>>(xp, hkey_part, &
+       skip1, skip2, skip3, dx_inv, head_idx, num_parts, leading, level)
+  call GPU_Error_Check("gpu/gpu_part.cuf", 0)
+
+  call init_global_swap_table_kernel<<<num_blocks, num_threads>>>(swap_global, &
+       head_idx, num_parts)
+
+  do ibit = 0, ndim * level - 1
+     call init_prefix_sum_part_bit<<<num_blocks, num_threads>>>(hkey_part, &
+          swap_global, prefix_sum, head_idx, num_parts, ibit)
+     call gpu_scan(head_idx, num_parts)
+     call compute_local_swap_table<<<num_blocks, num_threads>>>(swap_local, &
+          swap_global, prefix_sum, head_idx, num_parts)
+     call update_global_swap_table<<<num_blocks, num_threads>>>(swap_global, &
+          swap_local, head_idx, num_parts)
+  end do
+  call GPU_Error_Check("gpu/gpu_part.cuf", 0)
+
+  call write_sortp_part<<<num_blocks, num_threads>>>(sortp, swap_global, &
+       head_idx, num_parts)
+  call GPU_Error_Check("gpu/gpu_part.cuf", 0)
+
+  call nvtxEndRange()
+end subroutine gpu_sort_part
+
+attributes(global) subroutine reset_cell_part_count_kernel(cell_part_count_d, num_grids)
+  integer(kind=4), intent(in), value :: num_grids
+  integer(kind=4), device :: cell_part_count_d(1:twotondim, *)
+
+  integer :: thread_idx, block_idx, idx, icell, igrid
+  thread_idx = threadIdx%x - 1
+  block_idx  = blockIdx%x  - 1
+  idx = thread_idx + block_idx * blockDim%x
+  if (idx >= twotondim * num_grids) return
+  icell = mod(idx, twotondim) + 1
+  igrid = idx / twotondim + 1
+  cell_part_count_d(icell, igrid) = 0
+end subroutine reset_cell_part_count_kernel
+
+!> Count particles per source cell (ilevel+1); pack src_part.
+attributes(global) subroutine build_cell_part_count_kernel(xp_d, &
+     cell_part_count_d, src_part_d, &
+     hash_key_d, hash_val_d, hash_size_d, ckey_max_d, key_off_d, &
+     skip1, skip2, skip3, dx_loc, ilevel, head_idx, num_parts, leading)
+  integer(kind=4), intent(in), value :: leading
+  real(kind=dp),   device :: xp_d(*)
+  integer(kind=4), device :: cell_part_count_d(1:twotondim, *)
+  integer(kind=4), device :: src_part_d(*)
+  integer(kind=8), device :: hash_key_d(*)
+  integer(kind=4), device :: hash_val_d(*)
+  integer(kind=4), intent(in), value :: hash_size_d
+  integer(kind=4), device :: ckey_max_d(*)
+  integer(kind=8), device :: key_off_d(*)
+  real(kind=8), intent(in), value :: skip1, skip2, skip3, dx_loc
+  integer(kind=4), intent(in), value :: ilevel, head_idx, num_parts
+
+  integer :: thread_idx, block_idx, idx, ipart, idim, igrid, icell, old
+  integer(kind=4) :: host_ckey(1:3), father_ckey(1:3), ii(1:3)
+  integer(kind=8) :: nx, offset, key, ix8, iy8, iz8
+  real(kind=8) :: skip(1:3), xs, inv_dx_loc
+
+  thread_idx = threadIdx%x - 1
+  block_idx  = blockIdx%x  - 1
+  idx = thread_idx + block_idx * blockDim%x
+  if (idx >= num_parts) return
+  ipart = head_idx + idx
+
+  skip(1) = skip1
+  skip(2) = skip2
+  skip(3) = skip3
+  inv_dx_loc = 1d0 / dx_loc
+
+  host_ckey = 0
+  do idim = 1, ndim
+     xs = (xp_d(ipart + (idim-1)*leading) + skip(idim)) * inv_dx_loc
+     host_ckey(idim) = floor(xs)
+  end do
+
+  father_ckey = host_ckey / 2
+  ii = host_ckey - 2 * father_ckey
+  icell = 1
+  do idim = 1, ndim
+     icell = icell + ii(idim) * (2**(idim-1))
+  end do
+
+  ix8 = int(father_ckey(1), kind=8)
+  iy8 = int(father_ckey(2), kind=8)
+  iz8 = int(father_ckey(3), kind=8)
+  nx  = int(ckey_max_d(ilevel), kind=8)
+  offset = key_off_d(ilevel)
+  key = offset + ix8 + iy8*nx + iz8*nx*nx
+  igrid = hash_get(hash_key_d, hash_val_d, hash_size_d, key)
+
+  if (igrid == 0) then
+     src_part_d(ipart) = 0   ! OOD
+     return
+  endif
+
+  src_part_d(ipart) = ior(ishft(igrid, 5), icell)
+
+  old = atomicadd(cell_part_count_d(icell, igrid), 1)
+end subroutine build_cell_part_count_kernel
+
+attributes(global) subroutine flatten_cell_count_kernel(cell_part_count_d, &
+     prefix_sum_d, num_grids)
+  integer(kind=4), intent(in), value :: num_grids
+  integer(kind=4), device :: cell_part_count_d(1:twotondim, *)
+  integer(kind=4), device :: prefix_sum_d(*)
+
+  integer :: thread_idx, block_idx, idx, icell, igrid
+  thread_idx = threadIdx%x - 1
+  block_idx  = blockIdx%x  - 1
+  idx = thread_idx + block_idx * blockDim%x
+  if (idx >= twotondim * num_grids) return
+  icell = mod(idx, twotondim) + 1
+  igrid = idx / twotondim + 1
+  prefix_sum_d(idx + 1) = cell_part_count_d(icell, igrid)
+end subroutine flatten_cell_count_kernel
+
+!> cell_part_head = exclusive scan start; count reset for place pass.
+attributes(global) subroutine compute_cell_part_head_kernel(cell_part_count_d, &
+     cell_part_head_d, prefix_sum_d, num_grids)
+  integer(kind=4), intent(in), value :: num_grids
+  integer(kind=4), device :: cell_part_count_d(1:twotondim, *)
+  integer(kind=4), device :: cell_part_head_d (1:twotondim, *)
+  integer(kind=4), device :: prefix_sum_d(*)
+
+  integer :: thread_idx, block_idx, idx, icell, igrid, incl, cnt
+  thread_idx = threadIdx%x - 1
+  block_idx  = blockIdx%x  - 1
+  idx = thread_idx + block_idx * blockDim%x
+  if (idx >= twotondim * num_grids) return
+  icell = mod(idx, twotondim) + 1
+  igrid = idx / twotondim + 1
+  incl = prefix_sum_d(idx + 1)
+  cnt  = cell_part_count_d(icell, igrid)
+  cell_part_head_d(icell, igrid)  = incl - cnt
+  cell_part_count_d(icell, igrid) = 0
+end subroutine compute_cell_part_head_kernel
+
+!> Fill cell_part_idx at head + atomicAdd(count).
+attributes(global) subroutine place_cell_part_idx_kernel(cell_part_count_d, &
+     cell_part_head_d, cell_part_idx_d, src_part_d, &
+     head_idx, num_parts)
+  integer(kind=4), device :: cell_part_count_d(1:twotondim, *)
+  integer(kind=4), device :: cell_part_head_d (1:twotondim, *)
+  integer(kind=4), device :: cell_part_idx_d(*)
+  integer(kind=4), device :: src_part_d(*)
+  integer(kind=4), intent(in), value :: head_idx, num_parts
+
+  integer :: thread_idx, block_idx, idx, ipart, icell, igrid, slot_off, slot
+  integer(kind=4) :: combined
+  thread_idx = threadIdx%x - 1
+  block_idx  = blockIdx%x  - 1
+  idx = thread_idx + block_idx * blockDim%x
+  if (idx >= num_parts) return
+  ipart = head_idx + idx
+  combined = src_part_d(ipart)
+  if (combined == 0) return
+  icell = iand(combined, 31)
+  igrid = ishft(combined, -5)
+  slot_off = atomicadd(cell_part_count_d(icell, igrid), 1)
+  slot = cell_part_head_d(icell, igrid) + slot_off + 1
+  cell_part_idx_d(slot) = ipart
+end subroutine place_cell_part_idx_kernel
+
+!> Multipole reduction over [1, npart]: q(1)=sum(mp), q(idim+1)=sum(mp*xp).
+attributes(global) subroutine multipole_q_kernel(xp_d, mp_d, multipole_q_d, &
+     num_parts, leading)
+  integer(kind=4), intent(in), value :: leading, num_parts
+  real(kind=dp),   device :: xp_d(*)
+  real(kind=dp),   device :: mp_d(*)
+  real(kind=8),    device :: multipole_q_d(1:ndim+1)
+
+  integer :: thread_idx, block_idx, ipart, idim, info
+  real(kind=8) :: q_loc(1:ndim+1)
+
+  thread_idx = threadIdx%x - 1
+  block_idx  = blockIdx%x  - 1
+  ipart = thread_idx + block_idx * blockDim%x + 1
+
+  q_loc = 0d0
+  if (ipart <= num_parts) then
+     q_loc(1) = mp_d(ipart)
+     do idim = 1, ndim
+        q_loc(idim+1) = mp_d(ipart) * xp_d(ipart + (idim-1)*leading)
+     end do
+  endif
+
+  do idim = 1, ndim+1
+     q_loc(idim) = block_reduce_sum(q_loc(idim))
+  end do
+
+  if (threadIdx%x == 1) then
+     do idim = 1, ndim+1
+        info = atomicadd(multipole_q_d(idim), q_loc(idim))
+     end do
+  endif
+end subroutine multipole_q_kernel
+
+!> Warp-coalesced CIC deposit; fused k=1..27 over cell_part_idx.
+attributes(global) subroutine cic_part_warp_kernel(cell_part_idx_d, &
+     src_part_d, num_placed, &
+     grid_d, hash_key_d, hash_val_d, hash_size_d, ckey_max_d, key_off_d, &
+     box_ckey_min_d, box_ckey_max_d, periodic_d, &
+     xp_d, mp_d, rho_d, nref_d, &
+     skip1, skip2, skip3, dx_loc, vol_loc, &
+     m_refine_at_level, mass_cut_refine, ilevel, leading)
+  integer(kind=4), intent(in), value :: num_placed, leading, ilevel
+  integer(kind=4), device :: cell_part_idx_d(*)
+  integer(kind=4), device :: src_part_d(*)
+  type(oct),       device :: grid_d(*)
+  integer(kind=8), device :: hash_key_d(*)
+  integer(kind=4), device :: hash_val_d(*)
+  integer(kind=4), intent(in), value :: hash_size_d
+  integer(kind=4), device :: ckey_max_d(*)
+  integer(kind=8), device :: key_off_d(*)
+  integer(kind=4), device :: box_ckey_min_d(1:3, *)
+  integer(kind=4), device :: box_ckey_max_d(1:3, *)
+  logical,         device :: periodic_d(1:3)
+  real(kind=dp),   device :: xp_d(*)
+  real(kind=dp),   device :: mp_d(*)
+  real(kind=dp),   device :: rho_d (1:twotondim, *)
+  real(kind=dp),   device :: nref_d(1:twotondim, *)
+  real(kind=8), intent(in), value :: skip1, skip2, skip3, dx_loc, vol_loc
+  real(kind=8), intent(in), value :: m_refine_at_level, mass_cut_refine
+
+  integer :: tid_local, lane, warp_local, warps_per_block, warp_global, slot_global
+  integer :: ipart, idim, k, info
+  integer :: icell_src_lane, igrid_src_lane, ref_icell, ref_igrid
+  integer :: match_int, n_match
+  integer :: ox, oy, oz, dst_igrid_lane, dst_icell_lane
+  integer(kind=4) :: combined
+  integer(kind=4) :: src_full_ckey(1:3), target_ckey(1:3), father_ckey(1:3), ii(1:3)
+  integer(kind=4) :: ii_src(1:3), box_min(1:3), box_max(1:3)
+  integer(kind=8) :: nx, hkey_offset, key, ix8, iy8, iz8
+  logical :: valid_lane, in_domain
+  real(kind=8) :: my_rho, my_nref, mp_i
+  real(kind=8) :: skip(1:3), xs, frac(1:3)
+  real(kind=8) :: wx(0:2), wy(0:2), wz(0:2), w
+
+  tid_local       = threadIdx%x - 1
+  warps_per_block = blockDim%x / warpsize
+  warp_local      = tid_local / warpsize
+  lane            = mod(tid_local, warpsize)
+  warp_global     = (blockIdx%x - 1) * warps_per_block + warp_local
+  slot_global     = warp_global * warpsize + lane + 1
+
+  valid_lane = (slot_global <= num_placed)
+
+  ipart          = 0
+  icell_src_lane = 0
+  igrid_src_lane = 0
+  if (valid_lane) then
+     ipart    = cell_part_idx_d(slot_global)
+     combined = src_part_d(ipart)
+     if (combined == 0) then
+        valid_lane = .false.
+     else
+        icell_src_lane = iand(combined, 31)
+        igrid_src_lane = ishft(combined, -5)
+     endif
+  endif
+
+  skip(1) = skip1
+  skip(2) = skip2
+  skip(3) = skip3
+
+  mp_i = 0d0
+  frac = 0d0
+  if (valid_lane) then
+     mp_i = mp_d(ipart)
+     do idim = 1, ndim
+        xs = (xp_d(ipart + (idim-1)*leading) + skip(idim)) / dx_loc
+        frac(idim) = xs - floor(xs)
+     end do
+  endif
+  wx(0) = max(0d0, 0.5d0 - frac(1))
+  wx(1) = 1d0 - abs(frac(1) - 0.5d0)
+  wx(2) = max(0d0, frac(1) - 0.5d0)
+  wy = 0d0
+  wz = 0d0
+  wy(1) = 1d0
+  wz(1) = 1d0
+  if (ndim >= 2) then
+     wy(0) = max(0d0, 0.5d0 - frac(2))
+     wy(1) = 1d0 - abs(frac(2) - 0.5d0)
+     wy(2) = max(0d0, frac(2) - 0.5d0)
+  endif
+  if (ndim >= 3) then
+     wz(0) = max(0d0, 0.5d0 - frac(3))
+     wz(1) = 1d0 - abs(frac(3) - 0.5d0)
+     wz(2) = max(0d0, frac(3) - 0.5d0)
+  endif
+
+  ! Warp vote: lanes sharing lane-0 source cell coalesce hash_get.
+  ref_icell = __shfl(icell_src_lane, 0)
+  ref_igrid = __shfl(igrid_src_lane, 0)
+  match_int = 1
+  if (valid_lane) then
+     if (icell_src_lane /= ref_icell .or. igrid_src_lane /= ref_igrid) match_int = 0
+  endif
+  n_match = match_int
+  n_match = n_match + __shfl_xor(n_match, 1)
+  n_match = n_match + __shfl_xor(n_match, 2)
+  n_match = n_match + __shfl_xor(n_match, 4)
+  n_match = n_match + __shfl_xor(n_match, 8)
+  n_match = n_match + __shfl_xor(n_match, 16)
+
+  box_min = 0
+  box_max = 0
+  do idim = 1, ndim
+     box_min(idim) = box_ckey_min_d(idim, ilevel+1)
+     box_max(idim) = box_ckey_max_d(idim, ilevel+1)
+  end do
+  nx          = int(ckey_max_d(ilevel), kind=8)
+  hkey_offset = key_off_d(ilevel)
+
+  if (n_match == warpsize .and. ref_igrid /= 0) then
+     ! Uniform warp: lane-0 hash, warp-reduce, one atomicAdd per dest.
+     ii_src = 0
+     do idim = 1, ndim
+        ii_src(idim) = mod((ref_icell - 1) / (2**(idim-1)), 2)
+     end do
+     src_full_ckey = 0
+     do idim = 1, ndim
+        src_full_ckey(idim) = 2 * grid_d(ref_igrid)%ckey(idim) + ii_src(idim)
+     end do
+
+     do k = 1, threetondim
+        ox = mod(k - 1, 3) - 1
+        oy = mod((k - 1) / 3, 3) - 1
+        oz = (k - 1) / 9 - 1
+
+        dst_igrid_lane = 0
+        dst_icell_lane = 0
+        if (lane == 0) then
+           target_ckey = 0
+           target_ckey(1) = src_full_ckey(1) + ox
+           if (ndim >= 2) target_ckey(2) = src_full_ckey(2) + oy
+           if (ndim >= 3) target_ckey(3) = src_full_ckey(3) + oz
+           in_domain = .true.
+           do idim = 1, ndim
+              if (periodic_d(idim)) then
+                 if (target_ckey(idim) < box_min(idim))  target_ckey(idim) = box_max(idim) - 1
+                 if (target_ckey(idim) >= box_max(idim)) target_ckey(idim) = box_min(idim)
+              else
+                 if (target_ckey(idim) < box_min(idim))  in_domain = .false.
+                 if (target_ckey(idim) >= box_max(idim)) in_domain = .false.
+              endif
+           end do
+           if (in_domain) then
+              father_ckey = target_ckey / 2
+              ii = target_ckey - 2 * father_ckey
+              dst_icell_lane = 1
+              do idim = 1, ndim
+                 dst_icell_lane = dst_icell_lane + ii(idim) * (2**(idim-1))
+              end do
+              ix8 = int(father_ckey(1), kind=8)
+              iy8 = int(father_ckey(2), kind=8)
+              iz8 = int(father_ckey(3), kind=8)
+              key = hkey_offset + ix8 + iy8*nx + iz8*nx*nx
+              dst_igrid_lane = hash_get(hash_key_d, hash_val_d, hash_size_d, key)
+           endif
+        endif
+        dst_igrid_lane = __shfl(dst_igrid_lane, 0)
+        dst_icell_lane = __shfl(dst_icell_lane, 0)
+
+        if (valid_lane) then
+           w      = wx(ox+1) * wy(oy+1) * wz(oz+1)
+           my_rho = mp_i * w / vol_loc
+           if (m_refine_at_level >= 0d0) then
+              if (mass_cut_refine > 0d0) then
+                 if (mp_i < mass_cut_refine) then
+                    my_nref = w
+                 else
+                    my_nref = 0d0
+                 endif
+              else
+                 my_nref = w
+              endif
+           else
+              my_nref = 0d0
+           endif
+        else
+           my_rho  = 0d0
+           my_nref = 0d0
+        endif
+        call warp_reduce_sum(my_rho)
+        call warp_reduce_sum(my_nref)
+        if (lane == 0 .and. dst_igrid_lane /= 0) then
+           info = atomicadd(rho_d(dst_icell_lane, dst_igrid_lane), my_rho)
+           if (m_refine_at_level >= 0d0) then
+              info = atomicadd(nref_d(dst_icell_lane, dst_igrid_lane), my_nref)
+           endif
+        endif
+     end do
+  else
+     ! Mixed warp: per-lane hash + per-lane atomicAdd.
+     src_full_ckey = 0
+     if (valid_lane) then
+        ii_src = 0
+        do idim = 1, ndim
+           ii_src(idim) = mod((icell_src_lane - 1) / (2**(idim-1)), 2)
+        end do
+        do idim = 1, ndim
+           src_full_ckey(idim) = 2 * grid_d(igrid_src_lane)%ckey(idim) + ii_src(idim)
+        end do
+     endif
+
+     do k = 1, threetondim
+        ox = mod(k - 1, 3) - 1
+        oy = mod((k - 1) / 3, 3) - 1
+        oz = (k - 1) / 9 - 1
+        if (valid_lane) then
+           target_ckey = 0
+           target_ckey(1) = src_full_ckey(1) + ox
+           if (ndim >= 2) target_ckey(2) = src_full_ckey(2) + oy
+           if (ndim >= 3) target_ckey(3) = src_full_ckey(3) + oz
+           in_domain = .true.
+           do idim = 1, ndim
+              if (periodic_d(idim)) then
+                 if (target_ckey(idim) < box_min(idim))  target_ckey(idim) = box_max(idim) - 1
+                 if (target_ckey(idim) >= box_max(idim)) target_ckey(idim) = box_min(idim)
+              else
+                 if (target_ckey(idim) < box_min(idim))  in_domain = .false.
+                 if (target_ckey(idim) >= box_max(idim)) in_domain = .false.
+              endif
+           end do
+           dst_igrid_lane = 0
+           dst_icell_lane = 0
+           if (in_domain) then
+              father_ckey = target_ckey / 2
+              ii = target_ckey - 2 * father_ckey
+              dst_icell_lane = 1
+              do idim = 1, ndim
+                 dst_icell_lane = dst_icell_lane + ii(idim) * (2**(idim-1))
+              end do
+              ix8 = int(father_ckey(1), kind=8)
+              iy8 = int(father_ckey(2), kind=8)
+              iz8 = int(father_ckey(3), kind=8)
+              key = hkey_offset + ix8 + iy8*nx + iz8*nx*nx
+              dst_igrid_lane = hash_get(hash_key_d, hash_val_d, hash_size_d, key)
+           endif
+           if (dst_igrid_lane /= 0) then
+              w      = wx(ox+1) * wy(oy+1) * wz(oz+1)
+              my_rho = mp_i * w / vol_loc
+              info   = atomicadd(rho_d(dst_icell_lane, dst_igrid_lane), my_rho)
+              if (m_refine_at_level >= 0d0) then
+                 if (mass_cut_refine > 0d0) then
+                    if (mp_i < mass_cut_refine) then
+                       my_nref = w
+                    else
+                       my_nref = 0d0
+                    endif
+                 else
+                    my_nref = w
+                 endif
+                 info = atomicadd(nref_d(dst_icell_lane, dst_igrid_lane), my_nref)
+              endif
+           endif
+        endif
+     end do
+  endif
+end subroutine cic_part_warp_kernel
+
+!> Cell list + multipole_q + cic_part_warp_kernel.
+subroutine gpu_cic_part(sim, ilevel, rtype)
+  use nvtx
+  use ramses_commons, only: ramses_t
+  type(ramses_t), intent(inout) :: sim
+  integer, intent(in) :: ilevel
+  integer, intent(in) :: rtype
+
+  integer(kind=4) :: head_idx, num_parts, leading, num_grids, total_cells
+  integer(kind=4) :: total_sum_unused
+  integer(kind=4), device :: total_sum_dev
+  integer :: num_threads, num_blocks, idim
+  integer :: deposit_block_size, deposit_num_blocks
+  real(kind=8) :: dx_loc, vol_loc, skip1, skip2, skip3
+  real(kind=8) :: q_host(1:ndim+1)
+
+  call nvtxStartRange("gpu_cic_part", color=4) ! purple
+
+  if (rtype /= 0 .and. rtype /= 1) then
+     call nvtxEndRange()
+     return
+  endif
+  if (.not. allocated(xp)) then
+     call nvtxEndRange()
+     return
+  endif
+
+  if (ilevel == sim%r%levelmin .and. sim%p%npart > 0) then
+     leading = size(xp, 1)
+     multipole_q_dev = 0d0
+     num_threads = 256
+     num_blocks  = (sim%p%npart + num_threads - 1) / num_threads
+     call multipole_q_kernel<<<num_blocks, num_threads>>>(xp, mp, multipole_q_dev, &
+          sim%p%npart, leading)
+     call GPU_Error_Check("gpu/gpu_part.cuf", 0)
+     q_host = multipole_q_dev
+     do idim = 1, ndim+1
+        sim%g%multipole%q(idim) = sim%g%multipole%q(idim) + q_host(idim)
+     end do
+  endif
+
+  head_idx  = sim%p%headp(ilevel)
+  num_parts = sim%p%tailp(sim%r%nlevelmax) - head_idx + 1
+  if (num_parts <= 0) then
+     call nvtxEndRange()
+     return
+  endif
+
+  leading = size(xp, 1)
+  dx_loc  = sim%r%boxlen / 2d0**ilevel
+  vol_loc = dx_loc**ndim
+  skip1 = 0d0
+  skip2 = 0d0
+  skip3 = 0d0
+  if (ndim >= 1) skip1 = sim%m%skip(1)
+  if (ndim >= 2) skip2 = sim%m%skip(2)
+  if (ndim >= 3) skip3 = sim%m%skip(3)
+
+  num_grids   = size(cell_part_count, 2)
+  total_cells = twotondim * num_grids
+
+  num_threads = 256
+  num_blocks  = (total_cells + num_threads - 1) / num_threads
+  call reset_cell_part_count_kernel<<<num_blocks, num_threads>>>(cell_part_count, num_grids)
+  call GPU_Error_Check("gpu/gpu_part.cuf", 0)
+
+  num_threads = 128
+  num_blocks  = (num_parts + num_threads - 1) / num_threads
+  call build_cell_part_count_kernel<<<num_blocks, num_threads>>>(xp, &
+       cell_part_count, src_part, &
+       hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, &
+       skip1, skip2, skip3, dx_loc, ilevel, head_idx, num_parts, leading)
+  call GPU_Error_Check("gpu/gpu_part.cuf", 0)
+
+  call ensure_scan_capacity_part(total_cells)
+
+  num_threads = 256
+  num_blocks  = (total_cells + num_threads - 1) / num_threads
+  call flatten_cell_count_kernel<<<num_blocks, num_threads>>>(cell_part_count, &
+       prefix_sum, num_grids)
+  call GPU_Error_Check("gpu/gpu_part.cuf", 0)
+
+  call gpu_scan(1, total_cells, total_sum_dev)
+  total_sum_unused = total_sum_dev
+
+  call compute_cell_part_head_kernel<<<num_blocks, num_threads>>>(cell_part_count, &
+       cell_part_head, prefix_sum, num_grids)
+  call GPU_Error_Check("gpu/gpu_part.cuf", 0)
+
+  num_threads = 128
+  num_blocks  = (num_parts + num_threads - 1) / num_threads
+  call place_cell_part_idx_kernel<<<num_blocks, num_threads>>>(cell_part_count, &
+       cell_part_head, cell_part_idx, src_part, &
+       head_idx, num_parts)
+  call GPU_Error_Check("gpu/gpu_part.cuf", 0)
+
+  if (total_sum_unused > 0) then
+     deposit_block_size = 256
+     deposit_num_blocks = (total_sum_unused + deposit_block_size - 1) / deposit_block_size
+     call cic_part_warp_kernel<<<deposit_num_blocks, deposit_block_size>>>(&
+          cell_part_idx, src_part, total_sum_unused, &
+          grid, hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, &
+          box_ckey_min, box_ckey_max, periodic, &
+          xp, mp, rho, nref, &
+          skip1, skip2, skip3, dx_loc, vol_loc, &
+          sim%r%m_refine(ilevel), sim%r%mass_cut_refine, ilevel, leading)
+     call GPU_Error_Check("gpu/gpu_part.cuf", 0)
+  endif
+
+  call nvtxEndRange()
+end subroutine gpu_cic_part
+
+attributes(device) subroutine analytic_gravity_part(x, ff, dx_loc, gravity_type, &
+     gp1, gp2, gp3, gp4, gp5, q1, q2, q3, q4)
+  real(kind=8) :: x(1:3), ff(1:3)
+  real(kind=8), intent(in), value :: dx_loc
+  integer(kind=4), intent(in), value :: gravity_type
+  real(kind=8), intent(in), value :: gp1, gp2, gp3, gp4, gp5
+  real(kind=8), intent(in), value :: q1, q2, q3, q4
+
+  real(kind=8) :: gmass, emass, xmass, ymass, zmass
+  real(kind=8) :: rx, ry, rz, rr
+
+  ff = 0d0
+
+  if (gravity_type == 0) then
+     rx = x(1) - q2 / q1
+     ry = 0d0
+     rz = 0d0
+     if (ndim >= 2) ry = x(2) - q3 / q1
+     if (ndim >= 3) rz = x(3) - q4 / q1
+     rr = max(sqrt(rx**2 + ry**2 + rz**2), dx_loc)
+     if (ndim == 1) then
+        ff(1) = -q1 * 2d0 * acos(-1d0) * rx / rr
+     else if (ndim == 2) then
+        ff(1) = -q1 * 2d0 * rx / rr**2
+        ff(2) = -q1 * 2d0 * ry / rr**2
+     else
+        ff(1) = -q1 * rx / rr**3
+        ff(2) = -q1 * ry / rr**3
+        ff(3) = -q1 * rz / rr**3
+     endif
+  else if (gravity_type == 1) then
+     ff(1) = gp1
+     if (ndim >= 2) ff(2) = gp2
+     if (ndim >= 3) ff(3) = gp3
+  else if (gravity_type == 2) then
+     gmass = gp1
+     emass = gp2
+     xmass = gp3
+     ymass = gp4
+     zmass = gp5
+     rx = x(1) - xmass
+     ry = 0d0
+     rz = 0d0
+     if (ndim >= 2) ry = x(2) - ymass
+     if (ndim >= 3) rz = x(3) - zmass
+     rr = sqrt(rx**2 + ry**2 + rz**2 + emass**2)
+     if (ndim == 1) then
+        ff(1) = -gmass * rx / rr
+     else if (ndim == 2) then
+        ff(1) = -gmass * rx / rr**2
+        ff(2) = -gmass * ry / rr**2
+     else
+        ff(1) = -gmass * rx / rr**3
+        ff(2) = -gmass * ry / rr**3
+        ff(3) = -gmass * rz / rr**3
+     endif
+  endif
+end subroutine analytic_gravity_part
+
+attributes(device) subroutine gather_cic_force_part(f_d, hash_key_d, hash_val_d, &
+     hash_size_d, ckey_max_d, key_off_d, box_ckey_min_d, box_ckey_max_d, periodic_d, &
+     ngridmax_d, x_in, cell_level, grid_level, ff, ok_level)
+  real(kind=dp),   device :: f_d(1:twotondim,1:ndim,*)
+  integer(kind=8), device :: hash_key_d(*)
+  integer(kind=4), device :: hash_val_d(*)
+  integer(kind=4), intent(in), value :: hash_size_d
+  integer(kind=4), device :: ckey_max_d(*)
+  integer(kind=8), device :: key_off_d(*)
+  integer(kind=4), device :: box_ckey_min_d(1:3,*)
+  integer(kind=4), device :: box_ckey_max_d(1:3,*)
+  logical,         device :: periodic_d(1:3)
+  integer(kind=4), intent(in), value :: ngridmax_d
+  real(kind=8) :: x_in(1:3), ff(1:3)
+  integer(kind=4), intent(in), value :: cell_level, grid_level
+  logical :: ok_level
+
+  integer :: idim, bx, by, bz, igrid, icell
+  integer(kind=4) :: il(1:3), ir(1:3), target_ckey(1:3), father_ckey(1:3), ii(1:3)
+  integer(kind=4) :: box_min(1:3), box_max(1:3)
+  integer(kind=8) :: nx, offset, key, ix8, iy8, iz8
+  real(kind=8) :: dr(1:3), dl(1:3), weight
+  logical :: in_domain
+
+  ok_level = .true.
+  ff = 0d0
+  if (grid_level < 1) then
+     ok_level = .false.
+     return
+  endif
+
+  il = 0
+  ir = 0
+  dr = 0d0
+  dl = 1d0
+  box_min = 0
+  box_max = 0
+  do idim = 1, ndim
+     dr(idim) = x_in(idim) + 0.5d0
+     ir(idim) = int(dr(idim))
+     dr(idim) = dr(idim) - ir(idim)
+     dl(idim) = 1d0 - dr(idim)
+     il(idim) = ir(idim) - 1
+     box_min(idim) = box_ckey_min_d(idim, cell_level)
+     box_max(idim) = box_ckey_max_d(idim, cell_level)
+     if (periodic_d(idim)) then
+        if (il(idim) < box_min(idim))  il(idim) = box_max(idim) - 1
+        if (ir(idim) >= box_max(idim)) ir(idim) = box_min(idim)
+     endif
+  end do
+
+  do bz = 0, 1
+     if (ndim < 3 .and. bz == 1) cycle
+     do by = 0, 1
+        if (ndim < 2 .and. by == 1) cycle
+        do bx = 0, 1
+           target_ckey = 0
+           target_ckey(1) = merge(ir(1), il(1), bx == 1)
+           weight = merge(dr(1), dl(1), bx == 1)
+           if (ndim >= 2) then
+              target_ckey(2) = merge(ir(2), il(2), by == 1)
+              weight = weight * merge(dr(2), dl(2), by == 1)
+           endif
+           if (ndim >= 3) then
+              target_ckey(3) = merge(ir(3), il(3), bz == 1)
+              weight = weight * merge(dr(3), dl(3), bz == 1)
+           endif
+
+           in_domain = .true.
+           do idim = 1, ndim
+              if (.not. periodic_d(idim)) then
+                 if (target_ckey(idim) < box_min(idim))  in_domain = .false.
+                 if (target_ckey(idim) >= box_max(idim)) in_domain = .false.
+              endif
+           end do
+           if (.not. in_domain) then
+              ok_level = .false.
+              cycle
+           endif
+
+           father_ckey = target_ckey / 2
+           ii = target_ckey - 2 * father_ckey
+           icell = 1
+           do idim = 1, ndim
+              icell = icell + ii(idim) * (2**(idim-1))
+           end do
+
+           ix8 = int(father_ckey(1), kind=8)
+           iy8 = int(father_ckey(2), kind=8)
+           iz8 = int(father_ckey(3), kind=8)
+           nx  = int(ckey_max_d(grid_level), kind=8)
+           offset = key_off_d(grid_level)
+           key = offset + ix8 + iy8*nx + iz8*nx*nx
+           igrid = hash_get(hash_key_d, hash_val_d, hash_size_d, key)
+           ! Skip cache/ghost octs (igrid > ngridmax): gpu_gradient_phi does
+           ! not update them, so f there is stale. CPU mirrors this by
+           ! returning child=0 in get_grid; same convention as gpu_mg.cuf.
+           if (igrid == 0 .or. igrid > ngridmax_d) then
+              ok_level = .false.
+              cycle
+           endif
+
+           do idim = 1, ndim
+              ff(idim) = ff(idim) + real(f_d(icell, idim, igrid), kind=8) * weight
+           end do
+        end do
+     end do
+  end do
+
+  if (.not. ok_level) then
+     ff = 0d0
+  endif
+end subroutine gather_cic_force_part
+
+attributes(global) subroutine static_levelp_part_kernel(levelp_d, ilevel, head_idx, num_parts)
+  integer(kind=4), device :: levelp_d(*)
+  integer(kind=4), intent(in), value :: ilevel
+  integer(kind=4), intent(in), value :: head_idx
+  integer(kind=4), intent(in), value :: num_parts
+
+  integer :: thread_idx, block_idx, idx, ipart
+
+  thread_idx = threadIdx%x - 1
+  block_idx  = blockIdx%x  - 1
+  idx = thread_idx + block_idx * blockDim%x
+  if (idx >= num_parts) return
+
+  ipart = head_idx + idx
+  levelp_d(ipart) = ilevel
+end subroutine static_levelp_part_kernel
+
+attributes(global) subroutine gravana_preloop_part_kernel(xp_d, vp_d, levelp_d, &
+     dtnew_d, dx_loc, action_part, ilevel, head_idx, num_parts, leading, &
+     gravity_type, gp1, gp2, gp3, gp4, gp5, q1, q2, q3, q4)
+  integer(kind=4), intent(in), value :: leading
+  real(kind=dp),   device :: xp_d(*)
+  real(kind=dp),   device :: vp_d(*)
+  integer(kind=4), device :: levelp_d(*)
+  real(kind=8),    device :: dtnew_d(*)
+  real(kind=8), intent(in), value :: dx_loc
+  integer(kind=4), intent(in), value :: action_part
+  integer(kind=4), intent(in), value :: ilevel
+  integer(kind=4), intent(in), value :: head_idx
+  integer(kind=4), intent(in), value :: num_parts
+  integer(kind=4), intent(in), value :: gravity_type
+  real(kind=8), intent(in), value :: gp1, gp2, gp3, gp4, gp5
+  real(kind=8), intent(in), value :: q1, q2, q3, q4
+
+  integer :: thread_idx, block_idx, idx, ipart, idim, lp
+  real(kind=8) :: x(1:3), ff(1:3), xnew, dteff
+
+  thread_idx = threadIdx%x - 1
+  block_idx  = blockIdx%x  - 1
+  idx = thread_idx + block_idx * blockDim%x
+  if (idx >= num_parts) return
+
+  ipart = head_idx + idx
+  x = 0d0
+  do idim = 1, ndim
+     x(idim) = xp_d(ipart + (idim-1)*leading)
+  end do
+
+  call analytic_gravity_part(x, ff, dx_loc, gravity_type, &
+       gp1, gp2, gp3, gp4, gp5, q1, q2, q3, q4)
+
+  if (action_part == 2) then
+     do idim = 1, ndim
+        vp_d(ipart + (idim-1)*leading) = vp_d(ipart + (idim-1)*leading) &
+             + ff(idim) * 0.5d0 * dtnew_d(ilevel)
+        xnew = xp_d(ipart + (idim-1)*leading) &
+             + vp_d(ipart + (idim-1)*leading) * dtnew_d(ilevel)
+        xp_d(ipart + (idim-1)*leading) = xnew
+     end do
+  else if (action_part == 1) then
+     lp = levelp_d(ipart)
+     dteff = dtnew_d(lp)
+     levelp_d(ipart) = ilevel
+     do idim = 1, ndim
+        vp_d(ipart + (idim-1)*leading) = vp_d(ipart + (idim-1)*leading) &
+             + ff(idim) * 0.5d0 * dteff
+     end do
+  endif
+end subroutine gravana_preloop_part_kernel
+
+attributes(global) subroutine kick_drift_part_kernel(xp_d, vp_d, levelp_d, &
+     f_d, hash_key_d, hash_val_d, hash_size_d, ckey_max_d, key_off_d, &
+     box_ckey_min_d, box_ckey_max_d, box_size_d, periodic_d, ngridmax_d, &
+     dtnew_d, dtold_d, skip1, skip2, skip3, dx_loc, &
+     action_part, ilevel, head_idx, num_parts, leading)
+  integer(kind=4), intent(in), value :: leading
+  real(kind=dp),   device :: xp_d(*)
+  real(kind=dp),   device :: vp_d(*)
+  integer(kind=4), device :: levelp_d(*)
+  real(kind=dp),   device :: f_d(1:twotondim,1:ndim,*)
+  integer(kind=8), device :: hash_key_d(*)
+  integer(kind=4), device :: hash_val_d(*)
+  integer(kind=4), intent(in), value :: hash_size_d
+  integer(kind=4), device :: ckey_max_d(*)
+  integer(kind=8), device :: key_off_d(*)
+  integer(kind=4), device :: box_ckey_min_d(1:3,*)
+  integer(kind=4), device :: box_ckey_max_d(1:3,*)
+  real(kind=8),    device :: box_size_d(1:3)
+  logical,         device :: periodic_d(1:3)
+  integer(kind=4), intent(in), value :: ngridmax_d
+  real(kind=8),    device :: dtnew_d(*)
+  real(kind=8),    device :: dtold_d(*)
+  real(kind=8), intent(in), value :: skip1, skip2, skip3, dx_loc
+  integer(kind=4), intent(in), value :: action_part
+  integer(kind=4), intent(in), value :: ilevel
+  integer(kind=4), intent(in), value :: head_idx
+  integer(kind=4), intent(in), value :: num_parts
+
+  integer :: thread_idx, block_idx, idx, ipart, idim, lp
+  real(kind=8) :: skip(1:3), x(1:3), x_coarse(1:3), ff(1:3)
+  real(kind=8) :: dteff, xnew
+  logical :: ok_level
+
+  thread_idx = threadIdx%x - 1
+  block_idx  = blockIdx%x  - 1
+  idx = thread_idx + block_idx * blockDim%x
+  if (idx >= num_parts) return
+
+  ipart = head_idx + idx
+  ff = 0d0
+
+  skip(1) = skip1
+  skip(2) = skip2
+  skip(3) = skip3
+
+  x = 0d0
+  do idim = 1, ndim
+     x(idim) = (xp_d(ipart + (idim-1)*leading) + skip(idim)) / dx_loc
+  end do
+
+  call gather_cic_force_part(f_d, hash_key_d, hash_val_d, hash_size_d, &
+       ckey_max_d, key_off_d, box_ckey_min_d, box_ckey_max_d, periodic_d, &
+       ngridmax_d, x, ilevel+1, ilevel, ff, ok_level)
+
+  if (.not. ok_level) then
+     x_coarse = x / 2d0
+     call gather_cic_force_part(f_d, hash_key_d, hash_val_d, hash_size_d, &
+          ckey_max_d, key_off_d, box_ckey_min_d, box_ckey_max_d, periodic_d, &
+          ngridmax_d, x_coarse, ilevel, ilevel-1, ff, ok_level)
+  endif
+
+  if (action_part == 2) then
+     do idim = 1, ndim
+        vp_d(ipart + (idim-1)*leading) = vp_d(ipart + (idim-1)*leading) &
+             + ff(idim) * 0.5d0 * dtnew_d(ilevel)
+        xnew = xp_d(ipart + (idim-1)*leading) &
+             + vp_d(ipart + (idim-1)*leading) * dtnew_d(ilevel)
+        if (periodic_d(idim)) then
+           if (xnew < 0d0)              xnew = xnew + box_size_d(idim)
+           if (xnew >= box_size_d(idim)) xnew = xnew - box_size_d(idim)
+        endif
+        xp_d(ipart + (idim-1)*leading) = xnew
+     end do
+  else if (action_part == 1) then
+     lp = levelp_d(ipart)
+     if (lp >= ilevel) then
+        dteff = dtnew_d(lp)
+     else
+        dteff = dtold_d(lp)
+     endif
+     levelp_d(ipart) = ilevel
+     do idim = 1, ndim
+        vp_d(ipart + (idim-1)*leading) = vp_d(ipart + (idim-1)*leading) &
+             + ff(idim) * 0.5d0 * dteff
+     end do
+  endif
+end subroutine kick_drift_part_kernel
+
+subroutine gpu_kick_drift_part(sim, ilevel, action_part)
+  use nvtx
+  use ramses_commons, only: ramses_t
+  type(ramses_t), intent(inout) :: sim
+  integer, intent(in) :: ilevel
+  integer, intent(in) :: action_part
+
+  integer(kind=4) :: head_idx, num_parts, head_coarse, num_coarse, leading
+  integer :: num_threads, num_blocks
+  real(kind=8) :: dx_loc, skip1, skip2, skip3
+  real(kind=8) :: gp1, gp2, gp3, gp4, gp5, q1, q2, q3, q4
+  integer(kind=4) :: gravity_type
+  logical :: any_nonperiodic
+
+  call nvtxStartRange("gpu_kick_drift_part", color=4) ! purple
+
+  if (.not. allocated(xp)) then
+     call nvtxEndRange()
+     return
+  endif
+  leading = size(xp, 1)
+  dx_loc = sim%r%boxlen / 2d0**ilevel
+  skip1 = 0d0
+  skip2 = 0d0
+  skip3 = 0d0
+  if (ndim >= 1) skip1 = sim%m%skip(1)
+  if (ndim >= 2) skip2 = sim%m%skip(2)
+  if (ndim >= 3) skip3 = sim%m%skip(3)
+  dtnew_part = sim%g%dtnew
+  dtold_part = sim%g%dtold
+  num_threads = 128
+
+  head_idx  = sim%p%headp(ilevel)
+  num_parts = sim%p%tailp(ilevel) - head_idx + 1
+
+  if (sim%p%static) then
+     if (num_parts > 0) then
+        num_blocks  = (num_parts + num_threads - 1) / num_threads
+        call static_levelp_part_kernel<<<num_blocks, num_threads>>>(levelp, ilevel, head_idx, num_parts)
+        call GPU_Error_Check("gpu/gpu_part.cuf", 0)
+     endif
+     call nvtxEndRange()
+     return
+  endif
+
+  ! Analytic kick for nonperiodic coarse particles at levelmin.
+  any_nonperiodic = any(.not. sim%r%periodic(1:ndim))
+  if (ilevel == sim%r%levelmin .and. any_nonperiodic) then
+     head_coarse = sim%p%headp(ilevel-1)
+     num_coarse = sim%p%tailp(ilevel-1) - head_coarse + 1
+     if (num_coarse > 0) then
+        gp1 = sim%r%gravity_params(1)
+        gp2 = sim%r%gravity_params(2)
+        gp3 = sim%r%gravity_params(3)
+        gp4 = sim%r%gravity_params(4)
+        gp5 = sim%r%gravity_params(5)
+        q1 = sim%g%multipole%q(1)
+        q2 = sim%g%multipole%q(2)
+        q3 = 0d0
+        q4 = 0d0
+        if (ndim >= 2) q3 = sim%g%multipole%q(3)
+        if (ndim >= 3) q4 = sim%g%multipole%q(4)
+        gravity_type = sim%r%gravity_type
+        num_blocks = (num_coarse + num_threads - 1) / num_threads
+        call gravana_preloop_part_kernel<<<num_blocks, num_threads>>>(xp, vp, levelp, &
+             dtnew_part, dx_loc, action_part, ilevel, head_coarse, num_coarse, leading, &
+             gravity_type, gp1, gp2, gp3, gp4, gp5, q1, q2, q3, q4)
+        call GPU_Error_Check("gpu/gpu_part.cuf", 0)
+     endif
+  endif
+
+  if (num_parts <= 0) then
+     call nvtxEndRange()
+     return
+  endif
+  if (.not. allocated(f)) then
+     call nvtxEndRange()
+     return
+  endif
+
+  if (sim%r%gravity_type > 0) then
+     f = sim%m%f
+     call GPU_Error_Check("gpu/gpu_part.cuf", 0)
+  endif
+  num_blocks  = (num_parts + num_threads - 1) / num_threads
+
+  call kick_drift_part_kernel<<<num_blocks, num_threads>>>(xp, vp, levelp, &
+       f, hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, &
+       box_ckey_min, box_ckey_max, box_size, periodic, sim%r%ngridmax, &
+       dtnew_part, dtold_part, &
+       skip1, skip2, skip3, dx_loc, action_part, ilevel, head_idx, num_parts, leading)
+  call GPU_Error_Check("gpu/gpu_part.cuf", 0)
+
+  call nvtxEndRange()
+end subroutine gpu_kick_drift_part
+
+end module part_device

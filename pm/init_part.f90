@@ -22,7 +22,7 @@ recursive subroutine r_init_part(pst)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
      if(pst%s%r%part)then
-        call init_part(pst%s%r,pst%s%g,pst%s%p   )
+        call init_part(pst%s%r,pst%s%g,pst%s%m,pst%s%p)
      endif
      if(pst%s%r%star)then
         call init_star(pst%s%r,pst%s%g,pst%s%star)
@@ -46,14 +46,19 @@ end subroutine r_init_part
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine init_part(r,g,p)
-  use amr_parameters, only: ndim
-  use amr_commons, only: run_t,global_t
+subroutine init_part(r,g,m,p)
+  use amr_parameters, only: ndim, twotondim, threetondim
+  use amr_commons, only: run_t,global_t,mesh_t
   use pm_parameters, only: PART_TYPE
   use pm_commons, only: part_t
+#ifdef _CUDA
+  use gpu_part_state
+  use cudafor
+#endif
   implicit none
   type(run_t)::r
   type(global_t)::g
+  type(mesh_t)::m
   type(part_t)::p
   !---------------------------------
   ! Allocate PART particle variables
@@ -83,6 +88,35 @@ subroutine init_part(r,g,p)
   ! No particle just yet
   p%headp=1
   p%tailp=0
+
+  ! Device mirrors/scratch; H→D in r_set_grid_device.
+#ifdef _CUDA
+  allocate(xp(1:r%npartmax, 1:ndim))
+  allocate(vp(1:r%npartmax, 1:ndim))
+  allocate(mp(1:r%npartmax))
+  allocate(levelp(1:r%npartmax))
+  allocate(sortp(1:r%npartmax))
+  allocate(idp(1:r%npartmax))
+  ! CIC/sort/split scratch.
+  allocate(hkey_part  (1:r%npartmax))
+  allocate(bucket_part(1:r%npartmax))
+  allocate(cell_part_count(1:twotondim, 1:m%ngridmax+m%ncachemax))
+  allocate(cell_part_head (1:twotondim, 1:m%ngridmax+m%ncachemax))
+  allocate(cell_part_idx  (1:r%npartmax))
+  allocate(src_part       (1:r%npartmax))
+  allocate(multipole_q_dev (1:ndim+1))
+  ! Gather/scatter scratch (device-only).
+  allocate(xp_swap (1:r%npartmax))
+  allocate(idp_swap(1:r%npartmax))
+  if (allocated(p%jp))     allocate(jp    (1:size(p%jp, 1), 1:ndim))
+  if (allocated(p%zp))     allocate(zp    (1:size(p%zp)))
+  if (allocated(p%tp))     allocate(tp    (1:size(p%tp)))
+  if (allocated(p%tm))     allocate(tm    (1:size(p%tm)))
+  if (allocated(p%size))   allocate(size_p(1:size(p%size)))
+  if (allocated(p%charge)) allocate(charge(1:size(p%charge)))
+  if (allocated(p%idm))    allocate(idm   (1:size(p%idm)))
+  if (allocated(p%idt))    allocate(idt   (1:size(p%idt)))
+#endif
 end subroutine init_part
 !#########################################################################
 !#########################################################################
