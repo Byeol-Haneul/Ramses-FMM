@@ -64,21 +64,20 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
      ilevel=input_array(1)
      action_part=input_array(2)
 #ifdef _CUDA
-     ! Kick runs only from amr_step, after r_set_grid_device in adaptive_loop.
      if(pst%s%r%part)then
         if(pst%s%p%type/=PART_TYPE)then
-           write(*,*)'r_kick_drift_part: GPU particle kick-drift supports DM PART_TYPE only in phase 1.'
+           write(*,*)'ERROR: r_kick_drift_part: DM PART_TYPE only.'
            call abort
         endif
         if(pst%s%r%part_force_interpolation_scheme/=1)then
-           write(*,'(A,I0,A)')' ERROR: r_kick_drift_part: GPU TSC/PCS DM force interpolation (scheme ', &
-                & pst%s%r%part_force_interpolation_scheme,') unavailable in phase 1.'
+           write(*,'(A,I0,A)')'ERROR: r_kick_drift_part: CIC only (scheme ', &
+                & pst%s%r%part_force_interpolation_scheme,').'
            call abort
         endif
         call gpu_kick_drift_part(pst%s, ilevel, action_part)
      endif
      if(pst%s%r%star.or.pst%s%r%sink.or.pst%s%r%tree.or.pst%s%r%trac.or.pst%s%r%dust)then
-        write(*,*)'r_kick_drift_part: star/sink/tree/tracers/dust on the GPU path are not supported in phase 1.'
+        write(*,*)'ERROR: r_kick_drift_part: non-DM not supported on GPU.'
         call abort
      endif
 #else

@@ -89,18 +89,15 @@ subroutine init_part(r,g,m,p)
   p%headp=1
   p%tailp=0
 
-  ! Allocate device mirrors and scratch for DM particles. Mirrors the
-  ! host+device side-by-side pattern used by init_amr for the mesh: both
-  ! halves persist for the whole run; r_set_grid_device only copies.
+  ! Device mirrors/scratch; H→D in r_set_grid_device.
 #ifdef _CUDA
-  ! Mandatory device mirrors of host particle arrays.
   allocate(xp(1:r%npartmax, 1:ndim))
   allocate(vp(1:r%npartmax, 1:ndim))
   allocate(mp(1:r%npartmax))
   allocate(levelp(1:r%npartmax))
   allocate(sortp(1:r%npartmax))
   allocate(idp(1:r%npartmax))
-  ! Per-particle / per-cell scratch (CIC + sort + split).
+  ! CIC/sort/split scratch.
   allocate(hkey_part  (1:r%npartmax))
   allocate(bucket_part(1:r%npartmax))
   allocate(cell_part_count(1:twotondim, 1:m%ngridmax+m%ncachemax))
@@ -108,18 +105,9 @@ subroutine init_part(r,g,m,p)
   allocate(cell_part_idx  (1:r%npartmax))
   allocate(src_part       (1:r%npartmax))
   allocate(multipole_q_dev (1:ndim+1))
-  ! Gather/scatter scratch — kernel-overwritten, no host->device copy.
-  ! xp_swap is 1D and shared across every dp permutation. The i4 analogue
-  ! is bucket_part (allocated above). idp_swap is the i8b (kind=4 or 8 per
-  ! LONGINT) analogue — separate from hkey_part because hkey_part is fixed
-  ! at kind=8 for Hilbert keys and may not match i8b in non-LONGINT builds.
+  ! Gather/scatter scratch (device-only).
   allocate(xp_swap (1:r%npartmax))
   allocate(idp_swap(1:r%npartmax))
-  ! Optional DM device mirrors: allocated iff the host counterpart is
-  ! allocated by the time init_part runs. init_part for DM does not allocate
-  ! these host fields today, so these conditionals do not fire — but keeping
-  ! the path lets a future DM scheme that adds e.g. jp pick up the device
-  ! mirror automatically.
   if (allocated(p%jp))     allocate(jp    (1:size(p%jp, 1), 1:ndim))
   if (allocated(p%zp))     allocate(zp    (1:size(p%zp)))
   if (allocated(p%tp))     allocate(tp    (1:size(p%tp)))

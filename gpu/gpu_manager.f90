@@ -37,21 +37,15 @@ recursive subroutine r_set_grid_device(pst)
      call nvtxEndRange()
 
 #ifdef _CUDA
-     ! Copy particle arrays host→device. Device arrays themselves are
-     ! allocated in init_part (mirroring init_amr's side-by-side host+device
-     ! allocation for the mesh); this block does data movement only.
+     ! Particle H→D (allocated in init_part).
      if (pst%s%r%part .and. allocated(pst%s%p%xp) .and. allocated(xp)) then
         call nvtxStartRange("Copy particles from host to device", color=5)!red
-        ! Mandatory host -> device copies.
         xp     = pst%s%p%xp
         vp     = pst%s%p%vp
         mp     = pst%s%p%mp
         levelp = pst%s%p%levelp
         sortp  = pst%s%p%sortp
         idp    = pst%s%p%idp
-        ! Optional DM fields: copy iff both host and device counterparts are
-        ! allocated (init_part allocates the device side when the host side
-        ! is already allocated at init time).
         if (allocated(pst%s%p%jp)     .and. allocated(jp))     jp     = pst%s%p%jp
         if (allocated(pst%s%p%zp)     .and. allocated(zp))     zp     = pst%s%p%zp
         if (allocated(pst%s%p%tp)     .and. allocated(tp))     tp     = pst%s%p%tp
@@ -140,8 +134,7 @@ end subroutine r_transfer_grid_host
 !###########################################################
 !###########################################################
 #ifdef _CUDA
-!> Copy device particle arrays back to host for host-side I/O readers.
-!> Call only at explicit host-consumer boundaries.
+!> D→H particle copy at host I/O boundaries.
 subroutine gpu_to_host_part(pst)
   use ramses_commons, only: pst_t
   implicit none
@@ -150,14 +143,12 @@ subroutine gpu_to_host_part(pst)
   if (.not. allocated(xp)) return
 
   call nvtxStartRange("Copy particles from device to host", color=5)!red
-  ! Mandatory mirrors (shapes match by construction in r_set_grid_device)
   pst%s%p%xp     = xp
   pst%s%p%vp     = vp
   pst%s%p%mp     = mp
   pst%s%p%levelp = levelp
   pst%s%p%sortp  = sortp
   pst%s%p%idp    = idp
-  ! Optional mirrors — copy iff both sides are allocated.
   if (allocated(jp)     .and. allocated(pst%s%p%jp))     pst%s%p%jp     = jp
   if (allocated(zp)     .and. allocated(pst%s%p%zp))     pst%s%p%zp     = zp
   if (allocated(tp)     .and. allocated(pst%s%p%tp))     pst%s%p%tp     = tp

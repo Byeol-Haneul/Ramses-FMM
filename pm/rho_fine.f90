@@ -519,6 +519,7 @@ recursive subroutine r_cic_multipole(pst,ilevel,input_size)
   else
 #ifdef _CUDA
      if(pst%s%m%data_on_device)then
+!       call gpu_cic_multipole(pst%s, ilevel)
         call gpu_cic_multipole2(pst%s, ilevel)
      else
         call cic_multipole(pst%s,ilevel)
@@ -682,18 +683,18 @@ recursive subroutine r_cic_part(pst,input_array,input_size)
      if(pst%s%m%data_on_device)then
         if(pst%s%r%part)then
            if(pst%s%p%type/=PART_TYPE)then
-              write(*,*)'r_cic_part: GPU mass deposition supports DM PART_TYPE only in phase 1.'
+              write(*,*)'ERROR: r_cic_part: DM PART_TYPE only.'
               call abort
            endif
            if(pst%s%r%part_mass_deposition_scheme/=1)then
-              write(*,'(A,I0,A)')' ERROR: r_cic_part: GPU TSC/PCS DM mass deposition (scheme ', &
-                   & pst%s%r%part_mass_deposition_scheme,') unavailable in phase 1.'
+              write(*,'(A,I0,A)')'ERROR: r_cic_part: CIC only (scheme ', &
+                   & pst%s%r%part_mass_deposition_scheme,').'
               call abort
            endif
            call gpu_cic_part(pst%s, ilevel, rtype)
         endif
         if(pst%s%r%star.or.pst%s%r%sink)then
-           write(*,*)'r_cic_part: star/sink on the GPU path are not supported in phase 1.'
+           write(*,*)'ERROR: r_cic_part: star/sink not supported on GPU.'
            call abort
         endif
         return
@@ -1234,7 +1235,7 @@ recursive subroutine r_split_part(pst,ilevel,input_size)
      if(pst%s%m%data_on_device)then
         if(pst%s%r%part)call gpu_split_part(pst%s, ilevel)
         if(pst%s%r%star.or.pst%s%r%sink.or.pst%s%r%tree.or.pst%s%r%trac)then
-           write(*,*)'r_split_part: star/sink/tree/tracers on the GPU path are not supported in phase 1.'
+           write(*,*)'ERROR: r_split_part: non-DM not supported on GPU.'
            call abort
         endif
         return
@@ -1992,7 +1993,7 @@ recursive subroutine r_sort_part(pst,ilevel,input_size)
      if(pst%s%m%data_on_device)then
         if(pst%s%r%part)call gpu_sort_part(pst%s, ilevel)
         if(pst%s%r%star.or.pst%s%r%sink.or.pst%s%r%tree.or.pst%s%r%trac)then
-           write(*,*)'r_sort_part: star/sink/tree/tracers on the GPU path are not supported in phase 1.'
+           write(*,*)'ERROR: r_sort_part: non-DM not supported on GPU.'
            call abort
         endif
         return
