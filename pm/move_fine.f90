@@ -55,9 +55,6 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
   integer::ilevel
   integer::action_part
   integer::rID
-#ifdef _CUDA
-  logical,save::warned_dm_kick_gpu=.false.
-#endif
 
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_KICK_DRIFT_PART,pst%iUpper+1,input_size,output_size,input_array)
@@ -73,18 +70,15 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
            write(*,*)'r_kick_drift_part: GPU particle kick-drift supports DM PART_TYPE only in phase 1.'
            call abort
         endif
-        if(pst%s%r%part_force_interpolation_scheme/=1 .and. .not.warned_dm_kick_gpu)then
-           write(*,'(A,I0,A)')' WARNING: r_kick_drift_part: GPU TSC/PCS DM force interpolation (scheme ', &
-                & pst%s%r%part_force_interpolation_scheme,') unavailable in phase 1; using GPU CIC kick-drift path instead.'
-           warned_dm_kick_gpu=.true.
+        if(pst%s%r%part_force_interpolation_scheme/=1)then
+           write(*,'(A,I0,A)')' ERROR: r_kick_drift_part: GPU TSC/PCS DM force interpolation (scheme ', &
+                & pst%s%r%part_force_interpolation_scheme,') unavailable in phase 1.'
+           call abort
         endif
         call gpu_kick_drift_part(pst%s, ilevel, action_part)
      endif
-     if(pst%s%r%star)call cic_kick_drift_part(pst%s,pst%s%star,ilevel,action_part)
-     if(pst%s%r%sink)call cic_kick_drift_part(pst%s,pst%s%sink,ilevel,action_part)
-     if(pst%s%r%tree)call cic_kick_drift_part(pst%s,pst%s%tree,ilevel,action_part)
-     if(pst%s%r%trac.or.pst%s%r%dust)then
-        write(*,*)'r_kick_drift_part: tracers/dust on the GPU path are not supported in phase 1.'
+     if(pst%s%r%star.or.pst%s%r%sink.or.pst%s%r%tree.or.pst%s%r%trac.or.pst%s%r%dust)then
+        write(*,*)'r_kick_drift_part: star/sink/tree/tracers/dust on the GPU path are not supported in phase 1.'
         call abort
      endif
 #else
