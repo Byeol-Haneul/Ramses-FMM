@@ -169,12 +169,10 @@ recursive subroutine r_multipole_leaf_cells(pst,ilevel,input_size)
 #ifdef _CUDA
      if(pst%s%m%data_on_device)then
         call gpu_multipole_leaf(pst%s, ilevel)
-     else
-        call multipole_leaf_cells(pst%s%r,pst%s%g,pst%s%m,ilevel)
+        return
      endif
-#else
-     call multipole_leaf_cells(pst%s%r,pst%s%g,pst%s%m,ilevel)
 #endif
+     call multipole_leaf_cells(pst%s%r,pst%s%g,pst%s%m,ilevel)
   endif
 
 end subroutine r_multipole_leaf_cells
@@ -283,12 +281,10 @@ recursive subroutine r_multipole_split_cells(pst,ilevel,input_size)
 #ifdef _CUDA
      if(pst%s%m%data_on_device)then
         call gpu_multipole_split(pst%s, ilevel)
-     else
-        call multipole_split_cells(pst%s,ilevel)
+        return
      endif
-#else
-     call multipole_split_cells(pst%s,ilevel)
 #endif
+     call multipole_split_cells(pst%s,ilevel)
   endif
 
 end subroutine r_multipole_split_cells
@@ -456,12 +452,10 @@ recursive subroutine r_reset_rho(pst,ilevel,input_size)
 #ifdef _CUDA
      if(pst%s%m%data_on_device)then
         call gpu_reset_rho(pst%s, ilevel)
-     else
-        call reset_rho(pst%s%r,pst%s%g,pst%s%m,ilevel)
+        return
      endif
-#else
-     call reset_rho(pst%s%r,pst%s%g,pst%s%m,ilevel)
 #endif
+     call reset_rho(pst%s%r,pst%s%g,pst%s%m,ilevel)
   endif
 
 end subroutine r_reset_rho
@@ -519,14 +513,11 @@ recursive subroutine r_cic_multipole(pst,ilevel,input_size)
   else
 #ifdef _CUDA
      if(pst%s%m%data_on_device)then
-!       call gpu_cic_multipole(pst%s, ilevel)
         call gpu_cic_multipole2(pst%s, ilevel)
-     else
-        call cic_multipole(pst%s,ilevel)
+        return
      endif
-#else
-     call cic_multipole(pst%s,ilevel)
 #endif
+     call cic_multipole(pst%s,ilevel)
   endif
 
 end subroutine r_cic_multipole
