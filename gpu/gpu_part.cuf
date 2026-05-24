@@ -11,7 +11,7 @@ module part_device
        jp, zp, tp, tm, size_p, charge, idm, idt, &
        hkey_part, bucket_part, &
        cell_part_count, cell_part_head, cell_part_idx, &
-       src_icell_part, src_igrid_part, &
+       src_part, &
        multipole_q_dev, &
        xp_swap, idp_swap, &
        dtnew_part, dtold_part
@@ -433,6 +433,7 @@ subroutine gpu_split_part(sim, ilevel)
   integer, intent(in) :: ilevel
 
   integer(kind=4) :: head_idx, num_parts, n_fine, n_coarse, ilev, leading
+  integer(kind=4), device :: n_fine_dev
   integer :: num_threads, num_blocks, idim
   real(kind=8) :: dx_loc, skip1, skip2, skip3
 
@@ -474,7 +475,8 @@ subroutine gpu_split_part(sim, ilevel)
           head_idx, num_parts)
      call init_prefix_sum_part<<<num_blocks, num_threads>>>(bucket_part, prefix_sum, &
           head_idx, num_parts)
-     call gpu_scan(head_idx, num_parts, n_fine)
+     call gpu_scan(head_idx, num_parts, n_fine_dev)
+     n_fine = n_fine_dev      ! D->H copy
      n_coarse = num_parts - n_fine
      call compute_local_swap_table<<<num_blocks, num_threads>>>(swap_local, &
           swap_global, prefix_sum, head_idx, num_parts)
@@ -499,7 +501,8 @@ subroutine gpu_split_part(sim, ilevel)
 
      call init_prefix_sum_part_hilbert_fine<<<num_blocks, num_threads>>>( &
           bucket_part, sortp, prefix_sum, head_idx, num_parts)
-     call gpu_scan(head_idx, num_parts, n_fine)
+     call gpu_scan(head_idx, num_parts, n_fine_dev)
+     n_fine = n_fine_dev      ! D->H copy
      n_coarse = num_parts - n_fine
      call write_swap_global_hilbert_partition<<<num_blocks, num_threads>>>( &
           swap_global, bucket_part, sortp, prefix_sum, &
@@ -676,7 +679,7 @@ subroutine gpu_sort_part(sim, ilevel)
   type(ramses_t), intent(inout) :: sim
   integer, intent(in) :: ilevel
 
-  integer(kind=4) :: head_idx, num_parts, total_sum, leading
+  integer(kind=4) :: head_idx, num_parts, leading
   integer :: num_threads, num_blocks
   integer :: ibit, level
   real(kind=8) :: dx_inv, skip1, skip2, skip3
@@ -730,7 +733,7 @@ subroutine gpu_sort_part(sim, ilevel)
   do ibit = 0, ndim * level - 1
      call init_prefix_sum_part_bit<<<num_blocks, num_threads>>>(hkey_part, &
           swap_global, prefix_sum, head_idx, num_parts, ibit)
-     call gpu_scan(head_idx, num_parts, total_sum)
+     call gpu_scan(head_idx, num_parts)
      call compute_local_swap_table<<<num_blocks, num_threads>>>(swap_local, &
           swap_global, prefix_sum, head_idx, num_parts)
      call update_global_swap_table<<<num_blocks, num_threads>>>(swap_global, &
@@ -761,16 +764,16 @@ end subroutine reset_cell_part_count_kernel
 
 !> Per-particle (icell_src, igrid_src) at level (ilevel+1); bump
 !> cell_part_count and cache the source map so the deposit kernel skips
-!> the per-k hash_get repeat. Hash-miss returns igrid_src=0.
+!> the per-k hash_get repeat. Hash-miss writes 0 (whole-word OOD sentinel).
+!> See gpu_part_state.cuf for the src_part bit layout.
 attributes(global) subroutine build_cell_part_count_kernel(xp_d, &
-     cell_part_count_d, src_icell_part_d, src_igrid_part_d, &
+     cell_part_count_d, src_part_d, &
      hash_key_d, hash_val_d, hash_size_d, ckey_max_d, key_off_d, &
      skip1, skip2, skip3, dx_loc, ilevel, head_idx, num_parts, leading)
   integer(kind=4), intent(in), value :: leading
   real(kind=dp),   device :: xp_d(*)
   integer(kind=4), device :: cell_part_count_d(1:twotondim, *)
-  integer(kind=4), device :: src_icell_part_d(*)
-  integer(kind=4), device :: src_igrid_part_d(*)
+  integer(kind=4), device :: src_part_d(*)
   integer(kind=8), device :: hash_key_d(*)
   integer(kind=4), device :: hash_val_d(*)
   integer(kind=4), intent(in), value :: hash_size_d
@@ -816,10 +819,12 @@ attributes(global) subroutine build_cell_part_count_kernel(xp_d, &
   key = offset + ix8 + iy8*nx + iz8*nx*nx
   igrid = hash_get(hash_key_d, hash_val_d, hash_size_d, key)
 
-  src_icell_part_d(ipart) = icell
-  src_igrid_part_d(ipart) = igrid
+  if (igrid == 0) then
+     src_part_d(ipart) = 0   ! out-of-domain sentinel
+     return
+  endif
 
-  if (igrid == 0) return    ! out-of-domain sentinel
+  src_part_d(ipart) = ior(ishft(igrid, 5), icell)
 
   old = atomicadd(cell_part_count_d(icell, igrid), 1)
 end subroutine build_cell_part_count_kernel
@@ -866,24 +871,25 @@ end subroutine compute_cell_part_head_kernel
 !> head + atomicAdd(count, 1). cell_part_count is left restored to its
 !> pre-place values.
 attributes(global) subroutine place_cell_part_idx_kernel(cell_part_count_d, &
-     cell_part_head_d, cell_part_idx_d, src_icell_part_d, src_igrid_part_d, &
+     cell_part_head_d, cell_part_idx_d, src_part_d, &
      head_idx, num_parts)
   integer(kind=4), device :: cell_part_count_d(1:twotondim, *)
   integer(kind=4), device :: cell_part_head_d (1:twotondim, *)
   integer(kind=4), device :: cell_part_idx_d(*)
-  integer(kind=4), device :: src_icell_part_d(*)
-  integer(kind=4), device :: src_igrid_part_d(*)
+  integer(kind=4), device :: src_part_d(*)
   integer(kind=4), intent(in), value :: head_idx, num_parts
 
   integer :: thread_idx, block_idx, idx, ipart, icell, igrid, slot_off, slot
+  integer(kind=4) :: combined
   thread_idx = threadIdx%x - 1
   block_idx  = blockIdx%x  - 1
   idx = thread_idx + block_idx * blockDim%x
   if (idx >= num_parts) return
   ipart = head_idx + idx
-  icell = src_icell_part_d(ipart)
-  igrid = src_igrid_part_d(ipart)
-  if (igrid == 0) return
+  combined = src_part_d(ipart)
+  if (combined == 0) return        ! whole-word OOD sentinel
+  icell = iand(combined, 31)
+  igrid = ishft(combined, -5)
   slot_off = atomicadd(cell_part_count_d(icell, igrid), 1)
   slot = cell_part_head_d(icell, igrid) + slot_off + 1
   cell_part_idx_d(slot) = ipart
@@ -930,7 +936,7 @@ end subroutine multipole_q_kernel
 !> warps) each lane does its own hash_get and atomicAdd. The outer
 !> k=1..threetondim loop is fused inside the kernel.
 attributes(global) subroutine cic_part_warp_kernel(cell_part_idx_d, &
-     src_icell_part_d, src_igrid_part_d, num_placed, &
+     src_part_d, num_placed, &
      grid_d, hash_key_d, hash_val_d, hash_size_d, ckey_max_d, key_off_d, &
      box_ckey_min_d, box_ckey_max_d, periodic_d, &
      xp_d, mp_d, rho_d, nref_d, &
@@ -938,8 +944,7 @@ attributes(global) subroutine cic_part_warp_kernel(cell_part_idx_d, &
      m_refine_at_level, mass_cut_refine, ilevel, leading)
   integer(kind=4), intent(in), value :: num_placed, leading, ilevel
   integer(kind=4), device :: cell_part_idx_d(*)
-  integer(kind=4), device :: src_icell_part_d(*)
-  integer(kind=4), device :: src_igrid_part_d(*)
+  integer(kind=4), device :: src_part_d(*)
   type(oct),       device :: grid_d(*)
   integer(kind=8), device :: hash_key_d(*)
   integer(kind=4), device :: hash_val_d(*)
@@ -961,6 +966,7 @@ attributes(global) subroutine cic_part_warp_kernel(cell_part_idx_d, &
   integer :: icell_src_lane, igrid_src_lane, ref_icell, ref_igrid
   integer :: match_int, n_match
   integer :: ox, oy, oz, dst_igrid_lane, dst_icell_lane
+  integer(kind=4) :: combined
   integer(kind=4) :: src_full_ckey(1:3), target_ckey(1:3), father_ckey(1:3), ii(1:3)
   integer(kind=4) :: ii_src(1:3), box_min(1:3), box_max(1:3)
   integer(kind=8) :: nx, hkey_offset, key, ix8, iy8, iz8
@@ -982,12 +988,16 @@ attributes(global) subroutine cic_part_warp_kernel(cell_part_idx_d, &
   icell_src_lane = 0
   igrid_src_lane = 0
   if (valid_lane) then
-     ipart          = cell_part_idx_d(slot_global)
-     icell_src_lane = src_icell_part_d(ipart)
-     igrid_src_lane = src_igrid_part_d(ipart)
-     ! Defensive: place_cell_part_idx_kernel skips OOD particles, so a
-     ! sentinel here would indicate a build-pipeline bug.
-     if (igrid_src_lane == 0) valid_lane = .false.
+     ipart    = cell_part_idx_d(slot_global)
+     combined = src_part_d(ipart)
+     ! Defensive: place_cell_part_idx_kernel skips OOD particles (combined==0),
+     ! so a sentinel here would indicate a build-pipeline bug.
+     if (combined == 0) then
+        valid_lane = .false.
+     else
+        icell_src_lane = iand(combined, 31)
+        igrid_src_lane = ishft(combined, -5)
+     endif
   endif
 
   skip(1) = skip1
@@ -1210,6 +1220,7 @@ subroutine gpu_cic_part(sim, ilevel, rtype)
 
   integer(kind=4) :: head_idx, num_parts, leading, num_grids, total_cells
   integer(kind=4) :: total_sum_unused
+  integer(kind=4), device :: total_sum_dev
   integer :: num_threads, num_blocks, idim
   integer :: deposit_block_size, deposit_num_blocks
   real(kind=8) :: dx_loc, vol_loc, skip1, skip2, skip3
@@ -1271,7 +1282,7 @@ subroutine gpu_cic_part(sim, ilevel, rtype)
   num_threads = 128
   num_blocks  = (num_parts + num_threads - 1) / num_threads
   call build_cell_part_count_kernel<<<num_blocks, num_threads>>>(xp, &
-       cell_part_count, src_icell_part, src_igrid_part, &
+       cell_part_count, src_part, &
        hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, &
        skip1, skip2, skip3, dx_loc, ilevel, head_idx, num_parts, leading)
   call GPU_Error_Check("gpu/gpu_part.cuf", 0)
@@ -1284,7 +1295,8 @@ subroutine gpu_cic_part(sim, ilevel, rtype)
        prefix_sum, num_grids)
   call GPU_Error_Check("gpu/gpu_part.cuf", 0)
 
-  call gpu_scan(1, total_cells, total_sum_unused)
+  call gpu_scan(1, total_cells, total_sum_dev)
+  total_sum_unused = total_sum_dev      ! D->H copy
 
   call compute_cell_part_head_kernel<<<num_blocks, num_threads>>>(cell_part_count, &
        cell_part_head, prefix_sum, num_grids)
@@ -1293,7 +1305,7 @@ subroutine gpu_cic_part(sim, ilevel, rtype)
   num_threads = 128
   num_blocks  = (num_parts + num_threads - 1) / num_threads
   call place_cell_part_idx_kernel<<<num_blocks, num_threads>>>(cell_part_count, &
-       cell_part_head, cell_part_idx, src_icell_part, src_igrid_part, &
+       cell_part_head, cell_part_idx, src_part, &
        head_idx, num_parts)
   call GPU_Error_Check("gpu/gpu_part.cuf", 0)
 
@@ -1303,7 +1315,7 @@ subroutine gpu_cic_part(sim, ilevel, rtype)
      deposit_block_size = 256
      deposit_num_blocks = (total_sum_unused + deposit_block_size - 1) / deposit_block_size
      call cic_part_warp_kernel<<<deposit_num_blocks, deposit_block_size>>>(&
-          cell_part_idx, src_icell_part, src_igrid_part, total_sum_unused, &
+          cell_part_idx, src_part, total_sum_unused, &
           grid, hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, &
           box_ckey_min, box_ckey_max, periodic, &
           xp, mp, rho, nref, &
