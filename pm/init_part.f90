@@ -97,6 +97,9 @@ subroutine init_part(r,g,m,p)
   allocate(levelp(1:r%npartmax))
   allocate(sortp(1:r%npartmax))
   allocate(idp(1:r%npartmax))
+#ifdef OUTPUT_PARTICLE_POTENTIAL
+  allocate(phip(1:r%npartmax))
+#endif
   ! CIC/sort/split scratch.
   allocate(hkey_part  (1:r%npartmax))
   allocate(bucket_part(1:r%npartmax))
@@ -108,14 +111,6 @@ subroutine init_part(r,g,m,p)
   ! Gather/scatter scratch (device-only).
   allocate(xp_swap (1:r%npartmax))
   allocate(idp_swap(1:r%npartmax))
-  if (allocated(p%jp))     allocate(jp    (1:size(p%jp, 1), 1:ndim))
-  if (allocated(p%zp))     allocate(zp    (1:size(p%zp)))
-  if (allocated(p%tp))     allocate(tp    (1:size(p%tp)))
-  if (allocated(p%tm))     allocate(tm    (1:size(p%tm)))
-  if (allocated(p%size))   allocate(size_p(1:size(p%size)))
-  if (allocated(p%charge)) allocate(charge(1:size(p%charge)))
-  if (allocated(p%idm))    allocate(idm   (1:size(p%idm)))
-  if (allocated(p%idt))    allocate(idt   (1:size(p%idt)))
 #endif
 end subroutine init_part
 !#########################################################################
