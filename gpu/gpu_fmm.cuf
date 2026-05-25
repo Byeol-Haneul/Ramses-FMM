@@ -813,4 +813,156 @@ contains
   end subroutine fmm_amr_intermediate_kernel
   ! =========================================================================
 
+  ! =========================================================================
+  attributes(global) subroutine fmm_amr_direct_kernel(grid_amr, rho_amr, phi_amr, hash_key_amr, hash_val_amr, &
+       & hash_size_amr, ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, head_idx, num_octs, &
+       & ilev, level_fmm_to_amr, dx_loc, dxn)
+    type(oct), device :: grid_amr(*)
+    real(kind=dp), device :: rho_amr(1:twotondim,*), phi_amr(1:twotondim,*)
+    integer(kind=8), device :: hash_key_amr(*)
+    integer(kind=4), device :: hash_val_amr(*)
+    integer(kind=4), device :: ckey_max(*)
+    integer(kind=8), device :: key_off(*)
+    integer(kind=4), device :: box_ckey_min(1:3,*), box_ckey_max(1:3,*)
+    logical, device :: periodic(1:3)
+    integer(kind=4), value :: hash_size_amr, head_idx, num_octs, ilev, level_fmm_to_amr
+    real(kind=dp), value :: dx_loc, dxn
+
+    integer :: thread_idx, ioct, idim, icell, jcell, jgrid, jfinecell, inbor, nstride
+    integer(kind=4) :: nfine, half_nfine, nbox
+    integer(kind=4) :: hash_target(1:3), hash_fmm_cell(1:3), target_grid_coord(1:3)
+    integer(kind=4) :: offset(1:3), cc_fmm_cell(1:3), local_grid_coord(1:3)
+    integer(kind=4) :: hash_direct(1:3), hash_fine(1:3), source_cell_coord(1:3), fine_cell_coord(1:3)
+    integer(kind=4) :: cc_igrid(1:3), cc_jgrid(1:3), cc_icell(1:3), cc_jcell(1:3)
+    integer(kind=4) :: igrid, igrid_nbor, igrid_fine
+    real(kind=dp) :: diff(1:3), fine_diff(1:3), dist, inv_dist, phi_accum
+    logical :: in_domain, source_all_refined, direct_neighbor, same_cell
+
+    thread_idx = threadIdx%x - 1
+    ioct = thread_idx + (blockIdx%x - 1) * blockDim%x
+    if (ioct >= num_octs) return
+    ioct = head_idx + ioct
+
+    if (all(grid_amr(ioct)%refined(1:twotondim))) return
+
+    nfine = 2**level_fmm_to_amr
+    half_nfine = max(1, nfine / 2)
+    nbox = half_nfine**ndim
+
+    hash_target = 0
+    hash_fmm_cell = 0
+    target_grid_coord = 0
+    igrid = 1
+    do idim = 1, ndim
+       hash_target(idim) = grid_amr(ioct)%ckey(idim)
+       hash_fmm_cell(idim) = hash_target(idim) / half_nfine
+       target_grid_coord(idim) = mod(hash_target(idim), half_nfine)
+       igrid = igrid + half_nfine**(idim-1) * target_grid_coord(idim)
+    end do
+
+    do icell = 1, twotondim
+       if (grid_amr(ioct)%refined(icell)) cycle
+
+       cc_igrid = target_grid_coord
+       cc_icell = 0
+       do idim = 1, ndim
+          nstride = 2**(idim-1)
+          cc_icell(idim) = 2 * cc_igrid(idim) + mod((icell-1)/nstride, 2)
+       end do
+
+       phi_accum = 0.0_dp
+       do inbor = 1, threetondim
+          do idim = 1, ndim
+             offset(idim) = mod((inbor-1)/3**(idim-1), 3) - 1
+             cc_fmm_cell(idim) = hash_fmm_cell(idim) + offset(idim)
+          end do
+
+          do jgrid = 1, nbox
+             local_grid_coord = 0
+             hash_direct = 0
+             cc_jgrid = 0
+             do idim = 1, ndim
+                nstride = half_nfine**(idim-1)
+                local_grid_coord(idim) = mod((jgrid-1)/nstride, half_nfine)
+                hash_direct(idim) = half_nfine * cc_fmm_cell(idim) + local_grid_coord(idim)
+                cc_jgrid(idim) = offset(idim) * half_nfine + local_grid_coord(idim)
+             end do
+
+             call wrap_grid_ckey(hash_direct, ilev, box_ckey_min, box_ckey_max, periodic, in_domain)
+             if (.not. in_domain) cycle
+
+             igrid_nbor = lookup_grid_by_ckey(hash_direct, ilev, hash_key_amr, hash_val_amr, &
+                  & hash_size_amr, ckey_max, key_off)
+             if (igrid_nbor <= 0) cycle
+
+             source_all_refined = all(grid_amr(igrid_nbor)%refined(1:twotondim))
+             if (source_all_refined) then
+                do jcell = 1, twotondim
+                   source_cell_coord = 0
+                   cc_jcell = 0
+                   direct_neighbor = .true.
+                   do idim = 1, ndim
+                      nstride = 2**(idim-1)
+                      source_cell_coord(idim) = mod((jcell-1)/nstride, 2)
+                      cc_jcell(idim) = 2 * cc_jgrid(idim) + source_cell_coord(idim)
+                      if (abs(cc_icell(idim) - cc_jcell(idim)) > 1) direct_neighbor = .false.
+                   end do
+                   if (.not. direct_neighbor) cycle
+
+                   hash_fine = 0
+                   do idim = 1, ndim
+                      hash_fine(idim) = 2 * hash_direct(idim) + source_cell_coord(idim)
+                   end do
+                   igrid_fine = lookup_grid_by_ckey(hash_fine, ilev+1, hash_key_amr, hash_val_amr, &
+                        & hash_size_amr, ckey_max, key_off)
+                   if (igrid_fine <= 0) cycle
+
+                   diff = 0.0_dp
+                   do idim = 1, ndim
+                      diff(idim) = real(cc_icell(idim) - cc_jcell(idim), kind=dp) * dx_loc
+                   end do
+
+                   do jfinecell = 1, twotondim
+                      fine_diff = diff
+                      do idim = 1, ndim
+                         nstride = 2**(idim-1)
+                         fine_cell_coord(idim) = mod((jfinecell-1)/nstride, 2)
+                         fine_diff(idim) = fine_diff(idim) + &
+                              & 0.5_dp * (real(fine_cell_coord(idim), kind=dp) - 0.5_dp) * dx_loc
+                      end do
+                      dist = sqrt(sum(fine_diff(1:ndim)**2))
+                      if (dist > 0.0_dp) then
+                         phi_accum = phi_accum - rho_amr(jfinecell, igrid_fine) * dxn * 0.125_dp / dist
+                      end if
+                   end do
+                end do
+             else
+                do jcell = 1, twotondim
+                   cc_jcell = 0
+                   same_cell = .true.
+                   diff = 0.0_dp
+                   do idim = 1, ndim
+                      nstride = 2**(idim-1)
+                      source_cell_coord(idim) = mod((jcell-1)/nstride, 2)
+                      cc_jcell(idim) = 2 * cc_jgrid(idim) + source_cell_coord(idim)
+                      same_cell = same_cell .and. cc_icell(idim) == cc_jcell(idim)
+                      diff(idim) = real(cc_icell(idim) - cc_jcell(idim), kind=dp) * dx_loc
+                   end do
+                   if (same_cell) then
+                      inv_dist = 1.0_dp / dx_loc
+                   else
+                      inv_dist = 1.0_dp / sqrt(sum(diff(1:ndim)**2))
+                   end if
+                   phi_accum = phi_accum - rho_amr(jcell, igrid_nbor) * dxn * inv_dist
+                end do
+             end if
+          end do
+       end do
+
+       phi_amr(icell, ioct) = phi_amr(icell, ioct) + phi_accum
+    end do
+
+  end subroutine fmm_amr_direct_kernel
+  ! =========================================================================
+
 end module fmm_device

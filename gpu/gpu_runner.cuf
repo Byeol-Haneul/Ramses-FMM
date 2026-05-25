@@ -2598,6 +2598,53 @@ contains
 
   end subroutine gpu_fmm_amr_intermediate
 
+  !> @brief
+  !> Evaluate same-level AMR near-field direct interactions on leaf cells.
+  !>
+  subroutine gpu_fmm_amr_direct(sim, ilev)
+    use nvtx
+    use fmm_device, only: fmm_amr_direct_kernel
+    use ramses_commons, only: ramses_t
+    implicit none
+    type(ramses_t), intent(inout) :: sim
+    integer, intent(in) :: ilev
+
+    integer(kind=4) :: head_idx, num_octs, num_threads, num_blocks
+    real(kind=dp) :: dx_loc, dxn
+
+#ifdef FMM
+    call nvtxStartRange("GPU upload_fmm_amr_direct", color=5)!red
+    grid = sim%m%grid
+    rho = sim%m%rho
+    phi = sim%m%phi
+    call GPU_Error_Check(__FILE__, __LINE__)
+    call nvtxEndRange()
+
+    call gpu_reset_hash(sim)
+
+    head_idx = sim%m%head(ilev)
+    num_octs = sim%m%noct(ilev)
+    dx_loc = real(sim%r%boxlen / 2.0D0**ilev, kind=dp)
+    dxn = dx_loc**ndim
+    num_threads = 128
+    num_blocks = (num_octs + num_threads - 1) / num_threads
+    if (num_octs > 0) then
+       call nvtxStartRange("GPU fmm_amr_direct", color=1)!blue
+       call fmm_amr_direct_kernel<<<num_blocks, num_threads>>>(grid, rho, phi, hash_key, hash_val, &
+            & sim%m%hash_size, ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, head_idx, num_octs, &
+            & ilev, sim%r%level_fmm_to_amr, dx_loc, dxn)
+       call GPU_Error_Check(__FILE__, __LINE__)
+       call nvtxEndRange()
+    end if
+
+    call nvtxStartRange("GPU download_fmm_amr_direct", color=5)!red
+    sim%m%phi = phi
+    call GPU_Error_Check(__FILE__, __LINE__)
+    call nvtxEndRange()
+#endif
+
+  end subroutine gpu_fmm_amr_direct
+
   !###########################################################
   !###########################################################
   !###########################################################
