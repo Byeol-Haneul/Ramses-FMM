@@ -1,4 +1,8 @@
 module fmm_multipoles
+#if defined(_CUDA) && defined(WITHOUTMPI)
+  use gpu_runner, only: gpu_reset_fmm_multipoles_taylor, gpu_fmm_multipole_amr2fmm, &
+       & gpu_fmm_multipole_fmm2fmm, gpu_fmm_multipole_shift_downward
+#endif
 contains
 #ifdef GRAV
 !###############################################
@@ -295,7 +299,11 @@ recursive subroutine r_fmm_multipole_amr2fmm(pst,ilevel,input_size)
      call r_fmm_multipole_amr2fmm(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
+#if defined(_CUDA) && defined(WITHOUTMPI)
+     call gpu_fmm_multipole_amr2fmm(pst%s,ilevel)
+#else
      call fmm_multipole_amr2fmm(pst%s,ilevel)
+#endif
   endif
 
 end subroutine r_fmm_multipole_amr2fmm
@@ -443,7 +451,11 @@ recursive subroutine r_fmm_multipole_fmm2fmm(pst,fmm_levels,input_size)
      if (fmm_levels%mode == FMM_MULTIPOLE_MERGED) then
         call fmm_merge_multipoles_all(pst%s,fmm_levels%ilev)
      else
+#if defined(_CUDA) && defined(WITHOUTMPI)
+        call gpu_fmm_multipole_fmm2fmm(pst%s,fmm_levels%ilev,fmm_levels%flev)
+#else
         call fmm_multipole_fmm2fmm(pst%s,pst%s%m_fmm_list(fmm_levels%ilev),fmm_levels%flev)
+#endif
      end if
   endif
 
@@ -582,7 +594,11 @@ recursive subroutine r_fmm_multipole_shift_downward(pst,fmm_levels,input_size)
      call r_fmm_multipole_shift_downward(pst%pLower,fmm_levels,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
+#if defined(_CUDA) && defined(WITHOUTMPI)
+     call gpu_fmm_multipole_shift_downward(pst%s,fmm_levels%ilev,fmm_levels%flev)
+#else
      call fmm_multipole_shift_downward(pst%s,pst%s%m_fmm_list(fmm_levels%ilev),fmm_levels%flev)
+#endif
   endif
 
 end subroutine r_fmm_multipole_shift_downward
@@ -854,7 +870,11 @@ recursive subroutine r_reset_multipoles_taylor(pst,fmm_levels,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
      if (fmm_levels%flev <= fmm_levels%ilev-pst%s%r%level_fmm_to_amr) then
+#if defined(_CUDA) && defined(WITHOUTMPI)
+        call gpu_reset_fmm_multipoles_taylor(pst%s,fmm_levels%ilev,fmm_levels%flev)
+#else
         call reset_multipoles_taylor(pst%s%r,pst%s%g,pst%s%m_fmm_list(fmm_levels%ilev),fmm_levels%flev)
+#endif
      else 
         return
      end if

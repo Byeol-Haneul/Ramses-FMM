@@ -2323,6 +2323,86 @@ contains
 
   end subroutine gpu_fmm_multipole_amr2fmm
 
+  !> @brief
+  !> Accumulate child FMM cell multipoles into parent FMM cells.
+  !>
+  subroutine gpu_fmm_multipole_fmm2fmm(sim, ilevel, flev)
+    use nvtx
+    use fmm_device, only: fmm_multipole_fmm2fmm
+    use ramses_commons, only: ramses_t
+    implicit none
+    type(ramses_t), intent(inout) :: sim
+    integer, intent(in) :: ilevel, flev
+
+    integer(kind=4) :: head_idx, num_octs, num_threads, num_blocks
+
+#ifdef FMM
+    call gpu_upload_fmm_tree(sim, ilevel)
+
+    head_idx = sim%m_fmm_list(ilevel)%head(flev+1)
+    num_octs = sim%m_fmm_list(ilevel)%noct(flev+1)
+    num_threads = 128
+    num_blocks = (num_octs + num_threads - 1) / num_threads
+    if (num_octs > 0) then
+       call nvtxStartRange("GPU fmm_multipole_fmm2fmm", color=1)!blue
+       call fmm_multipole_fmm2fmm<<<num_blocks, num_threads>>>(grid_fmm, multipole_fmm, &
+            & hash_key_fmm, hash_val_fmm, fmm_hash_capacity, ckey_max, key_off, head_idx, num_octs)
+       call GPU_Error_Check(__FILE__, __LINE__)
+       call nvtxEndRange()
+    end if
+
+    call gpu_download_fmm_tree(sim, ilevel)
+#endif
+
+  end subroutine gpu_fmm_multipole_fmm2fmm
+
+  !> @brief
+  !> Shift FMM multipoles from absolute coordinates into each FMM cell center.
+  !>
+  subroutine gpu_fmm_multipole_shift_downward(sim, ilevel, flev)
+    use nvtx
+    use fmm_device, only: fmm_multipole_shift_downward
+    use ramses_commons, only: ramses_t
+    implicit none
+    type(ramses_t), intent(inout) :: sim
+    integer, intent(in) :: ilevel, flev
+
+    integer(kind=4) :: head_idx, num_octs
+    integer :: threadsX_per_block, threadsY_per_block, num_blocks
+    real(kind=dp) :: dx_loc, skip1, skip2, skip3
+
+#ifdef FMM
+    call gpu_upload_fmm_tree(sim, ilevel)
+
+    dx_loc = real(sim%r%boxlen / 2.0D0**flev, kind=dp)
+    skip1 = real(sim%m%skip(1), kind=dp)
+    skip2 = 0.0_dp
+    skip3 = 0.0_dp
+#if NDIM>1
+    skip2 = real(sim%m%skip(2), kind=dp)
+#endif
+#if NDIM>2
+    skip3 = real(sim%m%skip(3), kind=dp)
+#endif
+
+    head_idx = sim%m_fmm_list(ilevel)%head(flev)
+    num_octs = sim%m_fmm_list(ilevel)%noct(flev)
+    threadsX_per_block = twotondim
+    threadsY_per_block = 16
+    num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
+    if (num_octs > 0) then
+       call nvtxStartRange("GPU fmm_multipole_shift_downward", color=1)!blue
+       call fmm_multipole_shift_downward<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>( &
+            & grid_fmm, multipole_fmm, head_idx, num_octs, dx_loc, skip1, skip2, skip3)
+       call GPU_Error_Check(__FILE__, __LINE__)
+       call nvtxEndRange()
+    end if
+
+    call gpu_download_fmm_tree(sim, ilevel)
+#endif
+
+  end subroutine gpu_fmm_multipole_shift_downward
+
   !###########################################################
   !###########################################################
   !###########################################################
