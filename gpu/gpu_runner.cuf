@@ -2549,6 +2549,55 @@ contains
 
   end subroutine gpu_fmm_downward
 
+  !> @brief
+  !> Evaluate FMM interactions onto AMR leaf cells from a CPU-built source tree.
+  !>
+  subroutine gpu_fmm_amr_intermediate(sim, ilev, jlev, use_merged)
+    use nvtx
+    use fmm_device, only: fmm_amr_intermediate_kernel
+    use ramses_commons, only: ramses_t
+    implicit none
+    type(ramses_t), intent(inout) :: sim
+    integer, intent(in) :: ilev, jlev
+    logical, intent(in) :: use_merged
+
+    integer(kind=4) :: head_idx, num_octs, num_threads, num_blocks
+    real(kind=dp) :: dx_loc
+    logical :: reset_phi
+
+#ifdef FMM
+    call gpu_upload_fmm_source_tree(sim, jlev, use_merged)
+
+    call nvtxStartRange("GPU upload_fmm_amr_phi", color=5)!red
+    grid = sim%m%grid
+    phi = sim%m%phi
+    call GPU_Error_Check(__FILE__, __LINE__)
+    call nvtxEndRange()
+
+    head_idx = sim%m%head(ilev)
+    num_octs = sim%m%noct(ilev)
+    dx_loc = real(sim%r%boxlen / 2.0D0**ilev, kind=dp)
+    reset_phi = (jlev == ilev)
+    num_threads = 128
+    num_blocks = (num_octs + num_threads - 1) / num_threads
+    if (num_octs > 0) then
+       call nvtxStartRange("GPU fmm_amr_intermediate", color=1)!blue
+       call fmm_amr_intermediate_kernel<<<num_blocks, num_threads>>>(grid, phi, grid_fmm_source, multipole_fmm_source, &
+            & taylor_fmm_source, hash_key_fmm_source, hash_val_fmm_source, fmm_source_hash_capacity, &
+            & ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, head_idx, num_octs, ilev, jlev, &
+            & sim%r%level_fmm_to_amr, dx_loc, reset_phi)
+       call GPU_Error_Check(__FILE__, __LINE__)
+       call nvtxEndRange()
+    end if
+
+    call nvtxStartRange("GPU download_fmm_amr_phi", color=5)!red
+    sim%m%phi = phi
+    call GPU_Error_Check(__FILE__, __LINE__)
+    call nvtxEndRange()
+#endif
+
+  end subroutine gpu_fmm_amr_intermediate
+
   !###########################################################
   !###########################################################
   !###########################################################
