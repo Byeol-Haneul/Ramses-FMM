@@ -1,4 +1,7 @@
 module fmm_fine_commons
+#if defined(_CUDA) && defined(WITHOUTMPI)
+  use gpu_runner, only: gpu_fmm_downward
+#endif
 contains
 ! ------------------------------------------------------------------------
 ! FMM Poisson solver for refined AMR levels
@@ -297,8 +300,13 @@ recursive subroutine r_fmm_downward(pst,downward_levels,input_size)
        call fmm_downward_coarse(pst%s, downward_levels%ilev, downward_levels%jlev, downward_levels%flev, &
             use_merged=(downward_levels%mode == FMM_TREE_SOURCE_MERGED))
      else
+#if defined(_CUDA) && defined(WITHOUTMPI)
+       call gpu_fmm_downward(pst%s, downward_levels%ilev, downward_levels%jlev, downward_levels%flev, &
+            downward_levels%mode == FMM_TREE_SOURCE_MERGED)
+#else
        call fmm_downward(pst%s, downward_levels%ilev, downward_levels%jlev, downward_levels%flev, &
             use_merged=(downward_levels%mode == FMM_TREE_SOURCE_MERGED))
+#endif
      end if
   endif
 
