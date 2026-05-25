@@ -517,4 +517,149 @@ contains
   end subroutine fmm_multipole_shift_downward
   ! =========================================================================
 
+  ! =========================================================================
+  attributes(global) subroutine fmm_downward_kernel(grid_target, taylor_target, hash_key_target, hash_val_target, &
+       & grid_source, multipole_source, taylor_source, hash_key_source, hash_val_source, hash_size_target, &
+       & hash_size_source, ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, head_idx, num_octs, &
+       & ilev, jlev, flev, dx_loc)
+    type(oct), device :: grid_target(*), grid_source(*)
+    real(kind=dp), device :: taylor_target(1:twotondim,1:taylor_size,*)
+    real(kind=dp), device :: multipole_source(1:twotondim,1:multipole_size,*)
+    real(kind=dp), device :: taylor_source(1:twotondim,1:taylor_size,*)
+    integer(kind=8), device :: hash_key_target(*), hash_key_source(*)
+    integer(kind=4), device :: hash_val_target(*), hash_val_source(*)
+    integer(kind=4), device :: ckey_max(*)
+    integer(kind=8), device :: key_off(*)
+    integer(kind=4), device :: box_ckey_min(1:3,*), box_ckey_max(1:3,*)
+    logical, device :: periodic(1:3)
+    integer(kind=4), value :: hash_size_target, hash_size_source
+    integer(kind=4), value :: head_idx, num_octs, ilev, jlev, flev
+    real(kind=dp), value :: dx_loc
+
+    integer :: thread_idx, ioct, idim, icell, jcell, inbor, q, nstride
+    integer(kind=4) :: hash_key(1:3), hash_parent(1:3), hash_nbor_periodic(1:3)
+    integer(kind=4) :: pcell, target_cell_coord(1:3), source_cell_coord(1:3)
+    integer(kind=4) :: icell_coord(1:3), offset(1:3), cc_icell(1:3), cc_jcell(1:3)
+    integer(kind=4) :: grid_nbors(1:threetondim), igrid_nbor, igrid_parent
+    real(kind=dp) :: dx_shift(1:3), diff(1:3), dist, D0, D1, D2, D3
+    real(kind=dp) :: multipole(1:multipole_size), temp_taylor(1:taylor_size)
+    real(kind=dp) :: accum_taylor(1:twotondim,1:taylor_size), parent_taylor(1:taylor_size)
+    logical :: direct_neighbor, cycle_flag, nonzero_multipole
+
+    thread_idx = threadIdx%x - 1
+    ioct = thread_idx + (blockIdx%x - 1) * blockDim%x
+    if (ioct >= num_octs) return
+    ioct = head_idx + ioct
+
+    hash_key = 0
+    hash_parent = 0
+    target_cell_coord = 0
+    do idim = 1, ndim
+       hash_key(idim) = grid_target(ioct)%ckey(idim)
+       hash_parent(idim) = hash_key(idim) / 2
+       target_cell_coord(idim) = hash_key(idim) - 2 * hash_parent(idim)
+    end do
+
+    pcell = 1
+    do idim = 1, ndim
+       pcell = pcell + 2**(idim-1) * target_cell_coord(idim)
+    end do
+
+    accum_taylor = 0.0_dp
+
+    if (ilev == jlev) then
+       call get_parent_cell_device(grid_target, hash_key_target, hash_val_target, hash_size_target, &
+            & ckey_max, key_off, hash_key, flev, igrid_parent, pcell)
+       parent_taylor = 0.0_dp
+       if (igrid_parent > 0) parent_taylor = taylor_source(pcell, 1:taylor_size, igrid_parent)
+
+       do icell = 1, twotondim
+          dx_shift = 0.0_dp
+          do idim = 1, ndim
+             nstride = 2**(idim-1)
+             dx_shift(idim) = (real(mod((icell-1)/nstride, 2), kind=dp) - 0.5_dp) * dx_loc
+          end do
+          call fmm_shift_taylor(parent_taylor, dx_shift, temp_taylor)
+          do q = 1, taylor_size
+             accum_taylor(icell, q) = accum_taylor(icell, q) + temp_taylor(q)
+          end do
+       end do
+    end if
+
+    call get_intermediate_nbor_grid_device(hash_key_source, hash_val_source, hash_size_source, &
+         & ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, hash_key, flev, grid_nbors)
+
+    do inbor = 1, threetondim
+       do idim = 1, ndim
+          offset(idim) = mod((inbor-1)/3**(idim-1), 3) - 1
+          hash_nbor_periodic(idim) = hash_parent(idim) + offset(idim)
+       end do
+
+       igrid_nbor = grid_nbors(inbor)
+       if (igrid_nbor <= 0) cycle
+
+       do jcell = 1, twotondim
+          multipole = multipole_source(jcell, 1:multipole_size, igrid_nbor)
+          nonzero_multipole = .false.
+          do q = 1, multipole_size
+             nonzero_multipole = nonzero_multipole .or. multipole(q) /= 0.0_dp
+          end do
+          if (.not. nonzero_multipole) cycle
+
+          source_cell_coord = 0
+          cycle_flag = .false.
+          do idim = 1, ndim
+             nstride = 2**(idim-1)
+             source_cell_coord(idim) = mod((jcell-1)/nstride, 2)
+             if (2*hash_nbor_periodic(idim) + source_cell_coord(idim) < box_ckey_min(idim, flev) .or. &
+                 2*hash_nbor_periodic(idim) + source_cell_coord(idim) >= box_ckey_max(idim, flev)) then
+                cycle_flag = .true.
+             end if
+          end do
+          if (cycle_flag) cycle
+
+          cc_jcell = 0
+          do idim = 1, ndim
+             cc_jcell(idim) = 2 * offset(idim) + source_cell_coord(idim)
+          end do
+
+          direct_neighbor = .true.
+          do idim = 1, ndim
+             if (abs(cc_jcell(idim) - target_cell_coord(idim)) > 1) direct_neighbor = .false.
+          end do
+          if (direct_neighbor) cycle
+
+          do icell = 1, twotondim
+             icell_coord = 0
+             cc_icell = 0
+             diff = 0.0_dp
+             do idim = 1, ndim
+                nstride = 2**(idim-1)
+                icell_coord(idim) = mod((icell-1)/nstride, 2)
+                cc_icell(idim) = 2 * target_cell_coord(idim) + icell_coord(idim)
+                diff(idim) = (real(cc_icell(idim), kind=dp) - 0.5_dp - &
+                     & 2.0_dp * real(cc_jcell(idim), kind=dp)) * dx_loc
+             end do
+             dist = sqrt(sum(diff(1:ndim)**2))
+             D0 = 1.0_dp / dist
+             D1 = -1.0_dp / dist**3
+             D2 = 3.0_dp / dist**5
+             D3 = -15.0_dp / dist**7
+             call fmm_calc_taylor_from_multipole(diff, D0, D1, D2, D3, multipole, temp_taylor)
+             do q = 1, taylor_size
+                accum_taylor(icell, q) = accum_taylor(icell, q) + temp_taylor(q)
+             end do
+          end do
+       end do
+    end do
+
+    do icell = 1, twotondim
+       do q = 1, taylor_size
+          taylor_target(icell, q, ioct) = taylor_target(icell, q, ioct) + accum_taylor(icell, q)
+       end do
+    end do
+
+  end subroutine fmm_downward_kernel
+  ! =========================================================================
+
 end module fmm_device
