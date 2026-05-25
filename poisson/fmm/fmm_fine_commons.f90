@@ -1,6 +1,6 @@
 module fmm_fine_commons
 #if defined(_CUDA) && defined(WITHOUTMPI)
-  use gpu_runner, only: gpu_fmm_downward
+  use gpu_runner, only: gpu_fmm_downward, gpu_fmm_amr_intermediate
 #endif
 contains
 ! ------------------------------------------------------------------------
@@ -694,8 +694,13 @@ recursive subroutine r_fmm_amr_intermediate(pst,downward_levels,input_size)
      call r_fmm_amr_intermediate(pst%pLower,downward_levels,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
+#if defined(_CUDA) && defined(WITHOUTMPI)
+     call gpu_fmm_amr_intermediate(pst%s, downward_levels%ilev, downward_levels%jlev, &
+          downward_levels%mode == FMM_TREE_SOURCE_MERGED)
+#else
      call fmm_amr_intermediate(pst%s,downward_levels%ilev,downward_levels%jlev, &
           use_merged=(downward_levels%mode == FMM_TREE_SOURCE_MERGED))
+#endif
   endif
 
 end subroutine r_fmm_amr_intermediate
