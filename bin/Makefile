@@ -2,10 +2,10 @@
 # If you have problems with this makefile, contact Romain.Teyssier@gmail.com
 #############################################################################
 # Compilation time parameters
-COMPILER = GNU
+COMPILER = NVHPC
 NDIM = 3
-MPI = 1
-FMM=1
+MPI = 0
+FMM=0
 HYDRO = 1
 GRAV = 1
 MHD = 0
@@ -33,7 +33,7 @@ NPSCAL = 0
 NRTGRP = 0
 NHILBERT = 1
 NVECTOR = 32
-NPRE = 8
+NPRE = 4
 PATCH =
 DEBUG = 0
 HDF5 = 0

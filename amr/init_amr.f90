@@ -252,14 +252,6 @@ subroutine init_amr(r,g,m,type)
      allocate(m%taylor_coeff(1:twotondim,1:taylor_size,1:m%ngridmax+m%ncachemax))
   endif
 #endif
-  ! Allocate the device array
-#ifdef _CUDA
-  if(type=='amr')then
-     err_code = cudaMalloc(grid_device_cptr, sizeof(m%grid))
-     call c_f_pointer(grid_device_cptr, grid_device, [m%ngridmax+m%ncachemax])
-  endif
-#endif
-
   ! Allocate the device arrays
 #ifdef GRAV
 #ifdef _CUDA
