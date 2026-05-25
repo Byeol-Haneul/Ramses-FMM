@@ -1,5 +1,5 @@
 module gpu_runner
-  use amr_parameters, only: ndim, twotondim, threetondim, dp
+  use amr_parameters, only: ndim, twotondim, threetondim, dp, multipole_size, taylor_size
   use hydro_parameters, only: nvar
   use oct_commons, only: oct
   use gpu_utils
@@ -46,6 +46,14 @@ module gpu_runner
   real(kind=dp), device, allocatable, dimension(:,:) :: phi_mg
   integer(kind=8), device, allocatable, dimension(:) :: hash_key_mg
   integer(kind=4), device, allocatable, dimension(:) :: hash_val_mg
+
+  !> Staging arrays for one CPU-built FMM tree at a time.
+  type(oct), device, allocatable, dimension(:) :: grid_fmm
+  real(kind=dp), device, allocatable, dimension(:,:,:) :: multipole_fmm, taylor_fmm
+  integer(kind=8), device, allocatable, dimension(:) :: hash_key_fmm
+  integer(kind=4), device, allocatable, dimension(:) :: hash_val_fmm
+  integer(kind=4) :: fmm_grid_capacity = 0
+  integer(kind=4) :: fmm_hash_capacity = 0
 
   !> The Fortran array of hydro variables of ghost and halo octs on the host and on the device
   real(kind=dp), allocatable, dimension(:) :: uold_send_host, uold_recv_host
@@ -1241,7 +1249,7 @@ contains
        end if
 
        multipole_h = multipole_d
-       sim%g%multipole%q = sim%g%multipole%q + multipole_h
+       sim%g%multipole%q(1:ndim+1) = sim%g%multipole%q(1:ndim+1) + multipole_h
 
     end if
 
@@ -1287,7 +1295,7 @@ contains
           call nvtxEndRange()
        end if
        multipole_h = multipole_d
-       sim%g%multipole%q = sim%g%multipole%q + multipole_h
+       sim%g%multipole%q(1:ndim+1) = sim%g%multipole%q(1:ndim+1) + multipole_h
     end if
 
   end subroutine gpu_cic_multipole2
@@ -2122,6 +2130,198 @@ contains
     end if
 
   end subroutine gpu_rhomax
+
+  !> @brief
+  !> Ensure the single-tree FMM staging buffers are large enough.
+  !>
+  subroutine gpu_ensure_fmm_capacity(grid_capacity, hash_capacity)
+    implicit none
+    integer(kind=4), intent(in) :: grid_capacity, hash_capacity
+
+    if (grid_capacity > fmm_grid_capacity) then
+       if (allocated(grid_fmm)) deallocate(grid_fmm)
+       if (allocated(multipole_fmm)) deallocate(multipole_fmm)
+       if (allocated(taylor_fmm)) deallocate(taylor_fmm)
+       allocate(grid_fmm(1:grid_capacity))
+       allocate(multipole_fmm(1:twotondim,1:multipole_size,1:grid_capacity))
+       allocate(taylor_fmm(1:twotondim,1:taylor_size,1:grid_capacity))
+       multipole_fmm = 0.0_dp
+       taylor_fmm = 0.0_dp
+       fmm_grid_capacity = grid_capacity
+    end if
+
+    if (hash_capacity > fmm_hash_capacity) then
+       if (allocated(hash_key_fmm)) deallocate(hash_key_fmm)
+       if (allocated(hash_val_fmm)) deallocate(hash_val_fmm)
+       allocate(hash_key_fmm(1:hash_capacity))
+       allocate(hash_val_fmm(1:hash_capacity))
+       hash_key_fmm = 0
+       hash_val_fmm = 0
+       fmm_hash_capacity = hash_capacity
+    end if
+
+  end subroutine gpu_ensure_fmm_capacity
+
+  !> @brief
+  !> Copy a CPU-built FMM tree into reusable device staging buffers.
+  !>
+  subroutine gpu_upload_fmm_tree(sim, ilevel)
+    use nvtx
+    use amr_commons, only: mesh_t
+    use refine_device, only: insert_hash_kernel
+    use ramses_commons, only: ramses_t
+    implicit none
+    type(ramses_t), intent(inout) :: sim
+    integer, intent(in) :: ilevel
+
+    integer(kind=4) :: grid_capacity, hash_capacity, num_octs, num_threads, num_blocks
+#ifdef FMM
+    type(mesh_t), pointer :: m_fmm
+
+    if (.not. associated(sim%m_fmm_list)) return
+    m_fmm => sim%m_fmm_list(ilevel)
+
+    grid_capacity = m_fmm%ngridmax + m_fmm%ncachemax
+    hash_capacity = 2 * grid_capacity
+    call gpu_ensure_fmm_capacity(grid_capacity, hash_capacity)
+
+    call nvtxStartRange("GPU upload_fmm_tree", color=5)!red
+    grid_fmm = m_fmm%grid
+    multipole_fmm = m_fmm%multipole
+    taylor_fmm = m_fmm%taylor_coeff
+    hash_key_fmm = 0
+    hash_val_fmm = 0
+    call GPU_Error_Check(__FILE__, __LINE__)
+    call nvtxEndRange()
+
+    num_octs = m_fmm%noct_used
+    num_threads = 128
+    num_blocks = (num_octs + num_threads - 1) / num_threads
+    if (num_octs > 0) then
+       call nvtxStartRange("GPU hash_fmm_tree", color=5)!red
+       call insert_hash_kernel<<<num_blocks, num_threads>>>(grid_fmm, hash_key_fmm, hash_val_fmm, &
+            & hash_capacity, ckey_max, key_off, 1, num_octs)
+       call GPU_Error_Check(__FILE__, __LINE__)
+       call nvtxEndRange()
+    end if
+#endif
+
+  end subroutine gpu_upload_fmm_tree
+
+  !> @brief
+  !> Copy staged FMM multipole/Taylor arrays back to the CPU tree.
+  !>
+  subroutine gpu_download_fmm_tree(sim, ilevel)
+    use nvtx
+    use amr_commons, only: mesh_t
+    use ramses_commons, only: ramses_t
+    implicit none
+    type(ramses_t), intent(inout) :: sim
+    integer, intent(in) :: ilevel
+
+#ifdef FMM
+    type(mesh_t), pointer :: m_fmm
+
+    if (.not. associated(sim%m_fmm_list)) return
+    m_fmm => sim%m_fmm_list(ilevel)
+
+    if (.not. allocated(multipole_fmm)) return
+    call nvtxStartRange("GPU download_fmm_tree", color=5)!red
+    m_fmm%multipole = multipole_fmm
+    m_fmm%taylor_coeff = taylor_fmm
+    call GPU_Error_Check(__FILE__, __LINE__)
+    call nvtxEndRange()
+#endif
+
+  end subroutine gpu_download_fmm_tree
+
+  !> @brief
+  !> Reset multipoles and Taylor coefficients in one level of a staged FMM tree.
+  !>
+  subroutine gpu_reset_fmm_multipoles_taylor(sim, ilevel, flev)
+    use nvtx
+    use fmm_device, only: fmm_reset_multipole_taylor
+    use ramses_commons, only: ramses_t
+    implicit none
+    type(ramses_t), intent(inout) :: sim
+    integer, intent(in) :: ilevel, flev
+
+    integer(kind=4) :: head_idx, num_octs
+    integer :: threadsX_per_block, threadsY_per_block, num_blocks
+
+#ifdef FMM
+    call gpu_upload_fmm_tree(sim, ilevel)
+
+    head_idx = sim%m_fmm_list(ilevel)%head(flev)
+    num_octs = sim%m_fmm_list(ilevel)%noct(flev)
+    threadsX_per_block = twotondim
+    threadsY_per_block = 16
+    num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
+    if (num_octs > 0) then
+       call nvtxStartRange("GPU reset_fmm_multipoles_taylor", color=1)!blue
+       call fmm_reset_multipole_taylor<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>( &
+            & multipole_fmm, taylor_fmm, head_idx, num_octs)
+       call GPU_Error_Check(__FILE__, __LINE__)
+       call nvtxEndRange()
+    end if
+
+    call gpu_download_fmm_tree(sim, ilevel)
+#endif
+
+  end subroutine gpu_reset_fmm_multipoles_taylor
+
+  !> @brief
+  !> Local GPU version of fmm_multipole_amr2fmm using a CPU-built FMM tree.
+  !>
+  subroutine gpu_fmm_multipole_amr2fmm(sim, ilevel)
+    use nvtx
+    use fmm_device, only: fmm_multipole_amr2fmm
+    use ramses_commons, only: ramses_t
+    implicit none
+    type(ramses_t), intent(inout) :: sim
+    integer, intent(in) :: ilevel
+
+    integer(kind=4) :: head_idx, num_octs, num_threads, num_blocks
+    real(kind=dp) :: dx_loc, vol_loc, skip1, skip2, skip3
+
+#ifdef FMM
+    call gpu_upload_fmm_tree(sim, ilevel)
+
+    call nvtxStartRange("GPU upload_fmm_amr_sources", color=5)!red
+    grid = sim%m%grid
+    rho = sim%m%rho
+    call GPU_Error_Check(__FILE__, __LINE__)
+    call nvtxEndRange()
+
+    dx_loc = real(sim%r%boxlen / 2.0D0**ilevel, kind=dp)
+    vol_loc = dx_loc**ndim
+    skip1 = real(sim%m%skip(1), kind=dp)
+    skip2 = 0.0_dp
+    skip3 = 0.0_dp
+#if NDIM>1
+    skip2 = real(sim%m%skip(2), kind=dp)
+#endif
+#if NDIM>2
+    skip3 = real(sim%m%skip(3), kind=dp)
+#endif
+
+    head_idx = sim%m%head(ilevel)
+    num_octs = sim%m%noct(ilevel)
+    num_threads = 128
+    num_blocks = (num_octs + num_threads - 1) / num_threads
+    if (num_octs > 0) then
+       call nvtxStartRange("GPU fmm_multipole_amr2fmm", color=1)!blue
+       call fmm_multipole_amr2fmm<<<num_blocks, num_threads>>>(grid, rho, grid_fmm, multipole_fmm, &
+            & hash_key_fmm, hash_val_fmm, fmm_hash_capacity, ckey_max, key_off, head_idx, num_octs, &
+            & ilevel, sim%r%level_fmm_to_amr, dx_loc, vol_loc, skip1, skip2, skip3)
+       call GPU_Error_Check(__FILE__, __LINE__)
+       call nvtxEndRange()
+    end if
+
+    call gpu_download_fmm_tree(sim, ilevel)
+#endif
+
+  end subroutine gpu_fmm_multipole_amr2fmm
 
   !###########################################################
   !###########################################################

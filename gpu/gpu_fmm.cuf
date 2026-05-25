@@ -1,0 +1,438 @@
+module fmm_device
+  use amr_parameters, only: dp, ndim, twotondim, threetondim, multipole_size, taylor_size
+  use oct_commons, only: oct
+  use gpu_utils
+  use cudafor
+  implicit none
+
+contains
+
+  include 'gpu_hash.cuf'
+  include 'gpu_nbor.cuf'
+
+  ! =========================================================================
+  attributes(device) subroutine fmm_shift_multipole(multipole_in, a, multipole_out)
+    real(kind=dp), intent(in)  :: multipole_in(1:multipole_size)
+    real(kind=dp), intent(in)  :: a(1:3)
+    real(kind=dp), intent(out) :: multipole_out(1:multipole_size)
+
+    real(kind=dp) :: mp_in
+    real(kind=dp) :: dp_in(3), dp_out(3)
+    real(kind=dp) :: qp_in(3,3), qp_out(3,3)
+    integer :: i, j
+
+    mp_in = multipole_in(1)
+    multipole_out = 0.0_dp
+    multipole_out(1) = mp_in
+
+    dp_in = 0.0_dp
+    dp_out = 0.0_dp
+    do i = 1, ndim
+       dp_in(i) = multipole_in(1+i)
+       dp_out(i) = dp_in(i) - a(i) * mp_in
+       multipole_out(1+i) = dp_out(i)
+    end do
+
+    qp_in = 0.0_dp
+#if NDIM==1
+    qp_in(1,1) = multipole_in(3)
+#endif
+#if NDIM==2
+    qp_in(1,1) = multipole_in(4)
+    qp_in(1,2) = multipole_in(5); qp_in(2,1) = qp_in(1,2)
+    qp_in(2,2) = multipole_in(6)
+#endif
+#if NDIM==3
+    qp_in(1,1) = multipole_in(5)
+    qp_in(1,2) = multipole_in(6); qp_in(2,1) = qp_in(1,2)
+    qp_in(1,3) = multipole_in(7); qp_in(3,1) = qp_in(1,3)
+    qp_in(2,2) = multipole_in(8)
+    qp_in(2,3) = multipole_in(9); qp_in(3,2) = qp_in(2,3)
+    qp_in(3,3) = multipole_in(10)
+#endif
+
+    qp_out = 0.0_dp
+    do i = 1, ndim
+       do j = 1, ndim
+          qp_out(i,j) = qp_in(i,j) - (a(i)*dp_in(j) + dp_in(i)*a(j)) + mp_in*a(i)*a(j)
+       end do
+    end do
+
+#if NDIM==1
+    multipole_out(3) = qp_out(1,1)
+#endif
+#if NDIM==2
+    multipole_out(4) = qp_out(1,1)
+    multipole_out(5) = qp_out(1,2)
+    multipole_out(6) = qp_out(2,2)
+#endif
+#if NDIM==3
+    multipole_out(5)  = qp_out(1,1)
+    multipole_out(6)  = qp_out(1,2)
+    multipole_out(7)  = qp_out(1,3)
+    multipole_out(8)  = qp_out(2,2)
+    multipole_out(9)  = qp_out(2,3)
+    multipole_out(10) = qp_out(3,3)
+#endif
+
+  end subroutine fmm_shift_multipole
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(device) subroutine fmm_calc_taylor_from_multipole(R, D0, D1, D2, D3, multipoles, taylor_coeff)
+    real(kind=dp), intent(in)  :: R(1:3), D0, D1, D2, D3
+    real(kind=dp), intent(in)  :: multipoles(1:multipole_size)
+    real(kind=dp), intent(out) :: taylor_coeff(1:taylor_size)
+
+    real(kind=dp) :: trM, S, RdotM1
+    real(kind=dp) :: MR1, MR2, MR3
+
+    taylor_coeff = 0.0_dp
+#if NDIM==1
+    trM = multipoles(3)
+    MR1 = multipoles(3)*R(1)
+    S = R(1)*MR1
+    RdotM1 = R(1)*multipoles(2)
+
+    taylor_coeff(1) = multipoles(1)*D0 - RdotM1*D1 + 0.5_dp*(trM*D1 + S*D2)
+    taylor_coeff(2) = multipoles(1)*R(1)*D1 - multipoles(2)*D1 &
+         & - R(1)*RdotM1*D2 + 0.5_dp*R(1)*trM*D2 + 0.5_dp*R(1)*S*D3 + MR1*D2
+    taylor_coeff(3) = multipoles(1)*(D1 + R(1)**2*D2) &
+         & - RdotM1*D2 - 2*R(1)*multipoles(2)*D2 - R(1)**2*RdotM1*D3
+    taylor_coeff(4) = multipoles(1)*(3*R(1)*D2 + R(1)**3*D3)
+#endif
+
+#if NDIM==2
+    trM = multipoles(4) + multipoles(6)
+    MR1 = multipoles(4)*R(1) + multipoles(5)*R(2)
+    MR2 = multipoles(5)*R(1) + multipoles(6)*R(2)
+    S = R(1)*MR1 + R(2)*MR2
+    RdotM1 = R(1)*multipoles(2) + R(2)*multipoles(3)
+
+    taylor_coeff(1) = multipoles(1)*D0 - RdotM1*D1 + 0.5_dp*(trM*D1 + S*D2)
+    taylor_coeff(2) = multipoles(1)*R(1)*D1 - multipoles(2)*D1 + MR1*D2 &
+         & - R(1)*RdotM1*D2 + 0.5_dp*R(1)*(trM*D2 + S*D3)
+    taylor_coeff(3) = multipoles(1)*R(2)*D1 - multipoles(3)*D1 + MR2*D2 &
+         & - R(2)*RdotM1*D2 + 0.5_dp*R(2)*(trM*D2 + S*D3)
+    taylor_coeff(4) = multipoles(1)*(D1 + R(1)**2*D2) &
+         & - RdotM1*D2 - 2*R(1)*multipoles(2)*D2 - R(1)**2*RdotM1*D3
+    taylor_coeff(5) = multipoles(1)*(R(1)*R(2)*D2) &
+         & - R(1)*multipoles(3)*D2 - R(2)*multipoles(2)*D2 - R(1)*R(2)*RdotM1*D3
+    taylor_coeff(6) = multipoles(1)*(D1 + R(2)**2*D2) &
+         & - RdotM1*D2 - 2*R(2)*multipoles(3)*D2 - R(2)**2*RdotM1*D3
+    taylor_coeff(7) = multipoles(1)*(3*R(1)*D2 + R(1)**3*D3)
+    taylor_coeff(8) = multipoles(1)*(R(2)*D2 + R(1)*R(1)*R(2)*D3)
+    taylor_coeff(9) = multipoles(1)*(R(1)*D2 + R(1)*R(2)*R(2)*D3)
+    taylor_coeff(10)= multipoles(1)*(3*R(2)*D2 + R(2)**3*D3)
+#endif
+
+#if NDIM==3
+    trM = multipoles(5) + multipoles(8) + multipoles(10)
+    MR1 = multipoles(5)*R(1) + multipoles(6)*R(2) + multipoles(7)*R(3)
+    MR2 = multipoles(6)*R(1) + multipoles(8)*R(2) + multipoles(9)*R(3)
+    MR3 = multipoles(7)*R(1) + multipoles(9)*R(2) + multipoles(10)*R(3)
+    S = R(1)*MR1 + R(2)*MR2 + R(3)*MR3
+    RdotM1 = R(1)*multipoles(2) + R(2)*multipoles(3) + R(3)*multipoles(4)
+
+    taylor_coeff(1) = multipoles(1)*D0 - RdotM1*D1 + 0.5_dp*(trM*D1 + S*D2)
+    taylor_coeff(2) = multipoles(1)*R(1)*D1 - multipoles(2)*D1 - R(1)*RdotM1*D2 + 0.5_dp*R(1)*trM*D2 + 0.5_dp*R(1)*S*D3 + MR1*D2
+    taylor_coeff(3) = multipoles(1)*R(2)*D1 - multipoles(3)*D1 - R(2)*RdotM1*D2 + 0.5_dp*R(2)*trM*D2 + 0.5_dp*R(2)*S*D3 + MR2*D2
+    taylor_coeff(4) = multipoles(1)*R(3)*D1 - multipoles(4)*D1 - R(3)*RdotM1*D2 + 0.5_dp*R(3)*trM*D2 + 0.5_dp*R(3)*S*D3 + MR3*D2
+    taylor_coeff(5) = multipoles(1)*(D1 + R(1)**2*D2) - RdotM1*D2 - 2*R(1)*multipoles(2)*D2           - R(1)**2*RdotM1*D3
+    taylor_coeff(6) = multipoles(1)*(R(1)*R(2)*D2)    - R(1)*multipoles(3)*D2 - R(2)*multipoles(2)*D2 - R(1)*R(2)*RdotM1*D3
+    taylor_coeff(7) = multipoles(1)*(D1 + R(2)**2*D2) - RdotM1*D2 - 2*R(2)*multipoles(3)*D2           - R(2)**2*RdotM1*D3
+    taylor_coeff(8) = multipoles(1)*(R(1)*R(3)*D2)    - R(1)*multipoles(4)*D2 - R(3)*multipoles(2)*D2 - R(1)*R(3)*RdotM1*D3
+    taylor_coeff(9) = multipoles(1)*(R(2)*R(3)*D2)    - R(2)*multipoles(4)*D2 - R(3)*multipoles(3)*D2 - R(2)*R(3)*RdotM1*D3
+    taylor_coeff(10)= multipoles(1)*(D1 + R(3)**2*D2) - RdotM1*D2 - 2*R(3)*multipoles(4)*D2           - R(3)**2*RdotM1*D3
+    taylor_coeff(11) = multipoles(1)*(3*R(1)*D2 + R(1)*R(1)*R(1)*D3)
+    taylor_coeff(12) = multipoles(1)*(R(2)*D2   + R(1)*R(1)*R(2)*D3)
+    taylor_coeff(13) = multipoles(1)*(R(1)*D2   + R(1)*R(2)*R(2)*D3)
+    taylor_coeff(14) = multipoles(1)*(3*R(2)*D2 + R(2)*R(2)*R(2)*D3)
+    taylor_coeff(15) = multipoles(1)*(R(3)*D2   + R(1)*R(1)*R(3)*D3)
+    taylor_coeff(16) = multipoles(1)*(             R(1)*R(2)*R(3)*D3)
+    taylor_coeff(17) = multipoles(1)*(R(3)*D2   + R(2)*R(2)*R(3)*D3)
+    taylor_coeff(18) = multipoles(1)*(R(1)*D2   + R(1)*R(3)*R(3)*D3)
+    taylor_coeff(19) = multipoles(1)*(R(2)*D2   + R(2)*R(3)*R(3)*D3)
+    taylor_coeff(20) = multipoles(1)*(3*R(3)*D2 + R(3)*R(3)*R(3)*D3)
+#endif
+
+  end subroutine fmm_calc_taylor_from_multipole
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(device) subroutine fmm_calc_phi_from_multipole(R, D0, D1, D2, multipoles, phi_out)
+    real(kind=dp), intent(in)  :: R(1:3), D0, D1, D2
+    real(kind=dp), intent(in)  :: multipoles(1:multipole_size)
+    real(kind=dp), intent(out) :: phi_out
+
+    real(kind=dp) :: S
+
+#if NDIM==1
+    S = multipoles(3) * R(1) * R(1)
+    phi_out = - (multipoles(1)*D0 - multipoles(2)*R(1)*D1 + 0.5_dp*(multipoles(3)*D1 + S*D2))
+#endif
+#if NDIM==2
+    S = multipoles(4)*R(1)*R(1) + 2.0_dp*multipoles(5)*R(1)*R(2) + multipoles(6)*R(2)*R(2)
+    phi_out = - (multipoles(1)*D0 - (multipoles(2)*R(1) + multipoles(3)*R(2))*D1 + &
+         & 0.5_dp*((multipoles(4)+multipoles(6))*D1 + S*D2))
+#endif
+#if NDIM==3
+    S = multipoles(5)*R(1)*R(1) + 2.0_dp*multipoles(6)*R(1)*R(2) + 2.0_dp*multipoles(7)*R(1)*R(3) + &
+         & multipoles(8)*R(2)*R(2) + 2.0_dp*multipoles(9)*R(2)*R(3) + multipoles(10)*R(3)*R(3)
+    phi_out = - (multipoles(1)*D0 - (multipoles(2)*R(1) + multipoles(3)*R(2) + multipoles(4)*R(3))*D1 + &
+         & 0.5_dp*((multipoles(5)+multipoles(8)+multipoles(10))*D1 + S*D2))
+#endif
+
+  end subroutine fmm_calc_phi_from_multipole
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(device) subroutine fmm_shift_taylor(taylor_in, a, taylor_out)
+    real(kind=dp), intent(in)  :: taylor_in(1:taylor_size)
+    real(kind=dp), intent(in)  :: a(1:3)
+    real(kind=dp), intent(out) :: taylor_out(1:taylor_size)
+
+    integer :: i, j, k, idx, nq, no, idxC2, idxC3
+    real(kind=dp) :: C0, C0p
+    real(kind=dp) :: C1(3), C1p(3)
+    real(kind=dp) :: C2(3,3), C2p(3,3)
+    real(kind=dp) :: C3(3,3,3), C3p(3,3,3)
+
+    nq = ndim*(ndim+1)/2
+    no = ndim*(ndim+1)*(ndim+2)/6
+    idxC2 = 1 + ndim
+    idxC3 = idxC2 + nq
+
+    C0 = taylor_in(1)
+    C1 = 0.0_dp; C1p = 0.0_dp
+    C2 = 0.0_dp; C2p = 0.0_dp
+    C3 = 0.0_dp; C3p = 0.0_dp
+
+    do i = 1, ndim
+       C1(i) = taylor_in(1+i)
+    end do
+
+    idx = 0
+    do j = 1, ndim
+       do i = 1, j
+          idx = idx + 1
+          C2(i,j) = taylor_in(idxC2+idx)
+          C2(j,i) = C2(i,j)
+       end do
+    end do
+
+    idx = 0
+    do k = 1, ndim
+       do j = 1, k
+          do i = 1, j
+             idx = idx + 1
+             C3(i,j,k) = taylor_in(idxC3+idx)
+             C3(i,k,j) = C3(i,j,k)
+             C3(j,i,k) = C3(i,j,k)
+             C3(j,k,i) = C3(i,j,k)
+             C3(k,i,j) = C3(i,j,k)
+             C3(k,j,i) = C3(i,j,k)
+          end do
+       end do
+    end do
+
+    C3p = C3
+    do i = 1, ndim
+       do j = 1, ndim
+          C2p(i,j) = C2(i,j)
+          do k = 1, ndim
+             C2p(i,j) = C2p(i,j) + a(k)*C3(i,j,k)
+          end do
+       end do
+    end do
+
+    do i = 1, ndim
+       C1p(i) = C1(i)
+       do j = 1, ndim
+          C1p(i) = C1p(i) + a(j)*C2(i,j)
+          do k = 1, ndim
+             C1p(i) = C1p(i) + 0.5_dp*a(j)*a(k)*C3(i,j,k)
+          end do
+       end do
+    end do
+
+    C0p = C0
+    do i = 1, ndim
+       C0p = C0p + a(i)*C1(i)
+       do j = 1, ndim
+          C0p = C0p + 0.5_dp*a(i)*a(j)*C2(i,j)
+          do k = 1, ndim
+             C0p = C0p + (1.0_dp/6.0_dp)*a(i)*a(j)*a(k)*C3(i,j,k)
+          end do
+       end do
+    end do
+
+    taylor_out = 0.0_dp
+    taylor_out(1) = C0p
+    do i = 1, ndim
+       taylor_out(1+i) = C1p(i)
+    end do
+
+    idx = 0
+    do j = 1, ndim
+       do i = 1, j
+          idx = idx + 1
+          taylor_out(idxC2+idx) = C2p(i,j)
+       end do
+    end do
+
+    idx = 0
+    do k = 1, ndim
+       do j = 1, k
+          do i = 1, j
+             idx = idx + 1
+             taylor_out(idxC3+idx) = C3p(i,j,k)
+          end do
+       end do
+    end do
+
+  end subroutine fmm_shift_taylor
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(device) subroutine fmm_calc_phi(taylor_in, a, phi_out)
+    real(kind=dp), intent(in)  :: taylor_in(1:taylor_size)
+    real(kind=dp), intent(in)  :: a(1:3)
+    real(kind=dp), intent(out) :: phi_out
+
+#if NDIM==1
+    phi_out = - taylor_in(1) - a(1)*taylor_in(2) - 0.5_dp*a(1)**2*taylor_in(3) - &
+         & (1.0_dp/6.0_dp)*a(1)**3*taylor_in(4)
+#endif
+#if NDIM==2
+    phi_out = - taylor_in(1) &
+         & - a(1)*taylor_in(2) - a(2)*taylor_in(3) &
+         & - 0.5_dp*(a(1)**2*taylor_in(4) + 2.0_dp*a(1)*a(2)*taylor_in(5) + a(2)**2*taylor_in(6)) &
+         & - (1.0_dp/6.0_dp)*(a(1)**3*taylor_in(7) + 3.0_dp*a(1)**2*a(2)*taylor_in(8) + &
+         & 3.0_dp*a(1)*a(2)**2*taylor_in(9) + a(2)**3*taylor_in(10))
+#endif
+#if NDIM==3
+    phi_out = - taylor_in(1) &
+         & - a(1)*taylor_in(2) - a(2)*taylor_in(3) - a(3)*taylor_in(4) &
+         & - 0.5_dp*(a(1)**2*taylor_in(5) + 2.0_dp*a(1)*a(2)*taylor_in(6) + a(2)**2*taylor_in(7) &
+         & + 2.0_dp*a(1)*a(3)*taylor_in(8) + 2.0_dp*a(2)*a(3)*taylor_in(9) + a(3)**2*taylor_in(10)) &
+         & - (1.0_dp/6.0_dp)*(a(1)**3*taylor_in(11) + 3.0_dp*a(1)**2*a(2)*taylor_in(12) + &
+         & 3.0_dp*a(1)**2*a(3)*taylor_in(15) + 3.0_dp*a(1)*a(2)**2*taylor_in(13) + &
+         & 6.0_dp*a(1)*a(2)*a(3)*taylor_in(16) + 3.0_dp*a(1)*a(3)**2*taylor_in(18) + &
+         & a(2)**3*taylor_in(14) + 3.0_dp*a(2)**2*a(3)*taylor_in(17) + &
+         & 3.0_dp*a(2)*a(3)**2*taylor_in(19) + a(3)**3*taylor_in(20))
+#endif
+
+  end subroutine fmm_calc_phi
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine fmm_reset_multipole_taylor(multipole, taylor_coeff, head_idx, num_octs)
+    real(kind=dp), device :: multipole(1:twotondim,1:multipole_size,*)
+    real(kind=dp), device :: taylor_coeff(1:twotondim,1:taylor_size,*)
+    integer(kind=4), value :: head_idx
+    integer(kind=4), value :: num_octs
+
+    integer :: cell_idx, oct_idx, block_idx, q
+
+    block_idx = blockIdx%x - 1
+    oct_idx = block_idx * blockDim%y + threadIdx%y - 1
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+    cell_idx = threadIdx%x
+
+    do q = 1, multipole_size
+       multipole(cell_idx, q, oct_idx) = 0.0_dp
+    end do
+    do q = 1, taylor_size
+       taylor_coeff(cell_idx, q, oct_idx) = 0.0_dp
+    end do
+
+  end subroutine fmm_reset_multipole_taylor
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine fmm_multipole_amr2fmm(grid_amr, rho_amr, grid_fmm, multipole_fmm, hash_key_fmm, &
+       & hash_val_fmm, hash_size_fmm, ckey_max, key_off, head_idx, num_octs, ilevel, level_fmm_to_amr, &
+       & dx_loc, vol_loc, skip1, skip2, skip3)
+    type(oct), device :: grid_amr(*)
+    real(kind=dp), device :: rho_amr(1:twotondim,*)
+    type(oct), device :: grid_fmm(*)
+    real(kind=dp), device :: multipole_fmm(1:twotondim,1:multipole_size,*)
+    integer(kind=8), device :: hash_key_fmm(*)
+    integer(kind=4), device :: hash_val_fmm(*)
+    integer(kind=4), device :: ckey_max(*)
+    integer(kind=8), device :: key_off(*)
+    integer(kind=4), value :: hash_size_fmm
+    integer(kind=4), value :: head_idx, num_octs, ilevel, level_fmm_to_amr
+    real(kind=dp), value :: dx_loc, vol_loc, skip1, skip2, skip3
+
+    integer :: thread_idx, oct_idx, ind, idim, q, nstride, qidx
+    integer :: nfine, half_nfine, igrid_fmm, icell_fmm
+    integer(kind=4) :: fmm_ckey(1:3), child_in_cell(1:3)
+    real(kind=dp) :: x(1:3), mass, multipole(1:multipole_size), info
+
+    thread_idx = threadIdx%x - 1
+    oct_idx = thread_idx + (blockIdx%x - 1) * blockDim%x
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    nfine = 2**level_fmm_to_amr
+    half_nfine = max(1, nfine / 2)
+    fmm_ckey = 0
+    child_in_cell = 0
+    do idim = 1, ndim
+       fmm_ckey(idim) = grid_amr(oct_idx)%ckey(idim) / nfine
+       child_in_cell(idim) = (grid_amr(oct_idx)%ckey(idim) - nfine * fmm_ckey(idim)) / half_nfine
+    end do
+
+    icell_fmm = 1
+    do idim = 1, ndim
+       icell_fmm = icell_fmm + 2**(idim-1) * child_in_cell(idim)
+    end do
+
+    igrid_fmm = lookup_grid_by_ckey(fmm_ckey, ilevel-level_fmm_to_amr, hash_key_fmm, hash_val_fmm, &
+         & hash_size_fmm, ckey_max, key_off)
+    if (igrid_fmm <= 0) return
+
+    multipole = 0.0_dp
+    do ind = 1, twotondim
+       if (grid_amr(oct_idx)%refined(ind)) cycle
+
+       x = 0.0_dp
+       do idim = 1, ndim
+          nstride = 2**(idim-1)
+          x(idim) = (2.0_dp*grid_amr(oct_idx)%ckey(idim) + &
+               & real(mod((ind-1)/nstride, 2), kind=dp) + 0.5_dp) * dx_loc
+       end do
+       x(1) = x(1) - skip1
+#if NDIM>1
+       x(2) = x(2) - skip2
+#endif
+#if NDIM>2
+       x(3) = x(3) - skip3
+#endif
+
+       mass = rho_amr(ind, oct_idx) * vol_loc
+       multipole(1) = multipole(1) + mass
+       do idim = 1, ndim
+          multipole(1+idim) = multipole(1+idim) + mass * x(idim)
+       end do
+
+       qidx = 1 + ndim
+       do idim = 1, ndim
+          do q = idim, ndim
+             qidx = qidx + 1
+             multipole(qidx) = multipole(qidx) + mass * x(idim) * x(q)
+          end do
+       end do
+    end do
+
+    do q = 1, multipole_size
+       info = atomicadd(multipole_fmm(icell_fmm, q, igrid_fmm), multipole(q))
+    end do
+
+  end subroutine fmm_multipole_amr2fmm
+  ! =========================================================================
+
+end module fmm_device
