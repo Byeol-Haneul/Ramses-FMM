@@ -2,7 +2,7 @@ module mg_device
   use amr_parameters, only: dp, ndim, twondim, twotondim, threetondim, nhilbert
   use hydro_parameters, only: nvar
   use oct_commons, only: oct
-  use gpu_utils, only: nsubgrid, nsubgridsq, nsubgridtondim, nsubgridp2, nsubgridp2sq, subgridsize
+  use gpu_utils, only: nsubgrid, nsubgridsq, nsubgridtondim, nsubgridp2, nsubgridp2sq, subgridsize, nthreads_y
   use cudafor
   implicit none
 
@@ -89,8 +89,6 @@ module mg_device
 contains
 
   include 'gpu_hash.cuf'
-  include 'gpu_hilbert.cuf'
-  include 'gpu_scan.cuf'
   include 'gpu_reduce.cuf'
   include 'gpu_nbor.cuf'
 
@@ -650,9 +648,7 @@ contains
     phi_c = phi(cell_idx, oct_idx)
     dis_c = f(cell_idx, 3, oct_idx)
 
-    ! Initialize residual to zero
-    f(cell_idx, 1, oct_idx) = 0d0
-
+    ! Compute residual for inner cells
     if (dis_c > 0d0) then
 
        nb_sum = 0d0
@@ -698,6 +694,10 @@ contains
        end do
 
        f(cell_idx, 1, oct_idx) = - oneoverdx2 * (nb_sum - dble(twondim)*phi_c) + f(cell_idx, 2, oct_idx)
+
+    else
+
+       f(cell_idx, 1, oct_idx) = 0d0
 
     end if
 
@@ -845,6 +845,7 @@ contains
 
     integer :: tid, bid, cell_idx, oct_idx, mg_idx
     integer :: ind, father_idx, i, j, k
+    real(kind=dp) :: local_sum, dis_father
 
     ! Thread and block id
     tid = threadIdx%x - 1
@@ -865,15 +866,23 @@ contains
     k = grid(oct_idx)%ckey(3) - 2 * (grid(oct_idx)%ckey(3) / 2)
     cell_idx = 1 + i + 2*j + 4*k
 
-    ! Reset residual
-    f_mg(cell_idx, 2, father_idx) = 0_dp
+    ! Mask in the father cell
+    dis_father = f_mg(cell_idx, 3, father_idx)
+
+    ! Set restricted value to zero
+    local_sum  = 0d0
 
     ! Average children variables
-    do ind = 1, twotondim
-       if (f(ind, 3, oct_idx) > 0d0 .and. f_mg(cell_idx, 3, father_idx) > 0d0) then
-          f_mg(cell_idx, 2, father_idx) = f_mg(cell_idx, 2, father_idx) + f(ind, 1, oct_idx) / dble(twotondim)
-       end if
-    end do
+    if (dis_father > 0d0) then
+       do ind = 1, twotondim
+          if (f(ind, 3, oct_idx) > 0d0) then
+             local_sum = local_sum + f(ind, 1, oct_idx)
+          end if
+       end do
+    end if
+
+    ! Store back the result
+    f_mg(cell_idx, 2, father_idx) = local_sum / dble(twotondim)
 
   end subroutine restrict_residual
   ! =========================================================================
@@ -892,26 +901,35 @@ contains
     integer, value :: head_father
     integer, value :: num_octs
 
-    integer(4) :: cell_idx, oct_idx, mg_idx, block_idx, father_idx
-    integer(4) :: igrid_nbor(1:threetondim)
-    integer(4) :: icell_nbor(1:threetondim)
-    integer(4) :: ind_average, ind_father
-    integer(4) :: igrid_nbr, ind_nbr, i, j, k
+    integer(kind=4), shared :: igrid_nbor(1:threetondim,1:nthreads_y)
+    integer(kind=4), shared :: icell_nbor(1:threetondim,1:nthreads_y)
+    integer(kind=4) :: igrid_nbor_tmp(1:threetondim)
+    integer(kind=4) :: icell_nbor_tmp(1:threetondim)
+    integer(kind=4) :: cell_idx, oct_idx, mg_idx, block_idx
+    integer(kind=4) :: ind_average, ind_father
+    integer(kind=4) :: igrid_nbr, ind_nbr
     real(kind=dp) :: corr, coeff
 
     block_idx = blockIdx%x - 1
 
-    ! Map thread -> oct
+    ! Compute oct index
     oct_idx = block_idx * blockDim%y + threadIdx%y - 1
-    if (oct_idx >= num_octs) return
     mg_idx = head_father + oct_idx
-    oct_idx = head_idx + oct_idx
 
-    ! Map thread -> fine cell (1..8)
+    ! Compute cell index
     cell_idx = threadIdx%x
 
     ! Get 3x3x3 neighboring father cells of this oct
-    call nbor_father_cells_mg(grid, father, nbor, oct_idx, mg_idx, igrid_nbor, icell_nbor)
+    if (cell_idx == 1 .and. oct_idx < num_octs) then
+       call nbor_father_cells_mg(grid, father, nbor, head_idx + oct_idx, mg_idx, igrid_nbor_tmp, icell_nbor_tmp)
+       igrid_nbor(:, threadIdx%y) = igrid_nbor_tmp
+       icell_nbor(:, threadIdx%y) = icell_nbor_tmp
+    endif
+    call syncthreads()
+
+    ! Compute oct index
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
 
     ! CIC interpolation
     corr = 0d0
@@ -919,8 +937,8 @@ contains
        ind_father = ccc(ind_average, cell_idx)
        coeff      = bbb(ind_average)
 
-       igrid_nbr  = igrid_nbor(ind_father)
-       ind_nbr    = icell_nbor(ind_father)
+       igrid_nbr  = igrid_nbor(ind_father, threadIdx%y)
+       ind_nbr    = icell_nbor(ind_father, threadIdx%y)
 
        if ((igrid_nbr > 0) .and. (f(cell_idx, 3, oct_idx) > 0d0)) then
           corr = corr + coeff * phi_mg(ind_nbr, igrid_nbr)
@@ -1160,6 +1178,77 @@ contains
     end do
 
   end subroutine gradient_phi
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine update_nbor_array_mg(nbor, grid, hash_key, hash_val, hash_size, &
+       & ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, head_idx, num_subgrids)
+    logical, device :: periodic(1:3)
+    type(oct), device :: grid(*)
+    integer(kind=4), device :: nbor(1:subgridsize,*)
+    integer(kind=4), device :: ckey_max(*)
+    integer(kind=4), device :: box_ckey_min(1:ndim,*)
+    integer(kind=4), device :: box_ckey_max(1:ndim,*)
+    integer(kind=8), device :: key_off(*)
+    integer(kind=8), device :: hash_key(*)
+    integer(kind=4), device :: hash_val(*)
+    integer(kind=4), intent(in), value :: hash_size
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_subgrids
+
+    integer(kind=8) :: key, offset, ix, iy, iz, nx
+    integer :: thread_idx, block_idx, subgrid_idx, oct_idx, nbor_idx
+    integer :: ilevel, i, j, k, ind, idim, input_ind
+    integer(kind=4), dimension(1:ndim) ::ckey
+
+    ! Compute thread and block idx
+    thread_idx = threadIdx%x - 1
+    block_idx = blockIdx%x - 1
+
+    ! Compute subgrid and leading oct idx
+    subgrid_idx = thread_idx + block_idx * blockDim%x
+    if (subgrid_idx >= num_subgrids) return
+    subgrid_idx = head_idx + subgrid_idx
+    oct_idx = (subgrid_idx - 1) * nsubgridtondim + 1
+
+    ! Loop over nbor octs
+    do input_ind = 1, threetondim
+
+       ind = input_ind - 1
+       k = ind / nsubgridp2sq
+       ind = ind - k * nsubgridp2sq
+       j = ind / nsubgridp2
+       i = ind - j * nsubgridp2
+
+       ! Compute neighboring oct Cartesian key
+       ilevel = grid(oct_idx)%lev
+       ckey(1) = (grid(oct_idx)%ckey(1) / nsubgrid) * nsubgrid + i - 1
+       ckey(2) = (grid(oct_idx)%ckey(2) / nsubgrid) * nsubgrid + j - 1
+       ckey(3) = (grid(oct_idx)%ckey(3) / nsubgrid) * nsubgrid + k - 1
+
+       ! Periodic boundary conditions
+       do idim = 1,ndim
+          if(periodic(idim))then
+             if(ckey(idim)<box_ckey_min(idim,ilevel))ckey(idim)=box_ckey_max(idim,ilevel)-1
+             if(ckey(idim)>=box_ckey_max(idim,ilevel))ckey(idim)=box_ckey_min(idim,ilevel)
+          endif
+       enddo
+
+       ! Conpute key
+       ix = int(ckey(1), kind=8)
+       iy = int(ckey(2), kind=8)
+       iz = int(ckey(3), kind=8)
+       nx = int(ckey_max(ilevel), kind=8)
+       offset = key_off(ilevel)
+       key = offset + ix + iy * nx + iz * nx * nx
+
+       ! Get parent oct index in memory
+       nbor_idx = hash_get(hash_key, hash_val, hash_size, key)
+       nbor(input_ind, subgrid_idx) = nbor_idx
+
+    end do
+
+  end subroutine update_nbor_array_mg
   ! =========================================================================
 
 end module mg_device

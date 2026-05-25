@@ -1,5 +1,8 @@
 module move_fine_module
   use rho_fine_module, only: cic_weight, cic_index, tsc_weight, tsc_index, pcs_weight, pcs_index
+#ifdef _CUDA
+  use part_device, only: gpu_kick_drift_part
+#endif
   use rng
   implicit none
   ! Module-level tracer RNG state
@@ -39,6 +42,9 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
+#ifdef _CUDA
+  use pm_parameters, only: PART_TYPE
+#endif
   implicit none
   type(pst_t)::pst
   integer,VALUE::input_size
@@ -57,6 +63,24 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
   else
      ilevel=input_array(1)
      action_part=input_array(2)
+#ifdef _CUDA
+     if(pst%s%r%part)then
+        if(pst%s%p%type/=PART_TYPE)then
+           write(*,*)'ERROR: r_kick_drift_part: DM PART_TYPE only.'
+           call abort
+        endif
+        if(pst%s%r%part_force_interpolation_scheme/=1)then
+           write(*,'(A,I0,A)')'ERROR: r_kick_drift_part: CIC only (scheme ', &
+                & pst%s%r%part_force_interpolation_scheme,').'
+           call abort
+        endif
+        call gpu_kick_drift_part(pst%s, ilevel, action_part)
+     endif
+     if(pst%s%r%star.or.pst%s%r%sink.or.pst%s%r%tree.or.pst%s%r%trac.or.pst%s%r%dust)then
+        write(*,*)'ERROR: r_kick_drift_part: non-DM not supported on GPU.'
+        call abort
+     endif
+#else
      ! Force interpolation for various components (DM particles, star, sink, tree)
      ! based on their respective deposition schemes (CIC 1, TSC 2 or PCS 3)
      if(pst%s%r%part)then
@@ -131,6 +155,7 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
            call tsc_kick_drift_dust_guiding_center(pst%s,pst%s%dust,ilevel,action_part) ! TSC guiding center
         endif
      endif
+#endif
   endif
 
 end subroutine r_kick_drift_part
@@ -179,7 +204,7 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
   end if
 
   ! Mesh spacing in that level
-  dx_loc=r%boxlen/2**ilevel 
+  dx_loc=r%boxlen/2**ilevel
   vol_loc=dx_loc**ndim
 
   ! Deal with particles that left the computational domain
