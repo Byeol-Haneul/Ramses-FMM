@@ -42,6 +42,8 @@ ramses_*
 *.out
 amr_test/
 halo_test/
+analyze/*/results/
+analyze/binary/results/
 namelist/fmm_tests/*/ic_part
 coeur_fmm/
 coeur_mg/
