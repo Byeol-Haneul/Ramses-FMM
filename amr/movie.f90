@@ -747,7 +747,7 @@ subroutine project_point(xx,xcen,ycen,zcen,theta_cam,phi_cam,dist_cam, &
      ycentre = x2+ycen
      zcentre = x3+zcen
   endif
-#elif NDIM>1
+#else
   x1 = xx(1)-xcen
   x2 = xx(2)-ycen
   xtmp = cos(theta_cam)*x1+sin(theta_cam)*x2
