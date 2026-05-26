@@ -694,18 +694,9 @@ subroutine gpu_sort_part(sim, ilevel)
   num_threads = 128
   num_blocks  = (num_parts + num_threads - 1) / num_threads
 
-  level = ilevel - 1
-  if (level <= 0) then
-     call init_global_swap_table_kernel<<<num_blocks, num_threads>>>(swap_global, &
-          head_idx, num_parts)
-     call write_sortp_part<<<num_blocks, num_threads>>>(sortp, swap_global, &
-          head_idx, num_parts)
-     call GPU_Error_Check("gpu/gpu_part.cuf", 0)
-     call nvtxEndRange()
-     return
-  endif
+  level = ilevel
 
-  dx_inv = 2.0d0**(ilevel-1) / sim%r%boxlen
+  dx_inv = 2.0d0**ilevel / sim%r%boxlen
   skip1 = 0d0
   skip2 = 0d0
   skip3 = 0d0
@@ -751,17 +742,19 @@ attributes(global) subroutine reset_cell_part_count_kernel(cell_part_count_d, nu
   cell_part_count_d(icell, igrid) = 0
 end subroutine reset_cell_part_count_kernel
 
-!> Per-particle (icell_src, igrid_src) at level (ilevel+1); bump
-!> cell_part_count and cache the source map so the deposit kernel skips
-!> the per-k hash_get repeat. Hash-miss writes 0 (whole-word OOD sentinel).
+!> Hash each particle's source (igrid,icell) at level ilevel and pack the
+!> result into src_part so the deposit kernel skips the per-k hash_get repeat.
+!> Hash-miss writes 0 (whole-word OOD sentinel). Walks particles in Hilbert
+!> order via sortp; no per-cell counting (the Hilbert sort at depth ilevel
+!> already groups same-source-cell particles).
 !> See gpu_part_state.cuf for the src_part bit layout.
-attributes(global) subroutine build_cell_part_count_kernel(xp_d, &
-     cell_part_count_d, src_part_d, &
+attributes(global) subroutine build_src_part_kernel(xp_d, &
+     sortp_d, src_part_d, &
      hash_key_d, hash_val_d, hash_size_d, ckey_max_d, key_off_d, &
      skip1, skip2, skip3, dx_loc, ilevel, head_idx, num_parts, leading)
   integer(kind=4), intent(in), value :: leading
   real(kind=dp),   device :: xp_d(*)
-  integer(kind=4), device :: cell_part_count_d(1:twotondim, *)
+  integer(kind=4), device :: sortp_d(*)
   integer(kind=4), device :: src_part_d(*)
   integer(kind=8), device :: hash_key_d(*)
   integer(kind=4), device :: hash_val_d(*)
@@ -771,7 +764,7 @@ attributes(global) subroutine build_cell_part_count_kernel(xp_d, &
   real(kind=8), intent(in), value :: skip1, skip2, skip3, dx_loc
   integer(kind=4), intent(in), value :: ilevel, head_idx, num_parts
 
-  integer :: thread_idx, block_idx, idx, ipart, idim, igrid, icell, old
+  integer :: thread_idx, block_idx, idx, ipart, idim, igrid, icell
   integer(kind=4) :: host_ckey(1:3), father_ckey(1:3), ii(1:3)
   integer(kind=8) :: nx, offset, key, ix8, iy8, iz8
   real(kind=8) :: skip(1:3), xs, inv_dx_loc
@@ -780,7 +773,7 @@ attributes(global) subroutine build_cell_part_count_kernel(xp_d, &
   block_idx  = blockIdx%x  - 1
   idx = thread_idx + block_idx * blockDim%x
   if (idx >= num_parts) return
-  ipart = head_idx + idx
+  ipart = sortp_d(head_idx + idx)
 
   skip(1) = skip1
   skip(2) = skip2
@@ -815,9 +808,7 @@ attributes(global) subroutine build_cell_part_count_kernel(xp_d, &
 
   ! Pack (igrid, icell) into one 32-bit word; see gpu_part_state.cuf for layout.
   src_part_d(ipart) = ior(ishft(igrid, 5), icell)
-
-  old = atomicadd(cell_part_count_d(icell, igrid), 1)
-end subroutine build_cell_part_count_kernel
+end subroutine build_src_part_kernel
 
 attributes(global) subroutine flatten_cell_count_kernel(cell_part_count_d, &
      prefix_sum_d, num_grids)
@@ -916,16 +907,18 @@ attributes(global) subroutine multipole_q_kernel(xp_d, mp_d, multipole_q_d, &
   endif
 end subroutine multipole_q_kernel
 
-!> Warp-coalesced CIC deposit; fused k=1..27 over cell_part_idx.
-attributes(global) subroutine cic_part_warp_kernel(cell_part_idx_d, &
-     src_part_d, num_placed, &
+!> Warp-coalesced CIC deposit; fused k=1..27.  Walks particles in Hilbert
+!> order via sortp(head_idx..head_idx+num_parts-1) so same-source-cell lanes
+!> coalesce inside each warp.
+attributes(global) subroutine cic_part_warp_kernel(sortp_d, &
+     src_part_d, head_idx, num_parts, &
      grid_d, hash_key_d, hash_val_d, hash_size_d, ckey_max_d, key_off_d, &
      box_ckey_min_d, box_ckey_max_d, periodic_d, &
      xp_d, mp_d, rho_d, nref_d, &
      skip1, skip2, skip3, dx_loc, vol_loc, &
      m_refine_at_level, mass_cut_refine, ilevel, leading)
-  integer(kind=4), intent(in), value :: num_placed, leading, ilevel
-  integer(kind=4), device :: cell_part_idx_d(*)
+  integer(kind=4), intent(in), value :: head_idx, num_parts, leading, ilevel
+  integer(kind=4), device :: sortp_d(*)
   integer(kind=4), device :: src_part_d(*)
   type(oct),       device :: grid_d(*)
   integer(kind=8), device :: hash_key_d(*)
@@ -964,16 +957,16 @@ attributes(global) subroutine cic_part_warp_kernel(cell_part_idx_d, &
   warp_global     = (blockIdx%x - 1) * warps_per_block + warp_local
   slot_global     = warp_global * warpsize + lane + 1
 
-  valid_lane = (slot_global <= num_placed)
+  valid_lane = (slot_global <= num_parts)
 
   ipart          = 0
   icell_src_lane = 0
   igrid_src_lane = 0
   if (valid_lane) then
-     ipart    = cell_part_idx_d(slot_global)
+     ipart    = sortp_d(head_idx + slot_global - 1)
      combined = src_part_d(ipart)
-     ! Defensive: place_cell_part_idx_kernel skips OOD particles (combined==0),
-     ! so a sentinel here would indicate a build-pipeline bug.
+     ! OOD particles (combined==0 from build_src_part_kernel) sit in Hilbert
+     ! order alongside valid ones; mask the lane out.
      if (combined == 0) then
         valid_lane = .false.
      else
@@ -1198,9 +1191,7 @@ subroutine gpu_cic_part(sim, ilevel, rtype)
   integer, intent(in) :: ilevel
   integer, intent(in) :: rtype
 
-  integer(kind=4) :: head_idx, num_parts, leading, num_grids, total_cells
-  integer(kind=4) :: total_sum_unused
-  integer(kind=4), device :: total_sum_dev
+  integer(kind=4) :: head_idx, num_parts, leading
   integer :: num_threads, num_blocks, idim
   integer :: deposit_block_size, deposit_num_blocks
   real(kind=8) :: dx_loc, vol_loc, skip1, skip2, skip3
@@ -1248,56 +1239,27 @@ subroutine gpu_cic_part(sim, ilevel, rtype)
   if (ndim >= 2) skip2 = sim%m%skip(2)
   if (ndim >= 3) skip3 = sim%m%skip(3)
 
-  num_grids   = size(cell_part_count, 2)
-  total_cells = twotondim * num_grids
-
-  num_threads = 256
-  num_blocks  = (total_cells + num_threads - 1) / num_threads
-  call reset_cell_part_count_kernel<<<num_blocks, num_threads>>>(cell_part_count, num_grids)
-  call GPU_Error_Check("gpu/gpu_part.cuf", 0)
-
+  ! sortp is populated by gpu_sort_part at depth ilevel earlier in this
+  ! sweep, so particles with the same source cell are already contiguous in
+  ! sortp(head_idx..head_idx+num_parts-1). No count/scan/place is needed.
   num_threads = 128
   num_blocks  = (num_parts + num_threads - 1) / num_threads
-  call build_cell_part_count_kernel<<<num_blocks, num_threads>>>(xp, &
-       cell_part_count, src_part, &
+  call build_src_part_kernel<<<num_blocks, num_threads>>>(xp, &
+       sortp, src_part, &
        hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, &
        skip1, skip2, skip3, dx_loc, ilevel, head_idx, num_parts, leading)
   call GPU_Error_Check("gpu/gpu_part.cuf", 0)
 
-  call ensure_scan_capacity_part(total_cells)
-
-  num_threads = 256
-  num_blocks  = (total_cells + num_threads - 1) / num_threads
-  call flatten_cell_count_kernel<<<num_blocks, num_threads>>>(cell_part_count, &
-       prefix_sum, num_grids)
+  deposit_block_size = 256
+  deposit_num_blocks = (num_parts + deposit_block_size - 1) / deposit_block_size
+  call cic_part_warp_kernel<<<deposit_num_blocks, deposit_block_size>>>(&
+       sortp, src_part, head_idx, num_parts, &
+       grid, hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, &
+       box_ckey_min, box_ckey_max, periodic, &
+       xp, mp, rho, nref, &
+       skip1, skip2, skip3, dx_loc, vol_loc, &
+       sim%r%m_refine(ilevel), sim%r%mass_cut_refine, ilevel, leading)
   call GPU_Error_Check("gpu/gpu_part.cuf", 0)
-
-  call gpu_scan(1, total_cells, total_sum_dev)
-  total_sum_unused = total_sum_dev
-
-  call compute_cell_part_head_kernel<<<num_blocks, num_threads>>>(cell_part_count, &
-       cell_part_head, prefix_sum, num_grids)
-  call GPU_Error_Check("gpu/gpu_part.cuf", 0)
-
-  num_threads = 128
-  num_blocks  = (num_parts + num_threads - 1) / num_threads
-  call place_cell_part_idx_kernel<<<num_blocks, num_threads>>>(cell_part_count, &
-       cell_part_head, cell_part_idx, src_part, &
-       head_idx, num_parts)
-  call GPU_Error_Check("gpu/gpu_part.cuf", 0)
-
-  if (total_sum_unused > 0) then
-     deposit_block_size = 256
-     deposit_num_blocks = (total_sum_unused + deposit_block_size - 1) / deposit_block_size
-     call cic_part_warp_kernel<<<deposit_num_blocks, deposit_block_size>>>(&
-          cell_part_idx, src_part, total_sum_unused, &
-          grid, hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, &
-          box_ckey_min, box_ckey_max, periodic, &
-          xp, mp, rho, nref, &
-          skip1, skip2, skip3, dx_loc, vol_loc, &
-          sim%r%m_refine(ilevel), sim%r%mass_cut_refine, ilevel, leading)
-     call GPU_Error_Check("gpu/gpu_part.cuf", 0)
-  endif
 
   call nvtxEndRange()
 end subroutine gpu_cic_part
