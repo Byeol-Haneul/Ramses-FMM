@@ -1,4 +1,7 @@
 module init_fmm_module
+#ifdef _CUDA
+  use gpu_runner, only: gpu_build_fmm
+#endif
 integer, parameter :: FMM_BUILD_STANDARD = 0
 integer, parameter :: FMM_BUILD_MERGED = 1
 integer, parameter :: FMM_MULTIPOLE_STANDARD = 0
@@ -83,6 +86,9 @@ recursive subroutine r_build_fmm(pst,input,input_size)
      call r_build_fmm(pst%pLower,input,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
+#ifdef _CUDA
+      call gpu_build_fmm(pst%s, input%ilevel, input%ifine, input%mode == FMM_BUILD_MERGED)
+#else
       if (input%mode == FMM_BUILD_MERGED) then
           call build_fmm_merged(pst%s,input%ilevel)
       else if(input%ifine==input%ilevel)then
@@ -90,6 +96,7 @@ recursive subroutine r_build_fmm(pst,input,input_size)
       else
           call build_fmm(pst%s,pst%s%m_fmm_list(input%ilevel),pst%s%m_fmm_list(input%ilevel),input)
       end if
+#endif
   endif
 
 end subroutine r_build_fmm
