@@ -751,7 +751,10 @@ attributes(global) subroutine reset_cell_part_count_kernel(cell_part_count_d, nu
   cell_part_count_d(icell, igrid) = 0
 end subroutine reset_cell_part_count_kernel
 
-!> Count particles per source cell (ilevel+1); pack src_part.
+!> Per-particle (icell_src, igrid_src) at level (ilevel+1); bump
+!> cell_part_count and cache the source map so the deposit kernel skips
+!> the per-k hash_get repeat. Hash-miss writes 0 (whole-word OOD sentinel).
+!> See gpu_part_state.cuf for the src_part bit layout.
 attributes(global) subroutine build_cell_part_count_kernel(xp_d, &
      cell_part_count_d, src_part_d, &
      hash_key_d, hash_val_d, hash_size_d, ckey_max_d, key_off_d, &
@@ -806,10 +809,11 @@ attributes(global) subroutine build_cell_part_count_kernel(xp_d, &
   igrid = hash_get(hash_key_d, hash_val_d, hash_size_d, key)
 
   if (igrid == 0) then
-     src_part_d(ipart) = 0   ! OOD
+     src_part_d(ipart) = 0   ! out-of-domain sentinel
      return
   endif
 
+  ! Pack (igrid, icell) into one 32-bit word; see gpu_part_state.cuf for layout.
   src_part_d(ipart) = ior(ishft(igrid, 5), icell)
 
   old = atomicadd(cell_part_count_d(icell, igrid), 1)
@@ -968,11 +972,13 @@ attributes(global) subroutine cic_part_warp_kernel(cell_part_idx_d, &
   if (valid_lane) then
      ipart    = cell_part_idx_d(slot_global)
      combined = src_part_d(ipart)
+     ! Defensive: place_cell_part_idx_kernel skips OOD particles (combined==0),
+     ! so a sentinel here would indicate a build-pipeline bug.
      if (combined == 0) then
         valid_lane = .false.
      else
-        icell_src_lane = iand(combined, 31)
-        igrid_src_lane = ishft(combined, -5)
+        icell_src_lane = iand(combined, 31)    ! low 5 bits = icell
+        igrid_src_lane = ishft(combined, -5)   ! upper 27 bits = igrid
      endif
   endif
 
@@ -1103,8 +1109,10 @@ attributes(global) subroutine cic_part_warp_kernel(cell_part_idx_d, &
         call warp_reduce_sum(my_rho)
         call warp_reduce_sum(my_nref)
         if (lane == 0 .and. dst_igrid_lane /= 0) then
-           info = atomicadd(rho_d(dst_icell_lane, dst_igrid_lane), my_rho)
-           if (m_refine_at_level >= 0d0) then
+           if (my_rho /= 0d0) then
+              info = atomicadd(rho_d(dst_icell_lane, dst_igrid_lane), my_rho)
+           endif
+           if (m_refine_at_level >= 0d0 .and. my_nref /= 0d0) then
               info = atomicadd(nref_d(dst_icell_lane, dst_igrid_lane), my_nref)
            endif
         endif
@@ -1157,20 +1165,24 @@ attributes(global) subroutine cic_part_warp_kernel(cell_part_idx_d, &
               dst_igrid_lane = hash_get(hash_key_d, hash_val_d, hash_size_d, key)
            endif
            if (dst_igrid_lane /= 0) then
-              w      = wx(ox+1) * wy(oy+1) * wz(oz+1)
-              my_rho = mp_i * w / vol_loc
-              info   = atomicadd(rho_d(dst_icell_lane, dst_igrid_lane), my_rho)
-              if (m_refine_at_level >= 0d0) then
-                 if (mass_cut_refine > 0d0) then
-                    if (mp_i < mass_cut_refine) then
-                       my_nref = w
+              w = wx(ox+1) * wy(oy+1) * wz(oz+1)
+              if (w > 0d0) then
+                 my_rho = mp_i * w / vol_loc
+                 info   = atomicadd(rho_d(dst_icell_lane, dst_igrid_lane), my_rho)
+                 if (m_refine_at_level >= 0d0) then
+                    if (mass_cut_refine > 0d0) then
+                       if (mp_i < mass_cut_refine) then
+                          my_nref = w
+                       else
+                          my_nref = 0d0
+                       endif
                     else
-                       my_nref = 0d0
+                       my_nref = w
                     endif
-                 else
-                    my_nref = w
+                    if (my_nref /= 0d0) then
+                       info = atomicadd(nref_d(dst_icell_lane, dst_igrid_lane), my_nref)
+                    endif
                  endif
-                 info = atomicadd(nref_d(dst_icell_lane, dst_igrid_lane), my_nref)
               endif
            endif
         endif
