@@ -1110,10 +1110,10 @@ attributes(global) subroutine cic_part_warp_kernel(cell_part_idx_d, &
         call warp_reduce_sum(my_nref)
         if (lane == 0 .and. dst_igrid_lane /= 0) then
            if (my_rho /= 0d0) then
-              info = atomicadd(rho_d(dst_icell_lane, dst_igrid_lane), my_rho)
+              info = atomicadd(rho_d(dst_icell_lane, dst_igrid_lane), real(my_rho, kind=dp))
            endif
            if (m_refine_at_level >= 0d0 .and. my_nref /= 0d0) then
-              info = atomicadd(nref_d(dst_icell_lane, dst_igrid_lane), my_nref)
+              info = atomicadd(nref_d(dst_icell_lane, dst_igrid_lane), real(my_nref, kind=dp))
            endif
         endif
      end do
@@ -1168,7 +1168,7 @@ attributes(global) subroutine cic_part_warp_kernel(cell_part_idx_d, &
               w = wx(ox+1) * wy(oy+1) * wz(oz+1)
               if (w > 0d0) then
                  my_rho = mp_i * w / vol_loc
-                 info   = atomicadd(rho_d(dst_icell_lane, dst_igrid_lane), my_rho)
+                 info   = atomicadd(rho_d(dst_icell_lane, dst_igrid_lane), real(my_rho, kind=dp))
                  if (m_refine_at_level >= 0d0) then
                     if (mass_cut_refine > 0d0) then
                        if (mp_i < mass_cut_refine) then
@@ -1180,7 +1180,7 @@ attributes(global) subroutine cic_part_warp_kernel(cell_part_idx_d, &
                        my_nref = w
                     endif
                     if (my_nref /= 0d0) then
-                       info = atomicadd(nref_d(dst_icell_lane, dst_igrid_lane), my_nref)
+                       info = atomicadd(nref_d(dst_icell_lane, dst_igrid_lane), real(my_nref, kind=dp))
                     endif
                  endif
               endif
