@@ -1,6 +1,7 @@
 module fmm_fine_commons
 #if defined(_CUDA) && defined(WITHOUTMPI)
-  use gpu_runner, only: gpu_fmm_downward, gpu_fmm_amr_intermediate, gpu_fmm_amr_direct
+  use gpu_runner, only: gpu_fmm_downward, gpu_fmm_amr_intermediate, gpu_fmm_amr_direct, &
+       & gpu_fmm_amr_direct_taylor, gpu_fmm_combined_direct
 #endif
 contains
 ! ------------------------------------------------------------------------
@@ -986,7 +987,11 @@ recursive subroutine r_fmm_amr_direct(pst,downward_levels,input_size)
   else
      if (downward_levels%ilev-1==downward_levels%jlev) then
        !! HERE WE DO NEAR FIELD + MID FIELD TOGETHER WITH 6^n cells
+#if defined(_CUDA) && defined(WITHOUTMPI)
+       call gpu_fmm_combined_direct(pst%s, downward_levels%ilev)
+#else
        call fmm_combined_direct(pst%s,downward_levels%ilev,downward_levels%jlev)
+#endif
      else if (downward_levels%ilev==downward_levels%jlev) then
 #if defined(_CUDA) && defined(WITHOUTMPI)
        call gpu_fmm_amr_direct(pst%s, downward_levels%ilev)
@@ -994,8 +999,13 @@ recursive subroutine r_fmm_amr_direct(pst,downward_levels,input_size)
        call fmm_amr_direct(pst%s,downward_levels%ilev,downward_levels%jlev)
 #endif
      else
+#if defined(_CUDA) && defined(WITHOUTMPI)
+       call gpu_fmm_amr_direct_taylor(pst%s, downward_levels%ilev, downward_levels%jlev, &
+            downward_levels%mode == FMM_TREE_SOURCE_MERGED)
+#else
        call fmm_amr_direct_taylor(pst%s,downward_levels%ilev,downward_levels%jlev, &
             use_merged=(downward_levels%mode == FMM_TREE_SOURCE_MERGED)) ! important to exclude nearest neighbors.
+#endif
      end if
   endif
 
