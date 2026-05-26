@@ -1652,7 +1652,7 @@ subroutine gpu_kick_drift_part(sim, ilevel, action_part)
         num_threads = 128
         num_blocks = (num_coarse + num_threads - 1) / num_threads
         call gravana_preloop_part_kernel<<<num_blocks, num_threads>>>(xp, vp, levelp, &
-             dtnew_part, dx_loc, action_part, ilevel, head_coarse, num_coarse, sim%p%npartmax, &
+             dtnew_part, dx_loc, action_part, ilevel, head_coarse, num_coarse, sim%r%npartmax, &
              gravity_type, gp1, gp2, gp3, gp4, gp5, q1, q2, q3, q4)
      endif
   endif
@@ -1665,7 +1665,7 @@ subroutine gpu_kick_drift_part(sim, ilevel, action_part)
           & f, hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, &
           & box_ckey_min, box_ckey_max, box_size, periodic, sim%r%ngridmax, &
           & dtnew_part, dtold_part, &
-          & skip1, skip2, skip3, dx_loc, action_part, ilevel, head_idx, num_parts, leading)
+          & skip1, skip2, skip3, dx_loc, action_part, ilevel, head_idx, num_parts, sim%r%npartmax)
      call GPU_Error_Check("gpu/gpu_part.cuf", 0)
      call nvtxEndRange()
   endif
