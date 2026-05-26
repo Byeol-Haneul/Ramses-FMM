@@ -1317,25 +1317,16 @@ attributes(device) subroutine analytic_gravity_part(x, ff, dx_loc, gravity_type,
 
   if (gravity_type == 0) then
      rx = x(1) - q2 / q1
-     ry = 0d0
-     rz = 0d0
-     if (ndim >= 2) ry = x(2) - q3 / q1
-     if (ndim >= 3) rz = x(3) - q4 / q1
+     ry = x(2) - q3 / q1
+     rz = x(3) - q4 / q1
      rr = max(sqrt(rx**2 + ry**2 + rz**2), dx_loc)
-     if (ndim == 1) then
-        ff(1) = -q1 * 2d0 * acos(-1d0) * rx / rr
-     else if (ndim == 2) then
-        ff(1) = -q1 * 2d0 * rx / rr**2
-        ff(2) = -q1 * 2d0 * ry / rr**2
-     else
-        ff(1) = -q1 * rx / rr**3
-        ff(2) = -q1 * ry / rr**3
-        ff(3) = -q1 * rz / rr**3
-     endif
+     ff(1) = -q1 * rx / rr**3
+     ff(2) = -q1 * ry / rr**3
+     ff(3) = -q1 * rz / rr**3
   else if (gravity_type == 1) then
      ff(1) = gp1
-     if (ndim >= 2) ff(2) = gp2
-     if (ndim >= 3) ff(3) = gp3
+     ff(2) = gp2
+     ff(3) = gp3
   else if (gravity_type == 2) then
      gmass = gp1
      emass = gp2
@@ -1343,21 +1334,12 @@ attributes(device) subroutine analytic_gravity_part(x, ff, dx_loc, gravity_type,
      ymass = gp4
      zmass = gp5
      rx = x(1) - xmass
-     ry = 0d0
-     rz = 0d0
-     if (ndim >= 2) ry = x(2) - ymass
-     if (ndim >= 3) rz = x(3) - zmass
+     ry = x(2) - ymass
+     rz = x(3) - zmass
      rr = sqrt(rx**2 + ry**2 + rz**2 + emass**2)
-     if (ndim == 1) then
-        ff(1) = -gmass * rx / rr
-     else if (ndim == 2) then
-        ff(1) = -gmass * rx / rr**2
-        ff(2) = -gmass * ry / rr**2
-     else
-        ff(1) = -gmass * rx / rr**3
-        ff(2) = -gmass * ry / rr**3
-        ff(3) = -gmass * rz / rr**3
-     endif
+     ff(1) = -gmass * rx / rr**3
+     ff(2) = -gmass * ry / rr**3
+     ff(3) = -gmass * rz / rr**3
   endif
 end subroutine analytic_gravity_part
 
@@ -1407,27 +1389,21 @@ attributes(device) subroutine gather_cic_force_part(f_d, hash_key_d, hash_val_d,
      box_min(idim) = box_ckey_min_d(idim, cell_level)
      box_max(idim) = box_ckey_max_d(idim, cell_level)
      if (periodic_d(idim)) then
-        if (il(idim) < box_min(idim))  il(idim) = box_max(idim) - 1
+        if (il(idim) <  box_min(idim)) il(idim) = box_max(idim) - 1
         if (ir(idim) >= box_max(idim)) ir(idim) = box_min(idim)
      endif
   end do
 
   do bz = 0, 1
-     if (ndim < 3 .and. bz == 1) cycle
      do by = 0, 1
-        if (ndim < 2 .and. by == 1) cycle
         do bx = 0, 1
            target_ckey = 0
            target_ckey(1) = merge(ir(1), il(1), bx == 1)
            weight = merge(dr(1), dl(1), bx == 1)
-           if (ndim >= 2) then
-              target_ckey(2) = merge(ir(2), il(2), by == 1)
-              weight = weight * merge(dr(2), dl(2), by == 1)
-           endif
-           if (ndim >= 3) then
-              target_ckey(3) = merge(ir(3), il(3), bz == 1)
-              weight = weight * merge(dr(3), dl(3), bz == 1)
-           endif
+           target_ckey(2) = merge(ir(2), il(2), by == 1)
+           weight = weight * merge(dr(2), dl(2), by == 1)
+           target_ckey(3) = merge(ir(3), il(3), bz == 1)
+           weight = weight * merge(dr(3), dl(3), bz == 1)
 
            in_domain = .true.
            do idim = 1, ndim
@@ -1640,41 +1616,31 @@ subroutine gpu_kick_drift_part(sim, ilevel, action_part)
   integer, intent(in) :: ilevel
   integer, intent(in) :: action_part
 
-  integer(kind=4) :: head_idx, num_parts, head_coarse, num_coarse, leading
+  integer(kind=4) :: head_idx, tail_idx, num_parts
+  integer(kind=4) :: head_coarse, tail_coarse, num_coarse
   integer :: num_threads, num_blocks
   real(kind=8) :: dx_loc, skip1, skip2, skip3
   real(kind=8) :: gp1, gp2, gp3, gp4, gp5, q1, q2, q3, q4
   integer(kind=4) :: gravity_type
   logical :: any_nonperiodic
 
-  call nvtxStartRange("gpu_kick_drift_part", color=4) ! purple
-
-  if (.not. allocated(xp)) then
-     call nvtxEndRange()
-     return
-  endif
-  leading = size(xp, 1)
-  dx_loc = sim%r%boxlen / 2d0**ilevel
-  skip1 = 0d0
-  skip2 = 0d0
-  skip3 = 0d0
-  if (ndim >= 1) skip1 = sim%m%skip(1)
-  if (ndim >= 2) skip2 = sim%m%skip(2)
-  if (ndim >= 3) skip3 = sim%m%skip(3)
+  dx_loc = sim%r%boxlen/2**ilevel
+  skip1 = sim%m%skip(1)
+  skip2 = sim%m%skip(2)
+  skip3 = sim%m%skip(3)
   dtnew_part = sim%g%dtnew
   dtold_part = sim%g%dtold
-  num_threads = 128
 
-  head_idx  = sim%p%headp(ilevel)
-  num_parts = sim%p%tailp(ilevel) - head_idx + 1
+  head_idx = sim%p%headp(ilevel)
+  tail_idx = sim%p%tailp(ilevel)
+  num_parts = tail_idx - head_idx + 1
 
   if (sim%p%static) then
      if (num_parts > 0) then
+        num_threads = 128
         num_blocks  = (num_parts + num_threads - 1) / num_threads
         call static_levelp_part_kernel<<<num_blocks, num_threads>>>(levelp, ilevel, head_idx, num_parts)
-        call GPU_Error_Check("gpu/gpu_part.cuf", 0)
      endif
-     call nvtxEndRange()
      return
   endif
 
@@ -1682,7 +1648,8 @@ subroutine gpu_kick_drift_part(sim, ilevel, action_part)
   any_nonperiodic = any(.not. sim%r%periodic(1:ndim))
   if (ilevel == sim%r%levelmin .and. any_nonperiodic) then
      head_coarse = sim%p%headp(ilevel-1)
-     num_coarse = sim%p%tailp(ilevel-1) - head_coarse + 1
+     tail_coarse = sim%p%tailp(ilevel-1)
+     num_coarse = tail_coarse - head_coarse + 1
      if (num_coarse > 0) then
         gp1 = sim%r%gravity_params(1)
         gp2 = sim%r%gravity_params(2)
@@ -1691,42 +1658,30 @@ subroutine gpu_kick_drift_part(sim, ilevel, action_part)
         gp5 = sim%r%gravity_params(5)
         q1 = sim%g%multipole%q(1)
         q2 = sim%g%multipole%q(2)
-        q3 = 0d0
-        q4 = 0d0
-        if (ndim >= 2) q3 = sim%g%multipole%q(3)
-        if (ndim >= 3) q4 = sim%g%multipole%q(4)
+        q3 = sim%g%multipole%q(3)
+        q4 = sim%g%multipole%q(4)
         gravity_type = sim%r%gravity_type
+        num_threads = 128
         num_blocks = (num_coarse + num_threads - 1) / num_threads
         call gravana_preloop_part_kernel<<<num_blocks, num_threads>>>(xp, vp, levelp, &
-             dtnew_part, dx_loc, action_part, ilevel, head_coarse, num_coarse, leading, &
+             dtnew_part, dx_loc, action_part, ilevel, head_coarse, num_coarse, sim%r%npartmax, &
              gravity_type, gp1, gp2, gp3, gp4, gp5, q1, q2, q3, q4)
-        call GPU_Error_Check("gpu/gpu_part.cuf", 0)
      endif
   endif
 
-  if (num_parts <= 0) then
-     call nvtxEndRange()
-     return
-  endif
-  if (.not. allocated(f)) then
-     call nvtxEndRange()
-     return
-  endif
-
-  if (sim%r%gravity_type > 0) then
-     f = sim%m%f
+  if (num_parts > 0) then
+     num_threads = 128
+     num_blocks  = (num_parts + num_threads - 1) / num_threads
+     call nvtxStartRange("gpu_kick_drift_part", color=4) ! purple
+     call kick_drift_part_kernel<<<num_blocks, num_threads>>>(xp, vp, levelp, &
+          & f, hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, &
+          & box_ckey_min, box_ckey_max, box_size, periodic, sim%r%ngridmax, &
+          & dtnew_part, dtold_part, &
+          & skip1, skip2, skip3, dx_loc, action_part, ilevel, head_idx, num_parts, sim%r%npartmax)
      call GPU_Error_Check("gpu/gpu_part.cuf", 0)
+     call nvtxEndRange()
   endif
-  num_blocks  = (num_parts + num_threads - 1) / num_threads
 
-  call kick_drift_part_kernel<<<num_blocks, num_threads>>>(xp, vp, levelp, &
-       f, hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, &
-       box_ckey_min, box_ckey_max, box_size, periodic, sim%r%ngridmax, &
-       dtnew_part, dtold_part, &
-       skip1, skip2, skip3, dx_loc, action_part, ilevel, head_idx, num_parts, leading)
-  call GPU_Error_Check("gpu/gpu_part.cuf", 0)
-
-  call nvtxEndRange()
 end subroutine gpu_kick_drift_part
 
 end module part_device
