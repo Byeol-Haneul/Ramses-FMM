@@ -824,8 +824,9 @@ attributes(global) subroutine cic_part_warp_kernel(sortp_d, &
      box_ckey_min_d, box_ckey_max_d, periodic_d, &
      xp_d, mp_d, rho_d, nref_d, &
      skip1, skip2, skip3, dx_loc, vol_loc, &
-     m_refine_at_level, mass_cut_refine, ilevel, leading)
+     m_refine_at_level, mass_cut_refine, ilevel, leading, use_fast_path)
   integer(kind=4), intent(in), value :: head_idx, num_parts, leading, ilevel
+  logical, intent(in), value :: use_fast_path
   integer(kind=4), device :: sortp_d(*)
   integer(kind=4), device :: isp_swap_d(*)
   type(oct),       device :: grid_d(*)
@@ -937,7 +938,7 @@ attributes(global) subroutine cic_part_warp_kernel(sortp_d, &
   nx          = int(ckey_max_d(ilevel), kind=8)
   hkey_offset = key_off_d(ilevel)
 
-  if (n_match == warpsize .and. ref_igrid /= 0) then
+  if (use_fast_path .and. n_match == warpsize .and. ref_igrid /= 0) then
      ! Uniform warp: lane-0 hash, warp-reduce, one atomicAdd per dest.
      ii_src = 0
      do idim = 1, ndim
@@ -1110,6 +1111,14 @@ subroutine gpu_cic_part(sim, ilevel, rtype)
      return
   endif
 
+  block
+     logical, save :: cic_slow_path_warned = .false.
+     if (.not. sim%r%gpu_cic_fast_path .and. .not. cic_slow_path_warned) then
+        cic_slow_path_warned = .true.
+        write(*,*) 'gpu_cic_part: warp-coalesce fast path DISABLED (gpu_cic_fast_path=.false.)'
+     endif
+  end block
+
   ! Compute monopole and dipole
   if (ilevel == sim%r%levelmin .and. sim%p%npart > 0) then
 
@@ -1162,7 +1171,8 @@ subroutine gpu_cic_part(sim, ilevel, rtype)
        & box_ckey_min, box_ckey_max, periodic, &
        & xp, mp, rho, nref, &
        & skip1, skip2, skip3, dx_loc, vol_loc, &
-       & sim%r%m_refine(ilevel), sim%r%mass_cut_refine, ilevel, sim%r%npartmax)
+       & sim%r%m_refine(ilevel), sim%r%mass_cut_refine, ilevel, sim%r%npartmax, &
+       & sim%r%gpu_cic_fast_path)
   call nvtxEndRange()
 
 end subroutine gpu_cic_part

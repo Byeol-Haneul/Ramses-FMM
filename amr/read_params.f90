@@ -56,6 +56,7 @@ subroutine m_read_params(pst)
   logical::static_mesh=.false. ! Static mesh refinement activated
   logical::static_gas=.false.  ! Hydro is turned off
   logical::clump_only=.false.  ! Only clump finding
+  logical::gpu_cic_fast_path=.true. ! GPU CIC warp-coalesce fast path
 
   ! Step parameters
   integer::nrestart=0         ! New run or backup file number
@@ -558,7 +559,7 @@ subroutine m_read_params(pst)
   namelist/run_params/cosmo,pic,poisson,hydro,rt,verbose,debug &
        & ,nrestart,ncontrol,nstepmax,nsubcycle,nremap &
        & ,static_mesh,static_gas,geom,overload,nsuperoct &
-       & ,clump_only
+       & ,clump_only,gpu_cic_fast_path
   ! Output parameters
   namelist/output_params/foutput,aout,tout,output_mode &
        & ,tend,delta_tout,aend,delta_aout,gadget_output &
@@ -1241,6 +1242,7 @@ subroutine m_read_params(pst)
   s%r%overload=overload
   s%r%nsuperoct=nsuperoct
   s%r%clump_only=clump_only
+  s%r%gpu_cic_fast_path=gpu_cic_fast_path
 
   s%r%noutput=noutput
   s%r%foutput=foutput
