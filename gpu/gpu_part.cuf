@@ -7,7 +7,6 @@ module part_device
   use gpu_part_state, only: &
        & xp, vp, mp, phip, levelp, sortp, idp, &
 !       & jp, zp, tp, tm, size_p, charge, idm, idt, &
-       & cell_part_count, cell_part_head, cell_part_idx, src_part, &
        & xp_swap, isp_swap, idp_swap
   use gpu_runner, only: &
        & grid, hash_key, hash_val, ckey_max, key_off, &
@@ -655,19 +654,19 @@ subroutine gpu_sort_part(sim, ilevel)
 end subroutine gpu_sort_part
 
 !> Hash each particle's source (igrid,icell) at level ilevel and pack the
-!> result into src_part so the deposit kernel skips the per-k hash_get repeat.
+!> result into isp_swap so the deposit kernel skips the per-k hash_get repeat.
 !> Hash-miss writes 0 (whole-word OOD sentinel). Walks particles in Hilbert
 !> order via sortp; no per-cell counting (the Hilbert sort at depth ilevel
 !> already groups same-source-cell particles).
-!> See gpu_part_state.cuf for the src_part bit layout.
+!> See gpu_part_state.cuf for the isp_swap bit layout (gpu_cic_part role).
 attributes(global) subroutine build_src_part_kernel(xp_d, &
-     sortp_d, src_part_d, &
+     sortp_d, isp_swap_d, &
      hash_key_d, hash_val_d, hash_size_d, ckey_max_d, key_off_d, &
      skip1, skip2, skip3, dx_loc, ilevel, head_idx, num_parts, leading)
   integer(kind=4), intent(in), value :: leading
   real(kind=dp),   device :: xp_d(*)
   integer(kind=4), device :: sortp_d(*)
-  integer(kind=4), device :: src_part_d(*)
+  integer(kind=4), device :: isp_swap_d(*)
   integer(kind=8), device :: hash_key_d(*)
   integer(kind=4), device :: hash_val_d(*)
   integer(kind=4), intent(in), value :: hash_size_d
@@ -715,98 +714,13 @@ attributes(global) subroutine build_src_part_kernel(xp_d, &
   igrid = hash_get(hash_key_d, hash_val_d, hash_size_d, key)
 
   if (igrid == 0) then
-     src_part_d(ipart) = 0   ! out-of-domain sentinel
+     isp_swap_d(ipart) = 0   ! out-of-domain sentinel
      return
   endif
 
   ! Pack (igrid, icell) into one 32-bit word; see gpu_part_state.cuf for layout.
-  src_part_d(ipart) = ior(ishft(igrid, 5), icell)
+  isp_swap_d(ipart) = ior(ishft(igrid, 5), icell)
 end subroutine build_src_part_kernel
-
-attributes(global) subroutine flatten_cell_count_kernel(cell_part_count_d, &
-     prefix_sum_d, head_idx, num_grids)
-  integer(kind=4), intent(in), value :: head_idx
-  integer(kind=4), intent(in), value :: num_grids
-  integer(kind=4), device :: cell_part_count_d(1:twotondim, *)
-  integer(kind=4), device :: prefix_sum_d(*)
-
-  integer :: thread_idx, block_idx, idx, icell, igrid
-
-  thread_idx = threadIdx%x - 1
-  block_idx  = blockIdx%x  - 1
-
-  idx = thread_idx + block_idx * blockDim%x
-  if (idx >= twotondim * num_grids) return
-
-  icell = mod(idx, twotondim) + 1
-  igrid = head_idx + idx / twotondim
-
-  prefix_sum_d(idx + 1) = cell_part_count_d(icell, igrid)
-
-end subroutine flatten_cell_count_kernel
-
-!> cell_part_head = exclusive scan start; count reset for place pass.
-attributes(global) subroutine compute_cell_part_head_kernel(cell_part_count_d, &
-     cell_part_head_d, prefix_sum_d, head_idx, num_grids)
-  integer(kind=4), intent(in), value :: head_idx
-  integer(kind=4), intent(in), value :: num_grids
-  integer(kind=4), device :: cell_part_count_d(1:twotondim, *)
-  integer(kind=4), device :: cell_part_head_d (1:twotondim, *)
-  integer(kind=4), device :: prefix_sum_d(*)
-
-  integer :: thread_idx, block_idx, idx, icell, igrid, incl, cnt
-
-  thread_idx = threadIdx%x - 1
-  block_idx  = blockIdx%x  - 1
-
-  idx = thread_idx + block_idx * blockDim%x
-  if (idx >= twotondim * num_grids) return
-
-  icell = mod(idx, twotondim) + 1
-  igrid = head_idx + idx / twotondim
-
-  incl = prefix_sum_d(idx + 1)
-  cnt  = cell_part_count_d(icell, igrid)
-
-  cell_part_head_d(icell, igrid)  = incl - cnt
-  cell_part_count_d(icell, igrid) = 0
-
-end subroutine compute_cell_part_head_kernel
-
-!> Fill cell_part_idx at head + atomicAdd(count).
-attributes(global) subroutine place_cell_part_idx_kernel(cell_part_count_d, &
-     cell_part_head_d, cell_part_idx_d, src_part_d, &
-     head_idx, num_parts)
-  integer(kind=4), device :: cell_part_count_d(1:twotondim, *)
-  integer(kind=4), device :: cell_part_head_d (1:twotondim, *)
-  integer(kind=4), device :: cell_part_idx_d(*)
-  integer(kind=4), device :: src_part_d(*)
-  integer(kind=4), intent(in), value :: head_idx, num_parts
-
-  integer :: thread_idx, block_idx, idx, ipart, icell, igrid, slot_off, slot
-  integer(kind=4) :: combined
-
-  thread_idx = threadIdx%x - 1
-  block_idx  = blockIdx%x  - 1
-
-  idx = thread_idx + block_idx * blockDim%x
-  if (idx >= num_parts) return
-
-  ipart = head_idx + idx
-
-  combined = src_part_d(ipart)
-  if (combined == 0) return
-
-  icell = iand(combined, 31)
-  igrid = ishft(combined, -5)
-
-  slot_off = atomicadd(cell_part_count_d(icell, igrid), 1)
-
-  slot = cell_part_head_d(icell, igrid) + slot_off + 1
-
-  cell_part_idx_d(slot) = ipart
-
-end subroutine place_cell_part_idx_kernel
 
 !> Multipole reduction over [1, npart]: q(1)=sum(mp), q(idim+1)=sum(mp*xp).
 attributes(global) subroutine multipole_q_kernel(xp_d, mp_d, multipole_q_d, &
@@ -905,7 +819,7 @@ end subroutine gpu_newdt_part_kernel
 !> order via sortp(head_idx..head_idx+num_parts-1) so same-source-cell lanes
 !> coalesce inside each warp.
 attributes(global) subroutine cic_part_warp_kernel(sortp_d, &
-     src_part_d, head_idx, num_parts, &
+     isp_swap_d, head_idx, num_parts, &
      grid_d, hash_key_d, hash_val_d, hash_size_d, ckey_max_d, key_off_d, &
      box_ckey_min_d, box_ckey_max_d, periodic_d, &
      xp_d, mp_d, rho_d, nref_d, &
@@ -913,7 +827,7 @@ attributes(global) subroutine cic_part_warp_kernel(sortp_d, &
      m_refine_at_level, mass_cut_refine, ilevel, leading)
   integer(kind=4), intent(in), value :: head_idx, num_parts, leading, ilevel
   integer(kind=4), device :: sortp_d(*)
-  integer(kind=4), device :: src_part_d(*)
+  integer(kind=4), device :: isp_swap_d(*)
   type(oct),       device :: grid_d(*)
   integer(kind=8), device :: hash_key_d(*)
   integer(kind=4), device :: hash_val_d(*)
@@ -958,7 +872,7 @@ attributes(global) subroutine cic_part_warp_kernel(sortp_d, &
   igrid_src_lane = 0
   if (valid_lane) then
      ipart    = sortp_d(head_idx + slot_global - 1)
-     combined = src_part_d(ipart)
+     combined = isp_swap_d(ipart)
      ! OOD particles (combined==0 from build_src_part_kernel) sit in Hilbert
      ! order alongside valid ones; mask the lane out.
      if (combined == 0) then
@@ -1234,7 +1148,7 @@ subroutine gpu_cic_part(sim, ilevel, rtype)
   num_blocks  = (num_parts + num_threads - 1) / num_threads
   call nvtxStartRange("gpu_cic_part", color=4) ! purple
   call build_src_part_kernel<<<num_blocks, num_threads>>>(xp, &
-       & sortp, src_part, &
+       & sortp, isp_swap, &
        & hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, &
        & skip1, skip2, skip3, dx_loc, ilevel, head_idx, num_parts, sim%r%npartmax)
   call nvtxEndRange()
@@ -1243,7 +1157,7 @@ subroutine gpu_cic_part(sim, ilevel, rtype)
   deposit_num_blocks = (num_parts + deposit_block_size - 1) / deposit_block_size
   call nvtxStartRange("gpu_cic_part", color=4) ! purple
   call cic_part_warp_kernel<<<deposit_num_blocks, deposit_block_size>>>(&
-       & sortp, src_part, head_idx, num_parts, &
+       & sortp, isp_swap, head_idx, num_parts, &
        & grid, hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, &
        & box_ckey_min, box_ckey_max, periodic, &
        & xp, mp, rho, nref, &

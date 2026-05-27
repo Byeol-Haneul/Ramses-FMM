@@ -15,19 +15,17 @@ module gpu_part_state
 !!$  integer(i8b),    device, allocatable, dimension(:)   :: idm
 !!$  integer(kind=4), device, allocatable, dimension(:)   :: idt
 
-  integer(kind=4), device, allocatable, dimension(:,:) :: cell_part_count
-  integer(kind=4), device, allocatable, dimension(:,:) :: cell_part_head
-  integer(kind=4), device, allocatable, dimension(:)   :: cell_part_idx
-  !> Packed per-particle source map: bits 0..4 = icell (1..twotondim),
-  !> bits 5..31 = igrid. Encoded as
-  !>   src_part(ipart) = ior(ishft(igrid, 5), icell)
+  !> xp_swap/isp_swap/idp_swap: gather/scatter scratch with disjoint lifetimes.
+  !> isp_swap carries the split-sort bucket / swap-permutation during
+  !> gpu_split_part and the packed per-particle source map during
+  !> gpu_cic_part. The source-map encoding packs (igrid, icell) into one
+  !> 32-bit word: bits 0..4 = icell (1..twotondim), bits 5..31 = igrid.
+  !> Encoded as
+  !>   isp_swap(ipart) = ior(ishft(igrid, 5), icell)
   !> and decoded as
-  !>   combined = src_part(ipart)
+  !>   combined = isp_swap(ipart)
   !>   icell = iand(combined, 31); igrid = ishft(combined, -5)
   !> OOD sentinel is the whole word == 0 (cheap check before unpacking).
-  integer(kind=4), device, allocatable, dimension(:)   :: src_part
-
-  !> xp_swap/isp_swap/idp_swap: gather/scatter scratch
   real(kind=dp),   device, allocatable, dimension(:) :: xp_swap
   integer(kind=8), device, allocatable, dimension(:) :: idp_swap
   integer(kind=4), device, allocatable, dimension(:) :: isp_swap
