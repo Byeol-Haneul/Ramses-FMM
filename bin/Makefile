@@ -3,6 +3,8 @@
 #############################################################################
 # Compilation time parameters
 COMPILER = GNU
+CUDA_ARCH = sm_80,sm_90
+CUDA_PROFILE = 0
 NDIM = 3
 MPI = 0
 HYDRO = 1
@@ -158,9 +160,13 @@ endif
 #############################################################################
 # NVHPC compiler
 ifeq ($(COMPILER),NVHPC)
-   FFLAGS = -mp -cpp -gpu=sm_80,sm_90,nordc -cuda $(DEFINES)
-   LIBS = -gpu=sm_80,sm_90,nordc -cuda -cudalib=nvtx
+   FFLAGS = -cpp -gpu=$(CUDA_ARCH),nordc -cuda -cudalib=nvtx $(DEFINES)
+   LIBS = -gpu=$(CUDA_ARCH),nordc -cuda -cudalib=nvtx
    GPU_PATH = ../gpu
+   ifeq ($(CUDA_PROFILE),1)
+      FFLAGS += -gpu=lineinfo,ptxinfo -Minstrument -traceback -gopt
+      LIBS += -gpu=lineinfo,ptxinfo -Minstrument -traceback -gopt
+   endif
    ifeq ($(MPI),1)
       F90 = $(MPIF90)
       FC = nvfortran
@@ -218,11 +224,11 @@ MODOBJ += init_neq_chem.o clfind_commons.o turb_commons.o mdl_commons.o mdl.o \
 	 cross_sections_module.o rt_spectra.o  \
 	 ramses_commons.o call_back.o cache_commons.o cache.o gadgetreadfile.o \
 	 boundaries.o output_hydro.o output_poisson.o output_part.o output_rt.o output_amr.o movie.o \
-	 sort.o nbors_utils.o hydro_flag.o multigrid_fine_coarse.o rho_fine.o marshal.o
+	 sort.o nbors_utils.o hydro_flag.o marshal.o
 ifeq ($(COMPILER),NVHPC)
 MODOBJ += gpu_utils.o gpu_hydro.o gpu_cooling.o gpu_rho.o gpu_mg.o gpu_refine.o gpu_flag.o gpu_runner.o gpu_part_state.o gpu_part.o gpu_manager.o
 endif
-MODOBJ +=  upload.o init_xion.o \
+MODOBJ +=  multigrid_fine_coarse.o rho_fine.o upload.o init_xion.o \
 	 rt_flux_module.o rt_godunov_fine.o rt_input_condinit.o rt_init_flow_fine.o rt_units.o  \
 	 rt_condinit.o rt_flag.o rt_upload.o interpol_rt.o rt_godunov_utils.o read_rt_params.o \
 	 turb_hydro.o turb_driving.o turb_init.o turb_update.o \
