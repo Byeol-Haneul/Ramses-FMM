@@ -20,6 +20,7 @@ subroutine adaptive_loop(pst)
   use clump_finder_module, only: m_clump_finder
 #ifdef _CUDA
   use gpu_manager, only: r_set_grid_device
+  use nvtx
 #endif
 
   implicit none
@@ -30,6 +31,11 @@ subroutine adaptive_loop(pst)
   integer::ilevel, dummy
   double precision::tt1,tt2
   real(kind=4)::core_mem
+#ifdef _CUDA
+  character(len=32) :: str_step
+  integer step
+  step = 0
+#endif
 
   associate(r=>pst%s%r,g=>pst%s%g,mdl=>pst%s%mdl)
 
@@ -109,6 +115,12 @@ subroutine adaptive_loop(pst)
   done = .false.
   do while(.not.done) ! Main time loop
 
+#ifdef _CUDA
+     write(str_step,'(A,I0)'),"step_",step
+     call nvtxStartRange(trim(str_step), color=5)
+     step = step + 1
+#endif
+
      tt1 = mdl_wtime(mdl)
 
      if(r%verbose)write(*,*)'Entering amr_step_coarse'
@@ -133,6 +145,9 @@ subroutine adaptive_loop(pst)
      call getmem(core_mem)
      call writemem(core_mem)
 
+#ifdef _CUDA
+     call nvtxEndRange()
+#endif
   end do
 
   call m_output_timer(.false.,'dummy')

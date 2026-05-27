@@ -1,24 +1,19 @@
 !> Device-resident DM particle arrays.
 module gpu_part_state
-  use amr_parameters, only: ndim, twotondim, threetondim, dp, i8b, MAXLEVEL
+  use amr_parameters, only: ndim, twotondim, threetondim, dp, i8b
   use cudafor
   implicit none
 
-  real(kind=8), device, dimension(1:MAXLEVEL) :: dtnew_part, dtold_part
-
   real(kind=dp),   device, allocatable, dimension(:,:) :: xp, vp
-  real(kind=dp),   device, allocatable, dimension(:)   :: mp
+  real(kind=dp),   device, allocatable, dimension(:)   :: mp, phip
   integer(kind=4), device, allocatable, dimension(:)   :: levelp
   integer(kind=4), device, allocatable, dimension(:)   :: sortp
   integer(i8b),    device, allocatable, dimension(:)   :: idp
-  !> size_p: host p%size (avoids intrinsic size).
-  real(kind=dp),   device, allocatable, dimension(:,:) :: jp
-  real(kind=dp),   device, allocatable, dimension(:)   :: zp, tp, tm, size_p, charge
-  integer(i8b),    device, allocatable, dimension(:)   :: idm
-  integer(kind=4), device, allocatable, dimension(:)   :: idt
 
-  integer(kind=8), device, allocatable, dimension(:) :: hkey_part
-  integer(kind=4), device, allocatable, dimension(:) :: bucket_part
+!!$  real(kind=dp),   device, allocatable, dimension(:,:) :: jp
+!!$  real(kind=dp),   device, allocatable, dimension(:)   :: zp, tp, tm, size_p, charge
+!!$  integer(i8b),    device, allocatable, dimension(:)   :: idm
+!!$  integer(kind=4), device, allocatable, dimension(:)   :: idt
 
   integer(kind=4), device, allocatable, dimension(:,:) :: cell_part_count
   integer(kind=4), device, allocatable, dimension(:,:) :: cell_part_head
@@ -32,10 +27,9 @@ module gpu_part_state
   !> OOD sentinel is the whole word == 0 (cheap check before unpacking).
   integer(kind=4), device, allocatable, dimension(:)   :: src_part
 
-  real(kind=8), device, allocatable, dimension(:) :: multipole_q_dev
-
-  !> xp_swap/idp_swap: gather/scatter scratch; bucket_part reused as i4 scratch.
-  real(kind=dp),   device, allocatable, dimension(:)   :: xp_swap
-  integer(i8b),    device, allocatable, dimension(:)   :: idp_swap
+  !> xp_swap/isp_swap/idp_swap: gather/scatter scratch
+  real(kind=dp),   device, allocatable, dimension(:) :: xp_swap
+  integer(kind=8), device, allocatable, dimension(:) :: idp_swap
+  integer(kind=4), device, allocatable, dimension(:) :: isp_swap
 
 end module gpu_part_state

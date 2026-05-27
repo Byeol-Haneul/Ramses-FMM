@@ -46,14 +46,14 @@ recursive subroutine r_set_grid_device(pst)
         levelp = pst%s%p%levelp
         sortp  = pst%s%p%sortp
         idp    = pst%s%p%idp
-        if (allocated(pst%s%p%jp)     .and. allocated(jp))     jp     = pst%s%p%jp
-        if (allocated(pst%s%p%zp)     .and. allocated(zp))     zp     = pst%s%p%zp
-        if (allocated(pst%s%p%tp)     .and. allocated(tp))     tp     = pst%s%p%tp
-        if (allocated(pst%s%p%tm)     .and. allocated(tm))     tm     = pst%s%p%tm
-        if (allocated(pst%s%p%size)   .and. allocated(size_p)) size_p = pst%s%p%size
-        if (allocated(pst%s%p%charge) .and. allocated(charge)) charge = pst%s%p%charge
-        if (allocated(pst%s%p%idm)    .and. allocated(idm))    idm    = pst%s%p%idm
-        if (allocated(pst%s%p%idt)    .and. allocated(idt))    idt    = pst%s%p%idt
+!!$        if (allocated(pst%s%p%jp)     .and. allocated(jp))     jp     = pst%s%p%jp
+!!$        if (allocated(pst%s%p%zp)     .and. allocated(zp))     zp     = pst%s%p%zp
+!!$        if (allocated(pst%s%p%tp)     .and. allocated(tp))     tp     = pst%s%p%tp
+!!$        if (allocated(pst%s%p%tm)     .and. allocated(tm))     tm     = pst%s%p%tm
+!!$        if (allocated(pst%s%p%size)   .and. allocated(size_p)) size_p = pst%s%p%size
+!!$        if (allocated(pst%s%p%charge) .and. allocated(charge)) charge = pst%s%p%charge
+!!$        if (allocated(pst%s%p%idm)    .and. allocated(idm))    idm    = pst%s%p%idm
+!!$        if (allocated(pst%s%p%idt)    .and. allocated(idt))    idt    = pst%s%p%idt
         call GPU_Error_Check(__FILE__, __LINE__)
         call nvtxEndRange()
      endif
@@ -149,14 +149,14 @@ subroutine gpu_to_host_part(pst)
   pst%s%p%levelp = levelp
   pst%s%p%sortp  = sortp
   pst%s%p%idp    = idp
-  if (allocated(jp)     .and. allocated(pst%s%p%jp))     pst%s%p%jp     = jp
-  if (allocated(zp)     .and. allocated(pst%s%p%zp))     pst%s%p%zp     = zp
-  if (allocated(tp)     .and. allocated(pst%s%p%tp))     pst%s%p%tp     = tp
-  if (allocated(tm)     .and. allocated(pst%s%p%tm))     pst%s%p%tm     = tm
-  if (allocated(size_p) .and. allocated(pst%s%p%size))   pst%s%p%size   = size_p
-  if (allocated(charge) .and. allocated(pst%s%p%charge)) pst%s%p%charge = charge
-  if (allocated(idm)    .and. allocated(pst%s%p%idm))    pst%s%p%idm    = idm
-  if (allocated(idt)    .and. allocated(pst%s%p%idt))    pst%s%p%idt    = idt
+!!$  if (allocated(jp)     .and. allocated(pst%s%p%jp))     pst%s%p%jp     = jp
+!!$  if (allocated(zp)     .and. allocated(pst%s%p%zp))     pst%s%p%zp     = zp
+!!$  if (allocated(tp)     .and. allocated(pst%s%p%tp))     pst%s%p%tp     = tp
+!!$  if (allocated(tm)     .and. allocated(pst%s%p%tm))     pst%s%p%tm     = tm
+!!$  if (allocated(size_p) .and. allocated(pst%s%p%size))   pst%s%p%size   = size_p
+!!$  if (allocated(charge) .and. allocated(pst%s%p%charge)) pst%s%p%charge = charge
+!!$  if (allocated(idm)    .and. allocated(pst%s%p%idm))    pst%s%p%idm    = idm
+!!$  if (allocated(idt)    .and. allocated(pst%s%p%idt))    pst%s%p%idt    = idt
   call GPU_Error_Check(__FILE__, __LINE__)
   call nvtxEndRange()
 

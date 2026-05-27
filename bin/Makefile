@@ -3,6 +3,8 @@
 #############################################################################
 # Compilation time parameters
 COMPILER = GNU
+CUDA_ARCH = sm_80,sm_90
+CUDA_PROFILE = 0
 NDIM = 3
 MPI = 0
 HYDRO = 1
@@ -158,9 +160,13 @@ endif
 #############################################################################
 # NVHPC compiler
 ifeq ($(COMPILER),NVHPC)
-   FFLAGS = -mp -cpp -gpu=sm_80,sm_90,nordc -cuda $(DEFINES)
-   LIBS = -gpu=sm_80,sm_90,nordc -cuda -cudalib=nvtx
+   FFLAGS = -cpp -gpu=$(CUDA_ARCH),nordc -cuda -cudalib=nvtx $(DEFINES)
+   LIBS = -gpu=$(CUDA_ARCH),nordc -cuda -cudalib=nvtx
    GPU_PATH = ../gpu
+   ifeq ($(CUDA_PROFILE),1)
+      FFLAGS += -gpu=lineinfo,ptxinfo -Minstrument -traceback -gopt
+      LIBS += -gpu=lineinfo,ptxinfo -Minstrument -traceback -gopt
+   endif
    ifeq ($(MPI),1)
       F90 = $(MPIF90)
       FC = nvfortran
