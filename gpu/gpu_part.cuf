@@ -815,9 +815,19 @@ attributes(global) subroutine gpu_newdt_part_kernel(vp_d, mp_d, &
   endif
 end subroutine gpu_newdt_part_kernel
 
-!> Warp-coalesced CIC deposit; fused k=1..27.  Walks particles in Hilbert
-!> order via sortp(head_idx..head_idx+num_parts-1) so same-source-cell lanes
-!> coalesce inside each warp.
+!> CIC deposit; fused k=1..27. Walks particles in Hilbert order via
+!> sortp(head_idx..head_idx+num_parts-1) and does one atomicAdd per
+!> (lane, k) into rho/nref.
+!>
+!> The previous warp-uniformity fast path (lane-0 hash + warp_reduce_sum
+!> + single atomicAdd per warp per k) was removed: even after tightening
+!> the n_match check and inlining the warp reduction, it broke mass
+!> conservation in a way we couldn't isolate, stalling multigrid on the
+!> coarsest level. The originally-planned replacement is a segmented
+!> prefix-sum that aggregates each cell's particles into a single
+!> atomicAdd at the leader lane (see "Idea — segmented warp + block scan"
+!> in planned_next_stage_edits.md). Until that lands, this kernel runs
+!> the per-lane deposit unconditionally — slower but correct.
 attributes(global) subroutine cic_part_warp_kernel(sortp_d, &
      isp_swap_d, head_idx, num_parts, &
      grid_d, hash_key_d, hash_val_d, hash_size_d, ckey_max_d, key_off_d, &
@@ -846,8 +856,7 @@ attributes(global) subroutine cic_part_warp_kernel(sortp_d, &
 
   integer :: tid_local, lane, warp_local, warps_per_block, warp_global, slot_global
   integer :: ipart, idim, k, info
-  integer :: icell_src_lane, igrid_src_lane, ref_icell, ref_igrid
-  integer :: match_int, n_match
+  integer :: icell_src_lane, igrid_src_lane
   integer :: ox, oy, oz, dst_igrid_lane, dst_icell_lane
   integer(kind=4) :: combined
   integer(kind=4) :: src_full_ckey(1:3), target_ckey(1:3), father_ckey(1:3), ii(1:3)
@@ -914,25 +923,6 @@ attributes(global) subroutine cic_part_warp_kernel(sortp_d, &
      wz(2) = max(0d0, frac(3) - 0.5d0)
   endif
 
-  ! Warp vote: lanes sharing lane-0 source cell coalesce hash_get.
-  ! Default match_int=0 so OOD/OOB lanes (valid_lane=false) cannot be
-  ! counted as matching; the fast path fires only when every lane is
-  ! valid AND shares lane 0's source cell. Otherwise the slow path
-  ! per-lane hashes and deposits, which is what the OOD/OOB lanes
-  ! actually need.
-  ref_icell = __shfl(icell_src_lane, 0)
-  ref_igrid = __shfl(igrid_src_lane, 0)
-  match_int = 0
-  if (valid_lane) then
-     if (icell_src_lane == ref_icell .and. igrid_src_lane == ref_igrid) match_int = 1
-  endif
-  n_match = match_int
-  n_match = n_match + __shfl_xor(n_match, 1)
-  n_match = n_match + __shfl_xor(n_match, 2)
-  n_match = n_match + __shfl_xor(n_match, 4)
-  n_match = n_match + __shfl_xor(n_match, 8)
-  n_match = n_match + __shfl_xor(n_match, 16)
-
   box_min = 0
   box_max = 0
   do idim = 1, ndim
@@ -942,174 +932,76 @@ attributes(global) subroutine cic_part_warp_kernel(sortp_d, &
   nx          = int(ckey_max_d(ilevel), kind=8)
   hkey_offset = key_off_d(ilevel)
 
-  if (n_match == warpsize .and. ref_igrid /= 0) then
-     ! Uniform warp: lane-0 hash, warp-reduce, one atomicAdd per dest.
+  ! Per-lane hash + per-lane atomicAdd. TODO: replace with the
+  ! leader-particle segmented prefix sum (see kernel header comment).
+  src_full_ckey = 0
+  if (valid_lane) then
      ii_src = 0
      do idim = 1, ndim
-        ii_src(idim) = mod((ref_icell - 1) / (2**(idim-1)), 2)
+        ii_src(idim) = mod((icell_src_lane - 1) / (2**(idim-1)), 2)
      end do
-     src_full_ckey = 0
      do idim = 1, ndim
-        src_full_ckey(idim) = 2 * grid_d(ref_igrid)%ckey(idim) + ii_src(idim)
-     end do
-
-     do k = 1, threetondim
-        ox = mod(k - 1, 3) - 1
-        oy = mod((k - 1) / 3, 3) - 1
-        oz = (k - 1) / 9 - 1
-
-        dst_igrid_lane = 0
-        dst_icell_lane = 0
-        if (lane == 0) then
-           target_ckey = 0
-           target_ckey(1) = src_full_ckey(1) + ox
-           if (ndim >= 2) target_ckey(2) = src_full_ckey(2) + oy
-           if (ndim >= 3) target_ckey(3) = src_full_ckey(3) + oz
-           in_domain = .true.
-           do idim = 1, ndim
-              if (periodic_d(idim)) then
-                 if (target_ckey(idim) < box_min(idim))  target_ckey(idim) = box_max(idim) - 1
-                 if (target_ckey(idim) >= box_max(idim)) target_ckey(idim) = box_min(idim)
-              else
-                 if (target_ckey(idim) < box_min(idim))  in_domain = .false.
-                 if (target_ckey(idim) >= box_max(idim)) in_domain = .false.
-              endif
-           end do
-           if (in_domain) then
-              father_ckey = target_ckey / 2
-              ii = target_ckey - 2 * father_ckey
-              dst_icell_lane = 1
-              do idim = 1, ndim
-                 dst_icell_lane = dst_icell_lane + ii(idim) * (2**(idim-1))
-              end do
-              ix8 = int(father_ckey(1), kind=8)
-              iy8 = int(father_ckey(2), kind=8)
-              iz8 = int(father_ckey(3), kind=8)
-              key = hkey_offset + ix8 + iy8*nx + iz8*nx*nx
-              dst_igrid_lane = hash_get(hash_key_d, hash_val_d, hash_size_d, key)
-           endif
-        endif
-        dst_igrid_lane = __shfl(dst_igrid_lane, 0)
-        dst_icell_lane = __shfl(dst_icell_lane, 0)
-
-        if (valid_lane) then
-           w      = wx(ox+1) * wy(oy+1) * wz(oz+1)
-           my_rho = mp_i * w / vol_loc
-           if (m_refine_at_level >= 0d0) then
-              if (mass_cut_refine > 0d0) then
-                 if (mp_i < mass_cut_refine) then
-                    my_nref = w
-                 else
-                    my_nref = 0d0
-                 endif
-              else
-                 my_nref = w
-              endif
-           else
-              my_nref = 0d0
-           endif
-        else
-           my_rho  = 0d0
-           my_nref = 0d0
-        endif
-        ! Inlined warp reduction. The subroutine-call form
-        !   call warp_reduce_sum(my_rho)
-        !   call warp_reduce_sum(my_nref)
-        ! lost some lanes' contributions under NVHPC (suspected codegen issue
-        ! with by-reference `mass` across recursive __shfl_down iterations),
-        ! breaking mass conservation in the fast-path deposit and stalling
-        ! multigrid convergence. Keep the shuffles inline so each lane's
-        ! partial sum stays in a register across the butterfly.
-        my_rho = my_rho + __shfl_down(my_rho, 16)
-        my_rho = my_rho + __shfl_down(my_rho,  8)
-        my_rho = my_rho + __shfl_down(my_rho,  4)
-        my_rho = my_rho + __shfl_down(my_rho,  2)
-        my_rho = my_rho + __shfl_down(my_rho,  1)
-        my_nref = my_nref + __shfl_down(my_nref, 16)
-        my_nref = my_nref + __shfl_down(my_nref,  8)
-        my_nref = my_nref + __shfl_down(my_nref,  4)
-        my_nref = my_nref + __shfl_down(my_nref,  2)
-        my_nref = my_nref + __shfl_down(my_nref,  1)
-        if (lane == 0 .and. dst_igrid_lane /= 0) then
-           if (my_rho /= 0d0) then
-              info = atomicadd(rho_d(dst_icell_lane, dst_igrid_lane), real(my_rho, kind=dp))
-           endif
-           if (m_refine_at_level >= 0d0 .and. my_nref /= 0d0) then
-              info = atomicadd(nref_d(dst_icell_lane, dst_igrid_lane), real(my_nref, kind=dp))
-           endif
-        endif
-     end do
-  else
-     ! Mixed warp: per-lane hash + per-lane atomicAdd.
-     src_full_ckey = 0
-     if (valid_lane) then
-        ii_src = 0
-        do idim = 1, ndim
-           ii_src(idim) = mod((icell_src_lane - 1) / (2**(idim-1)), 2)
-        end do
-        do idim = 1, ndim
-           src_full_ckey(idim) = 2 * grid_d(igrid_src_lane)%ckey(idim) + ii_src(idim)
-        end do
-     endif
-
-     do k = 1, threetondim
-        ox = mod(k - 1, 3) - 1
-        oy = mod((k - 1) / 3, 3) - 1
-        oz = (k - 1) / 9 - 1
-        if (valid_lane) then
-           target_ckey = 0
-           target_ckey(1) = src_full_ckey(1) + ox
-           if (ndim >= 2) target_ckey(2) = src_full_ckey(2) + oy
-           if (ndim >= 3) target_ckey(3) = src_full_ckey(3) + oz
-           in_domain = .true.
-           do idim = 1, ndim
-              if (periodic_d(idim)) then
-                 if (target_ckey(idim) < box_min(idim))  target_ckey(idim) = box_max(idim) - 1
-                 if (target_ckey(idim) >= box_max(idim)) target_ckey(idim) = box_min(idim)
-              else
-                 if (target_ckey(idim) < box_min(idim))  in_domain = .false.
-                 if (target_ckey(idim) >= box_max(idim)) in_domain = .false.
-              endif
-           end do
-           dst_igrid_lane = 0
-           dst_icell_lane = 0
-           if (in_domain) then
-              father_ckey = target_ckey / 2
-              ii = target_ckey - 2 * father_ckey
-              dst_icell_lane = 1
-              do idim = 1, ndim
-                 dst_icell_lane = dst_icell_lane + ii(idim) * (2**(idim-1))
-              end do
-              ix8 = int(father_ckey(1), kind=8)
-              iy8 = int(father_ckey(2), kind=8)
-              iz8 = int(father_ckey(3), kind=8)
-              key = hkey_offset + ix8 + iy8*nx + iz8*nx*nx
-              dst_igrid_lane = hash_get(hash_key_d, hash_val_d, hash_size_d, key)
-           endif
-           if (dst_igrid_lane /= 0) then
-              w = wx(ox+1) * wy(oy+1) * wz(oz+1)
-              if (w > 0d0) then
-                 my_rho = mp_i * w / vol_loc
-                 info   = atomicadd(rho_d(dst_icell_lane, dst_igrid_lane), real(my_rho, kind=dp))
-                 if (m_refine_at_level >= 0d0) then
-                    if (mass_cut_refine > 0d0) then
-                       if (mp_i < mass_cut_refine) then
-                          my_nref = w
-                       else
-                          my_nref = 0d0
-                       endif
-                    else
-                       my_nref = w
-                    endif
-                    if (my_nref /= 0d0) then
-                       info = atomicadd(nref_d(dst_icell_lane, dst_igrid_lane), real(my_nref, kind=dp))
-                    endif
-                 endif
-              endif
-           endif
-        endif
+        src_full_ckey(idim) = 2 * grid_d(igrid_src_lane)%ckey(idim) + ii_src(idim)
      end do
   endif
+
+  do k = 1, threetondim
+     ox = mod(k - 1, 3) - 1
+     oy = mod((k - 1) / 3, 3) - 1
+     oz = (k - 1) / 9 - 1
+     if (valid_lane) then
+        target_ckey = 0
+        target_ckey(1) = src_full_ckey(1) + ox
+        if (ndim >= 2) target_ckey(2) = src_full_ckey(2) + oy
+        if (ndim >= 3) target_ckey(3) = src_full_ckey(3) + oz
+        in_domain = .true.
+        do idim = 1, ndim
+           if (periodic_d(idim)) then
+              if (target_ckey(idim) < box_min(idim))  target_ckey(idim) = box_max(idim) - 1
+              if (target_ckey(idim) >= box_max(idim)) target_ckey(idim) = box_min(idim)
+           else
+              if (target_ckey(idim) < box_min(idim))  in_domain = .false.
+              if (target_ckey(idim) >= box_max(idim)) in_domain = .false.
+           endif
+        end do
+        dst_igrid_lane = 0
+        dst_icell_lane = 0
+        if (in_domain) then
+           father_ckey = target_ckey / 2
+           ii = target_ckey - 2 * father_ckey
+           dst_icell_lane = 1
+           do idim = 1, ndim
+              dst_icell_lane = dst_icell_lane + ii(idim) * (2**(idim-1))
+           end do
+           ix8 = int(father_ckey(1), kind=8)
+           iy8 = int(father_ckey(2), kind=8)
+           iz8 = int(father_ckey(3), kind=8)
+           key = hkey_offset + ix8 + iy8*nx + iz8*nx*nx
+           dst_igrid_lane = hash_get(hash_key_d, hash_val_d, hash_size_d, key)
+        endif
+        if (dst_igrid_lane /= 0) then
+           w = wx(ox+1) * wy(oy+1) * wz(oz+1)
+           if (w > 0d0) then
+              my_rho = mp_i * w / vol_loc
+              info   = atomicadd(rho_d(dst_icell_lane, dst_igrid_lane), real(my_rho, kind=dp))
+              if (m_refine_at_level >= 0d0) then
+                 if (mass_cut_refine > 0d0) then
+                    if (mp_i < mass_cut_refine) then
+                       my_nref = w
+                    else
+                       my_nref = 0d0
+                    endif
+                 else
+                    my_nref = w
+                 endif
+                 if (my_nref /= 0d0) then
+                    info = atomicadd(nref_d(dst_icell_lane, dst_igrid_lane), real(my_nref, kind=dp))
+                 endif
+              endif
+           endif
+        endif
+     endif
+  end do
 end subroutine cic_part_warp_kernel
 
 !> Cell list + multipole_q + cic_part_warp_kernel.
