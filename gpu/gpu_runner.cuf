@@ -518,17 +518,22 @@ contains
           ! Compute prefix sum
           call gpu_scan(head_idx, num_octs, new_noct_d)
 
-          ! Compute new noct
-          new_noct = new_noct_d
-          new_noct = num_octs - new_noct
-
           ! Compute local swap table
+          ! Update global swap table
+#define FUSE_LEVEL
+#if defined(FUSE_LEVEL)
+          call compute_and_update_swap_table<<<num_blocks, num_threads>>>(swap_local, swap_global, prefix_sum, &
+               & head_idx, num_octs)
+#else
           call compute_local_swap_table<<<num_blocks, num_threads>>>(swap_local, swap_global, prefix_sum, &
                & head_idx, num_octs)
 
-          ! Update global swap table
           call update_global_swap_table<<<num_blocks, num_threads>>>(swap_global, swap_local, &
                & head_idx, num_octs)
+#endif
+          ! Compute new noct. note: this results in D-to-H memcpy
+          new_noct = new_noct_d
+          new_noct = num_octs - new_noct
 
           call nvtxEndRange()
        endif
@@ -571,13 +576,18 @@ contains
              call gpu_scan(head_idx, num_octs)
 
              ! Compute local swap table
+             ! Update global swap table
+#define FUSE_HILBERT
+#if defined(FUSE_HILBERT)
+             call compute_and_update_swap_table<<<num_blocks, num_threads>>>(swap_local, swap_global, prefix_sum, &
+                  & head_idx, num_octs)
+#else
              call compute_local_swap_table<<<num_blocks, num_threads>>>(swap_local, swap_global, prefix_sum, &
                   & head_idx, num_octs)
 
-             ! Update global swap table
              call update_global_swap_table<<<num_blocks, num_threads>>>(swap_global, swap_local, &
                   & head_idx, num_octs)
-
+#endif
              call nvtxEndRange()
           end do
 
