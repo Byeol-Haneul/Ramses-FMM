@@ -391,6 +391,7 @@ subroutine gpu_split_part(sim, ilevel)
 
   head_idx = sim%p%headp(ilevel)
   num_parts = sim%p%tailp(sim%r%nlevelmax) - head_idx + 1
+  leading = sim%r%npartmax
 
   if (num_parts <= 0) then
      sim%p%tailp(ilevel) = sim%p%headp(ilevel) - 1
