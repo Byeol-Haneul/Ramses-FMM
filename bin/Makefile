@@ -160,12 +160,12 @@ endif
 #############################################################################
 # NVHPC compiler
 ifeq ($(COMPILER),NVHPC)
-   FFLAGS = -cpp -gpu=$(CUDA_ARCH),nordc,lineinfo,ptxinfo -cuda -cudalib=nvtx $(DEFINES)
-   LIBS = -gpu=$(CUDA_ARCH),nordc,lineinfo,ptxinfo -cuda -cudalib=nvtx
+   FFLAGS = -cpp -gpu=$(CUDA_ARCH),nordc -cuda -cudalib=nvtx $(DEFINES)
+   LIBS = -gpu=$(CUDA_ARCH),nordc -cuda -cudalib=nvtx
    GPU_PATH = ../gpu
    ifeq ($(CUDA_PROFILE),1)
-      FFLAGS += -Minstrument -traceback -gopt
-      LIBS += -Minstrument -traceback -gopt
+      FFLAGS += -gpu=lineinfo,ptxinfo -Minstrument -traceback -gopt
+      LIBS += -gpu=lineinfo,ptxinfo -Minstrument -traceback -gopt
    endif
    ifeq ($(MPI),1)
       F90 = $(MPIF90)
