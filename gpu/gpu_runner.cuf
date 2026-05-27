@@ -675,22 +675,29 @@ contains
              call gpu_scan(head_idx, num_subgrids, new_noct_d)
 
              ! Compute cache swap table
+             ! Make new ghost octs in cache
+             ! Insert new octs in hash table
+             ! Increment ifree_cache on device
+#if defined(FUSE_CACHE)
+             call make_cache_insert_ghost_octs<<<num_blocks, num_threads>>>(grid, flag1, &
+                  & uold, f, phi, phi_old, swap_local, prefix_sum, father, nbor, hash_key, &
+                  & hash_val, sim%m%hash_size, ckey_max, key_off, box_ckey_min, box_ckey_max, &
+                  & periodic, sim%m%ngridmax, ifree_cache_d, new_noct_d, ind, head_idx, &
+                  & num_subgrids)
+#else
              call compute_cache_swap_table<<<num_blocks, num_threads>>>(swap_local, prefix_sum, &
                   & head_idx, num_subgrids)
 
-             ! Make new ghost octs in cache
              call make_cache_octs<<<num_blocks, num_threads>>>(grid, flag1, &
                   & uold, f, phi, phi_old, swap_local, father, nbor, &
                   & hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, &
                   & sim%m%ngridmax, ifree_cache_d, new_noct_d, ind)
 
-             ! Insert new octs in hash table
              call insert_hash_cache<<<num_blocks, num_threads>>>(grid, hash_key, hash_val, sim%m%hash_size, &
                   & ckey_max, key_off, sim%m%ngridmax, ifree_cache_d, new_noct_d)
 
-             ! Increment ifree_cache on device
              call advance_ifree_cache<<<1,1>>>(ifree_cache_d, new_noct_d)
-
+#endif
              call nvtxEndRange()
           end do
           ! End loop over 27 nbors
