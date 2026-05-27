@@ -4,11 +4,20 @@ contains
 ! ------------------------------------------------------------------------
 ! FMM Poisson solver for refined AMR levels
 ! ------------------------------------------------------------------------
-! This file contains all generic fine fmm routines, such as
-!   * fmm iterations @ MG levels
-!   * MG workspace building
+! This file contains the fine-level FMM routines, such as
+!   * FMM tree downward pass (M2L/L2L)
+!   * AMR projection of Taylor and multipole fields (L2P/M2P)
+!   * direct near-field correction on AMR cells
 !
 ! Used variables:
+!     -----------------------------------------------------------------
+!     potential                 phi
+!     density                   rho
+!     FMM multipole moments     multipole
+!     FMM local expansion       taylor_coeff
+!     AMR grid key              ckey
+!
+! ------------------------------------------------------------------------
 #ifdef GRAV
 subroutine fmm(pst,ilev,icount)
   use amr_parameters, only: multipole_size
@@ -29,8 +38,6 @@ subroutine fmm(pst,ilev,icount)
 
   if(pst%s%r%gravity_type>0)return
   if(pst%s%m%noct_tot(ilev)==0)return
-
-  !print *, "CALLING FMM TREE at LEVEL ", ilev, " (icount)=", icount
   
   if(pst%s%r%verbose) print '(A,I2)','Entering fmm at AMR level ',ilev
 
@@ -47,7 +54,6 @@ subroutine fmm(pst,ilev,icount)
     !cleanup FMM trees
     if (ilev > pst%s%r%levelmin) then
      do jlev=ilev,pst%s%r%nlevelmax
-       !print *, "clean tree: ", jlev
        call r_cleanup_fmm(pst, jlev, 1)
      end do
     end if
@@ -65,14 +71,14 @@ subroutine fmm(pst,ilev,icount)
 
     if(pst%s%r%verbose) print '(A)','FMM Hierarchy done '
 
-	    do jlev=ilev,pst%s%r%nlevelmax
-	      call m_fmm_multipoles(pst, jlev) ! do upward pass !
-	    end do
+    do jlev=ilev,pst%s%r%nlevelmax
+      call m_fmm_multipoles(pst, jlev) ! do upward pass !
+    end do
 
-      call sync_fmm_global_multipole(pst)
+    call sync_fmm_global_multipole(pst)
 
     do jlev=ilev,pst%s%r%nlevelmax
-	      if(pst%s%r%verbose) print *, "[M2M] LEVEL: ", jlev
+      if(pst%s%r%verbose) print *, "[M2M] LEVEL: ", jlev
       fmm_levels%ilev = jlev
       fmm_levels%mode = FMM_MULTIPOLE_STANDARD
       do flev=pst%s%r%bound_levelmin,jlev-1
@@ -93,7 +99,11 @@ subroutine fmm(pst,ilev,icount)
   end if
   use_merged = associated(pst%s%m_fmm_merged) .and. (ilev < pst%s%r%nlevelmax)
 
-   ! Downward pass for fmm grids. 
+   ! ---------------------------------------------------------------------
+   ! Downward pass on FMM grids
+   ! ---------------------------------------------------------------------
+   ! flev is the target FMM level receiving Taylor coefficients.
+   ! jlev is the source AMR/FMM level providing multipoles.
    input_size = storage_size(downward_levels)/32
    downward_levels%ilev=ilev
    
@@ -115,10 +125,13 @@ subroutine fmm(pst,ilev,icount)
       end if
    end do
 
-   ! Call direct force calculation
+   ! ---------------------------------------------------------------------
+   ! Project FMM fields from grids to AMR cells
+   ! ---------------------------------------------------------------------
+   ! The intermediate pass applies L2P/M2P terms, excluding nearby cells
+   ! that are left for the direct AMR correction below.
    downward_levels%flev=ilev-1
 
-   !! L2P and M2P from ilev - 1 is done through combined_direct force. 
    if(pst%s%r%verbose) print *, "[L2P & M2P] LEVEL: ", ilev
    downward_levels%mode=FMM_TREE_SOURCE_STANDARD
    downward_levels%jlev=ilev
@@ -138,6 +151,12 @@ subroutine fmm(pst,ilev,icount)
       end do
    end if
 
+   ! ---------------------------------------------------------------------
+   ! Direct near-field correction on AMR cells
+   ! ---------------------------------------------------------------------
+   ! Standard sources cover the current and coarser neighboring levels.
+   ! Finer sources use a merged tree when available, otherwise each finer
+   ! source level is visited explicitly.
    if(pst%s%r%verbose) print *, "[P2P] LEVEL: ", ilev
    downward_levels%mode=FMM_TREE_SOURCE_STANDARD
    jlev_max_amr_direct = min(pst%s%r%nlevelmax, ilev)
@@ -347,6 +366,15 @@ subroutine fmm_downward(s, ilev, jlev, flev, use_merged)
   integer, dimension(threetondim) :: source_active_count
   integer, dimension(twotondim, threetondim) :: source_active_idx
 
+  ! ---------------------------------------------------------------------
+  ! Stencil tables for M2L on neighboring FMM grids
+  ! ---------------------------------------------------------------------
+  ! inbor : source parent grid in the 3^ndim neighbor stencil
+  ! jcell : source FMM cell inside the neighboring parent grid
+  ! pcell : target FMM parent cell
+  ! icell : target FMM child cell receiving the Taylor coefficients
+  ! direct_neighbor_list marks pairs handled by direct AMR routines.
+  ! ---------------------------------------------------------------------
   integer, dimension(twotondim, ndim), parameter :: displacement_list = reshape( &
       [ &
         0, 1, 0, 1, 0, 1, 0, 1,  &
@@ -371,8 +399,6 @@ subroutine fmm_downward(s, ilev, jlev, flev, use_merged)
             init=init_flush_taylor, flush=pack_flush_taylor, combine=unpack_flush_taylor, &
             bound=init_bound_taylor_zero)
 
-  ! (debug logging removed)
-
   hash_key(0) = flev
   hash_nbor_periodic(0) = flev - 1
   hash_parent(0) = flev - 1
@@ -381,14 +407,13 @@ subroutine fmm_downward(s, ilev, jlev, flev, use_merged)
   dx_loc = r%boxlen / 2.0D0**flev
   neighbors_cached = .false.
 
-  ! jcell to icell
+  ! Precompute geometry and Taylor kernels for each source-target pair.
   do inbor = 1, threetondim
-    ! calculate offsets
     do idim = 1, ndim
-      offset_list(idim, inbor) = MOD((inbor-1)/3**(idim-1), 3) - 1 ! offset by how many fmm parent grids
+      offset_list(idim, inbor) = MOD((inbor-1)/3**(idim-1), 3) - 1
     end do
     do jcell = 1, twotondim
-      cc_jcell = 2 * offset_list(:,inbor) + displacement_list(jcell,:) ! respect to parent grid left corner / fmm grid unit
+      cc_jcell = 2 * offset_list(:,inbor) + displacement_list(jcell,:)
       do pcell = 1,twotondim
         cycle_flag = .true.
         do idim=1, ndim
@@ -409,13 +434,13 @@ subroutine fmm_downward(s, ilev, jlev, flev, use_merged)
     end do
   end do
 
-  ! Loop over octs at this level
+  ! Loop over target FMM grids at flev.
   do ioct = m_target%head(flev), m_target%tail(flev)
      accum_taylor(:, :) = 0.0D0
      hash_key(1:ndim) = m_target%grid(ioct)%ckey(1:ndim)
-     hash_parent(1:ndim) = hash_key(1:ndim)/2 !!! check
+     hash_parent(1:ndim) = hash_key(1:ndim)/2
 
-    ! Only do L2L if source and target trees are the same.
+    ! Apply L2L from the parent only when source and target trees coincide.
     if (ilev == jlev) then
       call get_parent_cell(s, hash_key, igrid_parent, pcell, flush_cache=.false., fetch_cache=.true.)
 #ifdef FMM
@@ -426,7 +451,7 @@ subroutine fmm_downward(s, ilev, jlev, flev, use_merged)
       end if
 #endif
 
-      ! Far Field Calculation
+      ! Shift the parent Taylor expansion to each target child cell.
       do icell = 1, twotondim
         do idim =1,ndim
           dx(idim) = (displacement_list(icell, idim) - 0.5) * dx_loc
@@ -442,6 +467,7 @@ subroutine fmm_downward(s, ilev, jlev, flev, use_merged)
       end do
     end if
 
+     ! Neighbor lists are reused for all target grids sharing a parent.
      if (.not. all(hash_parent == prev_hash_parent)) then
        if (neighbors_cached) then
          do inbor = 1, threetondim
@@ -449,7 +475,7 @@ subroutine fmm_downward(s, ilev, jlev, flev, use_merged)
          end do
        end if
 
-       ! Get neighboring parent grids (returns 3^n parent level grids)
+       ! Fetch neighboring parent grids and keep only non-zero source cells.
        call get_intermediate_nbor_grid(s, hash_key, grid_nbors, flush_cache=.false., fetch_cache=.true.)
        source_active_count(:) = 0
        do inbor = 1, threetondim
@@ -470,7 +496,7 @@ subroutine fmm_downward(s, ilev, jlev, flev, use_merged)
      end if
 
      do inbor = 1, threetondim
-       ! Get offset for neighboring parent grids (can reach off bounds)
+       ! Cartesian offset of this neighboring parent grid.
        do idim=1,ndim
          offset(idim) = MOD((inbor-1)/3**(idim-1), 3) - 1
        end do
@@ -491,12 +517,12 @@ subroutine fmm_downward(s, ilev, jlev, flev, use_merged)
               cycle_flag = .true.
             end if
           end do
+          ! Skip direct-neighbor pairs and non-periodic images outside the box.
           if (direct_neighbor_list(inbor, jcell, pcell) .or. cycle_flag) cycle
-          ! Shift multipole from origin -> source center (Need to use grid position)
 #ifdef FMM
           multipole = multipole_jcell_list(:, jcell, inbor)
 #endif
-          ! Get taylor coeffs from local
+          ! Accumulate M2L contribution from this source cell.
           do icell=1, twotondim
             dx = intermediate_diff_list(:, icell, pcell, jcell, inbor)
             D0 = D0_list(icell, pcell, jcell, inbor)
@@ -507,10 +533,10 @@ subroutine fmm_downward(s, ilev, jlev, flev, use_merged)
             accum_taylor(icell, :) = accum_taylor(icell, :) + temp_taylor
           end do
        end do ! over neighboring grid's cells 2^n
-	     end do ! over neighboring grids 3^n 
-	     ! Add taylor coefficients from intermediate fields
+     end do ! over neighboring grids 3^n
+     ! Add Taylor coefficients from intermediate fields.
 #ifdef FMM
-		     m_target%taylor_coeff(:,:,ioct) = m_target%taylor_coeff(:,:,ioct) + accum_taylor
+     m_target%taylor_coeff(:,:,ioct) = m_target%taylor_coeff(:,:,ioct) + accum_taylor
 #endif
   end do
   if (neighbors_cached) then
@@ -560,6 +586,13 @@ subroutine fmm_downward_coarse(s, ilev, jlev, flev, use_merged)
   real(kind=8), dimension(ndim, twotondim, twotondim, twotondim, threetondim) :: intermediate_diff_list
   logical, dimension(threetondim, twotondim, twotondim) :: direct_neighbor_list
 
+  ! ---------------------------------------------------------------------
+  ! Coarse-source M2L stencil
+  ! ---------------------------------------------------------------------
+  ! This path is used when the source level is the AMR level directly below
+  ! the target FMM level.  Source masses come from rho rather than FMM
+  ! multipoles, and nearby cells are still excluded for the direct pass.
+  ! ---------------------------------------------------------------------
   integer, dimension(twotondim, ndim), parameter :: displacement_list = reshape( &
       [ &
         0, 1, 0, 1, 0, 1, 0, 1,  &
@@ -583,14 +616,13 @@ subroutine fmm_downward_coarse(s, ilev, jlev, flev, use_merged)
   vol = dx_loc ** ndim
   temp_taylor = 0.0D0
 
-  ! jcell to icell
+  ! Precompute source-cell to target-cell distances for the neighbor stencil.
   do inbor = 1, threetondim
-    ! calculate offsets
     do idim = 1, ndim
-      offset_list(idim, inbor) = MOD((inbor-1)/3**(idim-1), 3) - 1 ! offset by how many fmm parent grids
+      offset_list(idim, inbor) = MOD((inbor-1)/3**(idim-1), 3) - 1
     end do
     do jcell = 1, twotondim
-      cc_jcell = 2 * offset_list(:,inbor) + displacement_list(jcell,:) ! respect to parent grid left corner / fmm grid unit
+      cc_jcell = 2 * offset_list(:,inbor) + displacement_list(jcell,:)
       do pcell = 1,twotondim
         cycle_flag = .true.
         do idim=1, ndim
@@ -608,7 +640,7 @@ subroutine fmm_downward_coarse(s, ilev, jlev, flev, use_merged)
     end do
   end do
 
-  ! Loop over octs at this level
+  ! Loop over target FMM grids at flev.
   do ioct = m_target%head(flev), m_target%tail(flev)
      accum_taylor(:, :) = 0.0D0
      hash_key(1:ndim) = m_target%grid(ioct)%ckey(1:ndim)
@@ -619,10 +651,10 @@ subroutine fmm_downward_coarse(s, ilev, jlev, flev, use_merged)
        pcell=pcell+2**(idim-1)*ii(idim)
      end do
 
-     ! Get neighboring parent grids (returns 3^n parent level grids)
+     ! Fetch the neighboring AMR grids that provide coarse source masses.
      call get_intermediate_nbor_grid(s, hash_key, grid_nbors, flush_cache=.false., fetch_cache=.true.)
      do inbor = 1, threetondim
-       ! Get offset for neighboring parent grids (can reach off bounds)
+       ! Cartesian offset of this neighboring source grid.
        do idim=1,ndim
          offset(idim) = MOD((inbor-1)/3**(idim-1), 3) - 1
        end do
@@ -631,7 +663,7 @@ subroutine fmm_downward_coarse(s, ilev, jlev, flev, use_merged)
        hash_nbor_periodic(1:ndim) = hash_parent(1:ndim) + offset
 
        if (igrid_nbor<=0) cycle
-       ! If any has a refined cell, by definition there exists an FMM grid of size of the grid we called.
+       ! Refined source grids are represented by finer FMM data.
        if (any(m_source%grid(igrid_nbor)%refined(1:twotondim))) cycle
 
        do jcell = 1, twotondim
@@ -645,24 +677,24 @@ subroutine fmm_downward_coarse(s, ilev, jlev, flev, use_merged)
             end if
           end do
           if (cycle_flag) cycle
-          ! skip direct neighbors
+          ! Skip nearby cells: the direct AMR routines handle them.
           if (direct_neighbor_list(inbor, jcell, pcell)) cycle
-          ! Get taylor coeffs from local
+          ! Add the source mass to the target Taylor monopole term.
           do icell=1, twotondim
             dx = intermediate_diff_list(:, icell, pcell, jcell, inbor)
             D0 = D0_list(icell, pcell, jcell, inbor)
             accum_taylor(icell, 1) = accum_taylor(icell, 1) + D0 * (m_source%rho(jcell,igrid_nbor) * vol)
           end do
        end do ! over neighboring grid's cells 2^n
-	     end do ! over neighboring grids 3^n 
-	     ! Add taylor coefficients from intermediate fields
+     end do ! over neighboring grids 3^n
+     ! Add Taylor coefficients from intermediate fields.
 #ifdef FMM
-		     m_target%taylor_coeff(:,:,ioct) = m_target%taylor_coeff(:,:,ioct) + accum_taylor
+     m_target%taylor_coeff(:,:,ioct) = m_target%taylor_coeff(:,:,ioct) + accum_taylor
 #endif
-	     ! Unlock neighbor octs
-	     do inbor = 1, threetondim
-	        if (grid_nbors(inbor)>0) call unlock_cache(m_source, grid_nbors(inbor))
-	     end do
+     ! Unlock neighbor octs
+     do inbor = 1, threetondim
+        if (grid_nbors(inbor)>0) call unlock_cache(m_source, grid_nbors(inbor))
+     end do
   end do
   call close_cache(mdl)
   end associate
@@ -736,9 +768,17 @@ subroutine fmm_amr_intermediate(s, ilev, jlev, use_merged)
         0, 0, 0, 0, 1, 1, 1, 1   &
       ], [twotondim, ndim] )
 
-  ! =====================================================
-  ! FMM code uses one AMR level per FMM level; the namelist option remains elsewhere.
-  ! =====================================================
+  ! ---------------------------------------------------------------------
+  ! Interaction tables for AMR cells inside the target FMM grid
+  ! ---------------------------------------------------------------------
+  ! igrid : target AMR oct inside the target FMM grid
+  ! icell : target AMR cell inside igrid
+  ! ind   : source FMM grid in the 3^ndim neighbor stencil
+  ! jcell : source FMM cell inside ind
+  ! D0,D1,D2 are Green-function derivatives used by M2P.
+  ! direct_neighbor_list marks pairs left to the direct AMR pass.
+  ! source_active_* stores only non-empty source cells for this stencil.
+  ! ---------------------------------------------------------------------
   real(kind=8), allocatable :: D0_list(:,:,:,:), D1_list(:,:,:,:), D2_list(:,:,:,:)
   real(kind=8), allocatable :: intermediate_diff_list(:,:,:,:,:), cell_diff_list(:,:,:,:)
   real(kind=8), allocatable :: far_diff_list(:,:,:)
@@ -775,13 +815,8 @@ subroutine fmm_amr_intermediate(s, ilev, jlev, use_merged)
   neighbors_cached = .false.
   reset_phi_state = (jlev == ilev)
 
-  ! nbox is the number of cells at the target AMR level
+  ! Number of target AMR octs inside one FMM grid for this projection.
   nbox = nfine ** ndim
-
-  !ind  : index of source fmm_grid within the neighboring 3^n fmm_grid
-  !jcell: index of source fmm_cell within the neighboring fmm_grid
-  !igrid: index of oct within target fmm_grid
-  !icell: index of target cell within target fmm_grid
 
   allocate(D0_list(twotondim, nbox, twotondim, threetondim))
   allocate(D1_list(twotondim, nbox, twotondim, threetondim))
@@ -797,7 +832,8 @@ subroutine fmm_amr_intermediate(s, ilev, jlev, use_merged)
   allocate(direct_neighbor_list(twotondim, nbox, threetondim))
   allocate(cell_diff_list(ndim, twotondim, nbox, threetondim))
 
-  ! Precalculate differences
+  ! AMR oct offsets within the target FMM grid.  far_diff_list is the
+  ! displacement from the parent Taylor center to each target AMR cell.
   do igrid=1, nbox
     do idim = 1,ndim
       nstride = nfine**(idim-1)
@@ -810,17 +846,16 @@ subroutine fmm_amr_intermediate(s, ilev, jlev, use_merged)
     end do
   end do 
 
-  ! jcell to icell
+  ! Precompute source FMM cell to target AMR cell geometry for M2P.
   do ind = 1, threetondim
-    ! calculate offsets
     do idim = 1, ndim
-      offset_list(idim, ind) = MOD((ind-1)/3**(idim-1), 3) - 1 ! offset by how many fmm grids
+      offset_list(idim, ind) = MOD((ind-1)/3**(idim-1), 3) - 1
     end do
     do jcell = 1, twotondim
-      cc_jcell = 2 * offset_list(:,ind) + displacement_list(jcell,:) ! respect to grid left corner / fmm cell unit
-      offset = (cc_jcell+ 0.5) * nfine ! offset by how many amr cells
+      cc_jcell = 2 * offset_list(:,ind) + displacement_list(jcell,:)
+      offset = (cc_jcell+ 0.5) * nfine
       do igrid=1,nbox
-        cc_icell = (fmm_grid_center_offset(:, igrid) + nfine/2)/(nfine/2) ! respect to grid left corner / fmm cell unit
+        cc_icell = (fmm_grid_center_offset(:, igrid) + nfine/2)/(nfine/2)
         cycle_flag = .true.
         cell_diff_list(:, jcell, igrid, ind) = cc_icell - cc_jcell
         do idim=1, ndim
@@ -839,10 +874,12 @@ subroutine fmm_amr_intermediate(s, ilev, jlev, use_merged)
     end do
   end do
 
-  ! Loop over octs at this level
+  ! Loop over target AMR octs at ilev.
   do ioct = m%head(ilev), m%tail(ilev)
+    ! Reset the target potential once, before adding same-level sources.
     if (reset_phi_state) m%phi(:, ioct) = 0.0D0
 
+    ! Fully refined octs have no leaf cells to update on this level.
     if (all(m%grid(ioct)%refined(1:twotondim))) cycle
 
     hash_key(1:ndim) = m%grid(ioct)%ckey(1:ndim)
@@ -855,7 +892,7 @@ subroutine fmm_amr_intermediate(s, ilev, jlev, use_merged)
       igrid = igrid + nstride * MOD(hash_key(idim), nfine)
     end do
 
-    !! FAR-FIELD
+    ! L2P from the parent Taylor expansion for the same source tree.
     if(ilev == jlev) then
       call get_grid(s, hash_fmm_grid, igrid_parent, flush_cache=.false., fetch_cache=.true.)
       pcell = 1
@@ -870,7 +907,6 @@ subroutine fmm_amr_intermediate(s, ilev, jlev, use_merged)
         parent_taylor = 0.0
       end if
 #endif
-      ! Far field
       do icell = 1, twotondim
         if (m%grid(ioct)%refined(icell)) cycle
         diff = far_diff_list(:, icell, igrid)
@@ -881,7 +917,7 @@ subroutine fmm_amr_intermediate(s, ilev, jlev, use_merged)
       end do
     end if
 
-    ! Check if we need to fetch neighbors & parent Taylor
+    ! Refresh the 3^ndim neighbor stencil when the enclosing FMM grid changes.
     if (.not. all(hash_fmm_grid == prev_hash_fmm_grid)) then
       if (neighbors_cached) then
         do ind = 1, threetondim
@@ -908,7 +944,7 @@ subroutine fmm_amr_intermediate(s, ilev, jlev, use_merged)
       prev_hash_fmm_grid = hash_fmm_grid
     end if
 
-    ! Intermediate field
+    ! M2P from non-neighbor source cells in the cached stencil.
     do ind = 1, threetondim
       igrid_nbor = grid_nbors(ind)
       if (igrid_nbor<=0) cycle
@@ -923,6 +959,7 @@ subroutine fmm_amr_intermediate(s, ilev, jlev, use_merged)
             cycle_flag = .true.
           end if
         end do
+        ! Direct neighbors and off-domain non-periodic images are skipped here.
         if (direct_neighbor_list(jcell, igrid, ind) .or. cycle_flag) cycle
 #ifdef FMM
         multipole = multipole_jcell_list(:, jcell, ind)
@@ -1022,9 +1059,16 @@ subroutine fmm_combined_direct(s, ilev, jlev)
         0, 0, 0, 0, 1, 1, 1, 1   &
       ], [twotondim, ndim] )
 
-  ! =====================================================
-  ! FMM code uses one AMR level per FMM level; the namelist option remains elsewhere.
-  ! =====================================================
+  ! ---------------------------------------------------------------------
+  ! Combined direct stencil for neighboring AMR cells
+  ! ---------------------------------------------------------------------
+  ! This routine acts on the direct-neighbor cells that are excluded from
+  ! the intermediate multipole pass.
+  ! ind       : neighboring source AMR grid in the 3^ndim stencil
+  ! jcell     : source cell in that grid
+  ! icell     : target cell in the current AMR oct
+  ! ifinecell : leaf target cell receiving the direct contribution
+  ! ---------------------------------------------------------------------
   real(kind=8), allocatable, save :: D0_list(:,:,:,:)
   real(kind=8), allocatable, save :: intermediate_diff_list(:,:,:,:,:), cell_diff_list(:,:,:,:)
   real(kind=8), allocatable, save :: far_diff_list(:,:,:)
@@ -1045,25 +1089,20 @@ subroutine fmm_combined_direct(s, ilev, jlev)
   vol    = (dx_loc ** ndim) * twotondim
 
   neighbors_cached = .false.
-  !ind  : index of source fmm_grid within the neighboring 3^n fmm_grid
-  !jcell: index of source cell within the neighboring fmm_grid
-  !igrid: index of oct within target fmm_grid
-  !icell: index of target cell within target fmm_grid
-
   if (.not. allocated(D0_list)) then
     allocate(D0_list(twotondim, twotondim, twotondim, threetondim))
     allocate(intermediate_diff_list(ndim, twotondim, twotondim, twotondim, threetondim))
     allocate(cell_diff_list(threetondim, twotondim, twotondim, ndim))
   end if
 
-  ! jcell to icell
+  ! Precompute direct distances from neighboring source cells to target leaves.
   do ind = 1, threetondim
     do idim = 1, ndim
-      offset_list(idim, ind) = MOD((ind-1)/3**(idim-1), 3) - 1 ! offset by how many fmm grids (-1, 0, 1)
+      offset_list(idim, ind) = MOD((ind-1)/3**(idim-1), 3) - 1
     end do
     do jcell = 1, twotondim
-      cc_jcell = 2 * offset_list(:,ind) + displacement_list(jcell,:) ! respect to grid left corner / fmm cell unit (-2, -1, 0, 1, 2, 3)
-      offset   = 2 * (cc_jcell+ 0.5) ! offset by how many amr cells respect to grid left corner (-3, -1, 1, 3, 5, 7)
+      cc_jcell = 2 * offset_list(:,ind) + displacement_list(jcell,:)
+      offset   = 2 * (cc_jcell+ 0.5)
       do icell=1,twotondim
         cell_diff_list(ind, jcell, icell, :) = displacement_list(icell,:) - offset !(-7, -6, .., 4)
         do ifinecell=1, twotondim
@@ -1076,9 +1115,10 @@ subroutine fmm_combined_direct(s, ilev, jlev)
     end do
   end do
 
-  ! Loop over octs at this level
+  ! Loop over target AMR octs at ilev.
   do ioct = m%head(ilev), m%tail(ilev)
 
+    ! Fully refined octs are updated through their children.
     if (all(m%grid(ioct)%refined(1:twotondim))) cycle
 
     hash_key(1:ndim) = m%grid(ioct)%ckey(1:ndim)
@@ -1091,7 +1131,7 @@ subroutine fmm_combined_direct(s, ilev, jlev)
       icell = icell + nstride * MOD(hash_key(idim), 2)
     end do
 
-    ! Check if we need to fetch neighbors & parent Taylor
+    ! Reuse neighbor grids for target octs sharing the same enclosing FMM grid.
     if (.not. all(hash_fmm_grid == prev_hash_fmm_grid)) then
       if (neighbors_cached) then
         do ind = 1, threetondim
@@ -1104,7 +1144,7 @@ subroutine fmm_combined_direct(s, ilev, jlev)
       prev_hash_fmm_grid = hash_fmm_grid
     end if
 
-    ! Intermediate field & Near Field
+    ! Direct contribution from unrefined cells in the cached neighbor grids.
     do ind = 1, threetondim
       igrid_nbor = grid_nbors(ind)
       if (igrid_nbor<=0) cycle
@@ -1120,6 +1160,7 @@ subroutine fmm_combined_direct(s, ilev, jlev)
           end if
         end do
         if (cycle_flag) cycle
+        ! Refined source cells are represented by finer children.
         if (m%grid(igrid_nbor)%refined(jcell)) cycle
 
         do ifinecell=1, twotondim
@@ -1169,6 +1210,18 @@ subroutine fmm_amr_direct(s, ilev, jlev)
       0, 0, 0, 0, 1, 1, 1, 1   &
     ], [twotondim, ndim] )
 
+  ! ---------------------------------------------------------------------
+  ! Direct AMR source tables
+  ! ---------------------------------------------------------------------
+  ! ind                  : neighboring AMR oct in the 3^ndim stencil
+  ! jcell                : source cell inside that neighboring oct
+  ! icell                : target leaf cell in the current oct
+  ! mm_jcell_list        : source AMR cell masses
+  ! mm_jfinecell_list    : refined source child masses
+  ! inv_dist             : source cell to target cell inverse distances
+  ! nearest_inv_dist     : refined source child to target cell distances
+  ! *_count, *_idx       : compact lists used to skip empty source cells
+  ! ---------------------------------------------------------------------
   real(kind=8), dimension(:,:), allocatable        :: mm_jcell_list
   real(kind=8), dimension(:,:,:), allocatable      :: mm_jfinecell_list
   real(kind=8), dimension(:,:,:), allocatable      :: inv_dist
@@ -1196,7 +1249,7 @@ subroutine fmm_amr_direct(s, ilev, jlev)
 
   dx_loc = r%boxlen / 2.0D0**ilev
   dxn    = dx_loc**ndim
-  ! Allocate arrays for all possible source cells
+  ! Allocate source lists and precomputed Green-function coefficients.
   allocate(mm_jcell_list(twotondim, threetondim))
   allocate(mm_jfinecell_list(twotondim, twotondim, threetondim))
   allocate(inv_dist(twotondim, threetondim, twotondim))
@@ -1215,14 +1268,15 @@ subroutine fmm_amr_direct(s, ilev, jlev)
   nearest_inv_dist = 0.0D0
   nearest_source_mask = .false.
 
-  ! Get offset lists
+  ! Offsets for the 3^ndim neighboring AMR octs.
   do ind = 1, threetondim
     do idim = 1, ndim
-      offset_list(idim, ind) = MOD((ind-1)/3**(idim-1), 3) - 1 ! offset by how many fmm grids
+      offset_list(idim, ind) = MOD((ind-1)/3**(idim-1), 3) - 1
     end do
   end do
 
-  ! target cell
+  ! Precompute direct source-target distances.  Self-interaction is capped
+  ! at one cell width; refined children are handled through nearest_* tables.
   do icell = 1, twotondim
     cc_icell = displacement_list(icell, :)
     do ind = 1, threetondim
@@ -1230,7 +1284,7 @@ subroutine fmm_amr_direct(s, ilev, jlev)
       do jcell = 1, twotondim
         cc_jcell = 2 * cc_jgrid + displacement_list(jcell, :)
         if (all(cc_icell(1:ndim) == cc_jcell(1:ndim))) then
-          inv_dist(jcell, ind, icell) = 1 / dx_loc !! cap it to dx_loc instead of skipping
+          inv_dist(jcell, ind, icell) = 1 / dx_loc
         else
           diff = (cc_icell - cc_jcell) * dx_loc
 #if NDIM==3
@@ -1264,17 +1318,18 @@ subroutine fmm_amr_direct(s, ilev, jlev)
     end do
   end do
 
-  ! Loop over octs at this level
+  ! Loop over target AMR octs at ilev.
   do ioct = m%head(ilev), m%tail(ilev)
     refined_target(:) = m%grid(ioct)%refined(1:twotondim)
+    ! Fully refined octs have no leaf cells to update on this level.
     if (all(refined_target)) cycle
 
-    ! set keys for this amr grid
+    ! Set keys for the target AMR oct and its enclosing FMM grid/cell.
     hash_key(1:ndim) = m%grid(ioct)%ckey(1:ndim)
     hash_fmm_grid(1:ndim) = m%grid(ioct)%ckey(1:ndim) / 2
     hash_fmm_cell(1:ndim) = m%grid(ioct)%ckey(1:ndim)
 
-    ! If parent fmm cell changed, fetch (and unlock previous) neighbor info
+    ! Refresh compact source lists when moving to a new target oct key.
     if (.not. all(hash_fmm_cell == prev_hash_fmm_cell)) then
       prev_hash_fmm_cell = hash_fmm_cell
       
@@ -1286,53 +1341,65 @@ subroutine fmm_amr_direct(s, ilev, jlev)
         do idim = 1, ndim
           offset(idim) = MOD((ind-1)/3**(idim-1), 3) - 1
         end do
-        
-        ! calculate neighboring fmm_cell's cartesian coordinate
+
+        ! Cartesian key of the neighboring source AMR oct.
         cc_fmm_cell = hash_fmm_cell(1:ndim) + offset
         hash_direct(1:ndim) = cc_fmm_cell(1:ndim)
-          cycle_flag = .false.
-          do idim = 1, ndim
-            if (r%periodic(idim)) then
-              if (hash_direct(idim) < m%box_ckey_min(idim, ilev)) then
-                hash_direct(idim) = m%box_ckey_max(idim, ilev) - 1
-              end if
-              if (hash_direct(idim) >= m%box_ckey_max(idim, ilev)) then
-                hash_direct(idim) = m%box_ckey_min(idim, ilev)
-              end if
+        cycle_flag = .false.
+        do idim = 1, ndim
+          if (r%periodic(idim)) then
+            if (hash_direct(idim) < m%box_ckey_min(idim, ilev)) then
+              hash_direct(idim) = m%box_ckey_max(idim, ilev) - 1
             end if
-            if (hash_direct(idim) < m%box_ckey_min(idim, ilev) .or. &
-                hash_direct(idim) >= m%box_ckey_max(idim, ilev)) then
-              cycle_flag = .true.
+            if (hash_direct(idim) >= m%box_ckey_max(idim, ilev)) then
+              hash_direct(idim) = m%box_ckey_min(idim, ilev)
             end if
-          end do
-          if (cycle_flag) then
-            mm_jcell_list(:, ind) = 0.0d0
-            cycle
           end if
-          call get_grid(s, hash_direct, igrid_nbor, flush_cache = .false., fetch_cache = .true.)
-          if (igrid_nbor .le. 0) then 
-            mm_jcell_list(:, ind) = 0.0d0
-            cycle
+          if (hash_direct(idim) < m%box_ckey_min(idim, ilev) .or. &
+              hash_direct(idim) >= m%box_ckey_max(idim, ilev)) then
+            cycle_flag = .true.
           end if
-          refined_source(:) = m%grid(igrid_nbor)%refined(1:twotondim)
-          do jcell = 1, twotondim
-            if (refined_source(jcell)) then
-              refined_mask(jcell, ind) = .true.
-              if (nearest_source_mask(jcell, ind)) then
-                hash_fine(1:ndim) = 2 * hash_direct(1:ndim) + displacement_list(jcell, :)
-                call get_grid(s, hash_fine, igrid_fine, flush_cache = .false., fetch_cache = .true.)
-                if (igrid_fine .le. 0) then
-                  mm_jfinecell_list(:, jcell, ind) = 0.0d0
-                else
-                  mm_jfinecell_list(:, jcell, ind) = m%rho(:,igrid_fine)*dxn/8
-                end if
+        end do
+        if (cycle_flag) then
+          mm_jcell_list(:, ind) = 0.0d0
+          cycle
+        end if
+
+        ! Source AMR oct
+        call get_grid(s, hash_direct, igrid_nbor, flush_cache = .false., fetch_cache = .true.)
+
+        if (igrid_nbor .le. 0) then
+          mm_jcell_list(:, ind) = 0.0d0
+          cycle
+        end if
+
+        ! See if the source cells in the neighboring oct are refined.
+        ! Store child masses only for refined source cells in the nearest field.
+        refined_source(:) = m%grid(igrid_nbor)%refined(1:twotondim)
+        do jcell = 1, twotondim
+          if (refined_source(jcell)) then
+            refined_mask(jcell, ind) = .true.
+            ! If refined, only keep track of nearest field children since non-nearest refined sources are handled through multipoles.
+            if (nearest_source_mask(jcell, ind)) then
+              hash_fine(1:ndim) = 2 * hash_direct(1:ndim) + displacement_list(jcell, :)
+              call get_grid(s, hash_fine, igrid_fine, flush_cache = .false., fetch_cache = .true.)
+              if (igrid_fine .le. 0) then
+                mm_jfinecell_list(:, jcell, ind) = 0.0d0
+              else
+                mm_jfinecell_list(:, jcell, ind) = m%rho(:,igrid_fine)*dxn/8
               end if
-            else
-              unrefined_count(ind) = unrefined_count(ind) + 1
-              unrefined_jcell_idx(unrefined_count(ind), ind) = jcell
             end if
-          end do
-          mm_jcell_list(:, ind) = m%rho(:,igrid_nbor)*dxn
+          ! Unrefined cells are added directly to the source list for the near-field contribution.
+          else
+            unrefined_count(ind) = unrefined_count(ind) + 1
+            unrefined_jcell_idx(unrefined_count(ind), ind) = jcell
+          end if
+        end do
+
+        ! Source mass for direct contribution from unrefined cells.
+        mm_jcell_list(:, ind) = m%rho(:,igrid_nbor)*dxn
+
+        ! Generate list of refined children for nearest-field contribution.
         do icell_act = 1, twotondim
           nnear = nearest_count(ind, icell_act)
           do inear = 1, nnear
@@ -1343,18 +1410,24 @@ subroutine fmm_amr_direct(s, ilev, jlev)
             refined_near_jcell_idx(iact, icell_act, ind) = jcell
           end do
         end do
-      end do
-    end if
 
-    ! Compute interactions for all cells in this AMR grid
+      end do ! end loop over neighboring octs
+    end if ! end of refreshing source lists for the current target oct
+
+    ! Add direct potential from unrefined source cells and nearby refined children.
     do icell = 1, twotondim
       if (refined_target(icell)) cycle
       phi = 0.0D0
       do ind = 1, threetondim
+
+        ! Loop over unrefined source cells in the near-field.
+        ! Refined nonnearest, near-field source cells are handled through fmm_amr_direct_taylor.
         do iact = 1, unrefined_count(ind)
           jcell = unrefined_jcell_idx(iact, ind)
           phi = phi - mm_jcell_list(jcell, ind) * inv_dist(jcell, ind, icell)
         end do 
+
+        ! Loop over refined source cells in the nearest-field.
         do iact = 1, refined_near_count(icell, ind)
           jcell = refined_near_jcell_idx(iact, icell, ind)
           do jfinecell = 1, twotondim
@@ -1362,6 +1435,7 @@ subroutine fmm_amr_direct(s, ilev, jlev)
                         nearest_inv_dist(jfinecell, jcell, ind, icell)
           end do
         end do
+
       end do
       m%phi(icell, ioct) = m%phi(icell, ioct) + phi
     end do
@@ -1410,6 +1484,15 @@ subroutine fmm_amr_direct_taylor(s, ilev, jlev, use_merged)
       0, 0, 0, 0, 1, 1, 1, 1   &
     ], [twotondim, ndim] )
 
+  ! ---------------------------------------------------------------------
+  ! Direct Taylor source tables
+  ! ---------------------------------------------------------------------
+  ! ind                  : neighboring source FMM cell in the 3^ndim stencil
+  ! jcell                : source multipole cell inside that neighbor
+  ! icell                : target AMR cell in the current oct
+  ! nearest_flags        : source-target pairs handled by direct P2P
+  ! source_active_*      : compact list of non-zero multipole cells
+  ! ---------------------------------------------------------------------
   real(kind=8), dimension(:,:,:), allocatable, save      :: multipole_jcell_list
   real(kind=8), dimension(:,:,:), allocatable, save      :: D0_list, D1_list, D2_list
   real(kind=8), dimension(:,:,:,:), allocatable, save    :: diff_list
@@ -1442,7 +1525,7 @@ subroutine fmm_amr_direct_taylor(s, ilev, jlev, use_merged)
 
   dx_loc = r%boxlen / 2.0D0**ilev
 
-  ! Allocate arrays for all possible source cells
+  ! Allocate once; the stencil depends only on source-target geometry.
   rebuild_stencil = .false.
   if (.not. allocated(multipole_jcell_list)) then
     allocate(multipole_jcell_list(multipole_size, twotondim, threetondim))
@@ -1461,64 +1544,65 @@ subroutine fmm_amr_direct_taylor(s, ilev, jlev, use_merged)
 
   if (rebuild_stencil) then
     diff_list = 0.0D0
-    ! Get offset lists
+    ! Offsets for the 3^ndim neighboring source cells.
     do ind = 1, threetondim
       do idim = 1, ndim
-        offset_list(idim, ind) = MOD((ind-1)/3**(idim-1), 3) - 1 ! offset by how many fmm grids
+        offset_list(idim, ind) = MOD((ind-1)/3**(idim-1), 3) - 1
       end do
     end do
 
-    ! target cell
+    ! Precompute multipole-to-cell Taylor kernels for neighboring sources.
     do icell = 1, twotondim
       cc_icell = displacement_list(icell, :)
       do ind = 1, threetondim
         cc_jgrid = offset_list(:, ind)
         do jcell = 1, twotondim
-              cc_jcell = 2 * cc_jgrid + displacement_list(jcell, :)
-              if (all(cc_icell(1:ndim) == cc_jcell(1:ndim))) then
-                ! Skip self-interaction to avoid dist=0
-                nearest_flags(jcell, ind, icell) = .true.
-                diff_list(:, jcell, ind, icell) = 0.0D0
-                D0_list(jcell, ind, icell) = 0.0D0
-                D1_list(jcell, ind, icell) = 0.0D0
-                D2_list(jcell, ind, icell) = 0.0D0
-              else
-                diff = real(cc_icell - cc_jcell, kind=8)
-                diff_list(:, jcell, ind, icell) = diff
+          cc_jcell = 2 * cc_jgrid + displacement_list(jcell, :)
+          if (all(cc_icell(1:ndim) == cc_jcell(1:ndim))) then
+            ! Mark self-interaction separately to avoid dist=0.
+            nearest_flags(jcell, ind, icell) = .true.
+            diff_list(:, jcell, ind, icell) = 0.0D0
+            D0_list(jcell, ind, icell) = 0.0D0
+            D1_list(jcell, ind, icell) = 0.0D0
+            D2_list(jcell, ind, icell) = 0.0D0
+          else
+            diff = real(cc_icell - cc_jcell, kind=8)
+            diff_list(:, jcell, ind, icell) = diff
 #if NDIM==3
-                dist = sqrt(diff(1)*diff(1) + diff(2)*diff(2) + diff(3)*diff(3))
+            dist = sqrt(diff(1)*diff(1) + diff(2)*diff(2) + diff(3)*diff(3))
 #elif NDIM==2
-                dist = sqrt(diff(1)*diff(1) + diff(2)*diff(2))
+            dist = sqrt(diff(1)*diff(1) + diff(2)*diff(2))
 #elif NDIM==1
-                dist = sqrt(diff(1)*diff(1))
+            dist = sqrt(diff(1)*diff(1))
 #else
-                dist = sqrt(sum(diff(:)**2))
+            dist = sqrt(sum(diff(:)**2))
 #endif
-                D0_list(jcell, ind, icell) = 1.0D0 / dist
-                D1_list(jcell, ind, icell) = -1.0D0 / dist**3
-                D2_list(jcell, ind, icell) = 3.0D0 / dist**5
-                if (is_direct_neighbor(cc_icell, cc_jcell)) then
-                  nearest_flags(jcell, ind, icell) = .true.
-                else
-                  nearest_flags(jcell, ind, icell) = .false.
-                end if
-              end if
-            end do
+            D0_list(jcell, ind, icell) = 1.0D0 / dist
+            D1_list(jcell, ind, icell) = -1.0D0 / dist**3
+            D2_list(jcell, ind, icell) = 3.0D0 / dist**5
+            if (is_direct_neighbor(cc_icell, cc_jcell)) then
+              nearest_flags(jcell, ind, icell) = .true.
+            else
+              nearest_flags(jcell, ind, icell) = .false.
+            end if
+          end if
+        end do
       end do
     end do
   end if
   
-  ! Loop over octs at this level
+  ! Loop over target AMR octs at ilev.
   do ioct = m%head(ilev), m%tail(ilev)
     refined_target(:) = m%grid(ioct)%refined(1:twotondim)
+    ! Fully refined octs have no leaf cells to update on this level.
     if (all(refined_target)) cycle
 
-    ! set keys for this amr grid
+    ! Set keys for the target AMR oct and its enclosing FMM grid/cell.
     hash_key(1:ndim) = m%grid(ioct)%ckey(1:ndim)
     hash_fmm_grid(1:ndim) = m%grid(ioct)%ckey(1:ndim) / 2
     hash_fmm_cell(1:ndim) = m%grid(ioct)%ckey(1:ndim)
 
-    ! If parent fmm cell changed, fetch (and unlock previous) neighbor info
+    ! Refresh source multipoles when moving to a new target oct key.
     if (.not. all(hash_fmm_cell == prev_hash_fmm_cell)) then
       prev_hash_fmm_cell = hash_fmm_cell
       
@@ -1528,47 +1612,47 @@ subroutine fmm_amr_direct_taylor(s, ilev, jlev, use_merged)
           offset(idim) = MOD((ind-1)/3**(idim-1), 3) - 1
         end do
         
-        ! calculate neighboring fmm_cell's cartesian coordinate
+        ! Cartesian key of the neighboring source FMM cell.
         cc_fmm_cell = hash_fmm_cell(1:ndim) + offset
         hash_direct(1:ndim) = cc_fmm_cell(1:ndim)
-          cycle_flag = .false.
-          do idim = 1, ndim
-            if (r%periodic(idim)) then
-              if (hash_direct(idim) < m%box_ckey_min(idim, ilev)) then
-                hash_direct(idim) = m%box_ckey_max(idim, ilev) - 1
-              end if
-              if (hash_direct(idim) >= m%box_ckey_max(idim, ilev)) then
-                hash_direct(idim) = m%box_ckey_min(idim, ilev)
-              end if
+        cycle_flag = .false.
+        do idim = 1, ndim
+          if (r%periodic(idim)) then
+            if (hash_direct(idim) < m%box_ckey_min(idim, ilev)) then
+              hash_direct(idim) = m%box_ckey_max(idim, ilev) - 1
             end if
-            if (hash_direct(idim) < m%box_ckey_min(idim, ilev) .or. &
-                hash_direct(idim) >= m%box_ckey_max(idim, ilev)) then
-              cycle_flag = .true.
+            if (hash_direct(idim) >= m%box_ckey_max(idim, ilev)) then
+              hash_direct(idim) = m%box_ckey_min(idim, ilev)
             end if
-          end do
-          if (cycle_flag) then
-            cycle
           end if
-          call get_grid(s, hash_direct, igrid_nbor, flush_cache = .false., fetch_cache = .true.)
-          if (igrid_nbor .le. 0) then 
-            cycle
+          if (hash_direct(idim) < m%box_ckey_min(idim, ilev) .or. &
+              hash_direct(idim) >= m%box_ckey_max(idim, ilev)) then
+            cycle_flag = .true.
           end if
-          do jcell = 1, twotondim
+        end do
+        if (cycle_flag) cycle
+
+        ! Source AMR oct for Taylor expansion
+        call get_grid(s, hash_direct, igrid_nbor, flush_cache = .false., fetch_cache = .true.)
+        if (igrid_nbor .le. 0) cycle
+
+        do jcell = 1, twotondim
 #ifdef FMM
-            multipole_jcell_list(:, jcell, ind) = m_source%multipole(jcell, :, igrid_nbor)
-            if (multipole_jcell_list(1, jcell, ind) /= 0.0d0) then
-              source_active_count(ind) = source_active_count(ind) + 1
-              source_active_idx(source_active_count(ind), ind) = jcell
-            end if
+          multipole_jcell_list(:, jcell, ind) = m_source%multipole(jcell, :, igrid_nbor)
+          if (multipole_jcell_list(1, jcell, ind) /= 0.0d0) then
+            source_active_count(ind) = source_active_count(ind) + 1
+            source_active_idx(source_active_count(ind), ind) = jcell
+          end if
 #endif
-          end do
+        end do
       end do
 
     end if
 
+    ! No active source multipoles in the local stencil.
     if (sum(source_active_count) == 0) cycle
 
-    ! Compute interactions for all cells in this AMR grid
+    ! Apply Taylor contribution from non-neighbor active source multipoles.
     do icell = 1, twotondim
       if (refined_target(icell)) cycle
       phi = 0.0D0

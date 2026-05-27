@@ -350,11 +350,12 @@ subroutine fmm_multipole_amr2fmm(s,ilevel)
   call open_cache(mdl,s%m_fmm_list(ilevel),pack_size=storage_size(dummy_realdp)/32,&
                      init=init_flush_multipole, flush=pack_flush_multipole, combine=unpack_flush_multipole)
 
-  ! Loop over levelmin grids.
+  ! Loop over AMR octs and deposit their leaf-cell moments into the
+  ! enclosing FMM grid.  ii is the oct position inside that FMM grid and
+  ! icell is the FMM cell receiving the accumulated AMR multipole.
   hash_key_fmm(0)=ilevel - 1
   hash_key_amr(0) = ilevel
   do ioct=m%head(ilevel),m%tail(ilevel)
-     ! Get fmm grid one AMR level above the AMR grid.
      hash_key_amr(1:ndim)=m%grid(ioct)%ckey(1:ndim)
      hash_key_fmm(1:ndim)= hash_key_amr(1:ndim)/2
      ii(1:ndim)=hash_key_amr(1:ndim)-2*hash_key_fmm(1:ndim) ! 0 or 1
@@ -369,10 +370,10 @@ subroutine fmm_multipole_amr2fmm(s,ilevel)
 
      multipole = 0.0D0
 
-    ! Loop over cells
+     ! Build monopole, dipole, and quadrupole moments from leaf cells only.
      do ind = 1, twotondim
         leaf_cell=m%grid(ioct)%refined(ind).EQV..FALSE.
-        ! Reset multipoles for this grid
+        ! Reset the temporary contribution for this AMR cell.
         monopole   = 0.0D0
         dipole     = 0.0D0
         quadrupole = 0.0D0
@@ -412,7 +413,7 @@ subroutine fmm_multipole_amr2fmm(s,ilevel)
         multipole(2+ndim:1+ndim+nq) = multipole(2+ndim:1+ndim+nq) + quadrupole
      end do  ! cell loop
 #ifdef FMM
-      ! need to fix so that we loop over all ilevel above
+     ! Add this AMR oct contribution to its enclosing FMM cell.
      s%m_fmm_list(ilevel)%multipole(icell,:,igrid_fmm) = s%m_fmm_list(ilevel)%multipole(icell,:,igrid_fmm) + multipole
 #endif
   end do
