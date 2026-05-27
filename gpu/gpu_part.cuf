@@ -83,12 +83,12 @@ subroutine ensure_scan_capacity_part(min_capacity)
 end subroutine ensure_scan_capacity_part
 
 !> Bucket 0/1 from hash lookup and leaf/refined test.
-attributes(global) subroutine bucket_part(xp, bucket_part, &
-     grid, hash_key_d, hash_val_d, hash_size_d, ckey_max_d, key_off_d, &
-     skip1, skip2, skip3, dx_loc, ilevel, head_idx, num_parts, leading)
+attributes(global) subroutine bucket_part_kernel(xp, bucket_part_d, &
+     & grid, hash_key_d, hash_val_d, hash_size_d, ckey_max_d, key_off_d, &
+     & skip1, skip2, skip3, dx_loc, ilevel, head_idx, num_parts, leading)
   integer(kind=4), intent(in), value :: leading
   real(kind=dp), device :: xp(*)
-  integer(kind=4), device :: bucket_part(*)
+  integer(kind=4), device :: bucket_part_d(*)
   type(oct), device :: grid(*)
   integer(kind=8), device :: hash_key_d(*)
   integer(kind=4), device :: hash_val_d(*)
@@ -135,7 +135,7 @@ attributes(global) subroutine bucket_part(xp, bucket_part, &
   igrid = hash_get(hash_key_d, hash_val_d, hash_size_d, key)
 
   if (igrid == 0) then
-     bucket_part(ipart) = 0
+     bucket_part_d(ipart) = 0
      return
   endif
 
@@ -149,16 +149,16 @@ attributes(global) subroutine bucket_part(xp, bucket_part, &
   end do
 
   if (.not. grid(igrid)%refined(icell)) then
-     bucket_part(ipart) = 0
+     bucket_part_d(ipart) = 0
   else
-     bucket_part(ipart) = 1
+     bucket_part_d(ipart) = 1
   endif
 
-end subroutine bucket_part
+end subroutine bucket_part_kernel
 
-attributes(global) subroutine init_prefix_sum_part(bucket_part, prefix_sum_d, &
+attributes(global) subroutine init_prefix_sum_part(bucket_part_d, prefix_sum_d, &
      head_idx, num_parts)
-  integer(kind=4), device :: bucket_part(*)
+  integer(kind=4), device :: bucket_part_d(*)
   integer(kind=4), device :: prefix_sum_d(*)
   integer(kind=4), intent(in), value :: head_idx
   integer(kind=4), intent(in), value :: num_parts
@@ -169,7 +169,7 @@ attributes(global) subroutine init_prefix_sum_part(bucket_part, prefix_sum_d, &
   idx = thread_idx + block_idx * blockDim%x
   if (idx >= num_parts) return
   idx = head_idx + idx
-  prefix_sum_d(idx) = bucket_part(idx)
+  prefix_sum_d(idx) = bucket_part_d(idx)
 end subroutine init_prefix_sum_part
 
 !> prefix_sum of bucket_part(sortp); last value is n_fine.
@@ -412,7 +412,7 @@ subroutine gpu_split_part(sim, ilevel)
 
   ! Partition into current level particles and finer levels particles
   call nvtxStartRange("gpu_split_part", color=4) ! purple
-  call bucket_part<<<num_blocks, num_threads>>>(xp, isp_swap, &
+  call bucket_part_kernel<<<num_blocks, num_threads>>>(xp, isp_swap, &
        grid, hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, &
        skip1, skip2, skip3, dx_loc, ilevel, head_idx, num_parts, &
        leading)
@@ -478,17 +478,23 @@ subroutine gpu_split_part(sim, ilevel)
   endif
 
   ! Levels
-  call sort_gather_part_i4_1d<<<num_blocks, num_threads>>>(bucket_part, levelp, &
+  call sort_gather_part_i4_1d<<<num_blocks, num_threads>>>(isp_swap, levelp, &
        sortp, head_idx, num_parts)
-  call sort_scatter_part_i4_1d<<<num_blocks, num_threads>>>(levelp, bucket_part, &
+  call sort_scatter_part_i4_1d<<<num_blocks, num_threads>>>(levelp, isp_swap, &
        head_idx, num_parts)
 
   ! Particle ids
+#ifndef LONGINT
+  call sort_gather_part_i8_1d<<<num_blocks, num_threads>>>(isp_swap, idp, &
+       sortp, head_idx, num_parts)
+  call sort_scatter_part_i8_1d<<<num_blocks, num_threads>>>(idp, isp_swap, &
+       head_idx, num_parts)
+#else
   call sort_gather_part_i8_1d<<<num_blocks, num_threads>>>(idp_swap, idp, &
        sortp, head_idx, num_parts)
   call sort_scatter_part_i8_1d<<<num_blocks, num_threads>>>(idp, idp_swap, &
        head_idx, num_parts)
-
+#endif
   call nvtxEndRange()
 
   ! Bookkeeping
@@ -608,7 +614,7 @@ subroutine gpu_sort_part(sim, ilevel)
   ! Compute Hilbert keys and store them in idp_swap
   call nvtxStartRange("gpu_sort_part", color=4) ! purple
   call compute_hkey_part_kernel<<<num_blocks, num_threads>>>(xp, idp_swap, &
-       & skip1, skip2, skip3, dx_inv, head_idx, num_parts, sim%p%npartmax, level)
+       & skip1, skip2, skip3, dx_inv, head_idx, num_parts, sim%r%npartmax, level)
   call nvtxEndRange()
 
   ! Init sortp

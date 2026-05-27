@@ -24,7 +24,7 @@ module gpu_part_state
 
   !> xp_swap/isp_swap/idp_swap: gather/scatter scratch
   real(kind=dp),   device, allocatable, dimension(:) :: xp_swap
-  integer(i8b),    device, allocatable, dimension(:) :: idp_swap
+  integer(kind=8), device, allocatable, dimension(:) :: idp_swap
   integer(kind=4), device, allocatable, dimension(:) :: isp_swap
 
 end module gpu_part_state
