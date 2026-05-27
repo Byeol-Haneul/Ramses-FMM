@@ -955,6 +955,8 @@ contains
     integer(kind=4) :: block_size, grid_size_0, grid_size_1, grid_size_2
     integer(kind=4) :: offset, size
     integer(kind=4) :: num_max_0, num_max_1, num_max_2
+    integer(kind=4) :: cap0, cap1, cap2
+    integer(kind=8) :: scan_last_idx
     integer(kind=4), device :: total_sum_d
 
     block_size = 256
@@ -962,10 +964,40 @@ contains
     num_max_1 = block_size**3
     num_max_2 = huge(1_4)
 
+    if (num_octs <= 0) then
+       if (present(total_sum)) total_sum = 0
+       return
+    endif
+
+    scan_last_idx = int(head_idx, kind=8) + int(num_octs, kind=8) - 1_8
+    if (.not. allocated(prefix_sum)) then
+       write(*,*)'gpu_scan: prefix_sum is not allocated'
+       write(*,*)'  head_idx=', head_idx, ' num_octs=', num_octs
+       stop
+    endif
+    if (head_idx < 1 .or. scan_last_idx > int(ubound(prefix_sum, 1), kind=8)) then
+       write(*,*)'gpu_scan: prefix_sum bounds exceeded'
+       write(*,*)'  head_idx=', head_idx, ' num_octs=', num_octs, ' last_idx=', scan_last_idx
+       write(*,*)'  capacity(prefix_sum)=', ubound(prefix_sum, 1)
+       stop
+    endif
+
+    cap0 = 0
+    cap1 = 0
+    cap2 = 0
+    if (allocated(partial_sums_0)) cap0 = ubound(partial_sums_0, 1)
+    if (allocated(partial_sums_1)) cap1 = ubound(partial_sums_1, 1)
+    if (allocated(partial_sums_2)) cap2 = ubound(partial_sums_2, 1)
+
     if(num_octs <= num_max_0)then
 
        ! Works only for arrray size smaller or equal than 256^2=65'536
        grid_size_0 = (num_octs + block_size - 1) / block_size
+       if (grid_size_0 > cap0) then
+          write(*,*)'gpu_scan: partial_sums_0 bounds exceeded'
+          write(*,*)'  grid_size_0=', grid_size_0, ' capacity(partial_sums_0)=', cap0
+          stop
+       endif
        call block_scan<<<grid_size_0, block_size>>>(prefix_sum, head_idx, num_octs, partial_sums_0, total_sum_d)
        if (grid_size_0 > 1) then
           call block_scan<<<1, grid_size_0>>>(partial_sums_0, 1, grid_size_0)
@@ -978,8 +1010,18 @@ contains
 
        ! Works only for arrray size smaller or equal than 256^3=16'777'216
        grid_size_0 = (num_octs + block_size - 1) / block_size
+       if (grid_size_0 > cap0) then
+          write(*,*)'gpu_scan: partial_sums_0 bounds exceeded'
+          write(*,*)'  grid_size_0=', grid_size_0, ' capacity(partial_sums_0)=', cap0
+          stop
+       endif
        call block_scan<<<grid_size_0, block_size>>>(prefix_sum, head_idx, num_octs, partial_sums_0)
        grid_size_1 = (grid_size_0 + block_size - 1) / block_size
+       if (grid_size_1 > cap1) then
+          write(*,*)'gpu_scan: partial_sums_1 bounds exceeded'
+          write(*,*)'  grid_size_1=', grid_size_1, ' capacity(partial_sums_1)=', cap1
+          stop
+       endif
        call block_scan<<<grid_size_1, block_size>>>(partial_sums_0, 1, grid_size_0, partial_sums_1)
        if (grid_size_1 > 1) then
           call block_scan<<<1, grid_size_1>>>(partial_sums_1, 1, grid_size_1)
@@ -995,10 +1037,25 @@ contains
 
        ! Works only for arrray size smaller or equal than huge(1_4)=2'147'483'647
        grid_size_0 = (num_octs + block_size - 1) / block_size
+       if (grid_size_0 > cap0) then
+          write(*,*)'gpu_scan: partial_sums_0 bounds exceeded'
+          write(*,*)'  grid_size_0=', grid_size_0, ' capacity(partial_sums_0)=', cap0
+          stop
+       endif
        call block_scan<<<grid_size_0, block_size>>>(prefix_sum, head_idx, num_octs, partial_sums_0)
        grid_size_1 = (grid_size_0 + block_size - 1) / block_size
+       if (grid_size_1 > cap1) then
+          write(*,*)'gpu_scan: partial_sums_1 bounds exceeded'
+          write(*,*)'  grid_size_1=', grid_size_1, ' capacity(partial_sums_1)=', cap1
+          stop
+       endif
        call block_scan<<<grid_size_1, block_size>>>(partial_sums_0, 1, grid_size_0, partial_sums_1)
        grid_size_2 = (grid_size_1 + block_size - 1) / block_size
+       if (grid_size_2 > cap2) then
+          write(*,*)'gpu_scan: partial_sums_2 bounds exceeded'
+          write(*,*)'  grid_size_2=', grid_size_2, ' capacity(partial_sums_2)=', cap2
+          stop
+       endif
        call block_scan<<<grid_size_2, block_size>>>(partial_sums_1, 1, grid_size_1, partial_sums_2)
        if (grid_size_2 > 1) then
           call block_scan<<<1, grid_size_2>>>(partial_sums_2, 1, grid_size_2)
