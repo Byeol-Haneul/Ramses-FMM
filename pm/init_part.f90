@@ -22,7 +22,7 @@ recursive subroutine r_init_part(pst)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
      if(pst%s%r%part)then
-        call init_part(pst%s%r,pst%s%g,pst%s%p   )
+        call init_part(pst%s%r,pst%s%g,pst%s%m,pst%s%p)
      endif
      if(pst%s%r%star)then
         call init_star(pst%s%r,pst%s%g,pst%s%star)
@@ -46,15 +46,24 @@ end subroutine r_init_part
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine init_part(r,g,p)
-  use amr_parameters, only: ndim
-  use amr_commons, only: run_t,global_t
+subroutine init_part(r,g,m,p)
+  use amr_parameters, only: ndim, twotondim, threetondim
+  use amr_commons, only: run_t,global_t,mesh_t
   use pm_parameters, only: PART_TYPE
   use pm_commons, only: part_t
+#ifdef _CUDA
+  use gpu_part_state
+  use part_device, only: ensure_scan_capacity_part
+  use cudafor
+#endif
   implicit none
   type(run_t)::r
   type(global_t)::g
+  type(mesh_t)::m
   type(part_t)::p
+#ifdef _CUDA
+  integer::scan_size
+#endif
   !---------------------------------
   ! Allocate PART particle variables
   !---------------------------------
@@ -83,6 +92,31 @@ subroutine init_part(r,g,p)
   ! No particle just yet
   p%headp=1
   p%tailp=0
+
+  ! Device mirrors/scratch; H→D in r_set_grid_device.
+#ifdef _CUDA
+  allocate(xp(1:r%npartmax, 1:ndim))
+  allocate(vp(1:r%npartmax, 1:ndim))
+  allocate(mp(1:r%npartmax))
+  allocate(levelp(1:r%npartmax))
+  allocate(sortp(1:r%npartmax))
+  allocate(idp(1:r%npartmax))
+#ifdef OUTPUT_PARTICLE_POTENTIAL
+  allocate(phip(1:r%npartmax))
+#endif
+  ! CIC/sort/split scratch.
+  allocate(cell_part_count(1:twotondim, 1:m%ngridmax+m%ncachemax))
+  allocate(cell_part_head (1:twotondim, 1:m%ngridmax+m%ncachemax))
+  allocate(cell_part_idx  (1:r%npartmax))
+  allocate(src_part       (1:r%npartmax))
+  ! Gather/scatter scratch (device-only).
+  allocate(xp_swap (1:r%npartmax))
+  allocate(isp_swap(1:r%npartmax))
+  allocate(idp_swap(1:r%npartmax))
+  ! Prefix sum arrays
+  scan_size = max(r%npartmax, twotondim*r%ngridmax)
+  call ensure_scan_capacity_part(scan_size)
+#endif
 end subroutine init_part
 !#########################################################################
 !#########################################################################

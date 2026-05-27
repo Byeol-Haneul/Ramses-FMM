@@ -42,6 +42,7 @@ program amr2map
   integer,dimension(:),allocatable::cpu_list
 
   integer,dimension(:),allocatable::ckey,cart_key
+  integer::refined_int
   logical,dimension(:),allocatable::refined
   real(KIND=8),dimension(:,:),allocatable::uold
   real(KIND=4),dimension(:,:),allocatable::qold
@@ -195,7 +196,7 @@ program amr2map
         end do
         ipos=13+4*(ilevel-p%levelmin)
         read(10,POS=ipos)noct_file
-        iskip_amr=13+4*(p%nlevelmax-p%levelmin+1)+(4*ndim+4*twotondim)*noct_skip
+        iskip_amr=13+4*(p%nlevelmax-p%levelmin+1)+(4*ndim+4)*noct_skip
 
         ! Prepare reading the HYDRO file
         if(do_grav)then
@@ -217,10 +218,13 @@ program amr2map
         do i=1,noct_file
 
            ! Read values from files
-           ipos=iskip_amr+(4*ndim+4*twotondim)*(i-1)
+           ipos=iskip_amr+(4*ndim+4)*(i-1)
            read(10,POS=ipos)ckey
-           ipos=iskip_amr+(4*ndim+4*twotondim)*(i-1)+4*ndim
-           read(10,POS=ipos)refined
+           ipos=iskip_amr+(4*ndim+4)*(i-1)+4*ndim
+           read(10,POS=ipos)refined_int
+           do ind=1,twotondim
+              refined(ind)=btest(refined_int,ind-1)
+           end do
            if(backup_file)then
               ipos=iskip_hydro+(8*twotondim*nvar)*(i-1)
               read(11,POS=ipos)uold

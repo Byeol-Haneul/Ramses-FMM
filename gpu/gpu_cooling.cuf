@@ -7,11 +7,6 @@ module cooling_device
 
 contains
 
-  include 'gpu_hash.cuf'
-  include 'gpu_hilbert.cuf'
-  include 'gpu_scan.cuf'
-  include 'gpu_reduce.cuf'
-
   ! =========================================================================
   attributes(global) subroutine cooling_kernel(uold, grid, head_idx, num_octs, gamma, dt, &
        & eos_type, eos_T2, eos_nH, eos_index, scale_T2, scale_nH)

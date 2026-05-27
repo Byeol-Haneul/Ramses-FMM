@@ -25,9 +25,6 @@ module flag_device
 
 contains
 
-  include 'gpu_hash.cuf'
-  include 'gpu_hilbert.cuf'
-  include 'gpu_scan.cuf'
   include 'gpu_reduce.cuf'
 
   ! =========================================================================
@@ -402,7 +399,7 @@ contains
        pressure   = (gamma - 1d0) * pressure
 
        ! Compute Jeans length
-       c_iso = sqrt(max(pressure / density, 1d-20))
+       c_iso = sqrt(max(real(pressure,kind=8) / real(density,kind=8), 1d-20))
        t_ff = sqrt(ACOS(-1d0) /density / factG)
        jeans_length = c_iso * t_ff
 

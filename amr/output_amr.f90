@@ -519,7 +519,7 @@ end subroutine r_output_amr
 !#########################################################################
 !#########################################################################
 subroutine output_amr(s,filename)
-  use amr_parameters, only: ndim,flen
+  use amr_parameters, only: ndim,flen,twotondim
   use ramses_commons, only: ramses_t,open_file,close_file
   use mdl_module
   implicit none
@@ -527,8 +527,8 @@ subroutine output_amr(s,filename)
   character(LEN=flen)::filename
   !-----------------------------------
   ! Output amr grid to file
-  !-----------------------------------  
-  integer::ilun,ilevel,igrid
+  !-----------------------------------
+  integer::ilun,ilevel,igrid,ind,refined_int
   integer(kind=8),dimension(s%r%levelmin:s%r%nlevelmax)::nskip
 
   associate(r=>s%r,g=>s%g,m=>s%m)
@@ -539,7 +539,11 @@ subroutine output_amr(s,filename)
      write(ilun,POS=nskip(ilevel))
      do igrid=m%head(ilevel),m%tail(ilevel)
         write(ilun)m%grid(igrid)%ckey
-        write(ilun)m%grid(igrid)%refined
+        refined_int=0
+        do ind=1,twotondim
+           if(m%grid(igrid)%refined(ind))refined_int=ibset(refined_int,ind-1)
+        end do
+        write(ilun)refined_int
      end do
   end do
 
@@ -553,7 +557,7 @@ end subroutine output_amr
 !#########################################################################
 !#########################################################################
 subroutine backup_amr(r,g,m,mdl,filename)
-  use amr_parameters, only: ndim, flen
+  use amr_parameters, only: ndim, flen, twotondim
   use amr_commons, only: run_t, global_t, mesh_t
   use mdl_module
   implicit none
@@ -565,7 +569,7 @@ subroutine backup_amr(r,g,m,mdl,filename)
   !-----------------------------------
   ! Output amr grid to restart file
   !-----------------------------------
-  integer::ilun,ierr,ilevel,igrid
+  integer::ilun,ierr,ilevel,igrid,ind,refined_int
   character(LEN=flen)::fileloc
   character(LEN=5)::nchar
   logical::file_exist
@@ -588,7 +592,11 @@ subroutine backup_amr(r,g,m,mdl,filename)
   do ilevel=r%levelmin,r%nlevelmax
      do igrid=m%head(ilevel),m%tail(ilevel)
         write(ilun)m%grid(igrid)%ckey
-        write(ilun)m%grid(igrid)%refined
+        refined_int=0
+        do ind=1,twotondim
+           if(m%grid(igrid)%refined(ind))refined_int=ibset(refined_int,ind-1)
+        end do
+        write(ilun)refined_int
      end do
   end do
   close(ilun)

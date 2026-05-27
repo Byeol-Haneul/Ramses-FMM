@@ -1931,7 +1931,7 @@ subroutine particle_potential(s,p)
   integer::i,ipart,ind,idim,ibin,ilevel
   integer(kind=8)::global_peak_id
   integer::ipeak
-  real(kind=8)::pi,grav,rad,dist,dr
+  real(kind=8)::pi,grav,rad,dist,dr,bound
   real(kind=8),dimension(1:ndim)::xpart,vpart
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c,mdl=>s%mdl)

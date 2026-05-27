@@ -9,15 +9,15 @@ real(kind=8) function wallclock()
 #endif
   implicit none
 #ifdef WITHOUTMPI
-  integer,      save :: tstart
-  integer            :: tcur
-  integer            :: count_rate
+  integer(kind=8), save :: tstart
+  integer(kind=8)       :: tcur
+  integer(kind=8)       :: count_rate
 #else
   real(kind=8), save :: tstart
   real(kind=8)       :: tcur
 #endif
   logical,      save :: first_call=.true.
-  real(kind=8), save :: norm, offset=0.
+  real(kind=8), save :: norm
   !---------------------------------------------------------------------
   if (first_call) then
 #ifdef WITHOUTMPI
@@ -34,11 +34,7 @@ real(kind=8) function wallclock()
 #else
   tcur = MPI_Wtime()
 #endif
-  wallclock = (tcur-tstart)*norm + offset
-  if (wallclock < 0.) then
-     offset = offset + 24d0*3600d0
-     wallclock = wallclock + 24d0*3600d0
-  end if
+  wallclock = (tcur-tstart)*norm
 end function wallclock
 !################################################################
 !################################################################
