@@ -824,9 +824,8 @@ attributes(global) subroutine cic_part_warp_kernel(sortp_d, &
      box_ckey_min_d, box_ckey_max_d, periodic_d, &
      xp_d, mp_d, rho_d, nref_d, &
      skip1, skip2, skip3, dx_loc, vol_loc, &
-     m_refine_at_level, mass_cut_refine, ilevel, leading, use_fast_path)
+     m_refine_at_level, mass_cut_refine, ilevel, leading)
   integer(kind=4), intent(in), value :: head_idx, num_parts, leading, ilevel
-  logical, intent(in), value :: use_fast_path
   integer(kind=4), device :: sortp_d(*)
   integer(kind=4), device :: isp_swap_d(*)
   type(oct),       device :: grid_d(*)
@@ -916,11 +915,16 @@ attributes(global) subroutine cic_part_warp_kernel(sortp_d, &
   endif
 
   ! Warp vote: lanes sharing lane-0 source cell coalesce hash_get.
+  ! Default match_int=0 so OOD/OOB lanes (valid_lane=false) cannot be
+  ! counted as matching; the fast path fires only when every lane is
+  ! valid AND shares lane 0's source cell. Otherwise the slow path
+  ! per-lane hashes and deposits, which is what the OOD/OOB lanes
+  ! actually need.
   ref_icell = __shfl(icell_src_lane, 0)
   ref_igrid = __shfl(igrid_src_lane, 0)
-  match_int = 1
+  match_int = 0
   if (valid_lane) then
-     if (icell_src_lane /= ref_icell .or. igrid_src_lane /= ref_igrid) match_int = 0
+     if (icell_src_lane == ref_icell .and. igrid_src_lane == ref_igrid) match_int = 1
   endif
   n_match = match_int
   n_match = n_match + __shfl_xor(n_match, 1)
@@ -938,7 +942,7 @@ attributes(global) subroutine cic_part_warp_kernel(sortp_d, &
   nx          = int(ckey_max_d(ilevel), kind=8)
   hkey_offset = key_off_d(ilevel)
 
-  if (use_fast_path .and. n_match == warpsize .and. ref_igrid /= 0) then
+  if (n_match == warpsize .and. ref_igrid /= 0) then
      ! Uniform warp: lane-0 hash, warp-reduce, one atomicAdd per dest.
      ii_src = 0
      do idim = 1, ndim
@@ -1111,14 +1115,6 @@ subroutine gpu_cic_part(sim, ilevel, rtype)
      return
   endif
 
-  block
-     logical, save :: cic_slow_path_warned = .false.
-     if (.not. sim%r%gpu_cic_fast_path .and. .not. cic_slow_path_warned) then
-        cic_slow_path_warned = .true.
-        write(*,*) 'gpu_cic_part: warp-coalesce fast path DISABLED (gpu_cic_fast_path=.false.)'
-     endif
-  end block
-
   ! Compute monopole and dipole
   if (ilevel == sim%r%levelmin .and. sim%p%npart > 0) then
 
@@ -1171,8 +1167,7 @@ subroutine gpu_cic_part(sim, ilevel, rtype)
        & box_ckey_min, box_ckey_max, periodic, &
        & xp, mp, rho, nref, &
        & skip1, skip2, skip3, dx_loc, vol_loc, &
-       & sim%r%m_refine(ilevel), sim%r%mass_cut_refine, ilevel, sim%r%npartmax, &
-       & sim%r%gpu_cic_fast_path)
+       & sim%r%m_refine(ilevel), sim%r%mass_cut_refine, ilevel, sim%r%npartmax)
   call nvtxEndRange()
 
 end subroutine gpu_cic_part

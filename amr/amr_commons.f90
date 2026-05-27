@@ -30,7 +30,6 @@ module amr_commons
      logical::verbose =.false.   ! Write everything
      logical::debug   =.false.   ! Debug mode activated
      logical::clump_only =.false. ! Only clump finding
-     logical::gpu_cic_fast_path=.true. ! GPU CIC warp-coalesce fast path
      integer::nrestart=0         ! New run or backup file number
      integer::ncontrol=1         ! Write control variables
      integer::nstepmax=1000000   ! Maximum number of time steps
