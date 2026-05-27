@@ -1012,8 +1012,24 @@ attributes(global) subroutine cic_part_warp_kernel(sortp_d, &
            my_rho  = 0d0
            my_nref = 0d0
         endif
-        call warp_reduce_sum(my_rho)
-        call warp_reduce_sum(my_nref)
+        ! Inlined warp reduction. The subroutine-call form
+        !   call warp_reduce_sum(my_rho)
+        !   call warp_reduce_sum(my_nref)
+        ! lost some lanes' contributions under NVHPC (suspected codegen issue
+        ! with by-reference `mass` across recursive __shfl_down iterations),
+        ! breaking mass conservation in the fast-path deposit and stalling
+        ! multigrid convergence. Keep the shuffles inline so each lane's
+        ! partial sum stays in a register across the butterfly.
+        my_rho = my_rho + __shfl_down(my_rho, 16)
+        my_rho = my_rho + __shfl_down(my_rho,  8)
+        my_rho = my_rho + __shfl_down(my_rho,  4)
+        my_rho = my_rho + __shfl_down(my_rho,  2)
+        my_rho = my_rho + __shfl_down(my_rho,  1)
+        my_nref = my_nref + __shfl_down(my_nref, 16)
+        my_nref = my_nref + __shfl_down(my_nref,  8)
+        my_nref = my_nref + __shfl_down(my_nref,  4)
+        my_nref = my_nref + __shfl_down(my_nref,  2)
+        my_nref = my_nref + __shfl_down(my_nref,  1)
         if (lane == 0 .and. dst_igrid_lane /= 0) then
            if (my_rho /= 0d0) then
               info = atomicadd(rho_d(dst_icell_lane, dst_igrid_lane), real(my_rho, kind=dp))
