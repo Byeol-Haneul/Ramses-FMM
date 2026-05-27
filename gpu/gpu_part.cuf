@@ -594,6 +594,7 @@ subroutine gpu_sort_part(sim, ilevel)
   integer :: num_threads, num_blocks
   integer :: ibit, level
   real(kind=8) :: dx, dx_inv, skip1, skip2, skip3
+  character(len=32) :: nvtx_lbl
 
   head_idx = sim%p%headp(ilevel)
   tail_idx = sim%p%tailp(sim%r%nlevelmax)
@@ -611,45 +612,44 @@ subroutine gpu_sort_part(sim, ilevel)
   skip2 = sim%m%skip(2)
   skip3 = sim%m%skip(3)
 
-  ! Compute Hilbert keys and store them in idp_swap
   call nvtxStartRange("gpu_sort_part", color=4) ! purple
+
+  ! Compute Hilbert keys and store them in idp_swap
+  call nvtxStartRange("gpu_sort_part:hkey", color=4)
   call compute_hkey_part_kernel<<<num_blocks, num_threads>>>(xp, idp_swap, &
        & skip1, skip2, skip3, dx_inv, head_idx, num_parts, sim%r%npartmax, level)
   call nvtxEndRange()
 
   ! Init sortp
-  call nvtxStartRange("gpu_sort_part", color=4) ! purple
+  call nvtxStartRange("gpu_sort_part:init_sortp", color=4)
   call init_global_swap_table_kernel<<<num_blocks, num_threads>>>(sortp, &
        & head_idx, num_parts)
   call nvtxEndRange()
 
-  ! Loop over bits
+  ! Loop over bits (one NVTX range per radix pass; kernels visible in CUDA row)
   do ibit = 0, ndim * level - 1
+     write(nvtx_lbl, '(A,I0)') 'gpu_sort_part:bit_', ibit
+     call nvtxStartRange(trim(nvtx_lbl), color=4)
 
      ! Init prefix sum based on Hilbert key bit value
-     call nvtxStartRange("gpu_sort_part", color=4) ! purple
      call init_prefix_sum_part_bit<<<num_blocks, num_threads>>>(idp_swap, &
           & sortp, prefix_sum, head_idx, num_parts, ibit)
-     call nvtxEndRange()
 
      ! Compute prefix sum
-     call nvtxStartRange("gpu_sort_part", color=4) ! purple
      call gpu_scan(head_idx, num_parts)
-     call nvtxEndRange()
 
      ! Compute sorted indices
-     call nvtxStartRange("gpu_sort_part", color=4) ! purple
      call compute_local_swap_table<<<num_blocks, num_threads>>>(isp_swap, &
           & sortp, prefix_sum, head_idx, num_parts)
-     call nvtxEndRange()
 
      ! Store back to sortp
-     call nvtxStartRange("gpu_sort_part", color=4) ! purple
      call update_global_swap_table<<<num_blocks, num_threads>>>(sortp, &
           & isp_swap, head_idx, num_parts)
-     call nvtxEndRange()
 
+     call nvtxEndRange()
   end do
+
+  call nvtxEndRange()
 
 end subroutine gpu_sort_part
 
