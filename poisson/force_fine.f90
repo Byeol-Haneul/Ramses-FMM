@@ -47,6 +47,10 @@ subroutine m_force_fine(pst,ilevel,icount)
   ! Compute gravity potential energy
   call r_compute_epot(pst,ilevel,1,epot,2)
   pst%s%g%epot_tot=pst%s%g%epot_tot+epot
+  ! PHASE2_DMO_DIAG: temporary per-level epot check after force_fine.
+  if(phase2_dmo_diag_enabled(pst%s%g%nstep_coarse))then
+     call phase2_dmo_diag_write(pst%s%g%nstep_coarse,'epot_after_force',ilevel,epot)
+  endif
   if(pst%s%r%verbose)write(*,'("   Potential energy done for level ",I2)')ilevel
 
   ! Compute maximum mass density
@@ -55,6 +59,72 @@ subroutine m_force_fine(pst,ilevel,icount)
   if(pst%s%r%verbose)write(*,'("   Maximum density done for level ",I2)')ilevel
 
 end subroutine m_force_fine
+!#########################################################
+! PHASE2_DMO_DIAG BEGIN: temporary diagnostics for CPU/GPU DMO isolation.
+! Remove this block after the rho->Poisson->force comparison is complete.
+!#########################################################
+logical function phase2_dmo_diag_enabled(nstep_coarse)
+  implicit none
+  integer,intent(in)::nstep_coarse
+  character(len=64)::value
+  integer::status,diag_step
+
+  phase2_dmo_diag_enabled=.false.
+  call get_environment_variable('RAMSES_PHASE2_DMO_DIAG',value,status=status)
+  if(status/=0)return
+  if(len_trim(value)==0)return
+  if(trim(value)=='0'.or.trim(value)=='false'.or.trim(value)=='FALSE')return
+
+  diag_step=19
+  call get_environment_variable('RAMSES_PHASE2_DMO_DIAG_STEP',value,status=status)
+  if(status==0.and.len_trim(value)>0)then
+     read(value,*,err=10)diag_step
+10   continue
+  endif
+  phase2_dmo_diag_enabled=(nstep_coarse==diag_step)
+
+end function phase2_dmo_diag_enabled
+!#########################################################
+subroutine phase2_dmo_diag_write(nstep_coarse,kind,ilevel,epot)
+  implicit none
+  integer::nstep_coarse,ilevel
+  character(len=*),intent(in)::kind
+  real(kind=8)::epot
+  character(len=512)::line
+
+  write(line,'("PHASE2_DMO_DIAG kind=",A," step=",I0," level=",I0," epot=",1PE24.16)') &
+       & trim(kind),nstep_coarse,ilevel,epot
+  call phase2_dmo_diag_emit(line)
+
+end subroutine phase2_dmo_diag_write
+!#########################################################
+subroutine phase2_dmo_diag_emit(line)
+  implicit none
+  character(len=*),intent(in)::line
+  character(len=256)::diag_dir,diag_tag
+  character(len=640)::diag_path
+  integer::status,unit,ios
+
+  call get_environment_variable('RAMSES_PHASE2_DMO_DIAG_DIR',diag_dir,status=status)
+  if(status/=0.or.len_trim(diag_dir)==0)then
+     write(*,'(A)')trim(line)
+     return
+  endif
+  call get_environment_variable('RAMSES_PHASE2_DMO_DIAG_TAG',diag_tag,status=status)
+  if(status/=0.or.len_trim(diag_tag)==0)diag_tag='untagged'
+  diag_path=trim(diag_dir)//'/phase2_dmo_diag_'//trim(diag_tag)//'.txt'
+  open(newunit=unit,file=trim(diag_path),status='unknown',position='append',action='write',iostat=ios)
+  if(ios==0)then
+     write(unit,'(A)')trim(line)
+     close(unit)
+  else
+     write(*,'(A)')trim(line)
+  endif
+
+end subroutine phase2_dmo_diag_emit
+!#########################################################
+! PHASE2_DMO_DIAG END.
+!#########################################################
 !#########################################################
 !#########################################################
 !#########################################################

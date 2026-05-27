@@ -1,6 +1,6 @@
 module rho_fine_module
 #ifdef _CUDA
-  use gpu_runner, only: gpu_multipole_leaf, gpu_multipole_split, gpu_reset_rho, gpu_cic_multipole, gpu_cic_multipole2
+  use gpu_runner, only: gpu_multipole_leaf, gpu_multipole_split, gpu_reset_rho, gpu_cic_multipole, gpu_cic_multipole2, gpu_rho_diag
   use part_device, only: gpu_split_part, gpu_sort_part, gpu_cic_part
 #endif
 contains
@@ -27,6 +27,7 @@ subroutine m_rho_fine(pst,ilevel,rtype)
   type(multipole_t)::multipole_tot
   integer::i,input_size
   integer,dimension(1:2)::input_array
+  real(kind=8)::rho_mass,rho_abs,rho_sq
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
 
   if(m%noct_tot(ilevel)==0)return
@@ -114,6 +115,11 @@ subroutine m_rho_fine(pst,ilevel,rtype)
            input_array(1)=i
            input_array(2)=rtype
            call r_cic_part(pst,input_array,2)
+           ! PHASE2_DMO_DIAG: temporary per-level rho field check after CIC.
+           if(phase2_dmo_diag_enabled(g%nstep_coarse))then
+              call phase2_compute_rho_diag(pst,i,rho_mass,rho_abs,rho_sq)
+              call phase2_dmo_diag_write(g%nstep_coarse,'rho_after_cic',i,rho_mass,rho_abs,rho_sq)
+           endif
         endif
 #endif
 
@@ -145,6 +151,121 @@ subroutine m_rho_fine(pst,ilevel,rtype)
   end associate
 
 end subroutine m_rho_fine
+!################################################################
+! PHASE2_DMO_DIAG BEGIN: temporary diagnostics for CPU/GPU DMO isolation.
+! Remove this block after the rho->Poisson->force comparison is complete.
+!################################################################
+logical function phase2_dmo_diag_enabled(nstep_coarse)
+  implicit none
+  integer,intent(in)::nstep_coarse
+  character(len=64)::value
+  integer::status,diag_step
+
+  phase2_dmo_diag_enabled=.false.
+  call get_environment_variable('RAMSES_PHASE2_DMO_DIAG',value,status=status)
+  if(status/=0)return
+  if(len_trim(value)==0)return
+  if(trim(value)=='0'.or.trim(value)=='false'.or.trim(value)=='FALSE')return
+
+  diag_step=19
+  call get_environment_variable('RAMSES_PHASE2_DMO_DIAG_STEP',value,status=status)
+  if(status==0.and.len_trim(value)>0)then
+     read(value,*,err=10)diag_step
+10   continue
+  endif
+  phase2_dmo_diag_enabled=(nstep_coarse==diag_step)
+
+end function phase2_dmo_diag_enabled
+!################################################################
+subroutine phase2_compute_rho_diag(pst,ilevel,rho_mass,rho_abs,rho_sq)
+  use ramses_commons, only: pst_t
+  implicit none
+  type(pst_t)::pst
+  integer::ilevel
+  real(kind=8)::rho_mass,rho_abs,rho_sq
+
+  rho_mass=0d0
+  rho_abs=0d0
+  rho_sq=0d0
+  if(pst%nLower>0)return
+#ifdef _CUDA
+  if(pst%s%m%data_on_device)then
+     call gpu_rho_diag(pst%s,ilevel,rho_mass,rho_abs,rho_sq)
+     return
+  endif
+#endif
+  call phase2_compute_rho_diag_cpu(pst%s%r,pst%s%m,ilevel,rho_mass,rho_abs,rho_sq)
+
+end subroutine phase2_compute_rho_diag
+!################################################################
+subroutine phase2_compute_rho_diag_cpu(r,m,ilevel,rho_mass,rho_abs,rho_sq)
+  use amr_parameters, only: ndim, twotondim
+  use amr_commons, only: run_t, mesh_t
+  implicit none
+  type(run_t)::r
+  type(mesh_t)::m
+  integer::ilevel
+  real(kind=8)::rho_mass,rho_abs,rho_sq
+  integer::igrid,ind
+  real(kind=8)::dx,vol_loc,rho_cell
+
+  dx=r%boxlen/2**ilevel
+  vol_loc=dx**ndim
+  rho_mass=0d0
+  rho_abs=0d0
+  rho_sq=0d0
+  do igrid=m%head(ilevel),m%tail(ilevel)
+     do ind=1,twotondim
+        rho_cell=dble(m%rho(ind,igrid))
+        rho_mass=rho_mass+rho_cell*vol_loc
+        rho_abs=rho_abs+abs(rho_cell)*vol_loc
+        rho_sq=rho_sq+rho_cell*rho_cell*vol_loc
+     end do
+  end do
+
+end subroutine phase2_compute_rho_diag_cpu
+!################################################################
+subroutine phase2_dmo_diag_write(nstep_coarse,kind,ilevel,rho_mass,rho_abs,rho_sq)
+  implicit none
+  integer::nstep_coarse,ilevel
+  character(len=*),intent(in)::kind
+  real(kind=8)::rho_mass,rho_abs,rho_sq
+  character(len=512)::line
+
+  write(line,'("PHASE2_DMO_DIAG kind=",A," step=",I0," level=",I0, &
+       & " rho_mass=",1PE24.16," rho_abs_mass=",1PE24.16," rho_sq_mass=",1PE24.16)') &
+       & trim(kind),nstep_coarse,ilevel,rho_mass,rho_abs,rho_sq
+  call phase2_dmo_diag_emit(line)
+
+end subroutine phase2_dmo_diag_write
+!################################################################
+subroutine phase2_dmo_diag_emit(line)
+  implicit none
+  character(len=*),intent(in)::line
+  character(len=256)::diag_dir,diag_tag
+  character(len=640)::diag_path
+  integer::status,unit,ios
+
+  call get_environment_variable('RAMSES_PHASE2_DMO_DIAG_DIR',diag_dir,status=status)
+  if(status/=0.or.len_trim(diag_dir)==0)then
+     write(*,'(A)')trim(line)
+     return
+  endif
+  call get_environment_variable('RAMSES_PHASE2_DMO_DIAG_TAG',diag_tag,status=status)
+  if(status/=0.or.len_trim(diag_tag)==0)diag_tag='untagged'
+  diag_path=trim(diag_dir)//'/phase2_dmo_diag_'//trim(diag_tag)//'.txt'
+  open(newunit=unit,file=trim(diag_path),status='unknown',position='append',action='write',iostat=ios)
+  if(ios==0)then
+     write(unit,'(A)')trim(line)
+     close(unit)
+  else
+     write(*,'(A)')trim(line)
+  endif
+
+end subroutine phase2_dmo_diag_emit
+!################################################################
+! PHASE2_DMO_DIAG END.
+!################################################################
 !################################################################
 !################################################################
 !################################################################
