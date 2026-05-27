@@ -1,4 +1,5 @@
 module fmm_multipoles
+  implicit none
 contains
 #ifdef GRAV
 !###############################################
@@ -47,7 +48,7 @@ subroutine m_fmm_multipoles(pst,ilevel)
 
   if(r%verbose) print *, "[M2M] LEVEL: ", ilevel
   ! Add multipoles to FMM grids. 
-  do i=ilevel-r%level_fmm_to_amr-1,r%bound_levelmin,-1
+  do i=ilevel-2,r%bound_levelmin,-1
      fmm_levels%flev=i
      if(r%verbose)write(*,'("     <ACCUMULATION> TREE for AMR LEVEL: ",I2,", TREE LEVEL: ",I2)')ilevel, i
      call r_fmm_multipole_fmm2fmm(pst,fmm_levels,input_size)
@@ -350,14 +351,13 @@ subroutine fmm_multipole_amr2fmm(s,ilevel)
                      init=init_flush_multipole, flush=pack_flush_multipole, combine=unpack_flush_multipole)
 
   ! Loop over levelmin grids.
-  hash_key_fmm(0)=ilevel - r%level_fmm_to_amr
+  hash_key_fmm(0)=ilevel - 1
   hash_key_amr(0) = ilevel
   do ioct=m%head(ilevel),m%tail(ilevel)
-     ! Get fmm grid above level_fmm_to_amr
+     ! Get fmm grid one AMR level above the AMR grid.
      hash_key_amr(1:ndim)=m%grid(ioct)%ckey(1:ndim)
-     hash_key_fmm(1:ndim)= hash_key_amr(1:ndim)/(2**r%level_fmm_to_amr)
-     ii(1:ndim)=hash_key_amr(1:ndim)-(2**r%level_fmm_to_amr)*hash_key_fmm(1:ndim) ! 0 to 2^(level_fmm_to_amr)-1
-     ii(1:ndim)=ii(1:ndim)/(2**(r%level_fmm_to_amr-1)) ! 0 or 1
+     hash_key_fmm(1:ndim)= hash_key_amr(1:ndim)/2
+     ii(1:ndim)=hash_key_amr(1:ndim)-2*hash_key_fmm(1:ndim) ! 0 or 1
      icell=1
      do idim=1,ndim
        icell=icell+2**(idim-1)*ii(idim) ! 1 to twotondim
@@ -540,7 +540,7 @@ subroutine fmm_merge_multipoles_all(s,active_levelmin)
        init=init_flush_multipole, flush=pack_flush_multipole, combine=unpack_flush_multipole)
 
   do ilevel=active_levelmin,r%nlevelmax
-     do flev=r%bound_levelmin,ilevel-r%level_fmm_to_amr
+     do flev=r%bound_levelmin,ilevel-1
         if (s%m_fmm_list(ilevel)%tail(flev) < s%m_fmm_list(ilevel)%head(flev)) cycle
         hash_key(0)=flev
 
@@ -853,7 +853,7 @@ recursive subroutine r_reset_multipoles_taylor(pst,fmm_levels,input_size)
      call r_reset_multipoles_taylor(pst%pLower,fmm_levels,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     if (fmm_levels%flev <= fmm_levels%ilev-pst%s%r%level_fmm_to_amr) then
+     if (fmm_levels%flev <= fmm_levels%ilev-1) then
         call reset_multipoles_taylor(pst%s%r,pst%s%g,pst%s%m_fmm_list(fmm_levels%ilev),fmm_levels%flev)
      else 
         return
