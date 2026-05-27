@@ -619,7 +619,20 @@ contains
     integer(kind=4), device :: flag2(1:twotondim,*)
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
-    
+
+    call sort_gather_grid_impl(flag2, grid, swap_global, head_idx, num_octs)
+
+  end subroutine sort_gather_grid
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(device) subroutine sort_gather_grid_impl(flag2, grid, swap_global, head_idx, num_octs)
+    type(oct), device :: grid(*)
+    integer(kind=4), device :: swap_global(*)
+    integer(kind=4), device :: flag2(1:twotondim,*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
     integer :: oct_idx, thread_idx, block_idx, old_oct_idx
     integer :: bit, mask, idim, ind
 
@@ -648,11 +661,23 @@ contains
     end do
     flag2(ndim + 2, oct_idx) = mask
 
-  end subroutine sort_gather_grid
+  end subroutine sort_gather_grid_impl
   ! =========================================================================
 
   ! =========================================================================
   attributes(global) subroutine sort_scatter_grid(grid, flag2, head_idx, num_octs)
+    type(oct), device :: grid(*)
+    integer(kind=4), device :: flag2(1:twotondim,*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
+    call sort_scatter_grid_impl(grid, flag2, head_idx, num_octs)
+
+  end subroutine sort_scatter_grid
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(device) subroutine sort_scatter_grid_impl(grid, flag2, head_idx, num_octs)
     type(oct), device :: grid(*)
     integer(kind=4), device :: flag2(1:twotondim,*)
     integer(kind=4), intent(in), value :: head_idx
@@ -689,7 +714,7 @@ contains
     hkey = hilbert_key(ckey, ilevel - 1)
     grid(oct_idx)%hkey(1) = hkey
 
-  end subroutine sort_scatter_grid
+  end subroutine sort_scatter_grid_impl
   ! =========================================================================
 
   ! =========================================================================
@@ -699,7 +724,20 @@ contains
     integer(kind=4), device :: swap_global(*)
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
-    
+
+    call sort_gather_flag_impl(flag2, flag1, swap_global, head_idx, num_octs)
+
+  end subroutine sort_gather_flag
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(device) subroutine sort_gather_flag_impl(flag2, flag1, swap_global, head_idx, num_octs)
+    integer(kind=4), device :: flag1(1:twotondim,*)
+    integer(kind=4), device :: flag2(1:twotondim,*)
+    integer(kind=4), device :: swap_global(*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
     integer :: oct_idx, thread_idx, block_idx, old_oct_idx
 
     ! Compute the thread and block idx
@@ -717,7 +755,7 @@ contains
     ! Gather flag1 into flag2
     flag2(:, oct_idx) = flag1(:, old_oct_idx)
 
-  end subroutine sort_gather_flag
+  end subroutine sort_gather_flag_impl
   ! =========================================================================
 
   ! =========================================================================
@@ -726,7 +764,19 @@ contains
     integer(kind=4), device :: flag2(1:twotondim,*)
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
-    
+
+    call sort_scatter_flag_impl(flag1, flag2, head_idx, num_octs)
+
+  end subroutine sort_scatter_flag
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(device) subroutine sort_scatter_flag_impl(flag1, flag2, head_idx, num_octs)
+    integer(kind=4), device :: flag1(1:twotondim,*)
+    integer(kind=4), device :: flag2(1:twotondim,*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
     integer :: oct_idx, thread_idx, block_idx
 
     ! Compute the thread and block idx
@@ -741,7 +791,7 @@ contains
     ! Scatter flag2 to flag1
     flag1(:, oct_idx) = flag2(:, oct_idx)
 
-  end subroutine sort_scatter_flag
+  end subroutine sort_scatter_flag_impl
   ! =========================================================================
 
   ! =========================================================================
@@ -751,7 +801,19 @@ contains
     integer(kind=4), device :: swap_global(*)
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
-    
+
+    call sort_gather_hydro_impl(unew, uold, swap_global, head_idx, num_octs)
+
+  end subroutine sort_gather_hydro
+
+  ! =========================================================================
+  attributes(device) subroutine sort_gather_hydro_impl(unew, uold, swap_global, head_idx, num_octs)
+    real(kind=dp), device :: unew(1:twotondim,1:nvar,*)
+    real(kind=dp), device :: uold(1:twotondim,1:nvar,*)
+    integer(kind=4), device :: swap_global(*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
     integer :: oct_idx, cell_idx, thread_idx, block_idx, old_oct_idx, ivar
 
     ! Compute block idx
@@ -773,7 +835,7 @@ contains
        unew(cell_idx, ivar, oct_idx) = uold(cell_idx, ivar, old_oct_idx)
     end do
 
-  end subroutine sort_gather_hydro
+  end subroutine sort_gather_hydro_impl
   ! =========================================================================
 
   ! =========================================================================
@@ -782,7 +844,19 @@ contains
     real(kind=dp), device :: unew(1:twotondim,1:nvar,*)
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
-    
+
+    call  sort_scatter_hydro_impl(uold, unew, head_idx, num_octs)
+
+  end subroutine sort_scatter_hydro
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(device) subroutine sort_scatter_hydro_impl(uold, unew, head_idx, num_octs)
+    real(kind=dp), device :: uold(1:twotondim,1:nvar,*)
+    real(kind=dp), device :: unew(1:twotondim,1:nvar,*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
     integer :: oct_idx, thread_idx, block_idx
 
     ! Compute the thread and block idx
@@ -797,11 +871,25 @@ contains
     ! Scatter unew to uold
     uold(:, :, oct_idx) = unew(:, :, oct_idx)
 
-  end subroutine sort_scatter_hydro
+  end subroutine sort_scatter_hydro_impl
   ! =========================================================================
 
   ! =========================================================================
   attributes(global) subroutine sort_gather_force(nref, f, idim, swap_global, head_idx, num_octs)
+    real(kind=dp), device :: nref(1:twotondim,*)
+    real(kind=dp), device :: f(1:twotondim,1:ndim,*)
+    integer(kind=4), device :: swap_global(*)
+    integer(kind=4), intent(in), value :: idim
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
+    call sort_gather_force_impl(nref, f, idim, swap_global, head_idx, num_octs)
+
+  end subroutine sort_gather_force
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(device) subroutine sort_gather_force_impl(nref, f, idim, swap_global, head_idx, num_octs)
     real(kind=dp), device :: nref(1:twotondim,*)
     real(kind=dp), device :: f(1:twotondim,1:ndim,*)
     integer(kind=4), device :: swap_global(*)
@@ -826,11 +914,23 @@ contains
     ! Gather force into nref
     nref(:, oct_idx) = f(:, idim, old_oct_idx)
 
-  end subroutine sort_gather_force
+  end subroutine sort_gather_force_impl
   ! =========================================================================
 
   ! =========================================================================
   attributes(global) subroutine sort_scatter_force(f, nref, idim, head_idx, num_octs)
+    real(kind=dp), device :: f(1:twotondim,1:ndim,*)
+    real(kind=dp), device :: nref(1:twotondim,*)
+    integer(kind=4), intent(in), value :: idim
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
+    call sort_scatter_force_impl(f, nref, idim, head_idx, num_octs)
+
+  end subroutine sort_scatter_force
+
+  ! =========================================================================
+  attributes(device) subroutine sort_scatter_force_impl(f, nref, idim, head_idx, num_octs)
     real(kind=dp), device :: f(1:twotondim,1:ndim,*)
     real(kind=dp), device :: nref(1:twotondim,*)
     integer(kind=4), intent(in), value :: idim
@@ -851,11 +951,23 @@ contains
     ! Scatter nref to force
     f(:, idim, oct_idx) = nref(:, oct_idx)
 
-  end subroutine sort_scatter_force
+  end subroutine sort_scatter_force_impl
   ! =========================================================================
 
   ! =========================================================================
   attributes(global) subroutine sort_gather_phi(nref, phi, swap_global, head_idx, num_octs)
+    real(kind=dp), device :: nref(1:twotondim,*)
+    real(kind=dp), device :: phi(1:twotondim,*)
+    integer(kind=4), device :: swap_global(*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
+    call sort_gather_phi_impl(nref, phi, swap_global, head_idx, num_octs)
+
+  end subroutine sort_gather_phi
+
+  ! =========================================================================
+  attributes(device) subroutine sort_gather_phi_impl(nref, phi, swap_global, head_idx, num_octs)
     real(kind=dp), device :: nref(1:twotondim,*)
     real(kind=dp), device :: phi(1:twotondim,*)
     integer(kind=4), device :: swap_global(*)
@@ -879,11 +991,23 @@ contains
     ! Gather phi into nref
     nref(:, oct_idx) = phi(:, old_oct_idx)
 
-  end subroutine sort_gather_phi
+  end subroutine sort_gather_phi_impl
   ! =========================================================================
 
   ! =========================================================================
   attributes(global) subroutine sort_scatter_phi(phi, nref, head_idx, num_octs)
+    real(kind=dp), device :: phi(1:twotondim,*)
+    real(kind=dp), device :: nref(1:twotondim,*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+
+    call sort_scatter_phi_impl(phi, nref, head_idx, num_octs)
+
+  end subroutine sort_scatter_phi
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(device) subroutine sort_scatter_phi_impl(phi, nref, head_idx, num_octs)
     real(kind=dp), device :: phi(1:twotondim,*)
     real(kind=dp), device :: nref(1:twotondim,*)
     integer(kind=4), intent(in), value :: head_idx
@@ -903,7 +1027,84 @@ contains
     ! Scatter nref to phi
     phi(:, oct_idx) = nref(:, oct_idx)
 
-  end subroutine sort_scatter_phi
+  end subroutine sort_scatter_phi_impl
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(grid_global) subroutine sort_gather_scatter_grid_flag(grid, &
+      &flag1, flag2, swap_global, head_idx, num_octs)
+    use cooperative_groups
+    implicit none
+    type(oct), device :: grid(*)
+    integer(kind=4), device :: swap_global(*)
+    integer(kind=4), device :: flag1(1:twotondim,*)
+    integer(kind=4), device :: flag2(1:twotondim,*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+    type(grid_group) :: gg
+    gg = this_grid()
+
+    call sort_gather_grid_impl(flag2, grid, swap_global, head_idx, num_octs)
+    call syncthreads(gg)
+
+    call sort_scatter_grid_impl(grid, flag2, head_idx, num_octs)
+    call syncthreads(gg)
+
+    call sort_gather_flag_impl(flag2, flag1, swap_global, head_idx, num_octs)
+    call syncthreads(gg)
+
+    call sort_scatter_flag_impl(flag1, flag2, head_idx, num_octs)
+
+  end subroutine sort_gather_scatter_grid_flag
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(grid_global) subroutine sort_gather_scatter_force_phi(f, phi, phi_old, &
+      & nref, swap_global, head_idx, num_octs)
+
+    use cooperative_groups
+    implicit none
+
+    real(kind=dp), device :: f(1:twotondim,1:ndim,*)
+    real(kind=dp), device :: phi(1:twotondim,*)
+    real(kind=dp), device :: phi_old(1:twotondim,*)
+    real(kind=dp), device :: nref(1:twotondim,*)
+    integer(kind=4), device :: swap_global(*)
+    integer(kind=4), intent(in), value :: head_idx
+    integer(kind=4), intent(in), value :: num_octs
+    type(grid_group) :: gg
+    gg = this_grid()
+
+    call sort_gather_force_impl(nref, f, 1, swap_global, head_idx, num_octs)
+    call syncthreads(gg)
+
+    call sort_scatter_force_impl(f, nref, 1, head_idx, num_octs)
+    call syncthreads(gg)
+
+    call sort_gather_force_impl(nref, f, 2, swap_global, head_idx, num_octs)
+    call syncthreads(gg)
+
+    call sort_scatter_force_impl(f, nref, 2, head_idx, num_octs)
+    call syncthreads(gg)
+
+    call sort_gather_force_impl(nref, f, 3, swap_global, head_idx, num_octs)
+    call syncthreads(gg)
+
+    call sort_scatter_force_impl(f, nref, 3, head_idx, num_octs)
+    call syncthreads(gg)
+
+    call sort_gather_phi_impl(nref, phi, swap_global, head_idx, num_octs)
+    call syncthreads(gg)
+
+    call sort_scatter_phi_impl(phi, nref, head_idx, num_octs)
+    call syncthreads(gg)
+
+    call sort_gather_phi_impl(nref, phi_old, swap_global, head_idx, num_octs)
+    call syncthreads(gg)
+
+    call sort_scatter_phi_impl(phi_old, nref, head_idx, num_octs)
+
+  end subroutine sort_gather_scatter_force_phi
   ! =========================================================================
 
   ! =========================================================================
