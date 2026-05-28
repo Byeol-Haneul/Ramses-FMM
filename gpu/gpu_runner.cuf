@@ -128,7 +128,6 @@ contains
     call nvtxStartRange("GPU cmpdt", color=0)!green
     call cmpdt_kernel<<<num_blocks, num_threads>>>(grid, uold, f, constant_gravity, head_idx, num_octs, &
          & mass_d, ekin_d, eint_d, emag_d, dt_d, dx, gamma, courant_factor)
-    call GPU_Error_Check(__FILE__, __LINE__)
     call nvtxEndRange()
 
     ! device to host
@@ -164,7 +163,6 @@ contains
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
     call nvtxStartRange("GPU Set_uold", color=0)!green
     call set_uold_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(uold, unew, head_idx, num_octs)
-    call GPU_Error_Check(__FILE__, __LINE__)
     call nvtxEndRange()
 
   end subroutine gpu_set_uold
@@ -193,7 +191,6 @@ contains
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
     call nvtxStartRange("GPU Set_unew", color=0)!green
     call set_unew_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(uold, unew, head_idx, num_octs)
-    call GPU_Error_Check(__FILE__, __LINE__)
     call nvtxEndRange()
 
   end subroutine gpu_set_unew
@@ -309,7 +306,6 @@ contains
     call hydro_integrator_kernel<<<num_blocks, threads_per_block>>>(grid, uold, unew, f, father, nbor, &
          & head_idx, num_subgrids, sim%m%ngridmax, ilevel, sim%r%levelmin, sim%r%nlevelmax, &
          & gamma, dt, dx, slope, riemann, constant_gravity)
-    call GPU_Error_Check(__FILE__, __LINE__)
     call nvtxEndRange()
 
   end subroutine gpu_godunov
@@ -846,17 +842,19 @@ contains
        call nvtxEndRange()
     endif
 
-    head_idx = sim%m%head(ilevel)
-    num_octs = sim%m%noct(ilevel)
-    threadsX_per_block = 8
-    threadsY_per_block = 16
-    num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
+    if (sim%r%hydro) then
+       head_idx = sim%m%head(ilevel)
+       num_octs = sim%m%noct(ilevel)
+       threadsX_per_block = 8
+       threadsY_per_block = 16
+       num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
 
-    if(num_octs > 0)then
-       call nvtxStartRange("GPU user_flag", color=2)!yellow
-       call hydro_flag_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(flag1, grid, nbor, uold, &
-            & head_idx, num_octs, gamma, err_grad_d, err_grad_p, floor_d, floor_p)
-       call nvtxEndRange()
+       if(num_octs > 0)then
+          call nvtxStartRange("GPU user_flag", color=2)!yellow
+          call hydro_flag_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(flag1, grid, nbor, uold, &
+               & head_idx, num_octs, gamma, err_grad_d, err_grad_p, floor_d, floor_p)
+          call nvtxEndRange()
+       endif
     endif
 
     nflag_d = 0
@@ -1118,7 +1116,6 @@ contains
        call nvtxStartRange("GPU refresh_amr_father", color=5)!red
        call update_father_array<<<num_blocks, num_threads>>>(grid, father, hash_key, hash_val, sim%m%hash_size, &
             & ckey_max, key_off, head_idx, num_octs)
-       call GPU_Error_Check(__FILE__, __LINE__)
        call nvtxEndRange()
     end if
 
@@ -1147,7 +1144,6 @@ contains
           call update_nbor_array<<<num_blocks, num_threads>>>(nbor, grid, hash_key, hash_val, sim%m%hash_size, &
                & ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, head_idx, num_subgrids, ind)
        end do
-       call GPU_Error_Check(__FILE__, __LINE__)
        call nvtxEndRange()
     end if
 
@@ -2340,7 +2336,6 @@ contains
           call update_father_array<<<num_blocks, num_threads>>>(grid_fmm, father_fmm(fmm_father_grid_offset+1), &
                & hash_key_fmm(hash_offset+1), hash_val_fmm(hash_offset+1), hash_capacity, &
                & ckey_max, key_off, head_idx, num_octs)
-          call GPU_Error_Check(__FILE__, __LINE__)
           call nvtxEndRange()
        end if
 
@@ -2357,7 +2352,6 @@ contains
                   & hash_key_fmm(hash_offset+1), hash_val_fmm(hash_offset+1), hash_capacity, &
                   & ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, head_idx, num_subgrids, ind)
           end do
-          call GPU_Error_Check(__FILE__, __LINE__)
           call nvtxEndRange()
        end if
     end do
@@ -2387,7 +2381,6 @@ contains
     m_fmm%grid = grid_fmm(grid_start:grid_stop)
     m_fmm%multipole = multipole_fmm(:,:,grid_start:grid_stop)
     m_fmm%taylor_coeff = taylor_fmm(:,:,grid_start:grid_stop)
-    call GPU_Error_Check(__FILE__, __LINE__)
 
     call reset_entire_hash(m_fmm%grid_dict,.false.)
     do ioct = 1, m_fmm%noct_used
@@ -2399,6 +2392,36 @@ contains
 #endif
 
   end subroutine gpu_download_fmm_tree_slot
+
+  !> @brief
+  !> Mirror a CPU-side FMM tree back into an existing device slot.
+  !>
+  !> @detail
+  !> The merged FMM topology is built on the device, but merge_multipoles
+  !> accumulates the merged multipoles on the CPU path.  Refresh the device
+  !> values before kernels use the merged tree as a source.
+  !>
+  subroutine gpu_upload_fmm_tree_slot(m_fmm, slot)
+    use amr_commons, only: mesh_t
+    implicit none
+    type(mesh_t), intent(in) :: m_fmm
+    integer(kind=4), intent(in) :: slot
+
+    integer(kind=4) :: grid_offset, grid_capacity, grid_start, grid_stop
+
+#ifdef FMM
+    grid_offset = fmm_grid_offset(slot)
+    grid_capacity = fmm_grid_capacity_slot(slot)
+    if (grid_capacity <= 0) return
+    grid_start = grid_offset + 1
+    grid_stop = grid_offset + grid_capacity
+
+    grid_fmm(grid_start:grid_stop) = m_fmm%grid
+    multipole_fmm(:,:,grid_start:grid_stop) = m_fmm%multipole
+    taylor_fmm(:,:,grid_start:grid_stop) = m_fmm%taylor_coeff
+#endif
+
+  end subroutine gpu_upload_fmm_tree_slot
 
   !> @brief
   !> Build one coarser level of a standard FMM tree directly on the GPU.
@@ -2468,7 +2491,6 @@ contains
           call fmm_init_prefix_sum_parent<<<num_blocks, num_threads>>>(grid_fmm, prefix_sum, box_ckey_min, &
                & box_ckey_max, source_head, num_child, icoarse, check_refinement)
        end if
-       call GPU_Error_Check(__FILE__, __LINE__)
        call nvtxEndRange()
     else
        new_noct_d = 0
@@ -2497,7 +2519,6 @@ contains
        end if
        call insert_hash_kernel<<<num_blocks_2, num_threads>>>(grid_fmm, hash_key_fmm(hash_start), &
             & hash_val_fmm(hash_start), hash_capacity, ckey_max, key_off, parent_head_global, new_noct)
-       call GPU_Error_Check(__FILE__, __LINE__)
        call nvtxEndRange()
     end if
 
@@ -2572,7 +2593,6 @@ contains
              call fmm_init_prefix_sum_copy_unique<<<num_blocks, num_threads>>>(grid_fmm, prefix_sum, &
                   & hash_key_fmm(hash_start), hash_val_fmm(hash_start), hash_capacity, ckey_max, key_off, &
                   & box_ckey_min, box_ckey_max, source_head, num_source, flev)
-             call GPU_Error_Check(__FILE__, __LINE__)
              call nvtxEndRange()
              call gpu_scan(1, num_source, new_noct_d)
              new_noct_chunk = new_noct_d
@@ -2589,7 +2609,6 @@ contains
                      & taylor_fmm, swap_local, next_ifree_global, new_noct_chunk)
                 call insert_hash_kernel<<<num_blocks_2, num_threads>>>(grid_fmm, hash_key_fmm(hash_start), &
                      & hash_val_fmm(hash_start), hash_capacity, ckey_max, key_off, next_ifree_global, new_noct_chunk)
-                call GPU_Error_Check(__FILE__, __LINE__)
                 call nvtxEndRange()
                 next_ifree_global = next_ifree_global + new_noct_chunk
              end if
@@ -2689,6 +2708,7 @@ contains
     call gpu_ensure_fmm_capacity(sim)
     if (use_merged .and. associated(sim%m_fmm_merged)) then
        slot = fmm_merged_slot
+       call gpu_upload_fmm_tree_slot(sim%m_fmm_merged, slot)
     else
        slot = int(jlev, kind=4)
     end if
@@ -2727,7 +2747,6 @@ contains
     call update_fmm_father_array<<<num_blocks, num_threads>>>(father_fmm, grid, &
          & hash_key_fmm(hash_offset+1), hash_val_fmm(hash_offset+1), hash_capacity, ckey_max, key_off, &
          & head_idx, 1, num_octs, .true.)
-    call GPU_Error_Check(__FILE__, __LINE__)
     call nvtxEndRange()
 
   end subroutine gpu_refresh_amr_fmm_father_level
@@ -2762,7 +2781,6 @@ contains
     call update_fmm_father_array<<<num_blocks, num_threads>>>(source_parent_fmm, grid_fmm, &
          & hash_key_fmm(hash_offset+1), hash_val_fmm(hash_offset+1), hash_capacity, ckey_max, key_off, &
          & head_idx, 1, num_octs, .false.)
-    call GPU_Error_Check(__FILE__, __LINE__)
     call nvtxEndRange()
 
   end subroutine gpu_refresh_fmm_source_parent_level
@@ -2796,7 +2814,6 @@ contains
     call update_fmm_grid_array<<<num_blocks, num_threads>>>(source_grid_fmm, grid, &
          & hash_key_fmm(hash_offset+1), hash_val_fmm(hash_offset+1), hash_capacity, ckey_max, key_off, &
          & head_idx, 1, num_octs)
-    call GPU_Error_Check(__FILE__, __LINE__)
     call nvtxEndRange()
 
   end subroutine gpu_refresh_amr_fmm_grid_level
@@ -2829,7 +2846,6 @@ contains
     call nvtxStartRange("GPU download_fmm_tree", color=5)!red
     m_fmm%multipole = multipole_fmm(:,:,grid_start:grid_stop)
     m_fmm%taylor_coeff = taylor_fmm(:,:,grid_start:grid_stop)
-    call GPU_Error_Check(__FILE__, __LINE__)
     call nvtxEndRange()
 #endif
 
@@ -2863,7 +2879,6 @@ contains
        call nvtxStartRange("GPU reset_fmm_multipoles_taylor", color=1)!blue
        call fmm_reset_multipole_taylor<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>( &
             & multipole_fmm, taylor_fmm, head_idx, num_octs)
-       call GPU_Error_Check(__FILE__, __LINE__)
        call nvtxEndRange()
     end if
 
@@ -2893,7 +2908,6 @@ contains
     call nvtxStartRange("GPU upload_fmm_amr_sources", color=5)!red
     grid = sim%m%grid
     rho = sim%m%rho
-    call GPU_Error_Check(__FILE__, __LINE__)
     call nvtxEndRange()
     call gpu_refresh_amr_fmm_father_level(sim, ilevel, tree_slot)
 
@@ -2917,7 +2931,6 @@ contains
        call nvtxStartRange("GPU fmm_multipole_amr2fmm", color=1)!blue
        call fmm_multipole_amr2fmm<<<num_blocks, num_threads>>>(grid, rho, multipole_fmm, father_fmm, &
             & head_idx, 1, num_octs, dx_loc, vol_loc, skip1, skip2, skip3)
-       call GPU_Error_Check(__FILE__, __LINE__)
        call nvtxEndRange()
     end if
 
@@ -2952,7 +2965,6 @@ contains
        call nvtxStartRange("GPU fmm_multipole_fmm2fmm", color=1)!blue
        call fmm_multipole_fmm2fmm<<<num_blocks, num_threads>>>(grid_fmm, multipole_fmm, &
             & father_fmm(fmm_father_grid_offset+1), head_idx, num_octs)
-       call GPU_Error_Check(__FILE__, __LINE__)
        call nvtxEndRange()
     end if
 
@@ -3000,7 +3012,6 @@ contains
        call nvtxStartRange("GPU fmm_multipole_shift_downward", color=1)!blue
        call fmm_multipole_shift_downward<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>( &
             & grid_fmm, multipole_fmm, head_idx, num_octs, dx_loc, skip1, skip2, skip3)
-       call GPU_Error_Check(__FILE__, __LINE__)
        call nvtxEndRange()
     end if
 
@@ -3024,6 +3035,7 @@ contains
     integer(kind=4) :: head_idx, num_octs, num_threads, num_blocks
     integer(kind=4) :: target_slot, source_slot
     integer(kind=4) :: target_grid_offset
+    integer(kind=4) :: hash_offset, hash_capacity
     real(kind=dp) :: dx_loc
 
 #ifdef FMM
@@ -3037,11 +3049,14 @@ contains
        num_threads = 128
        num_blocks = (num_octs + num_threads - 1) / num_threads
        if (num_octs > 0) then
+          hash_offset = fmm_hash_offset(target_slot)
+          hash_capacity = fmm_hash_capacity_slot(target_slot)
           call nvtxStartRange("GPU fmm_downward", color=1)!blue
           call fmm_downward_kernel<<<num_blocks, num_threads>>>(grid_fmm, taylor_fmm, &
                & father_fmm(fmm_father_grid_offset+1), grid_fmm, multipole_fmm, taylor_fmm, &
-               & nbor_fmm, source_parent_fmm, box_ckey_min, box_ckey_max, head_idx, num_octs, flev, dx_loc, .true.)
-          call GPU_Error_Check(__FILE__, __LINE__)
+               & nbor_fmm, source_parent_fmm, hash_key_fmm(hash_offset+1), hash_val_fmm(hash_offset+1), &
+               & hash_capacity, ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, &
+               & head_idx, num_octs, flev, dx_loc, .true.)
           call nvtxEndRange()
        end if
     else
@@ -3053,12 +3068,15 @@ contains
        num_threads = 128
        num_blocks = (num_octs + num_threads - 1) / num_threads
        if (num_octs > 0) then
+          hash_offset = fmm_hash_offset(source_slot)
+          hash_capacity = fmm_hash_capacity_slot(source_slot)
           call gpu_refresh_fmm_source_parent_level(sim, ilev, flev, source_slot)
           call nvtxStartRange("GPU fmm_downward", color=1)!blue
           call fmm_downward_kernel<<<num_blocks, num_threads>>>(grid_fmm, taylor_fmm, &
                & father_fmm(fmm_father_grid_offset+1), grid_fmm, multipole_fmm, taylor_fmm, &
-               & nbor_fmm, source_parent_fmm, box_ckey_min, box_ckey_max, head_idx, num_octs, flev, dx_loc, .false.)
-          call GPU_Error_Check(__FILE__, __LINE__)
+               & nbor_fmm, source_parent_fmm, hash_key_fmm(hash_offset+1), hash_val_fmm(hash_offset+1), &
+               & hash_capacity, ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, &
+               & head_idx, num_octs, flev, dx_loc, .false.)
           call nvtxEndRange()
        end if
     end if
@@ -3082,6 +3100,7 @@ contains
 
     integer(kind=4) :: head_idx, num_octs, num_threads, num_blocks
     integer(kind=4) :: tree_slot
+    integer(kind=4) :: hash_offset, hash_capacity
     real(kind=dp) :: dx_loc
     logical :: reset_phi, same_tree
 
@@ -3092,7 +3111,6 @@ contains
     call nvtxStartRange("GPU upload_fmm_amr_phi", color=5)!red
     grid = sim%m%grid
     phi = sim%m%phi
-    call GPU_Error_Check(__FILE__, __LINE__)
     call nvtxEndRange()
 
     head_idx = sim%m%head(ilev)
@@ -3103,18 +3121,19 @@ contains
     num_threads = 128
     num_blocks = (num_octs + num_threads - 1) / num_threads
     if (num_octs > 0) then
+       hash_offset = fmm_hash_offset(tree_slot)
+       hash_capacity = fmm_hash_capacity_slot(tree_slot)
        call gpu_refresh_amr_fmm_father_level(sim, ilev, tree_slot)
        call nvtxStartRange("GPU fmm_amr_intermediate", color=1)!blue
        call fmm_amr_intermediate_kernel<<<num_blocks, num_threads>>>(grid, phi, father_fmm, grid_fmm, &
             & multipole_fmm, taylor_fmm, nbor_fmm, box_ckey_min, box_ckey_max, &
+            & hash_key_fmm(hash_offset+1), hash_val_fmm(hash_offset+1), hash_capacity, ckey_max, key_off, periodic, &
             & head_idx, num_octs, ilev, dx_loc, reset_phi, same_tree)
-       call GPU_Error_Check(__FILE__, __LINE__)
        call nvtxEndRange()
     end if
 
     call nvtxStartRange("GPU download_fmm_amr_phi", color=5)!red
     sim%m%phi = phi
-    call GPU_Error_Check(__FILE__, __LINE__)
     call nvtxEndRange()
 #endif
 
@@ -3140,7 +3159,6 @@ contains
     grid = sim%m%grid
     rho = sim%m%rho
     phi = sim%m%phi
-    call GPU_Error_Check(__FILE__, __LINE__)
     call nvtxEndRange()
 
     call gpu_reset_hash(sim)
@@ -3156,13 +3174,11 @@ contains
        call nvtxStartRange("GPU fmm_amr_direct", color=1)!blue
        call fmm_amr_direct_kernel<<<num_blocks, num_threads>>>(grid, rho, phi, nbor, hash_key, hash_val, &
             & sim%m%hash_size, ckey_max, key_off, head_idx, num_octs, ilev, dx_loc, dxn)
-       call GPU_Error_Check(__FILE__, __LINE__)
        call nvtxEndRange()
     end if
 
     call nvtxStartRange("GPU download_fmm_amr_direct", color=5)!red
     sim%m%phi = phi
-    call GPU_Error_Check(__FILE__, __LINE__)
     call nvtxEndRange()
 #endif
 
@@ -3182,6 +3198,7 @@ contains
 
     integer(kind=4) :: head_idx, num_octs, num_threads, num_blocks
     integer(kind=4) :: tree_slot
+    integer(kind=4) :: hash_offset, hash_capacity
     real(kind=dp) :: dx_loc
 
 #ifdef FMM
@@ -3191,7 +3208,6 @@ contains
     call nvtxStartRange("GPU upload_fmm_amr_direct_taylor", color=5)!red
     grid = sim%m%grid
     phi = sim%m%phi
-    call GPU_Error_Check(__FILE__, __LINE__)
     call nvtxEndRange()
 
     head_idx = sim%m%head(ilev)
@@ -3200,17 +3216,18 @@ contains
     num_threads = 128
     num_blocks = (num_octs + num_threads - 1) / num_threads
     if (num_octs > 0) then
+       hash_offset = fmm_hash_offset(tree_slot)
+       hash_capacity = fmm_hash_capacity_slot(tree_slot)
        call gpu_refresh_amr_fmm_grid_level(sim, ilev, tree_slot)
        call nvtxStartRange("GPU fmm_amr_direct_taylor", color=1)!blue
        call fmm_amr_direct_taylor_kernel<<<num_blocks, num_threads>>>(grid, phi, source_grid_fmm, grid_fmm, &
-            & multipole_fmm, nbor_fmm, head_idx, num_octs, dx_loc)
-       call GPU_Error_Check(__FILE__, __LINE__)
+            & multipole_fmm, nbor_fmm, hash_key_fmm(hash_offset+1), hash_val_fmm(hash_offset+1), hash_capacity, &
+            & ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, head_idx, num_octs, dx_loc)
        call nvtxEndRange()
     end if
 
     call nvtxStartRange("GPU download_fmm_amr_direct_taylor", color=5)!red
     sim%m%phi = phi
-    call GPU_Error_Check(__FILE__, __LINE__)
     call nvtxEndRange()
 #endif
 
@@ -3236,7 +3253,6 @@ contains
     grid = sim%m%grid
     rho = sim%m%rho
     phi = sim%m%phi
-    call GPU_Error_Check(__FILE__, __LINE__)
     call nvtxEndRange()
 
     call gpu_reset_hash(sim)
@@ -3253,13 +3269,11 @@ contains
        call nvtxStartRange("GPU fmm_combined_direct", color=1)!blue
        call fmm_combined_direct_kernel<<<num_blocks, num_threads>>>(grid, rho, phi, father, nbor, &
             & box_ckey_min, box_ckey_max, head_idx, num_octs, ilev, dx_loc, vol_loc)
-       call GPU_Error_Check(__FILE__, __LINE__)
        call nvtxEndRange()
     end if
 
     call nvtxStartRange("GPU download_fmm_combined_direct", color=5)!red
     sim%m%phi = phi
-    call GPU_Error_Check(__FILE__, __LINE__)
     call nvtxEndRange()
 #endif
 

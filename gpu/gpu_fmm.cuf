@@ -574,6 +574,92 @@ contains
   ! =========================================================================
 
   ! =========================================================================
+  attributes(device) subroutine fmm_nbor_grids_by_ckey(center_ckey, ilevel, hash_key, hash_val, hash_size, &
+       & ckey_max, key_off, box_ckey_min, box_ckey_max, periodic_d, igrid_nbor)
+    integer(kind=4), intent(in) :: center_ckey(1:3)
+    integer(kind=4), value :: ilevel, hash_size
+    integer(kind=8), device :: hash_key(*)
+    integer(kind=4), device :: hash_val(*)
+    integer(kind=4), device :: ckey_max(*)
+    integer(kind=8), device :: key_off(*)
+    integer(kind=4), device :: box_ckey_min(1:3,*), box_ckey_max(1:3,*)
+    logical, device :: periodic_d(1:3)
+    integer(kind=4), intent(out) :: igrid_nbor(1:threetondim)
+
+    integer :: idim, i1, j1, k1, inbor
+    integer(kind=4) :: nbor_ckey(1:3)
+    logical :: in_domain
+
+    inbor = 0
+    do k1 = -1*(ndim/3), 1*(ndim/3)
+       do j1 = -1*(ndim/2), 1*(ndim/2)
+          do i1 = -1, 1
+             inbor = inbor + 1
+             nbor_ckey = center_ckey
+#if NDIM>0
+             nbor_ckey(1) = nbor_ckey(1) + i1
+#endif
+#if NDIM>1
+             nbor_ckey(2) = nbor_ckey(2) + j1
+#endif
+#if NDIM>2
+             nbor_ckey(3) = nbor_ckey(3) + k1
+#endif
+
+             in_domain = .true.
+             do idim = 1, ndim
+                if (periodic_d(idim)) then
+                   if (nbor_ckey(idim) < box_ckey_min(idim, ilevel)) nbor_ckey(idim) = box_ckey_max(idim, ilevel) - 1
+                   if (nbor_ckey(idim) >= box_ckey_max(idim, ilevel)) nbor_ckey(idim) = box_ckey_min(idim, ilevel)
+                endif
+                if (nbor_ckey(idim) < box_ckey_min(idim, ilevel) .or. &
+                    nbor_ckey(idim) >= box_ckey_max(idim, ilevel)) then
+                   in_domain = .false.
+                endif
+             end do
+
+             if (in_domain) then
+                igrid_nbor(inbor) = fmm_lookup_grid_by_ckey(nbor_ckey, ilevel, hash_key, hash_val, &
+                     & hash_size, ckey_max, key_off)
+             else
+                igrid_nbor(inbor) = 0
+             endif
+          end do
+       end do
+    end do
+
+  end subroutine fmm_nbor_grids_by_ckey
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(device) subroutine fmm_nbor_grids_hybrid(grid_source, nbor_source, center_ckey, ilevel, &
+       & hash_key, hash_val, hash_size, ckey_max, key_off, box_ckey_min, box_ckey_max, periodic_d, igrid_nbor)
+    type(oct), device :: grid_source(*)
+    integer(kind=4), device :: nbor_source(1:subgridsize,*)
+    integer(kind=4), intent(in) :: center_ckey(1:3)
+    integer(kind=4), value :: ilevel, hash_size
+    integer(kind=8), device :: hash_key(*)
+    integer(kind=4), device :: hash_val(*)
+    integer(kind=4), device :: ckey_max(*)
+    integer(kind=8), device :: key_off(*)
+    integer(kind=4), device :: box_ckey_min(1:3,*), box_ckey_max(1:3,*)
+    logical, device :: periodic_d(1:3)
+    integer(kind=4), intent(out) :: igrid_nbor(1:threetondim)
+
+    integer(kind=4) :: igrid_center
+
+    igrid_center = fmm_lookup_grid_by_ckey(center_ckey, ilevel, hash_key, hash_val, hash_size, ckey_max, key_off)
+    if (igrid_center > 0) then
+       call nbor_grids_from_nbor(grid_source, nbor_source, igrid_center, igrid_nbor)
+    else
+       call fmm_nbor_grids_by_ckey(center_ckey, ilevel, hash_key, hash_val, hash_size, ckey_max, key_off, &
+            & box_ckey_min, box_ckey_max, periodic_d, igrid_nbor)
+    endif
+
+  end subroutine fmm_nbor_grids_hybrid
+  ! =========================================================================
+
+  ! =========================================================================
   attributes(global) subroutine update_fmm_father_array(father_fmm, grid_source, hash_key_fmm, hash_val_fmm, &
        & hash_size_fmm, ckey_max, key_off, head_idx, head_father, num_octs, skip_all_refined)
     integer(kind=4), device :: father_fmm(*)
@@ -800,7 +886,8 @@ contains
   ! =========================================================================
   attributes(global) subroutine fmm_downward_kernel(grid_target, taylor_target, father_target, &
        & grid_source, multipole_source, taylor_source, nbor_source, source_parent, &
-       & box_ckey_min, box_ckey_max, head_idx, num_octs, flev, dx_loc, same_tree)
+       & hash_key_source, hash_val_source, hash_size_source, ckey_max, key_off, &
+       & box_ckey_min, box_ckey_max, periodic_d, head_idx, num_octs, flev, dx_loc, same_tree)
     type(oct), device :: grid_target(*), grid_source(*)
     real(kind=dp), device :: taylor_target(1:twotondim,1:taylor_size,*)
     real(kind=dp), device :: multipole_source(1:twotondim,1:multipole_size,*)
@@ -808,8 +895,13 @@ contains
     integer(kind=4), device :: father_target(*)
     integer(kind=4), device :: nbor_source(1:subgridsize,*)
     integer(kind=4), device :: source_parent(*)
+    integer(kind=8), device :: hash_key_source(*)
+    integer(kind=4), device :: hash_val_source(*)
+    integer(kind=4), device :: ckey_max(*)
+    integer(kind=8), device :: key_off(*)
     integer(kind=4), device :: box_ckey_min(1:3,*), box_ckey_max(1:3,*)
-    integer(kind=4), value :: head_idx, num_octs, flev
+    logical, device :: periodic_d(1:3)
+    integer(kind=4), value :: hash_size_source, head_idx, num_octs, flev
     real(kind=dp), value :: dx_loc
     logical, value :: same_tree
 
@@ -862,12 +954,9 @@ contains
        end do
     end if
 
-    if (same_tree) then
-       source_parent_idx = father_target(ioct)
-    else
-       source_parent_idx = source_parent(1 + local_idx)
-    end if
-    call nbor_grids_from_nbor(grid_source, nbor_source, source_parent_idx, grid_nbors)
+    call fmm_nbor_grids_hybrid(grid_source, nbor_source, hash_parent, flev - 1, &
+         & hash_key_source, hash_val_source, hash_size_source, ckey_max, key_off, &
+         & box_ckey_min, box_ckey_max, periodic_d, grid_nbors)
 
     do inbor = 1, threetondim
        do idim = 1, ndim
@@ -945,6 +1034,7 @@ contains
   ! =========================================================================
   attributes(global) subroutine fmm_amr_intermediate_kernel(grid_amr, phi_amr, source_parent, grid_source, &
        & multipole_source, taylor_source, nbor_source, box_ckey_min, box_ckey_max, &
+       & hash_key_source, hash_val_source, hash_size_source, ckey_max, key_off, periodic_d, &
        & head_idx, num_octs, ilev, dx_loc, reset_phi, same_tree)
     type(oct), device :: grid_amr(*), grid_source(*)
     real(kind=dp), device :: phi_amr(1:twotondim,*)
@@ -953,7 +1043,12 @@ contains
     integer(kind=4), device :: source_parent(*)
     integer(kind=4), device :: nbor_source(1:subgridsize,*)
     integer(kind=4), device :: box_ckey_min(1:3,*), box_ckey_max(1:3,*)
-    integer(kind=4), value :: head_idx, num_octs, ilev
+    integer(kind=8), device :: hash_key_source(*)
+    integer(kind=4), device :: hash_val_source(*)
+    integer(kind=4), device :: ckey_max(*)
+    integer(kind=8), device :: key_off(*)
+    logical, device :: periodic_d(1:3)
+    integer(kind=4), value :: hash_size_source, head_idx, num_octs, ilev
     real(kind=dp), value :: dx_loc
     logical, value :: reset_phi, same_tree
 
@@ -1018,7 +1113,9 @@ contains
        end do
     end if
 
-    call nbor_grids_from_nbor(grid_source, nbor_source, igrid_parent, grid_nbors)
+    call fmm_nbor_grids_hybrid(grid_source, nbor_source, hash_fmm_grid, fmm_level, &
+         & hash_key_source, hash_val_source, hash_size_source, ckey_max, key_off, &
+         & box_ckey_min, box_ckey_max, periodic_d, grid_nbors)
 
     do inbor = 1, threetondim
        do idim = 1, ndim
@@ -1214,13 +1311,20 @@ contains
 
   ! =========================================================================
   attributes(global) subroutine fmm_amr_direct_taylor_kernel(grid_amr, phi_amr, source_grid, grid_source, &
-       & multipole_source, nbor_source, head_idx, num_octs, dx_loc)
+       & multipole_source, nbor_source, hash_key_source, hash_val_source, hash_size_source, &
+       & ckey_max, key_off, box_ckey_min, box_ckey_max, periodic_d, head_idx, num_octs, dx_loc)
     type(oct), device :: grid_amr(*), grid_source(*)
     real(kind=dp), device :: phi_amr(1:twotondim,*)
     real(kind=dp), device :: multipole_source(1:twotondim,1:multipole_size,*)
     integer(kind=4), device :: source_grid(*)
     integer(kind=4), device :: nbor_source(1:subgridsize,*)
-    integer(kind=4), value :: head_idx, num_octs
+    integer(kind=8), device :: hash_key_source(*)
+    integer(kind=4), device :: hash_val_source(*)
+    integer(kind=4), device :: ckey_max(*)
+    integer(kind=8), device :: key_off(*)
+    integer(kind=4), device :: box_ckey_min(1:3,*), box_ckey_max(1:3,*)
+    logical, device :: periodic_d(1:3)
+    integer(kind=4), value :: hash_size_source, head_idx, num_octs
     real(kind=dp), value :: dx_loc
 
     integer :: thread_idx, local_idx, ioct, idim, icell, jcell, jgrid, inbor, nstride
@@ -1247,8 +1351,9 @@ contains
        target_grid_coord(idim) = mod(hash_target(idim), half_nfine)
     end do
 
-    igrid_center = source_grid(1 + local_idx)
-    call nbor_grids_from_nbor(grid_source, nbor_source, igrid_center, grid_nbors)
+    call fmm_nbor_grids_hybrid(grid_source, nbor_source, hash_target, grid_amr(ioct)%lev, &
+         & hash_key_source, hash_val_source, hash_size_source, ckey_max, key_off, &
+         & box_ckey_min, box_ckey_max, periodic_d, grid_nbors)
 
     do icell = 1, twotondim
        if (grid_amr(ioct)%refined(icell)) cycle
