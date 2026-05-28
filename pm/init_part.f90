@@ -52,7 +52,7 @@ subroutine init_part(r,g,m,p)
   use pm_parameters, only: PART_TYPE
   use pm_commons, only: part_t
 #ifdef _CUDA
-  use gpu_part_state
+  use gpu_runner
   use part_device, only: ensure_scan_capacity_part
   use cudafor
 #endif
@@ -105,7 +105,7 @@ subroutine init_part(r,g,m,p)
   allocate(phip(1:r%npartmax))
 #endif
   ! Gather/scatter scratch (device-only). isp_swap doubles as the
-  ! gpu_cic_part source map; see gpu_part_state.cuf for the bit layout.
+  ! gpu_cic_part source map.
   allocate(xp_swap (1:r%npartmax))
   allocate(isp_swap(1:r%npartmax))
   allocate(idp_swap(1:r%npartmax))

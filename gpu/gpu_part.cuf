@@ -4,16 +4,15 @@ module part_device
   use oct_commons, only: oct
   use gpu_utils
   use cudafor
-  use gpu_part_state, only: &
-       & xp, vp, mp, phip, levelp, sortp, idp, &
-!       & jp, zp, tp, tm, size_p, charge, idm, idt, &
-       & xp_swap, isp_swap, idp_swap
   use gpu_runner, only: &
        & grid, hash_key, hash_val, ckey_max, key_off, &
        & box_ckey_min, box_ckey_max, box_size, periodic, &
        & rho, nref, f, &
        & swap_local, swap_global, prefix_sum, &
        & partial_sums_0, partial_sums_1, partial_sums_2, &
+       & xp, vp, mp, phip, levelp, sortp, idp, &
+!       & jp, zp, tp, tm, size_p, charge, idm, idt, &
+       & xp_swap, isp_swap, idp_swap, &
        & gpu_scan
   implicit none
 
@@ -720,7 +719,7 @@ attributes(global) subroutine build_src_part_kernel(xp_d, &
      return
   endif
 
-  ! Pack (igrid, icell) into one 32-bit word; see gpu_part_state.cuf.
+  ! Pack (igrid, icell) into one 32-bit word.
   isp_swap_d(ipart) = ior(ishft(igrid, 5), icell)
 
 end subroutine build_src_part_kernel
