@@ -762,13 +762,6 @@ end subroutine multipole_q_kernel
 !> Per-level reduction of particle velocities for the Courant condition:
 !> vmax = MAX |vp|, ekin = SUM 0.5 * mp * |vp|^2 over ipart in
 !> [head_idx, head_idx+num_parts-1].
-!>
-!> The vmax accumulator is stored as integer(kind=8) holding the int64 bit
-!> pattern of the corresponding non-negative real(kind=8). For non-negative
-!> IEEE-754 doubles the bitwise order matches the numeric order, so atomicCAS
-!> on the int64 bits implements atomic max on the underlying double without
-!> needing a separate atomic_max_real8 helper. Initial value 0_8 corresponds
-!> to +0.0d0; the host reinterprets the final int64 via transfer().
 attributes(global) subroutine gpu_newdt_part_kernel(vp_d, mp_d, &
      vmax_int_d, ekin_d, head_idx, num_parts, leading)
   integer(kind=4), intent(in), value :: head_idx, num_parts, leading
@@ -818,10 +811,10 @@ attributes(global) subroutine gpu_newdt_part_kernel(vp_d, mp_d, &
 end subroutine gpu_newdt_part_kernel
 
 !> CIC mass deposit over sortp(head_idx:head_idx+num_parts-1).
-!> gpu_sort_part has already sorted this range at depth ilevel, so particles
+!> gpu_sort_part has sorted this range at depth ilevel, so particles
 !> sharing a source cell appear in contiguous runs. Each warp treats those runs
 !> as source-cell segments, accumulates each segment with an inclusive
-!> Hillis-Steele scan, and emits one atomicAdd from the segment tail for each
+!> Hillis-Steele scan (parallel prefix sum), and emits one atomicAdd from the segment tail for each
 !> stencil destination.
 attributes(global) subroutine cic_part_warp_kernel(sortp_d, &
      isp_swap_d, head_idx, num_parts, &
@@ -1127,8 +1120,7 @@ end subroutine gpu_cic_part
 
 !> Per-level particle Courant reduction. Computes vmax = MAX|vp| and
 !> ekin = SUM 0.5*mp*|vp|^2 over particles in level ilevel from device vp/mp
-!> and combines them into the inout host scalars using accumulating
-!> semantics (MAX for vmax, + for ekin), matching the host newdt_part.
+!> and combines them into the inout host scalars
 subroutine gpu_newdt_part(sim, ilevel, vmax, ekin)
   use nvtx
   use ramses_commons, only: ramses_t
