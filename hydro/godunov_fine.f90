@@ -25,9 +25,7 @@ recursive subroutine r_godunov_fine(pst,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
 #ifdef _CUDA
-     call nvtxStartRange("GPU Godunov", color=6)!teal
      call gpu_godunov(pst%s, ilevel)
-     call nvtxEndRange()
 #else
      call godunov_fine(pst%s, ilevel)
 #endif
