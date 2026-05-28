@@ -1102,50 +1102,6 @@ contains
 
   end subroutine gpu_reset_rho
 
-  !> PHASE2_DMO_DIAG BEGIN: temporary rho field reductions for CPU/GPU isolation.
-  subroutine gpu_rho_diag(sim, ilevel, rho_mass, rho_abs, rho_sq)
-    use nvtx
-    use rho_device, only: cmp_rho_diag
-    use ramses_commons, only: ramses_t
-    implicit none
-    type(ramses_t), intent(inout) :: sim
-    integer, intent(in) :: ilevel
-    real(kind=8), intent(out) :: rho_mass, rho_abs, rho_sq
-
-    integer(kind=4) :: head_idx
-    integer(kind=4) :: num_octs, num_blocks, num_threads
-    real(kind=8) :: dx, vol_loc
-    real(kind=8), device :: rho_mass_d, rho_abs_d, rho_sq_d
-
-    rho_mass = 0d0
-    rho_abs = 0d0
-    rho_sq = 0d0
-
-    dx = sim%r%boxlen/2**ilevel
-    vol_loc = dx**ndim
-
-    rho_mass_d = 0d0
-    rho_abs_d = 0d0
-    rho_sq_d = 0d0
-
-    head_idx = sim%m%head(ilevel)
-    num_octs = sim%m%noct(ilevel)
-    num_threads = 256
-    num_blocks = (num_octs * twotondim + num_threads - 1) / num_threads
-
-    if (num_octs > 0) then
-       call nvtxStartRange("GPU phase2 rho diag", color=1)!blue
-       call cmp_rho_diag<<<num_blocks, num_threads>>>(rho, head_idx, num_octs, vol_loc, &
-            & rho_mass_d, rho_abs_d, rho_sq_d)
-       rho_mass = rho_mass_d
-       rho_abs = rho_abs_d
-       rho_sq = rho_sq_d
-       call nvtxEndRange()
-    endif
-
-  end subroutine gpu_rho_diag
-  ! PHASE2_DMO_DIAG END.
-
   !> @brief
   !> Set multipole to cell center and mass in leaf cells and zero in split cells
   !>

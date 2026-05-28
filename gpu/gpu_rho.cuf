@@ -447,49 +447,5 @@ contains
   end subroutine deposit_rho
   ! =========================================================================
 
-  ! =========================================================================
-  ! PHASE2_DMO_DIAG BEGIN: temporary rho field reductions for CPU/GPU isolation.
-  attributes(global) subroutine cmp_rho_diag(rho, head_idx, num_octs, vol_loc, &
-       & rho_mass_tot, rho_abs_tot, rho_sq_tot)
-    real(kind=dp), device :: rho(1:twotondim,*)
-    integer(kind=4), intent(in), value :: head_idx
-    integer(kind=4), intent(in), value :: num_octs
-    real(kind=8), intent(in), value :: vol_loc
-    real(kind=8), device, intent(inout) :: rho_mass_tot, rho_abs_tot, rho_sq_tot
-
-    integer :: tid, bid, cell_idx, oct_idx, info
-    real(kind=8) :: rho_cell, mass_loc, abs_loc, sq_loc
-
-    tid = threadIdx%x - 1
-    bid = blockIdx%x - 1
-
-    oct_idx = (tid + bid * blockDim%x) / twotondim
-    if (oct_idx >= num_octs) then
-       mass_loc = 0d0
-       abs_loc = 0d0
-       sq_loc = 0d0
-    else
-       oct_idx = head_idx + oct_idx
-       cell_idx = mod(tid, twotondim) + 1
-       rho_cell = real(rho(cell_idx, oct_idx), kind=8)
-       mass_loc = rho_cell * vol_loc
-       abs_loc = abs(rho_cell) * vol_loc
-       sq_loc = rho_cell * rho_cell * vol_loc
-    endif
-
-    mass_loc = block_reduce_sum(mass_loc)
-    abs_loc = block_reduce_sum(abs_loc)
-    sq_loc = block_reduce_sum(sq_loc)
-
-    if (tid == 0) then
-       info = atomicadd(rho_mass_tot, mass_loc)
-       info = atomicadd(rho_abs_tot, abs_loc)
-       info = atomicadd(rho_sq_tot, sq_loc)
-    endif
-
-  end subroutine cmp_rho_diag
-  ! PHASE2_DMO_DIAG END.
-  ! =========================================================================
-
 end module rho_device
 
