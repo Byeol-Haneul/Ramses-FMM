@@ -103,17 +103,13 @@ subroutine init_part(r,g,p)
 #ifdef OUTPUT_PARTICLE_POTENTIAL
   allocate(phip(1:r%npartmax))
 #endif
-  ! CIC/sort/split scratch.
-  allocate(cell_part_count(1:twotondim, 1:r%ngridmax+r%ncachemax))
-  allocate(cell_part_head (1:twotondim, 1:r%ngridmax+r%ncachemax))
-  allocate(cell_part_idx  (1:r%npartmax))
-  allocate(src_part       (1:r%npartmax))
-  ! Gather/scatter scratch (device-only).
+  ! Gather/scatter scratch (device-only). isp_swap doubles as the
+  ! gpu_cic_part source map; see gpu_part_state.cuf for the bit layout.
   allocate(xp_swap (1:r%npartmax))
   allocate(isp_swap(1:r%npartmax))
   allocate(idp_swap(1:r%npartmax))
   ! Prefix sum arrays
-  scan_size = max(r%npartmax, twotondim*r%ngridmax)
+  scan_size = max(r%npartmax, m%ngridmax + m%ncachemax)
   call ensure_scan_capacity_part(scan_size)
 #endif
 end subroutine init_part
