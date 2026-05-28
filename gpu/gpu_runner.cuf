@@ -2035,7 +2035,7 @@ contains
     ! Compute residual norm
     if (num_octs > 0) then
        call nvtxStartRange("GPU epot", color=1)!blue
-       call cmp_epot<<<num_blocks, num_threads>>>(f, head_idx, num_octs, epot_tot)
+       call cmp_epot<<<num_blocks, num_threads>>>(grid, f, head_idx, num_octs, epot_tot)
        epot_tot_host = epot_tot ! device to host
        call nvtxEndRange()
        epot = fact * epot_tot_host
