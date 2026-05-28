@@ -593,7 +593,7 @@ contains
   ! =========================================================================
 
   ! =========================================================================
-  attributes(grid_global) subroutine compute_and_update_swap_table(swap_local, swap_global, prefix_sum, head_idx, num_octs)
+  attributes(grid_global) subroutine compute_and_update_swap_table(swap_local, swap_global, prefix_sum, head_idx, num_octs, total_sum)
     use cooperative_groups
     implicit none
     integer(kind=4), device :: swap_local(*)
@@ -601,6 +601,7 @@ contains
     integer(kind=4), device :: prefix_sum(*)
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
+    integer(kind=4), optional, device :: total_sum
     type(grid_group) :: gg
     gg = this_grid()
 
@@ -608,6 +609,13 @@ contains
     call syncthreads(gg)
 
     call update_global_swap_table_impl(swap_global, swap_local, head_idx, num_octs)
+
+    ! no sync because prefix_sum is computed in an earlier kernel
+    if (present(total_sum)) then
+      if ((1 == blockIdx%x) .AND. (1 == threadIdx%x)) then
+        total_sum = prefix_sum(head_idx + num_octs - 1)
+      endif
+    endif
 
   end subroutine compute_and_update_swap_table
   ! =========================================================================
@@ -1310,7 +1318,7 @@ contains
   attributes(grid_global) subroutine make_cache_insert_ghost_octs(grid, flag1, &
        & uold, f, phi, phi_old, swap_local, prefix_sum, father, nbor, hash_key, &
        & hash_val, hash_size, ckey_max, key_off, box_ckey_min, box_ckey_max, &
-       & periodic, ngridmax, ifree_cache, num_octs, input_ind, head_idx, &
+       & periodic, ngridmax, ifree_cache, input_ind, head_idx, &
        & num_subgrids)
 
     use cooperative_groups
@@ -1333,15 +1341,19 @@ contains
     integer(kind=8), device :: hash_key(*)
     integer(kind=4), device :: hash_val(*)
     logical, device :: periodic(1:3)
-    integer(kind=4), device :: ifree_cache, num_octs
+    integer(kind=4), device :: ifree_cache
     integer(kind=4), intent(in), value :: hash_size
     integer(kind=4), intent(in), value :: ngridmax
     integer(kind=4), intent(in), value :: input_ind
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_subgrids
+    integer(kind=4) :: num_octs
 
     type(grid_group) :: gg
     gg = this_grid()
+
+    ! all threads need the value
+    num_octs = prefix_sum(head_idx + num_subgrids - 1)
 
     ! Compute cache swap table
     call compute_cache_swap_table_impl(swap_local, prefix_sum, head_idx, num_subgrids)
