@@ -104,8 +104,8 @@ subroutine init_part(r,g,p)
   allocate(phip(1:r%npartmax))
 #endif
   ! CIC/sort/split scratch.
-  allocate(cell_part_count(1:twotondim, 1:m%ngridmax+m%ncachemax))
-  allocate(cell_part_head (1:twotondim, 1:m%ngridmax+m%ncachemax))
+  allocate(cell_part_count(1:twotondim, 1:r%ngridmax+r%ncachemax))
+  allocate(cell_part_head (1:twotondim, 1:r%ngridmax+r%ncachemax))
   allocate(cell_part_idx  (1:r%npartmax))
   allocate(src_part       (1:r%npartmax))
   ! Gather/scatter scratch (device-only).

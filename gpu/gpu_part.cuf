@@ -125,10 +125,17 @@ attributes(global) subroutine bucket_part_kernel(xp, bucket_part_d, &
      ix(idim) = floor(xs * inv_2dx_loc)
   end do
 
+  nx  = int(ckey_max_d(ilevel), kind=8)
+  do idim = 1, ndim
+     if (ix(idim) < 0 .or. ix(idim) >= nx) then
+        bucket_part_d(ipart) = 0
+        return
+     endif
+  end do
+
   ix8 = int(ix(1), kind=8)
   iy8 = int(ix(2), kind=8)
   iz8 = int(ix(3), kind=8)
-  nx  = int(ckey_max_d(ilevel), kind=8)
   offset = key_off_d(ilevel)
   key = offset + ix8 + iy8*nx + iz8*nx*nx
 
@@ -142,6 +149,10 @@ attributes(global) subroutine bucket_part_kernel(xp, bucket_part_d, &
   do idim = 1, ndim
      x(idim) = (xp(ipart + (idim-1)*leading) + skip(idim)) * inv_dx_loc
      ii(idim) = int(x(idim) - 2*ix(idim))
+     if (ii(idim) < 0 .or. ii(idim) > 1) then
+        bucket_part_d(ipart) = 0
+        return
+     endif
   end do
   icell = 1
   do idim = 1, ndim
@@ -409,6 +420,7 @@ subroutine gpu_split_part(sim, ilevel)
   skip1 = sim%m%skip(1)
   skip2 = sim%m%skip(2)
   skip3 = sim%m%skip(3)
+  leading = sim%r%npartmax
 
   ! Partition into current level particles and finer levels particles
   call nvtxStartRange("gpu_split_part", color=4) ! purple
@@ -519,6 +531,7 @@ attributes(global) subroutine compute_hkey_part_kernel(xp, hkey_part_d, &
 
   integer :: thread_idx, block_idx, idx, ipart, idim
   integer(kind=4) :: ix(1:ndim)
+  integer(kind=4) :: nx
   real(kind=8) :: skip(1:3), xs
 
   thread_idx = threadIdx%x - 1
@@ -535,6 +548,8 @@ attributes(global) subroutine compute_hkey_part_kernel(xp, hkey_part_d, &
   do idim = 1, ndim
      xs = xp(ipart + (idim-1)*leading) + skip(idim)
      ix(idim) = floor(xs * dx_inv)
+     nx = 2**level
+     ix(idim) = max(0, min(nx - 1, ix(idim)))
   end do
 
   hkey_part_d(ipart) = hilbert_key(ix, level)
@@ -695,6 +710,15 @@ attributes(global) subroutine build_cell_part_count_kernel(xp_d, &
 
   father_ckey = host_ckey / 2
   ii = host_ckey - 2 * father_ckey
+  nx  = int(ckey_max_d(ilevel), kind=8)
+  do idim = 1, ndim
+     if (father_ckey(idim) < 0 .or. father_ckey(idim) >= nx .or. &
+          & ii(idim) < 0 .or. ii(idim) > 1) then
+        src_part_d(ipart) = 0
+        return
+     endif
+  end do
+
   icell = 1
   do idim = 1, ndim
      icell = icell + ii(idim) * (2**(idim-1))
@@ -703,7 +727,6 @@ attributes(global) subroutine build_cell_part_count_kernel(xp_d, &
   ix8 = int(father_ckey(1), kind=8)
   iy8 = int(father_ckey(2), kind=8)
   iz8 = int(father_ckey(3), kind=8)
-  nx  = int(ckey_max_d(ilevel), kind=8)
   offset = key_off_d(ilevel)
   key = offset + ix8 + iy8*nx + iz8*nx*nx
   igrid = hash_get(hash_key_d, hash_val_d, hash_size_d, key)
@@ -1187,7 +1210,6 @@ subroutine gpu_cic_part(sim, ilevel, rtype)
   call nvtxStartRange("gpu_cic_part", color=4) ! purple
   call compute_cell_part_head_kernel<<<num_blocks, num_threads>>>(cell_part_count, &
        & cell_part_head, prefix_sum, head_grids, num_grids)
-  call GPU_Error_Check("gpu/gpu_part.cuf", 0)
   call nvtxEndRange()
 
   num_threads = 128
