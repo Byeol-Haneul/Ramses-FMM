@@ -798,17 +798,18 @@ attributes(global) subroutine gpu_newdt_part_kernel(vp_d, mp_d, &
      & vmax_int_d, ekin_d, head_idx, num_parts, leading)
   integer(kind=4), intent(in), value :: head_idx, num_parts, leading
   real(kind=dp),   device :: vp_d(*), mp_d(*)
-  ! vmax is reduced as the int64 bit pattern of a non-negative double so we
-  ! can use atomiccas (natively supported on every target arch). atomicmax
-  ! on real(8) only has a native hardware path on sm_90+; on sm_80 it goes
-  ! through a compiler-emulated path that has, in practice, produced
-  ! illegal-memory-access errors at sync time.
+  ! vmax is reduced as the int64 bit pattern of a non-negative double:
+  ! for v >= 0 the IEEE-754 bit pattern orders the same as the double, and
+  ! atomicmax on int64 is a single native instruction on every target
+  ! arch we care about (sm_80, sm_90). atomicmax on real(8) is only
+  ! native on sm_90; on sm_80 it goes through a compiler-emulated path
+  ! that, in practice, produced illegal-memory-access errors at sync time.
   integer(kind=8), device :: vmax_int_d
   real(kind=8),    device :: ekin_d
 
   integer :: thread_idx, block_idx, ipart, idim, info
+  integer(kind=8) :: info8
   real(kind=8) :: vmax_local, ekin_local, v, av, mi
-  integer(kind=8) :: val_int, old_int, assumed_int
 
   thread_idx = threadIdx%x - 1
   block_idx  = blockIdx%x  - 1
@@ -836,16 +837,10 @@ attributes(global) subroutine gpu_newdt_part_kernel(vp_d, mp_d, &
      if (ekin_local /= 0d0) then
         info = atomicadd(ekin_d, ekin_local)
      endif
-     ! vmax_local >= 0 so its IEEE-754 bit pattern compares as an integer
-     ! in the same order as the double. atomiccas is supported natively.
-     val_int = transfer(vmax_local, 0_8)
-     old_int = vmax_int_d
-     do
-        if (val_int <= old_int) exit
-        assumed_int = old_int
-        old_int = atomiccas(vmax_int_d, assumed_int, val_int)
-        if (old_int == assumed_int) exit
-     end do
+     ! vmax_local >= 0 so its IEEE-754 bit pattern compares as int64 in
+     ! the same order as the double. int64 atomicmax is a single native
+     ! instruction on every target arch we care about.
+     info8 = atomicmax(vmax_int_d, transfer(vmax_local, 0_8))
   endif
 
 end subroutine gpu_newdt_part_kernel
