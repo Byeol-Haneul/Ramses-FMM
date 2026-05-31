@@ -88,6 +88,21 @@ end subroutine m_timer
 !################################################################
 !################################################################
 !################################################################
+subroutine m_timer_add(label,elapsed)
+  use timer_module
+  implicit none
+  character(len=*) label
+  real(kind=8), intent(in) :: elapsed
+  integer :: active_timer
+  active_timer = itimer
+  call findit(label)
+  time(itimer) = time(itimer) + elapsed
+  itimer = active_timer
+end subroutine m_timer_add
+!################################################################
+!################################################################
+!################################################################
+!################################################################
 subroutine m_output_timer(write_file,filename)
   use amr_parameters, only: flen
   use mdl_module
@@ -108,7 +123,10 @@ subroutine m_output_timer(write_file,filename)
   write (ilun,'(/a,i7,a)') '     seconds         %    STEP'
   total = 1e-9
   do itimer = 1,ntimer
-     total = total + time(itimer)
+     ! FMM/MG phase labels are diagnostic sub-timers nested inside poisson.
+     if (len_trim(labels(itimer)) < 4 .or. &
+          (labels(itimer)(1:4) /= 'fmm ' .and. labels(itimer)(1:3) /= 'mg ')) &
+          total = total + time(itimer)
   end do
   do itimer = 1,ntimer
      if (time(itimer)/total >= 0.001) write (ilun,'(f12.3,4x,f6.1,4x,a24)') &
@@ -125,10 +143,6 @@ end subroutine m_output_timer
 
 
   
-
-
-
-
 
 
 

@@ -55,6 +55,7 @@ module gpu_runner
   integer(kind=4), device, allocatable, dimension(:) :: source_grid_fmm
   integer(kind=4), device, allocatable, dimension(:,:) :: nbor_fmm
   real(kind=dp), device, allocatable, dimension(:,:,:) :: multipole_fmm, taylor_fmm
+  real(kind=dp), allocatable, dimension(:,:,:) :: multipole_fmm_root_host
   integer(kind=8), device, allocatable, dimension(:) :: hash_key_fmm
   integer(kind=4), device, allocatable, dimension(:) :: hash_val_fmm
   integer(kind=4) :: fmm_grid_capacity = 0
@@ -2578,7 +2579,8 @@ contains
     m_fmm%ifree = m_fmm%noct_used + 1
 
     call gpu_build_fmm_topology(m_fmm, slot, .false.)
-    call gpu_download_fmm_tree_slot(m_fmm, slot)
+    ! Keep standard FMM trees device-resident.  The GPU kernels below only
+    ! need CPU scalar metadata (head/tail/noct), not a full host mirror.
 
   end subroutine gpu_build_fmm_level
 
@@ -2869,7 +2871,7 @@ contains
   end subroutine gpu_refresh_amr_fmm_grid_level
 
   !> @brief
-  !> Copy device FMM multipole/Taylor arrays back to a CPU level tree.
+  !> Copy device FMM multipoles back to the CPU level tree.
   !>
   subroutine gpu_download_fmm_tree(sim, ilevel)
     use nvtx
@@ -2895,11 +2897,56 @@ contains
 
     call nvtxStartRange("GPU download_fmm_tree", color=5)!red
     m_fmm%multipole = multipole_fmm(:,:,grid_start:grid_stop)
-    m_fmm%taylor_coeff = taylor_fmm(:,:,grid_start:grid_stop)
     call nvtxEndRange()
 #endif
 
   end subroutine gpu_download_fmm_tree
+
+  !> @brief
+  !> Copy only the top FMM multipoles needed by update_fmm_local_multipole_level.
+  !>
+  subroutine gpu_download_fmm_global_multipole_source(sim, ilevel)
+    use nvtx
+    use amr_commons, only: mesh_t
+    use ramses_commons, only: ramses_t
+    implicit none
+    type(ramses_t), intent(inout) :: sim
+    integer, intent(in) :: ilevel
+
+#ifdef FMM
+    type(mesh_t), pointer :: m_fmm
+    integer(kind=4) :: tree_slot, grid_offset, flev, num_octs
+    integer(kind=4) :: host_start, host_stop, device_start, device_stop
+
+    if (.not. associated(sim%m_fmm_list)) return
+    if (.not. allocated(multipole_fmm)) return
+
+    m_fmm => sim%m_fmm_list(ilevel)
+    flev = sim%r%bound_levelmin
+    if (m_fmm%tail(flev) < m_fmm%head(flev)) return
+
+    call gpu_select_fmm_tree(sim, ilevel, tree_slot)
+    grid_offset = fmm_grid_offset(tree_slot)
+    host_start = m_fmm%head(flev)
+    host_stop = m_fmm%tail(flev)
+    num_octs = host_stop - host_start + 1
+    device_start = grid_offset + host_start
+    device_stop = grid_offset + host_stop
+
+    if (allocated(multipole_fmm_root_host)) then
+       if (size(multipole_fmm_root_host, 3) < num_octs) deallocate(multipole_fmm_root_host)
+    end if
+    if (.not. allocated(multipole_fmm_root_host)) then
+       allocate(multipole_fmm_root_host(1:twotondim, 1:multipole_size, 1:num_octs))
+    end if
+
+    call nvtxStartRange("GPU download_fmm_global_multipole_source", color=5)!red
+    multipole_fmm_root_host(:,:,1:num_octs) = multipole_fmm(:,:,device_start:device_stop)
+    m_fmm%multipole(:,:,host_start:host_stop) = multipole_fmm_root_host(:,:,1:num_octs)
+    call nvtxEndRange()
+#endif
+
+  end subroutine gpu_download_fmm_global_multipole_source
 
   !> @brief
   !> Reset multipoles and Taylor coefficients in one level of a staged FMM tree.
@@ -2932,7 +2979,6 @@ contains
        call nvtxEndRange()
     end if
 
-    call gpu_download_fmm_tree(sim, ilevel)
 #endif
 
   end subroutine gpu_reset_fmm_multipoles_taylor
@@ -2956,7 +3002,6 @@ contains
     call gpu_select_fmm_tree(sim, ilevel, tree_slot)
 
     call nvtxStartRange("GPU upload_fmm_amr_sources", color=5)!red
-    grid = sim%m%grid
     rho = sim%m%rho
     call nvtxEndRange()
     call gpu_refresh_amr_fmm_father_level(sim, ilevel, tree_slot)
@@ -2984,7 +3029,6 @@ contains
        call nvtxEndRange()
     end if
 
-    call gpu_download_fmm_tree(sim, ilevel)
 #endif
 
   end subroutine gpu_fmm_multipole_amr2fmm
@@ -3018,7 +3062,6 @@ contains
        call nvtxEndRange()
     end if
 
-    call gpu_download_fmm_tree(sim, ilevel)
 #endif
 
   end subroutine gpu_fmm_multipole_fmm2fmm
@@ -3065,7 +3108,6 @@ contains
        call nvtxEndRange()
     end if
 
-    call gpu_download_fmm_tree(sim, ilevel)
 #endif
 
   end subroutine gpu_fmm_multipole_shift_downward
@@ -3131,7 +3173,6 @@ contains
        end if
     end if
 
-    call gpu_download_fmm_tree(sim, ilev)
 #endif
 
   end subroutine gpu_fmm_downward
@@ -3158,11 +3199,6 @@ contains
     call gpu_assert_fmm_to_amr_one(sim)
     call gpu_select_fmm_interaction_tree(sim, jlev, use_merged, tree_slot)
 
-    call nvtxStartRange("GPU upload_fmm_amr_phi", color=5)!red
-    grid = sim%m%grid
-    phi = sim%m%phi
-    call nvtxEndRange()
-
     head_idx = sim%m%head(ilev)
     num_octs = sim%m%noct(ilev)
     dx_loc = real(sim%r%boxlen / 2.0D0**ilev, kind=dp)
@@ -3182,9 +3218,6 @@ contains
        call nvtxEndRange()
     end if
 
-    call nvtxStartRange("GPU download_fmm_amr_phi", color=5)!red
-    sim%m%phi = phi
-    call nvtxEndRange()
 #endif
 
   end subroutine gpu_fmm_amr_intermediate
@@ -3206,9 +3239,7 @@ contains
 #ifdef FMM
     call gpu_assert_fmm_to_amr_one(sim)
     call nvtxStartRange("GPU upload_fmm_amr_direct", color=5)!red
-    grid = sim%m%grid
     rho = sim%m%rho
-    phi = sim%m%phi
     call nvtxEndRange()
 
     call gpu_reset_hash(sim)
@@ -3255,11 +3286,6 @@ contains
     call gpu_assert_fmm_to_amr_one(sim)
     call gpu_select_fmm_interaction_tree(sim, jlev, use_merged, tree_slot)
 
-    call nvtxStartRange("GPU upload_fmm_amr_direct_taylor", color=5)!red
-    grid = sim%m%grid
-    phi = sim%m%phi
-    call nvtxEndRange()
-
     head_idx = sim%m%head(ilev)
     num_octs = sim%m%noct(ilev)
     dx_loc = real(sim%r%boxlen / 2.0D0**ilev, kind=dp)
@@ -3300,9 +3326,7 @@ contains
 #ifdef FMM
     call gpu_assert_fmm_to_amr_one(sim)
     call nvtxStartRange("GPU upload_fmm_combined_direct", color=5)!red
-    grid = sim%m%grid
     rho = sim%m%rho
-    phi = sim%m%phi
     call nvtxEndRange()
 
     call gpu_reset_hash(sim)

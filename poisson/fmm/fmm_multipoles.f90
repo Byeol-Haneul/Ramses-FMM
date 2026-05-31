@@ -1,7 +1,8 @@
 module fmm_multipoles
 #if defined(_CUDA) && defined(WITHOUTMPI)
   use gpu_runner, only: gpu_reset_fmm_multipoles_taylor, gpu_fmm_multipole_amr2fmm, &
-       & gpu_fmm_multipole_fmm2fmm, gpu_fmm_multipole_shift_downward
+       & gpu_fmm_multipole_fmm2fmm, gpu_fmm_multipole_shift_downward, &
+       & gpu_download_fmm_global_multipole_source
 #endif
   implicit none
 contains
@@ -26,6 +27,9 @@ subroutine m_fmm_multipoles(pst,ilevel)
   !------------------------------------------------------------------
   type(fmm_level_t)::fmm_levels
   integer::i,input_size
+  real(kind=8) :: t_fmm_mp
+  real(kind=8), external :: wallclock
+  external :: m_timer_add
   associate(r=>pst%s%r)
 
   if(.not. r%poisson)return
@@ -40,25 +44,38 @@ subroutine m_fmm_multipoles(pst,ilevel)
   input_size = storage_size(fmm_levels)/32
 
   ! Initialize both AMR and FMM grids. 
+  t_fmm_mp = wallclock()
   do i = r%bound_levelmin, r%nlevelmax, 1
     fmm_levels%flev=i
     call r_reset_multipoles_taylor(pst, fmm_levels, input_size)
   end do
+  call m_timer_add('fmm mp reset', wallclock() - t_fmm_mp)
 
   ! Add multipoles from AMR grids
   if(r%verbose) print *, "[P2M] LEVEL: ", ilevel
+  t_fmm_mp = wallclock()
   call r_fmm_multipole_amr2fmm(pst, ilevel, 1)
+  call m_timer_add('fmm mp p2m', wallclock() - t_fmm_mp)
   if(r%verbose) print *, "      <AMR->FMM> : ", ilevel
 
   if(r%verbose) print *, "[M2M] LEVEL: ", ilevel
   ! Add multipoles to FMM grids. 
+  t_fmm_mp = wallclock()
   do i=ilevel-2,r%bound_levelmin,-1
      fmm_levels%flev=i
      if(r%verbose)write(*,'("     <ACCUMULATION> TREE for AMR LEVEL: ",I2,", TREE LEVEL: ",I2)')ilevel, i
      call r_fmm_multipole_fmm2fmm(pst,fmm_levels,input_size)
   end do
+  call m_timer_add('fmm mp m2m', wallclock() - t_fmm_mp)
 
+#if defined(_CUDA) && defined(WITHOUTMPI)
+  t_fmm_mp = wallclock()
+  call gpu_download_fmm_global_multipole_source(pst%s, ilevel)
+  call m_timer_add('fmm mp sync', wallclock() - t_fmm_mp)
+#endif
+  t_fmm_mp = wallclock()
   call update_fmm_local_multipole_level(pst, ilevel)
+  call m_timer_add('fmm mp local', wallclock() - t_fmm_mp)
 
   end associate
 
