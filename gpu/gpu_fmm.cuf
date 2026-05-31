@@ -546,6 +546,40 @@ contains
   ! =========================================================================
 
   ! =========================================================================
+  attributes(global) subroutine fmm_merge_multipoles_to_unique(grid_fmm, multipole_fmm, hash_key_merged, &
+       & hash_val_merged, hash_size_merged, ckey_max, key_off, source_head, num_source, flev)
+    type(oct), device :: grid_fmm(*)
+    real(kind=dp), device :: multipole_fmm(1:twotondim,1:multipole_size,*)
+    integer(kind=8), device :: hash_key_merged(*)
+    integer(kind=4), device :: hash_val_merged(*)
+    integer(kind=4), device :: ckey_max(*)
+    integer(kind=8), device :: key_off(*)
+    integer(kind=4), value :: hash_size_merged, source_head, num_source, flev
+
+    integer(kind=4) :: thread_idx, source_idx, target_idx, source_ckey(1:3)
+    integer :: icell, q
+    real(kind=dp) :: info
+
+    thread_idx = threadIdx%x - 1 + (blockIdx%x - 1) * blockDim%x
+    if (thread_idx >= num_source) return
+    source_idx = source_head + thread_idx
+
+    source_ckey = 0
+    source_ckey(1:ndim) = grid_fmm(source_idx)%ckey(1:ndim)
+    target_idx = fmm_lookup_grid_by_ckey(source_ckey, flev, hash_key_merged, hash_val_merged, &
+         & hash_size_merged, ckey_max, key_off)
+    if (target_idx <= 0) return
+
+    do icell = 1, twotondim
+       do q = 1, multipole_size
+          info = atomicadd(multipole_fmm(icell, q, target_idx), multipole_fmm(icell, q, source_idx))
+       end do
+    end do
+
+  end subroutine fmm_merge_multipoles_to_unique
+  ! =========================================================================
+
+  ! =========================================================================
   attributes(device) function fmm_lookup_grid_by_ckey(ckey, ilevel, hash_key, hash_val, hash_size, &
        & ckey_max, key_off) result(igrid)
     implicit none

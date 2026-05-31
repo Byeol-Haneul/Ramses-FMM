@@ -2683,9 +2683,52 @@ contains
     m_merged%noct_used = m_merged%ifree - 1
 
     call gpu_build_fmm_topology(m_merged, slot, .true.)
-    call gpu_download_fmm_tree_slot(m_merged, slot)
 
   end subroutine gpu_build_fmm_merged
+
+  !> @brief
+  !> Accumulate standard FMM multipoles into the resident merged FMM tree.
+  !>
+  subroutine gpu_fmm_merge_multipoles(sim, active_levelmin)
+    use nvtx
+    use fmm_device, only: fmm_merge_multipoles_to_unique
+    use ramses_commons, only: ramses_t
+    implicit none
+    type(ramses_t), intent(inout) :: sim
+    integer, intent(in) :: active_levelmin
+
+#ifdef FMM
+    integer(kind=4) :: slot, hash_offset, hash_capacity, hash_start
+    integer(kind=4) :: ilevel, flev, source_head, num_source
+    integer(kind=4) :: num_threads, num_blocks
+
+    if (.not. associated(sim%m_fmm_merged)) return
+    call gpu_ensure_fmm_capacity(sim)
+
+    slot = fmm_merged_slot
+    hash_offset = fmm_hash_offset(slot)
+    hash_capacity = fmm_hash_capacity_slot(slot)
+    hash_start = hash_offset + 1
+    num_threads = 128
+
+    call nvtxStartRange("GPU fmm_merge_multipoles", color=1)!blue
+    do ilevel = active_levelmin, sim%r%nlevelmax
+       do flev = sim%r%bound_levelmin, ilevel - 1
+          if (sim%m_fmm_list(ilevel)%tail(flev) < sim%m_fmm_list(ilevel)%head(flev)) cycle
+          source_head = fmm_grid_offset(ilevel) + sim%m_fmm_list(ilevel)%head(flev)
+          num_source = sim%m_fmm_list(ilevel)%noct(flev)
+          if (num_source <= 0) cycle
+
+          num_blocks = (num_source + num_threads - 1) / num_threads
+          call fmm_merge_multipoles_to_unique<<<num_blocks, num_threads>>>(grid_fmm, multipole_fmm, &
+               & hash_key_fmm(hash_start), hash_val_fmm(hash_start), hash_capacity, ckey_max, key_off, &
+               & source_head, num_source, flev)
+       end do
+    end do
+    call nvtxEndRange()
+#endif
+
+  end subroutine gpu_fmm_merge_multipoles
 
   !> @brief
   !> GPU entry point matching CPU build_fmm/build_fmm_merged.
@@ -2760,7 +2803,6 @@ contains
     call gpu_ensure_fmm_capacity(sim)
     if (use_merged .and. associated(sim%m_fmm_merged)) then
        slot = fmm_merged_slot
-       call gpu_upload_fmm_tree_slot(sim%m_fmm_merged, slot)
     else
        slot = int(jlev, kind=4)
     end if

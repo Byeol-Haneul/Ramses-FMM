@@ -2,7 +2,7 @@ module fmm_multipoles
 #if defined(_CUDA) && defined(WITHOUTMPI)
   use gpu_runner, only: gpu_reset_fmm_multipoles_taylor, gpu_fmm_multipole_amr2fmm, &
        & gpu_fmm_multipole_fmm2fmm, gpu_fmm_multipole_shift_downward, &
-       & gpu_download_fmm_global_multipole_source
+       & gpu_download_fmm_global_multipole_source, gpu_fmm_merge_multipoles
 #endif
   implicit none
 contains
@@ -467,7 +467,11 @@ recursive subroutine r_fmm_multipole_fmm2fmm(pst,fmm_levels,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
      if (fmm_levels%mode == FMM_MULTIPOLE_MERGED) then
+#if defined(_CUDA) && defined(WITHOUTMPI)
+        call gpu_fmm_merge_multipoles(pst%s,fmm_levels%ilev)
+#else
         call fmm_merge_multipoles_all(pst%s,fmm_levels%ilev)
+#endif
      else
 #if defined(_CUDA) && defined(WITHOUTMPI)
         call gpu_fmm_multipole_fmm2fmm(pst%s,fmm_levels%ilev,fmm_levels%flev)
