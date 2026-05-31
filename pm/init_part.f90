@@ -109,7 +109,7 @@ subroutine init_part(r,g,p)
   allocate(isp_swap(1:r%npartmax))
   allocate(idp_swap(1:r%npartmax))
   ! Prefix sum arrays
-  scan_size = max(r%npartmax, m%ngridmax + m%ncachemax)
+  scan_size = max(r%npartmax, r%ngridmax + r%ncachemax)
   call ensure_scan_capacity_part(scan_size)
 #endif
 end subroutine init_part

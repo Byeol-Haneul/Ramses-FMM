@@ -119,7 +119,7 @@ subroutine init_amr(r,g,m,type)
   endif
   if(type=='fmm')then
      m%ngridmax=r%ngridmax/7
-     m%ngridmax=MAX(r%ncachemax/7,10000)
+     m%ncachemax=MAX(r%ncachemax/7,10000)
   endif
   m%ncachemax=r%ncachemax
 

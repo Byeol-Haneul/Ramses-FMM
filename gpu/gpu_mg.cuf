@@ -1,5 +1,5 @@
 module mg_device
-  use amr_parameters, only: dp, ndim, twondim, twotondim, threetondim, nhilbert
+  use amr_parameters, only: dp, ndim, twondim, twotondim, threetondim, nhilbert, multipole_size
   use hydro_parameters, only: nvar
   use oct_commons, only: oct
   use gpu_utils, only: nsubgrid, nsubgridsq, nsubgridtondim, nsubgridp2, nsubgridp2sq, subgridsize
@@ -93,6 +93,299 @@ contains
   include 'gpu_nbor.cuf'
 
   ! =========================================================================
+  attributes(device) function lookup_grid_by_ckey(ckey, ilevel, hash_key, hash_val, hash_size, &
+       & ckey_max, key_off) result(igrid)
+    integer(kind=4), intent(in) :: ckey(1:3)
+    integer(kind=4), value :: ilevel, hash_size
+    integer(kind=8), device :: hash_key(*)
+    integer(kind=4), device :: hash_val(*)
+    integer(kind=4), device :: ckey_max(*)
+    integer(kind=8), device :: key_off(*)
+    integer(kind=4) :: igrid
+    integer(kind=8) :: ix, iy, iz, nx, key
+
+    ix = int(ckey(1), kind=8)
+    iy = 0_8
+    iz = 0_8
+#if NDIM>1
+    iy = int(ckey(2), kind=8)
+#endif
+#if NDIM>2
+    iz = int(ckey(3), kind=8)
+#endif
+    nx = int(ckey_max(ilevel), kind=8)
+    key = key_off(ilevel) + ix + iy * nx + iz * nx * nx
+    igrid = hash_get(hash_key, hash_val, hash_size, key)
+
+  end function lookup_grid_by_ckey
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(device) function phiana_multipole_cell(multipole_q, ckey, icell, ilevel, dx, skip) result(phi_b)
+    real(kind=8), device :: multipole_q(1:multipole_size)
+    integer(kind=4), intent(in) :: ckey(1:3)
+    integer(kind=4), value :: icell, ilevel
+    real(kind=8), value :: dx
+    real(kind=8), intent(in) :: skip(1:3)
+    real(kind=dp) :: phi_b
+
+    integer :: idim, j, nstride
+    real(kind=dp) :: mass, rr, rx, ry, rz, rr2, rr5, trace_c, scalar_q
+    real(kind=dp) :: center(1:3), x(1:3), rr_vec(1:3), q_central(1:3,1:3)
+
+    phi_b = 0.0_dp
+    if (multipole_q(1) <= 0.0_dp) return
+
+    mass = multipole_q(1)
+    center = 0.0_dp
+    do idim = 1, ndim
+       center(idim) = multipole_q(1 + idim) / mass
+       nstride = 2**(idim-1)
+       x(idim) = (2.0_dp * real(ckey(idim), kind=dp) + &
+            & real(mod((icell - 1) / nstride, 2), kind=dp) + 0.5_dp) * dx - skip(idim)
+    end do
+
+    rx = x(1) - center(1)
+    ry = 0.0_dp
+    rz = 0.0_dp
+#if NDIM>1
+    ry = x(2) - center(2)
+#endif
+#if NDIM>2
+    rz = x(3) - center(3)
+#endif
+    rr = max(sqrt(rx*rx + ry*ry + rz*rz), real(dx, kind=dp))
+
+#if NDIM==1
+    phi_b = mass * 4.0_dp * acos(-1.0_dp) / 2.0_dp * rr
+#endif
+#if NDIM==2
+    phi_b = mass * 2.0_dp * log(rr)
+#endif
+#if NDIM==3
+#ifdef FMM
+    q_central = 0.0_dp
+    q_central(1,1) = multipole_q(5)
+    q_central(1,2) = multipole_q(6)
+    q_central(2,1) = q_central(1,2)
+    q_central(1,3) = multipole_q(7)
+    q_central(3,1) = q_central(1,3)
+    q_central(2,2) = multipole_q(8)
+    q_central(2,3) = multipole_q(9)
+    q_central(3,2) = q_central(2,3)
+    q_central(3,3) = multipole_q(10)
+    trace_c = q_central(1,1) + q_central(2,2) + q_central(3,3)
+    rr_vec(1) = rx
+    rr_vec(2) = ry
+    rr_vec(3) = rz
+    rr2 = rr * rr
+    rr5 = rr2 * rr2 * rr
+    scalar_q = 0.0_dp
+    do idim = 1, 3
+       do j = 1, 3
+          scalar_q = scalar_q + rr_vec(idim) * q_central(idim,j) * rr_vec(j)
+       end do
+    end do
+    phi_b = -mass / rr - 0.5_dp * (3.0_dp * scalar_q - trace_c * rr2) / rr5
+#else
+    phi_b = -mass / rr
+#endif
+#endif
+
+  end function phiana_multipole_cell
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(device) function interpol_phi_from_parent(grid, phi, phi_old, hash_key, hash_val, hash_size, &
+       & ckey_max, key_off, box_ckey_min, box_ckey_max, periodic_d, multipole_q, ckey_child, icell_child, &
+       & ilevel, levelmin, tfrac, dx, skip, ngridmax) result(phi_int)
+    type(oct), device :: grid(*)
+    real(kind=dp), device :: phi(1:twotondim,*)
+    real(kind=dp), device :: phi_old(1:twotondim,*)
+    integer(kind=8), device :: hash_key(*)
+    integer(kind=4), device :: hash_val(*)
+    integer(kind=4), device :: ckey_max(*)
+    integer(kind=8), device :: key_off(*)
+    integer(kind=4), device :: box_ckey_min(1:3,*), box_ckey_max(1:3,*)
+    logical, device :: periodic_d(1:3)
+    real(kind=8), device :: multipole_q(1:multipole_size)
+    integer(kind=4), intent(in) :: ckey_child(1:3)
+    integer(kind=4), value :: icell_child, ilevel, levelmin, hash_size, ngridmax
+    real(kind=8), value :: tfrac, dx
+    real(kind=8), intent(in) :: skip(1:3)
+    real(kind=dp) :: phi_int
+
+    integer :: i1, j1, k1, ind_average, ind_parent, idim, inbor, ind_grid
+    integer(kind=4) :: parent_level, parent_grid_ckey(1:3)
+    integer(kind=4) :: hash_father(1:3), hash_nbor(1:3), hash_ref(1:3), ii(1:3)
+    integer(kind=4) :: child_ckey(1:3), igrid_parent(1:twotondim)
+    integer(kind=4) :: igrid_nbor(1:threetondim), ind_nbor(1:threetondim)
+    integer, dimension(1:3,1:8) :: shift_oct, start_oct
+    real(kind=dp) :: add
+    logical :: child_in_domain, in_domain
+
+    shift_oct = reshape((/ -1,-1,-1, +1,-1,-1, -1,+1,-1, +1,+1,-1, &
+         &                -1,-1,+1, +1,-1,+1, -1,+1,+1, +1,+1,+1 /), (/3,8/))
+    start_oct = reshape((/  1, 1, 1,  0, 1, 1,  1, 0, 1,  0, 0, 1, &
+         &                 1, 1, 0,  0, 1, 0,  1, 0, 0,  0, 0, 0 /), (/3,8/))
+
+    phi_int = 0.0_dp
+    child_ckey = ckey_child
+    child_in_domain = .true.
+    do idim = 1, ndim
+       if (periodic_d(idim)) then
+          if (child_ckey(idim) < box_ckey_min(idim, ilevel)) &
+               & child_ckey(idim) = box_ckey_max(idim, ilevel) - 1
+          if (child_ckey(idim) >= box_ckey_max(idim, ilevel)) &
+               & child_ckey(idim) = box_ckey_min(idim, ilevel)
+       endif
+       if (child_ckey(idim) < box_ckey_min(idim, ilevel) .or. &
+           child_ckey(idim) >= box_ckey_max(idim, ilevel)) child_in_domain = .false.
+    end do
+
+    if (.not. child_in_domain) then
+       phi_int = phiana_multipole_cell(multipole_q, ckey_child, icell_child, ilevel, dx, skip)
+       return
+    end if
+
+    parent_level = ilevel - 1
+    if (parent_level < levelmin) then
+       phi_int = phiana_multipole_cell(multipole_q, child_ckey, icell_child, ilevel, dx, skip)
+       return
+    end if
+
+    hash_father(1:ndim) = child_ckey(1:ndim) / 2
+    ii(1:ndim) = child_ckey(1:ndim) - 2 * hash_father(1:ndim)
+    ind_parent = 1
+    do idim = 1, ndim
+       ind_parent = ind_parent + 2**(idim-1) * ii(idim)
+    end do
+
+    igrid_parent = 0
+    hash_ref = 0
+    do k1 = 0, 1
+       hash_nbor(3) = hash_father(3) + k1 * shift_oct(3, ind_parent)
+       ii(3) = start_oct(3, ind_parent) + k1 * shift_oct(3, ind_parent)
+       do j1 = 0, 1
+          hash_nbor(2) = hash_father(2) + j1 * shift_oct(2, ind_parent)
+          ii(2) = start_oct(2, ind_parent) + j1 * shift_oct(2, ind_parent)
+          do i1 = 0, 1
+             hash_nbor(1) = hash_father(1) + i1 * shift_oct(1, ind_parent)
+             ii(1) = start_oct(1, ind_parent) + i1 * shift_oct(1, ind_parent)
+
+             inbor = 1
+             do idim = 1, ndim
+                inbor = inbor + 2**(idim-1) * ii(idim)
+             end do
+
+             in_domain = .true.
+             do idim = 1, ndim
+                if (periodic_d(idim)) then
+                   if (hash_nbor(idim) < box_ckey_min(idim, parent_level)) &
+                        & hash_nbor(idim) = box_ckey_max(idim, parent_level) - 1
+                   if (hash_nbor(idim) >= box_ckey_max(idim, parent_level)) &
+                        & hash_nbor(idim) = box_ckey_min(idim, parent_level)
+                endif
+                if (hash_nbor(idim) < box_ckey_min(idim, parent_level) .or. &
+                    hash_nbor(idim) >= box_ckey_max(idim, parent_level)) in_domain = .false.
+             end do
+
+             if (inbor == 1) hash_ref(1:ndim) = hash_nbor(1:ndim)
+             if (in_domain) then
+                igrid_parent(inbor) = lookup_grid_by_ckey(hash_nbor, parent_level, hash_key, hash_val, hash_size, &
+                     & ckey_max, key_off)
+             else
+                igrid_parent(inbor) = 0
+             endif
+          end do
+       end do
+    end do
+
+    inbor = 0
+    do k1 = -1, 1
+       do j1 = -1, 1
+          do i1 = -1, 1
+             inbor = inbor + 1
+             hash_nbor = child_ckey
+             hash_nbor(1) = hash_nbor(1) + i1
+#if NDIM>1
+             hash_nbor(2) = hash_nbor(2) + j1
+#endif
+#if NDIM>2
+             hash_nbor(3) = hash_nbor(3) + k1
+#endif
+
+             do idim = 1, ndim
+                if (periodic_d(idim)) then
+                   if (hash_nbor(idim) < box_ckey_min(idim, ilevel)) &
+                        & hash_nbor(idim) = box_ckey_max(idim, ilevel) - 1
+                   if (hash_nbor(idim) >= box_ckey_max(idim, ilevel)) &
+                        & hash_nbor(idim) = box_ckey_min(idim, ilevel)
+                endif
+             end do
+
+             parent_grid_ckey(1:ndim) = hash_nbor(1:ndim) / 2
+             ii(1:ndim) = hash_nbor(1:ndim) - 2 * parent_grid_ckey(1:ndim)
+             ind_nbor(inbor) = 1
+             do idim = 1, ndim
+                ind_nbor(inbor) = ind_nbor(inbor) + 2**(idim-1) * ii(idim)
+             end do
+
+             ii(1:ndim) = parent_grid_ckey(1:ndim) - hash_ref(1:ndim)
+             do idim = 1, ndim
+                if (periodic_d(idim)) then
+                   if (ii(idim) < 0) ii(idim) = ii(idim) + box_ckey_max(idim,parent_level) - box_ckey_min(idim,parent_level)
+                endif
+             end do
+             ind_grid = 1
+             do idim = 1, ndim
+                ind_grid = ind_grid + 2**(idim-1) * ii(idim)
+             end do
+
+             if (ind_grid >= 1 .and. ind_grid <= twotondim) then
+                igrid_nbor(inbor) = igrid_parent(ind_grid)
+             else
+                igrid_nbor(inbor) = 0
+             endif
+          end do
+       end do
+    end do
+
+    do ind_average = 1, twotondim
+       ind_parent = ccc(ind_average, icell_child)
+       parent_grid_ckey(1:ndim) = child_ckey(1:ndim)
+       parent_grid_ckey(1) = parent_grid_ckey(1) + mod(ind_parent - 1, 3) - 1
+#if NDIM>1
+       parent_grid_ckey(2) = parent_grid_ckey(2) + mod((ind_parent - 1) / 3, 3) - 1
+#endif
+#if NDIM>2
+       parent_grid_ckey(3) = parent_grid_ckey(3) + mod((ind_parent - 1) / 9, 3) - 1
+#endif
+       do idim = 1, ndim
+          if (periodic_d(idim)) then
+             if (parent_grid_ckey(idim) < box_ckey_min(idim, ilevel)) &
+                  & parent_grid_ckey(idim) = box_ckey_max(idim, ilevel) - 1
+             if (parent_grid_ckey(idim) >= box_ckey_max(idim, ilevel)) &
+                  & parent_grid_ckey(idim) = box_ckey_min(idim, ilevel)
+          endif
+       end do
+       parent_grid_ckey(1:ndim) = parent_grid_ckey(1:ndim) / 2
+
+       if (igrid_nbor(ind_parent) > 0 .and. igrid_nbor(ind_parent) <= ngridmax) then
+          add = phi(ind_nbor(ind_parent), igrid_nbor(ind_parent)) + &
+               & (phi(ind_nbor(ind_parent), igrid_nbor(ind_parent)) - &
+               &  phi_old(ind_nbor(ind_parent), igrid_nbor(ind_parent))) * tfrac
+       else
+          add = phiana_multipole_cell(multipole_q, parent_grid_ckey, ind_nbor(ind_parent), parent_level, &
+               & 2.0d0 * dx, skip)
+       end if
+       phi_int = phi_int + bbb(ind_average) * add
+    end do
+
+  end function interpol_phi_from_parent
+  ! =========================================================================
+
+  ! =========================================================================
   attributes(global) subroutine save_phi_old(phi_old, phi, head_idx, num_octs)
     real(kind=dp), device :: phi_old(1:twotondim,*)
     real(kind=dp), device :: phi(1:twotondim,*)
@@ -144,6 +437,40 @@ contains
     f(cell_idx, 3, oct_idx) = 0d0
 
   end subroutine reset_phi
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine make_initial_phi_isolated(grid, phi, f, multipole_q, head_idx, num_octs, ilevel, dx, &
+       & skip1, skip2, skip3)
+    implicit none
+    type(oct), device :: grid(*)
+    real(kind=dp), device :: phi(1:twotondim,*)
+    real(kind=dp), device :: f(1:twotondim,1:ndim,*)
+    real(kind=8), device :: multipole_q(1:multipole_size)
+    integer, value :: head_idx
+    integer, value :: num_octs
+    integer, value :: ilevel
+    real(kind=8), value :: dx, skip1, skip2, skip3
+
+    integer(4) :: cell_idx, oct_idx, block_idx
+    real(kind=8) :: skip(1:3)
+
+    block_idx = blockIdx%x - 1
+    oct_idx = block_idx * blockDim%y + threadIdx%y - 1
+    if (oct_idx >= num_octs) return
+    oct_idx = head_idx + oct_idx
+
+    cell_idx = threadIdx%x
+    skip(1) = skip1
+    skip(2) = skip2
+    skip(3) = skip3
+
+    phi(cell_idx, oct_idx) = phiana_multipole_cell(multipole_q, grid(oct_idx)%ckey, cell_idx, ilevel, dx, skip)
+    f(cell_idx, 1, oct_idx) = 0d0
+    f(cell_idx, 2, oct_idx) = 0d0
+    f(cell_idx, 3, oct_idx) = 0d0
+
+  end subroutine make_initial_phi_isolated
   ! =========================================================================
 
   ! =========================================================================
@@ -234,21 +561,36 @@ contains
   ! =========================================================================
 
   ! =========================================================================
-  attributes(global) subroutine reset_rhs_kernel(phi, rho, f, nbor, head_idx, num_octs, ngridmax, fourpi, offset, oneoverdx2)
+  attributes(global) subroutine reset_rhs_kernel(grid, phi, phi_old, rho, f, nbor, hash_key, hash_val, hash_size, &
+       & ckey_max, key_off, box_ckey_min, box_ckey_max, periodic_d, multipole_q, head_idx, num_octs, ngridmax, &
+       & levelmin, ilevel, fourpi, offset, oneoverdx2, tfrac, dx, skip1, skip2, skip3)
+    type(oct), device :: grid(*)
     real(kind=dp), device :: phi(1:twotondim,*)
+    real(kind=dp), device :: phi_old(1:twotondim,*)
     real(kind=dp), device :: rho(1:twotondim,*)
     real(kind=dp), device :: f(1:twotondim,1:ndim,*)
     integer(kind=4), device :: nbor(1:subgridsize,*)
+    integer(kind=8), device :: hash_key(*)
+    integer(kind=4), device :: hash_val(*)
+    integer(kind=4), device :: ckey_max(*)
+    integer(kind=8), device :: key_off(*)
+    integer(kind=4), device :: box_ckey_min(1:3,*), box_ckey_max(1:3,*)
+    logical, device :: periodic_d(1:3)
+    real(kind=8), device :: multipole_q(1:multipole_size)
+    integer(kind=4), intent(in), value :: hash_size
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
     integer(kind=4), intent(in), value :: ngridmax
-    real(kind=8), intent(in), value :: fourpi, offset, oneoverdx2
+    integer(kind=4), intent(in), value :: levelmin, ilevel
+    real(kind=8), intent(in), value :: fourpi, offset, oneoverdx2, tfrac, dx, skip1, skip2, skip3
 
     real(kind=dp) :: phi_nbr, dis_nbr, w, phi_b
+    real(kind=8) :: skip(1:3)
     integer :: cell_idx, oct_idx, block_idx, source_idx, subgrid_idx, num_idx
     integer :: ind, idim, inbor, icell, idir, ind_nbor
     integer :: i, j, k, in, jn, kn
     integer :: oct_nbr_idx, cell_nbr_idx
+    integer(kind=4) :: nbor_ckey(1:3)
 
     block_idx = blockIdx%x - 1
 
@@ -259,6 +601,9 @@ contains
 
     ! Compute the cell idx
     cell_idx = threadIdx%x
+    skip(1) = skip1
+    skip(2) = skip2
+    skip(3) = skip3
 
     ! Compute subgrid idx
     subgrid_idx = (oct_idx - 1) / nsubgridtondim + 1
@@ -299,14 +644,34 @@ contains
           ! Compute neighboring cell index in parent octs
           cell_nbr_idx = hhh(cell_idx, 2*(idim-1) + inbor)
 
-          ! Get phi
-          phi_nbr = phi(cell_nbr_idx, oct_nbr_idx)
+          if (oct_nbr_idx <= 0) then
+             nbor_ckey = grid(oct_idx)%ckey
+#if NDIM>0
+             nbor_ckey(1) = nbor_ckey(1) + in
+#endif
+#if NDIM>1
+             nbor_ckey(2) = nbor_ckey(2) + jn
+#endif
+#if NDIM>2
+             nbor_ckey(3) = nbor_ckey(3) + kn
+#endif
+          endif
 
-          ! Get distance function
-          if (oct_nbr_idx <= ngridmax) then
+          ! Get phi and distance function. Missing fine neighbors are treated
+          ! like the CPU path: interpolate from the parent level, falling back
+          ! to the isolated multipole boundary potential outside the domain.
+          if (oct_nbr_idx > 0) then
+             phi_nbr = phi(cell_nbr_idx, oct_nbr_idx)
+          else
+             phi_nbr = interpol_phi_from_parent(grid, phi, phi_old, hash_key, hash_val, hash_size, ckey_max, &
+                  & key_off, box_ckey_min, box_ckey_max, periodic_d, multipole_q, nbor_ckey, cell_nbr_idx, &
+                  & ilevel, levelmin, tfrac, dx, skip, ngridmax)
+          endif
+
+          if (oct_nbr_idx > 0 .and. oct_nbr_idx <= ngridmax) then
              dis_nbr = f(cell_nbr_idx, 3, oct_nbr_idx)
           else
-             dis_nbr = -1d0
+             dis_nbr = -1.0_dp
           end if
 
           ! If close to boundary and cell is not masked,
@@ -1071,21 +1436,37 @@ contains
   ! =========================================================================
 
   ! =========================================================================
-  attributes(global) subroutine gradient_phi(phi, f, nbor, head_idx, num_octs, dx)
+  attributes(global) subroutine gradient_phi(grid, phi, phi_old, f, nbor, hash_key, hash_val, hash_size, &
+       & ckey_max, key_off, box_ckey_min, box_ckey_max, periodic_d, multipole_q, head_idx, num_octs, &
+       & levelmin, ilevel, ngridmax, dx, tfrac, skip1, skip2, skip3)
+    type(oct), device :: grid(*)
     real(kind=dp), device :: phi(1:twotondim,*)
+    real(kind=dp), device :: phi_old(1:twotondim,*)
     real(kind=dp), device :: f(1:twotondim,1:ndim,*)
     integer(kind=4), device :: nbor(1:subgridsize,*)
+    integer(kind=8), device :: hash_key(*)
+    integer(kind=4), device :: hash_val(*)
+    integer(kind=4), device :: ckey_max(*)
+    integer(kind=8), device :: key_off(*)
+    integer(kind=4), device :: box_ckey_min(1:3,*), box_ckey_max(1:3,*)
+    logical, device :: periodic_d(1:3)
+    real(kind=8), device :: multipole_q(1:multipole_size)
+    integer(kind=4), intent(in), value :: hash_size
     integer(kind=4), intent(in), value :: head_idx
     integer(kind=4), intent(in), value :: num_octs
-    real(kind=8), intent(in), value :: dx
+    integer(kind=4), intent(in), value :: levelmin, ilevel, ngridmax
+    real(kind=8), intent(in), value :: dx, tfrac, skip1, skip2, skip3
 
-    real(kind=dp) :: phi1, phi2, phi3, phi4, a, b
+    real(kind=dp) :: phi1, phi2, phi3, phi4, phi_c, a, b
+    real(kind=8) :: skip(1:3)
     integer, dimension(0:twondim) :: nbor_idx
+    integer(kind=4), dimension(1:3,0:twondim) :: nbor_ckey
     integer :: cell_idx, oct_idx, block_idx, source_idx, subgrid_idx, num_idx
     integer :: ind, icell, idir, ind_nbor
     integer :: i, j, k, in, jn, kn, idim, inbor
     integer :: oct1_idx, oct2_idx, oct3_idx, oct4_idx
     integer :: ind1_idx, ind2_idx, ind3_idx, ind4_idx
+    logical :: in_domain
 
     block_idx = blockIdx%x - 1
 
@@ -1096,23 +1477,15 @@ contains
 
     ! Compute the cell idx
     cell_idx = threadIdx%x
+    skip(1) = skip1
+    skip(2) = skip2
+    skip(3) = skip3
 
-    ! Compute subgrid idx
-    subgrid_idx = (oct_idx - 1) / nsubgridtondim + 1
-
-    ! Compute oct rank within subgrid
-    num_idx = oct_idx - (subgrid_idx - 1) * nsubgridtondim
-    num_idx = num_idx - 1
-    k = num_idx / nsubgridsq
-    num_idx = num_idx - k * nsubgridsq
-    j = num_idx / nsubgrid
-    i = num_idx - j * nsubgrid
-    i = i + 1; j = j + 1; k = k + 1
-    ind_nbor = 1 + i + nsubgridp2 * j  + nsubgridp2sq * k
-
-    ! Compute true oct idx
-    oct_idx = nbor(ind_nbor, subgrid_idx)
+    ! Use the current AMR oct directly.  On adaptive meshes the compact level
+    ! range can be more reliable than the padded subgrid neighbor table.
     nbor_idx(0) = oct_idx
+    nbor_ckey(1:3,0) = grid(oct_idx)%ckey(1:3)
+    phi_c = phi(cell_idx, oct_idx)
 
     ! Loop over directions
     do idim = 1, ndim
@@ -1127,9 +1500,33 @@ contains
           else
              kn = -1+2*(inbor-1)
           end if
-          ind = 1 + (i + in) + nsubgridp2 * (j + jn)  + nsubgridp2sq * (k + kn)
-          ! Store neighboring oct index
-          nbor_idx(ind_nbor) = nbor(ind, subgrid_idx)
+          nbor_ckey(1:3,ind_nbor) = grid(oct_idx)%ckey(1:3)
+#if NDIM>0
+          nbor_ckey(1,ind_nbor) = nbor_ckey(1,ind_nbor) + in
+#endif
+#if NDIM>1
+          nbor_ckey(2,ind_nbor) = nbor_ckey(2,ind_nbor) + jn
+#endif
+#if NDIM>2
+          nbor_ckey(3,ind_nbor) = nbor_ckey(3,ind_nbor) + kn
+#endif
+          in_domain = .true.
+          do idir = 1, ndim
+             if (periodic_d(idir)) then
+                if (nbor_ckey(idir,ind_nbor) < box_ckey_min(idir,ilevel)) &
+                     & nbor_ckey(idir,ind_nbor) = box_ckey_max(idir,ilevel) - 1
+                if (nbor_ckey(idir,ind_nbor) >= box_ckey_max(idir,ilevel)) &
+                     & nbor_ckey(idir,ind_nbor) = box_ckey_min(idir,ilevel)
+             endif
+             if (nbor_ckey(idir,ind_nbor) < box_ckey_min(idir,ilevel) .or. &
+                 nbor_ckey(idir,ind_nbor) >= box_ckey_max(idir,ilevel)) in_domain = .false.
+          end do
+          if (in_domain) then
+             nbor_idx(ind_nbor) = lookup_grid_by_ckey(nbor_ckey(1:3,ind_nbor), ilevel, hash_key, hash_val, &
+                  & hash_size, ckey_max, key_off)
+          else
+             nbor_idx(ind_nbor) = 0
+          endif
        end do
     end do
 
@@ -1152,11 +1549,34 @@ contains
        ind3_idx = hh3(cell_idx, idim)
        ind4_idx = hh4(cell_idx, idim)
 
-       ! Get phi in the 4 cells of the kernel
-       phi1 = phi(ind1_idx, oct1_idx)
-       phi2 = phi(ind2_idx, oct2_idx)
-       phi3 = phi(ind3_idx, oct3_idx)
-       phi4 = phi(ind4_idx, oct4_idx)
+       if (oct1_idx > 0) then
+          phi1 = phi(ind1_idx, oct1_idx)
+       else
+          phi1 = interpol_phi_from_parent(grid, phi, phi_old, hash_key, hash_val, hash_size, ckey_max, &
+               & key_off, box_ckey_min, box_ckey_max, periodic_d, multipole_q, nbor_ckey(1:3,gg1(cell_idx,idim)), &
+               & ind1_idx, ilevel, levelmin, tfrac, dx, skip, ngridmax)
+       end if
+       if (oct2_idx > 0) then
+          phi2 = phi(ind2_idx, oct2_idx)
+       else
+          phi2 = interpol_phi_from_parent(grid, phi, phi_old, hash_key, hash_val, hash_size, ckey_max, &
+               & key_off, box_ckey_min, box_ckey_max, periodic_d, multipole_q, nbor_ckey(1:3,gg2(cell_idx,idim)), &
+               & ind2_idx, ilevel, levelmin, tfrac, dx, skip, ngridmax)
+       end if
+       if (oct3_idx > 0) then
+          phi3 = phi(ind3_idx, oct3_idx)
+       else
+          phi3 = interpol_phi_from_parent(grid, phi, phi_old, hash_key, hash_val, hash_size, ckey_max, &
+               & key_off, box_ckey_min, box_ckey_max, periodic_d, multipole_q, nbor_ckey(1:3,gg3(cell_idx,idim)), &
+               & ind3_idx, ilevel, levelmin, tfrac, dx, skip, ngridmax)
+       end if
+       if (oct4_idx > 0) then
+          phi4 = phi(ind4_idx, oct4_idx)
+       else
+          phi4 = interpol_phi_from_parent(grid, phi, phi_old, hash_key, hash_val, hash_size, ckey_max, &
+               & key_off, box_ckey_min, box_ckey_max, periodic_d, multipole_q, nbor_ckey(1:3,gg4(cell_idx,idim)), &
+               & ind4_idx, ilevel, levelmin, tfrac, dx, skip, ngridmax)
+       end if
 
        f(cell_idx, idim, oct_idx) = a * (phi1 - phi2) - b * (phi3 - phi4)
 
@@ -1166,4 +1586,3 @@ contains
   ! =========================================================================
 
 end module mg_device
-

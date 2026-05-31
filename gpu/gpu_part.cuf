@@ -1176,7 +1176,6 @@ subroutine gpu_newdt_part(sim, ilevel, vmax, ekin)
   call nvtxStartRange("gpu_newdt_part", color=4) ! purple
   call gpu_newdt_part_kernel<<<num_blocks, num_threads>>>(vp, mp, &
        & vmax_int_dev, ekin_dev, head_idx, num_parts, leading)
-  call GPU_Error_Check("gpu/gpu_part.cuf", 0)
   call nvtxEndRange()
 
   vmax_int_host = vmax_int_dev   ! D->H

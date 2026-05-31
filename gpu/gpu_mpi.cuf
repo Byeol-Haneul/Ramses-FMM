@@ -102,19 +102,16 @@ contains
        ! Copy halo octs map to device
        call nvtxStartRange("Copy halo octs mapping to device", color=5)!red
        idx_send_device = idx_send_host
-       call GPU_Error_Check(__FILE__, __LINE__)
        call nvtxEndRange()
 
        ! Copy ghost octs map to device
        call nvtxStartRange("Copy ghost octs mapping to device", color=5)!red
        idx_recv_device = idx_recv_host
-       call GPU_Error_Check(__FILE__, __LINE__)
        call nvtxEndRange()
 
        ! Copy subgrid map to device.
        call nvtxStartRange("Copy subgrid mapping to device", color=5)!red
 !       subgrid_indices_device = subgrid_indices_host
-       call GPU_Error_Check(__FILE__, __LINE__)
        call nvtxEndRange()
 
     end if
@@ -127,13 +124,11 @@ contains
        threadsX_per_block=8; threadsY_per_block=4
        num_blocks = (num_send + threadsY_per_block - 1) / threadsY_per_block
        call gather_send_buffer<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(mesh_device, uold_send_device, idx_send_device, num_send)
-       call GPU_Error_Check(__FILE__, __LINE__)
        call nvtxEndRange()
     endif
 
     call nvtxStartRange("Mem copy of halo octs", color=5)!red
     uold_send_host = uold_send_device
-    call GPU_Error_Check(__FILE__, __LINE__)
     call nvtxEndRange()
 
     ! =============================
@@ -146,7 +141,6 @@ contains
     ! ==============================
     call nvtxStartRange("Mem copy of ghost octs", color=5)!red
     uold_recv_device = uold_recv_host
-    call GPU_Error_Check(__FILE__, __LINE__)
     call nvtxEndRange()
 
     if(num_recv>0)then
@@ -154,7 +148,6 @@ contains
        threadsX_per_block=8; threadsY_per_block=4
        num_blocks = (num_recv + threadsY_per_block - 1) / threadsY_per_block
        call scatter_recv_buffer<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(mesh_device, uold_recv_device, idx_recv_device, num_recv)
-       call GPU_Error_Check(__FILE__, __LINE__)
        call nvtxEndRange()
     endif
 
@@ -169,7 +162,6 @@ contains
 
     call nvtxStartRange("GPU Integration", color=0)!green
     call hydro_integrator_kernel<<<num_blocks, threads_per_block>>>(mesh_device, head_idx, num_octs, subgrid_size, gamma, dt/dx)
-    call GPU_Error_Check(__FILE__, __LINE__)
     call nvtxEndRange()
 
   end subroutine gpu_integrator

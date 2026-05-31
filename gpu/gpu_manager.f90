@@ -35,7 +35,6 @@ recursive subroutine r_set_grid_device(pst)
 #ifdef HYDRO
      uold = pst%s%m%uold
 #endif
-     call GPU_Error_Check(__FILE__, __LINE__)
      call nvtxEndRange()
 
 #ifdef _CUDA
@@ -56,7 +55,6 @@ recursive subroutine r_set_grid_device(pst)
 !!$        if (allocated(pst%s%p%charge) .and. allocated(charge)) charge = pst%s%p%charge
 !!$        if (allocated(pst%s%p%idm)    .and. allocated(idm))    idm    = pst%s%p%idm
 !!$        if (allocated(pst%s%p%idt)    .and. allocated(idt))    idt    = pst%s%p%idt
-        call GPU_Error_Check(__FILE__, __LINE__)
         call nvtxEndRange()
      endif
 #endif
@@ -70,7 +68,6 @@ recursive subroutine r_set_grid_device(pst)
      call nvtxStartRange("Insert grid in hash table", color=5)!red
      call insert_hash_kernel<<<num_blocks, num_threads>>>(grid, hash_key, hash_val, pst%s%m%hash_size, &
           & ckey_max, key_off, head_idx, num_octs)
-     call GPU_Error_Check(__FILE__, __LINE__)
      call nvtxEndRange()
 
      ! Compute nbor grids array for coarse level only
@@ -83,7 +80,6 @@ recursive subroutine r_set_grid_device(pst)
         call update_nbor_array<<<num_blocks, num_threads>>>(nbor, grid, hash_key, hash_val, pst%s%m%hash_size, &
              & ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, head_idx, num_subgrids, ind)
      end do
-     call GPU_Error_Check(__FILE__, __LINE__)
      call nvtxEndRange()
 
      pst%s%m%data_on_device=.true.
@@ -121,8 +117,11 @@ recursive subroutine r_transfer_grid_host(pst)
      pst%s%m%f = f
      pst%s%m%phi = phi
 #endif
-     call GPU_Error_Check(__FILE__, __LINE__)
      call nvtxEndRange()
+
+#ifdef _CUDA
+     call gpu_to_host_part(pst)
+#endif
 
   endif
 
@@ -155,7 +154,6 @@ subroutine gpu_to_host_part(pst)
 !!$  if (allocated(charge) .and. allocated(pst%s%p%charge)) pst%s%p%charge = charge
 !!$  if (allocated(idm)    .and. allocated(pst%s%p%idm))    pst%s%p%idm    = idm
 !!$  if (allocated(idt)    .and. allocated(pst%s%p%idt))    pst%s%p%idt    = idt
-  call GPU_Error_Check(__FILE__, __LINE__)
   call nvtxEndRange()
 
 end subroutine gpu_to_host_part

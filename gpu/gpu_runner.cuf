@@ -11,6 +11,7 @@ module gpu_runner
   logical, device, dimension(1:3) :: periodic
   real(kind=8), device, dimension(1:3) :: box_size
   real(kind=8), device, dimension(1:3) :: constant_gravity
+  real(kind=8), device, dimension(1:multipole_size) :: gravity_multipole
   integer(kind=4), device, allocatable, dimension(:) :: ckey_max
   integer(kind=8), device, allocatable, dimension(:) :: key_off
   integer(kind=4), device, allocatable, dimension(:,:) :: box_ckey_min, box_ckey_max
@@ -1382,7 +1383,7 @@ contains
   !>
   subroutine gpu_init_phi(sim, ilevel, icount)
     use nvtx
-    use mg_device, only: reset_phi, make_initial_phi
+    use mg_device, only: reset_phi, make_initial_phi, make_initial_phi_isolated
     use ramses_commons, only: ramses_t
     type(ramses_t), intent(inout) :: sim
     integer, intent(in) :: ilevel
@@ -1390,7 +1391,7 @@ contains
 
     integer(kind=4) :: head_idx, num_octs
     integer :: threadsX_per_block, threadsY_per_block, num_threads, num_blocks
-    real(kind=8) :: tfrac
+    real(kind=8) :: tfrac, dx
 
     ! Compute fraction of time steps for interpolation
     if (sim%g%dtold(ilevel-1)>0.0)then
@@ -1398,6 +1399,7 @@ contains
     else
        tfrac = 0.0
     end if
+    dx = sim%r%boxlen/2**ilevel
 
     ! Initial guess for inner domain
     head_idx = sim%m%head(ilevel)
@@ -1412,6 +1414,18 @@ contains
        call reset_phi<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(phi, f, &
             & head_idx, num_octs)
        call nvtxEndRange()
+    endif
+
+    ! Match CPU make_initial_phi: isolated base level starts from phiana.
+    if (ilevel == sim%r%levelmin .and. any(.not. sim%r%periodic(1:ndim))) then
+       gravity_multipole = 0.0d0
+       gravity_multipole(1:size(sim%g%multipole%q)) = sim%g%multipole%q
+       if (num_octs > 0) then
+          call nvtxStartRange("GPU init_phi_isolated", color=1)!blue
+          call make_initial_phi_isolated<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(grid, phi, f, &
+               & gravity_multipole, head_idx, num_octs, ilevel, dx, sim%m%skip(1), sim%m%skip(2), sim%m%skip(3))
+          call nvtxEndRange()
+       endif
     endif
 
     ! Interpolate phi from coarser level
@@ -1484,16 +1498,17 @@ contains
   !> Close to the domain boundary, modify the charge to account for the value of
   !> the potential at the boundary. The new problem is now phi=0 at the boundary.
   !>
-  subroutine gpu_make_rhs(sim, ilevel)
+  subroutine gpu_make_rhs(sim, ilevel, icount)
     use nvtx
     use mg_device, only: reset_rhs_kernel
     use ramses_commons, only: ramses_t
     type(ramses_t), intent(inout) :: sim
     integer, intent(in) :: ilevel
+    integer, intent(in) :: icount
 
     integer(kind=4) :: head_idx, num_octs
     integer :: threadsX_per_block, threadsY_per_block, num_threads, num_blocks
-    real(kind=8) :: fourpi, offset, dx, oneoverdx2
+    real(kind=8) :: fourpi, offset, dx, oneoverdx2, tfrac
 
     ! Modify the rhs to account for boundary conditions.
     ! From now on, boundary conditions are phi = 0.
@@ -1504,6 +1519,21 @@ contains
     oneoverdx2 = 1.0d0/(dx*dx)
     offset = sim%g%rho_tot
     if(any(.not. sim%r%periodic(1:ndim)))offset = 0d0
+    if (sim%g%dtold(ilevel-1)>0.0d0) then
+       tfrac = sim%g%dtnew(ilevel) / sim%g%dtold(ilevel-1) * (icount-1)
+    else
+       tfrac = 0.0d0
+    endif
+    gravity_multipole = 0.0d0
+    gravity_multipole(1:size(sim%g%multipole%q)) = sim%g%multipole%q
+
+#ifdef FMM
+    call nvtxStartRange("GPU upload_gradient_phi", color=5)!red
+    grid = sim%m%grid
+    phi = sim%m%phi
+    phi_old = sim%m%phi_old
+    call nvtxEndRange()
+#endif
 
     call gpu_reset_hash(sim)
     call gpu_refresh_amr_nbor_level(sim, ilevel)
@@ -1515,8 +1545,10 @@ contains
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
     if (num_octs > 0) then
        call nvtxStartRange("GPU make_rhs", color=1)!blue
-       call reset_rhs_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(phi, rho, f, nbor, &
-            & head_idx, num_octs, sim%m%ngridmax, fourpi, offset, oneoverdx2)
+       call reset_rhs_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(grid, phi, phi_old, &
+            & rho, f, nbor, hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, box_ckey_min, box_ckey_max, &
+            & periodic, gravity_multipole, head_idx, num_octs, sim%m%ngridmax, sim%r%levelmin, ilevel, &
+            & fourpi, offset, oneoverdx2, tfrac, dx, sim%m%skip(1), sim%m%skip(2), sim%m%skip(3))
        call nvtxEndRange()
     end if
 
@@ -2055,20 +2087,36 @@ contains
   !> @param[in] sim : The simulation object
   !> @param[in] ilevel : The refinement level to update
   !>
-  subroutine gpu_gradient_phi(sim, ilevel)
+  subroutine gpu_gradient_phi(sim, ilevel, icount)
     use nvtx
     use mg_device
     use ramses_commons, only: ramses_t
     implicit none
     type(ramses_t), intent(inout) :: sim
     integer, intent(in) :: ilevel
+    integer, intent(in) :: icount
     !
-    integer(kind=4) :: head_idx, head_mg, head_father
-    integer(kind=4) :: num_octs, num_blocks, num_threads
+    integer(kind=4) :: head_idx
+    integer(kind=4) :: num_octs, num_blocks
     integer :: threadsX_per_block, threadsY_per_block
-    real(kind=8) :: dx, dx2
+    real(kind=8) :: dx, tfrac
 
     dx  = sim%r%boxlen/2**ilevel
+    if (sim%g%dtold(ilevel-1)>0.0d0) then
+       tfrac = sim%g%dtnew(ilevel) / sim%g%dtold(ilevel-1) * (icount-1)
+    else
+       tfrac = 0.0d0
+    endif
+    gravity_multipole = 0.0d0
+    gravity_multipole(1:size(sim%g%multipole%q)) = sim%g%multipole%q
+
+#ifdef FMM
+    call nvtxStartRange("GPU upload_gradient_phi", color=5)!red
+    grid = sim%m%grid
+    phi = sim%m%phi
+    phi_old = sim%m%phi_old
+    call nvtxEndRange()
+#endif
 
     call gpu_reset_hash(sim)
     call gpu_refresh_amr_nbor_level(sim, ilevel)
@@ -2080,8 +2128,10 @@ contains
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
     if (num_octs > 0) then
        call nvtxStartRange("GPU gradient_phi", color=1)!blue
-       call gradient_phi<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(phi, f, nbor, &
-            & head_idx, num_octs, dx)
+       call gradient_phi<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(grid, phi, phi_old, f, nbor, &
+            & hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, &
+            & gravity_multipole, head_idx, num_octs, sim%r%levelmin, ilevel, sim%m%ngridmax, dx, tfrac, &
+            & sim%m%skip(1), sim%m%skip(2), sim%m%skip(3))
        call nvtxEndRange()
     end if
 

@@ -161,7 +161,7 @@ recursive subroutine r_gradient_phi(pst,input,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
 #ifdef _CUDA
-     call gpu_gradient_phi(pst%s,input%ilevel)
+     call gpu_gradient_phi(pst%s,input%ilevel,input%icount)
 #else
      call gradient_phi(pst%s,input%ilevel,input%icount)
 #endif
