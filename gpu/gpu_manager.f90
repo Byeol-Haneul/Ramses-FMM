@@ -3,9 +3,6 @@ module gpu_manager
   use nvtx
   use gpu_utils
   use gpu_runner
-#ifdef _CUDA
-  use gpu_part_state
-#endif
 contains
 !###########################################################
 !###########################################################

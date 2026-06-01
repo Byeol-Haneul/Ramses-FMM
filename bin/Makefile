@@ -164,8 +164,8 @@ endif
 #############################################################################
 # NVHPC compiler
 ifeq ($(COMPILER),NVHPC)
-   FFLAGS = -cpp -gpu=$(CUDA_ARCH),nordc -cuda -cudalib=nvtx $(DEFINES)
-   LIBS = -gpu=$(CUDA_ARCH),nordc -cuda -cudalib=nvtx
+   FFLAGS = -cpp -gpu=$(CUDA_ARCH) -cuda -cudalib=nvtx $(DEFINES)
+   LIBS = -gpu=$(CUDA_ARCH) -cuda -cudalib=nvtx -lstdc++
    GPU_PATH = ../gpu
    ifeq ($(CUDA_PROFILE),1)
       FFLAGS += -gpu=lineinfo,ptxinfo -Minstrument -traceback -gopt
@@ -263,6 +263,13 @@ test_cooling:	$(MODOBJ) test_cooling.o
 write_gitinfo.o: FORCE
 	$(FC) -O0 -cpp -DPATCH=\'"$(PATCH)"\' -DGITBRANCH=\'"$(GITBRANCH)"\' -DGITHASH=\'"$(GITHASH)"\' \
                 -DGITREPO=\'"$(GITREPO)"\' -DBUILDDATE=\'"$(BUILDDATE)"\' -DBUILDCOMMAND=\'"$(BUILDCOMMAND)"\' -c ../amr/write_gitinfo.f90 -o $@
+#############################################################################
+cub_inclusive_scan_c.o: cub_inclusive_scan.h cub_inclusive_scan.cu
+	nvcc -arch=sm_90 -O3 -lineinfo -c $(GPU_PATH)/cub_inclusive_scan.cu -o cub_inclusive_scan_c.o
+#############################################################################
+cub_inclusive_scan_f.o: cub_inclusive_scan.cuf cub_inclusive_scan_c.o
+	nvfortran $(FFLAGS) -c cub_inclusive_scan_c.o $(GPU_PATH)/cub_inclusive_scan.cuf -o cub_inclusive_scan_f.o
+
 %.o:%.cuf
 	$(F90) $(FFLAGS) -c $^ -o $@ $(LIBS)
 %.o:%.f90
