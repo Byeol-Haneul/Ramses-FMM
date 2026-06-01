@@ -1,7 +1,7 @@
 module fmm_fine_commons
 #if defined(_CUDA) && defined(WITHOUTMPI)
   use gpu_runner, only: gpu_fmm_downward, gpu_fmm_amr_intermediate, gpu_fmm_amr_direct, &
-       & gpu_fmm_amr_direct_taylor, gpu_fmm_combined_direct
+       & gpu_fmm_amr_direct_taylor, gpu_fmm_combined_direct, gpu_fmm_fill_phi
 #endif
   implicit none
 contains
@@ -207,7 +207,7 @@ subroutine fmm(pst,ilev,icount)
    call m_timer_add('fmm direct', wallclock() - t_fmm)
 
    t_fmm = wallclock()
-   if (associated(pst%s%m_fmm_merged)) call r_cleanup_fmm_merge(pst)
+   if (use_merged) call r_cleanup_fmm_merge(pst)
    call m_timer_add('fmm cleanup', wallclock() - t_fmm)
 end subroutine fmm
 !###########################################################
@@ -255,7 +255,11 @@ recursive subroutine r_fmm_fill_phi(pst,ilevel,input_size)
      call r_fmm_fill_phi(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
+#if defined(_CUDA) && defined(WITHOUTMPI)
+     call gpu_fmm_fill_phi(pst%s,ilevel)
+#else
      call fmm_fill_phi(pst%s,ilevel)
+#endif
   endif
 
 end subroutine r_fmm_fill_phi

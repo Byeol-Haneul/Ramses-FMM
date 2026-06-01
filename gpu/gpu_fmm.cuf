@@ -608,6 +608,51 @@ contains
   ! =========================================================================
 
   ! =========================================================================
+  attributes(global) subroutine fmm_fill_phi_kernel(grid_amr, phi_amr, hash_key_amr, hash_val_amr, &
+       & hash_size_amr, ckey_max, key_off, head_idx, num_octs, ilevel)
+    type(oct), device :: grid_amr(*)
+    real(kind=dp), device :: phi_amr(1:twotondim,*)
+    integer(kind=8), device :: hash_key_amr(*)
+    integer(kind=4), device :: hash_val_amr(*)
+    integer(kind=4), device :: ckey_max(*)
+    integer(kind=8), device :: key_off(*)
+    integer(kind=4), value :: hash_size_amr, head_idx, num_octs, ilevel
+
+    integer :: thread_idx, local_idx, ioct, idim, ind, nstride
+    integer(kind=4) :: child_ckey(1:3), parent_ckey(1:3)
+    integer(kind=4) :: parent_cell, parent_grid
+    real(kind=dp) :: phi_sum
+
+    thread_idx = threadIdx%x - 1
+    local_idx = thread_idx + (blockIdx%x - 1) * blockDim%x
+    if (local_idx >= num_octs) return
+    ioct = head_idx + local_idx
+
+    child_ckey = 0
+    parent_ckey = 0
+    parent_cell = 1
+    do idim = 1, ndim
+       child_ckey(idim) = grid_amr(ioct)%ckey(idim)
+       parent_ckey(idim) = child_ckey(idim) / 2
+       nstride = 2**(idim-1)
+       parent_cell = parent_cell + nstride * (child_ckey(idim) - 2 * parent_ckey(idim))
+    end do
+
+    parent_grid = fmm_lookup_grid_by_ckey(parent_ckey, ilevel, hash_key_amr, hash_val_amr, &
+         & hash_size_amr, ckey_max, key_off)
+    if (parent_grid <= 0) return
+
+    phi_sum = 0.0_dp
+    do ind = 1, twotondim
+       phi_sum = phi_sum + phi_amr(ind, ioct)
+    end do
+    phi_amr(parent_cell, parent_grid) = phi_amr(parent_cell, parent_grid) + &
+         & phi_sum / real(twotondim, kind=dp)
+
+  end subroutine fmm_fill_phi_kernel
+  ! =========================================================================
+
+  ! =========================================================================
   attributes(device) subroutine fmm_nbor_grids_by_ckey(center_ckey, ilevel, hash_key, hash_val, hash_size, &
        & ckey_max, key_off, box_ckey_min, box_ckey_max, periodic_d, igrid_nbor)
     integer(kind=4), intent(in) :: center_ckey(1:3)
