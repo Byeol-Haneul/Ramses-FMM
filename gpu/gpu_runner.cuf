@@ -1615,10 +1615,12 @@ contains
     ! We preserve phi in the ghost cells stored in the cache.
     ! Note that the mask is only defined in the inner cells, not in the ghost cells.
     fourpi = 4.D0*ACOS(-1.0D0)
+    if (sim%r%cosmo) fourpi = 1.5D0 * sim%g%omega_m * sim%g%aexp
     dx  = sim%r%boxlen/2**ilevel
     oneoverdx2 = 1.0d0/(dx*dx)
     offset = sim%g%rho_tot
     if(any(.not. sim%r%periodic(1:ndim)))offset = 0d0
+#ifdef FMM
     if (sim%g%dtold(ilevel-1)>0.0d0) then
        tfrac = sim%g%dtnew(ilevel) / sim%g%dtold(ilevel-1) * (icount-1)
     else
@@ -1627,16 +1629,15 @@ contains
     gravity_multipole = 0.0d0
     gravity_multipole(1:size(sim%g%multipole%q)) = sim%g%multipole%q
 
-#ifdef FMM
     call nvtxStartRange("GPU upload_gradient_phi", color=5)!red
     grid = sim%m%grid
     phi = sim%m%phi
     phi_old = sim%m%phi_old
     call nvtxEndRange()
-#endif
 
     call gpu_reset_hash(sim)
     call gpu_refresh_amr_nbor_level(sim, ilevel)
+#endif
 
     head_idx = sim%m%head(ilevel)
     num_octs = sim%m%noct(ilevel)
@@ -1645,10 +1646,15 @@ contains
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
     if (num_octs > 0) then
        call nvtxStartRange("GPU make_rhs", color=1)!blue
+#ifdef FMM
        call reset_rhs_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(grid, phi, phi_old, &
             & rho, f, nbor, hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, box_ckey_min, box_ckey_max, &
             & periodic, gravity_multipole, head_idx, num_octs, sim%m%ngridmax, sim%r%levelmin, ilevel, &
             & fourpi, offset, oneoverdx2, tfrac, dx, sim%m%skip(1), sim%m%skip(2), sim%m%skip(3))
+#else
+       call reset_rhs_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(phi, rho, f, nbor, &
+            & head_idx, num_octs, sim%m%ngridmax, fourpi, offset, oneoverdx2)
+#endif
        call nvtxEndRange()
     end if
 
@@ -1668,7 +1674,7 @@ contains
   subroutine gpu_build_mg(sim, ilevel, ifine)
     use nvtx
     use mg_device
-    use refine_device, only: insert_hash_kernel, update_nbor_array
+    use refine_device, only: insert_hash_kernel
     use ramses_commons, only: ramses_t
     implicit none
     type(ramses_t), intent(inout) :: sim
@@ -1733,10 +1739,10 @@ contains
        ! Make new MG octs
        call nvtxStartRange("GPU build_mg", color=1)!blue
        if (ifine == ilevel) then
-          call make_father_octs<<<num_blocks_2, num_threads_2>>>(grid, grid_mg, phi_mg, f_mg, swap_local, &
+          call make_father_octs<<<num_blocks_2, num_threads_2>>>(grid, grid_mg, f_mg, phi_mg, swap_local, &
                & head_mg, new_noct)
        else
-          call make_father_octs<<<num_blocks_2, num_threads_2>>>(grid_mg, grid_mg, phi_mg, f_mg, swap_local, &
+          call make_father_octs<<<num_blocks_2, num_threads_2>>>(grid_mg, grid_mg, f_mg, phi_mg, swap_local, &
                & head_mg, new_noct)
        endif
        call nvtxEndRange()
@@ -1777,13 +1783,10 @@ contains
     num_blocks = (num_octs + num_threads - 1) / num_threads
 
     if (num_octs > 0) then
-       do ind = 1, threetondim
-          call nvtxStartRange("GPU build_mg", color=1)!blue
-          call update_nbor_array<<<num_blocks, num_threads>>>(nbor_mg, grid_mg, hash_key_mg, hash_val_mg, &
-               & sim%m_mg%hash_size, ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, &
-               & head_idx, num_octs, ind)
-          call nvtxEndRange()
-       end do
+       call nvtxStartRange("GPU build_mg", color=1)!blue
+       call update_nbor_array_mg<<<num_blocks, num_threads>>>(nbor_mg, grid_mg, hash_key_mg, hash_val_mg, &
+            & sim%m_mg%hash_size, ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, head_idx, num_octs)
+       call nvtxEndRange()
     end if
 
   end subroutine gpu_build_mg
@@ -1799,23 +1802,14 @@ contains
   !>
   subroutine gpu_clean_mg(sim)
     use nvtx
-    use refine_device, only: free_hash_kernel
     use ramses_commons, only: ramses_t
     implicit none
     type(ramses_t), intent(inout) :: sim
     !
-    integer(kind=4) :: head_idx, num_octs, num_blocks, num_threads
-
-    head_idx = 1
-    num_octs = sim%m_mg%tail(sim%r%bound_levelmin)
-    num_threads = 128
-    num_blocks = (num_octs + num_threads - 1) / num_threads
-    if (num_octs > 0) then
-       call nvtxStartRange("GPU clean_mg", color=1)!blue
-       call free_hash_kernel<<<num_blocks, num_threads>>>(grid_mg, hash_key_mg, hash_val_mg, sim%m_mg%hash_size, &
-            & ckey_max, key_off, head_idx, num_octs)
-       call nvtxEndRange()
-    endif
+    call nvtxStartRange("GPU clean_mg", color=1)!blue
+    hash_key_mg=0
+    hash_val_mg=0
+    call nvtxEndRange()
 
     sim%m_mg%head=1
     sim%m_mg%tail=0
@@ -2286,6 +2280,7 @@ contains
     external :: m_timer_add
 
     dx  = sim%r%boxlen/2**ilevel
+#ifdef FMM
     if (sim%g%dtold(ilevel-1)>0.0d0) then
        tfrac = sim%g%dtnew(ilevel) / sim%g%dtold(ilevel-1) * (icount-1)
     else
@@ -2303,8 +2298,7 @@ contains
     call gpu_refresh_amr_nbor_level(sim, ilevel)
 #ifdef FMM
     call m_timer_add('fmm grad nbor', wallclock() - t_gpu)
-#else
-    call m_timer_add('mg grad nbor', wallclock() - t_gpu)
+#endif
 #endif
 
     head_idx = sim%m%head(ilevel)
@@ -2313,17 +2307,22 @@ contains
     threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
     if (num_octs > 0) then
+#ifdef FMM
        t_gpu = wallclock()
+#endif
        call nvtxStartRange("GPU gradient_phi", color=1)!blue
+#ifdef FMM
        call gradient_phi<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(grid, phi, phi_old, f, nbor, &
             & hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, &
             & gravity_multipole, head_idx, num_octs, sim%r%levelmin, ilevel, sim%m%ngridmax, dx, tfrac, &
             & sim%m%skip(1), sim%m%skip(2), sim%m%skip(3))
+#else
+       call gradient_phi<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(phi, f, nbor, &
+            & head_idx, num_octs, dx)
+#endif
        call nvtxEndRange()
 #ifdef FMM
        call m_timer_add('fmm grad kernel', wallclock() - t_gpu)
-#else
-       call m_timer_add('mg grad kernel', wallclock() - t_gpu)
 #endif
     end if
 
