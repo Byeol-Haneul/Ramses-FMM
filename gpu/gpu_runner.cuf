@@ -72,7 +72,7 @@ module gpu_runner
   integer(kind=4), device, allocatable, dimension(:) :: source_grid_fmm
   integer(kind=4), device, allocatable, dimension(:,:) :: nbor_fmm
   real(kind=dp), device, allocatable, dimension(:,:,:) :: multipole_fmm, taylor_fmm
-  real(kind=dp), allocatable, dimension(:,:,:) :: multipole_fmm_root_host
+  real(kind=dp), device, dimension(1:multipole_size) :: fmm_global_multipole
   integer(kind=8), device, allocatable, dimension(:) :: hash_key_fmm
   integer(kind=4), device, allocatable, dimension(:) :: hash_val_fmm
   integer(kind=4) :: fmm_grid_capacity = 0
@@ -1733,10 +1733,10 @@ contains
        ! Make new MG octs
        call nvtxStartRange("GPU build_mg", color=1)!blue
        if (ifine == ilevel) then
-          call make_father_octs<<<num_blocks_2, num_threads_2>>>(grid, grid_mg, f_mg, phi_mg, swap_local, &
+          call make_father_octs<<<num_blocks_2, num_threads_2>>>(grid, grid_mg, phi_mg, f_mg, swap_local, &
                & head_mg, new_noct)
        else
-          call make_father_octs<<<num_blocks_2, num_threads_2>>>(grid_mg, grid_mg, f_mg, phi_mg, swap_local, &
+          call make_father_octs<<<num_blocks_2, num_threads_2>>>(grid_mg, grid_mg, phi_mg, f_mg, swap_local, &
                & head_mg, new_noct)
        endif
        call nvtxEndRange()
@@ -1822,6 +1822,88 @@ contains
     sim%m_mg%noct=0
 
   end subroutine gpu_clean_mg
+
+  !> @brief
+  !> Clean one resident standard FMM tree slot on the GPU.
+  !>
+  subroutine gpu_clean_fmm(sim, ilevel)
+    use amr_commons, only: mesh_t
+    use ramses_commons, only: ramses_t
+    implicit none
+    type(ramses_t), intent(inout) :: sim
+    integer(kind=4), intent(in) :: ilevel
+    type(mesh_t), pointer :: m_fmm
+
+    if (.not. associated(sim%m_fmm_list)) return
+    if (ilevel < lbound(sim%m_fmm_list,1) .or. ilevel > ubound(sim%m_fmm_list,1)) return
+
+    m_fmm => sim%m_fmm_list(ilevel)
+    call gpu_clean_fmm_slot(m_fmm, ilevel, .false.)
+
+  end subroutine gpu_clean_fmm
+
+  !> @brief
+  !> Clean the resident merged FMM tree slot on the GPU.
+  !>
+  subroutine gpu_clean_fmm_merged(sim)
+    use amr_commons, only: mesh_t
+    use ramses_commons, only: ramses_t
+    implicit none
+    type(ramses_t), intent(inout) :: sim
+    type(mesh_t), pointer :: m_fmm
+
+    if (.not. associated(sim%m_fmm_merged)) return
+
+    m_fmm => sim%m_fmm_merged
+    call gpu_clean_fmm_slot(m_fmm, fmm_merged_slot, .true.)
+
+  end subroutine gpu_clean_fmm_merged
+
+  !> @brief
+  !> Common FMM cleanup for standard and merged resident tree slots.
+  !>
+  subroutine gpu_clean_fmm_slot(m_fmm, slot, is_merged)
+    use nvtx
+    use amr_commons, only: mesh_t
+    use refine_device, only: free_hash_kernel
+    implicit none
+    type(mesh_t), intent(inout) :: m_fmm
+    integer(kind=4), intent(in) :: slot
+    logical, intent(in) :: is_merged
+
+    integer(kind=4) :: grid_offset, hash_offset, hash_capacity
+    integer(kind=4) :: head_idx, num_octs, num_threads, num_blocks
+
+    if (allocated(fmm_grid_offset)) then
+       if (slot >= lbound(fmm_grid_offset,1) .and. slot <= ubound(fmm_grid_offset,1)) then
+          grid_offset = fmm_grid_offset(slot)
+          hash_offset = fmm_hash_offset(slot)
+          hash_capacity = fmm_hash_capacity_slot(slot)
+          head_idx = grid_offset + 1
+          num_octs = m_fmm%noct_used
+          num_threads = 128
+          num_blocks = (num_octs + num_threads - 1) / num_threads
+          if (num_octs > 0 .and. hash_capacity > 0 .and. allocated(grid_fmm) .and. allocated(hash_key_fmm)) then
+             if (is_merged) then
+                call nvtxStartRange("GPU clean_fmm_merged", color=1)!blue
+             else
+                call nvtxStartRange("GPU clean_fmm", color=1)!blue
+             end if
+             call free_hash_kernel<<<num_blocks, num_threads>>>(grid_fmm, hash_key_fmm(hash_offset+1), &
+                  & hash_val_fmm(hash_offset+1), hash_capacity, ckey_max, key_off, head_idx, num_octs)
+             call nvtxEndRange()
+          end if
+       end if
+    end if
+
+    m_fmm%head=1
+    m_fmm%tail=0
+    m_fmm%noct=0
+    m_fmm%ifree=1
+    m_fmm%noct_tot=0
+    m_fmm%noct_used=0
+
+  end subroutine gpu_clean_fmm_slot
 
   !> @brief
   !> This routine restrict the mask from a fine level to a coarser level.
@@ -2589,6 +2671,7 @@ contains
   subroutine gpu_build_fmm_level(sim, ilevel, ifine)
     use nvtx
     use amr_commons, only: mesh_t
+    use cub_inclusive_scan_mod
     use fmm_device, only: fmm_init_prefix_sum_parent, fmm_compute_swap_table, fmm_make_parent_octs
     use refine_device, only: insert_hash_kernel
     use ramses_commons, only: ramses_t
@@ -2652,13 +2735,19 @@ contains
                & box_ckey_max, source_head, num_child, icoarse, check_refinement)
        end if
        call nvtxEndRange()
+
+       call nvtxStartRange("GPU build_fmm_scan_make", color=1)!blue
+#if defined(CUB_SCAN)
+       call cub_inclusive_sum(c_loc(prefix_sum), 1, num_child)
+       call get_total_sum<<<1,1>>>(prefix_sum, 1, num_child, new_noct_d)
+#else
+       call gpu_scan(1, num_child, new_noct_d)
+#endif
+       call nvtxEndRange()
     else
        new_noct_d = 0
     end if
 
-    if (num_child > 0) then
-       call gpu_scan(1, num_child, new_noct_d)
-    end if
     new_noct = new_noct_d
     if (parent_head_global + new_noct > grid_offset + grid_capacity + 1) then
        write(*,*)'No more grid memory, increase ngridmax for FMM'
@@ -2668,7 +2757,7 @@ contains
 
     if (new_noct > 0) then
        num_blocks_2 = (new_noct + num_threads - 1) / num_threads
-       call nvtxStartRange("GPU build_fmm", color=1)!blue
+       call nvtxStartRange("GPU build_fmm_make", color=1)!blue
        call fmm_compute_swap_table<<<num_blocks, num_threads>>>(swap_local, prefix_sum, source_head, num_child)
        if (ifine == ilevel) then
           call fmm_make_parent_octs<<<num_blocks_2, num_threads>>>(grid, grid_fmm, multipole_fmm, taylor_fmm, &
@@ -2820,7 +2909,7 @@ contains
     hash_start = hash_offset + 1
     num_threads = 128
 
-    call nvtxStartRange("GPU fmm_merge_multipoles", color=1)!blue
+    call nvtxStartRange("GPU fmm_merge_multipoles", color=0)!green
     do ilevel = active_levelmin, sim%r%nlevelmax
        do flev = sim%r%bound_levelmin, ilevel - 1
           if (sim%m_fmm_list(ilevel)%tail(flev) < sim%m_fmm_list(ilevel)%head(flev)) cycle
@@ -2849,8 +2938,6 @@ contains
     integer, intent(in) :: ilevel, ifine
     logical, intent(in) :: build_merged
 
-    call gpu_assert_fmm_to_amr_one(sim)
-
     if (build_merged) then
        call gpu_build_fmm_merged(sim, ilevel)
     else
@@ -2858,22 +2945,6 @@ contains
     end if
 
   end subroutine gpu_build_fmm
-
-  !> @brief
-  !> GPU FMM currently assumes one AMR refinement step per FMM leaf cell.
-  !>
-  subroutine gpu_assert_fmm_to_amr_one(sim)
-    use ramses_commons, only: ramses_t
-    implicit none
-    type(ramses_t), intent(in) :: sim
-
-    if (sim%r%level_fmm_to_amr /= 1) then
-       write(*,*)'GPU FMM currently requires level_fmm_to_amr = 1'
-       write(*,*)'Requested level_fmm_to_amr = ', sim%r%level_fmm_to_amr
-       stop
-    end if
-
-  end subroutine gpu_assert_fmm_to_amr_one
 
   !> @brief
   !> Select a level FMM tree slot already resident on the device.
@@ -3054,10 +3125,11 @@ contains
   end subroutine gpu_download_fmm_tree
 
   !> @brief
-  !> Copy only the top FMM multipoles needed by update_fmm_local_multipole_level.
+  !> Reduce the root FMM multipoles to the host global-multipole bookkeeping vector.
   !>
-  subroutine gpu_download_fmm_global_multipole_source(sim, ilevel)
+  subroutine gpu_reduce_fmm_global_multipole_source(sim, ilevel)
     use nvtx
+    use fmm_device, only: fmm_accumulate_global_multipole
     use amr_commons, only: mesh_t
     use ramses_commons, only: ramses_t
     implicit none
@@ -3066,8 +3138,9 @@ contains
 
 #ifdef FMM
     type(mesh_t), pointer :: m_fmm
-    integer(kind=4) :: tree_slot, grid_offset, flev, num_octs
-    integer(kind=4) :: host_start, host_stop, device_start, device_stop
+    integer(kind=4) :: tree_slot, grid_offset, flev, num_octs, source_head
+    integer(kind=4) :: num_threads, num_blocks
+    real(kind=dp) :: multipole_h(1:multipole_size)
 
     if (.not. associated(sim%m_fmm_list)) return
     if (.not. allocated(multipole_fmm)) return
@@ -3078,26 +3151,23 @@ contains
 
     call gpu_select_fmm_tree(sim, ilevel, tree_slot)
     grid_offset = fmm_grid_offset(tree_slot)
-    host_start = m_fmm%head(flev)
-    host_stop = m_fmm%tail(flev)
-    num_octs = host_stop - host_start + 1
-    device_start = grid_offset + host_start
-    device_stop = grid_offset + host_stop
+    source_head = grid_offset + m_fmm%head(flev)
+    num_octs = m_fmm%noct(flev)
+    if (num_octs <= 0) return
 
-    if (allocated(multipole_fmm_root_host)) then
-       if (size(multipole_fmm_root_host, 3) < num_octs) deallocate(multipole_fmm_root_host)
-    end if
-    if (.not. allocated(multipole_fmm_root_host)) then
-       allocate(multipole_fmm_root_host(1:twotondim, 1:multipole_size, 1:num_octs))
-    end if
-
-    call nvtxStartRange("GPU download_fmm_global_multipole_source", color=5)!red
-    multipole_fmm_root_host(:,:,1:num_octs) = multipole_fmm(:,:,device_start:device_stop)
-    m_fmm%multipole(:,:,host_start:host_stop) = multipole_fmm_root_host(:,:,1:num_octs)
+    fmm_global_multipole = 0.0_dp
+    num_threads = 128
+    num_blocks = (num_octs * twotondim + num_threads - 1) / num_threads
+    call nvtxStartRange("GPU reduce_fmm_global_multipole", color=0)!green
+    call fmm_accumulate_global_multipole<<<num_blocks, num_threads>>>(multipole_fmm, fmm_global_multipole, &
+         & source_head, num_octs)
+    multipole_h = fmm_global_multipole
     call nvtxEndRange()
+
+    sim%g%multipole_fmm_level(ilevel)%q(1:multipole_size) = multipole_h(1:multipole_size)
 #endif
 
-  end subroutine gpu_download_fmm_global_multipole_source
+  end subroutine gpu_reduce_fmm_global_multipole_source
 
   !> @brief
   !> Reset multipoles and Taylor coefficients in one level of a staged FMM tree.
@@ -3114,7 +3184,6 @@ contains
     integer :: threadsX_per_block, threadsY_per_block, num_blocks
 
 #ifdef FMM
-    call gpu_assert_fmm_to_amr_one(sim)
     call gpu_select_fmm_tree(sim, ilevel, tree_slot)
 
     grid_offset = fmm_grid_offset(tree_slot)
@@ -3124,7 +3193,7 @@ contains
     threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
     if (num_octs > 0) then
-       call nvtxStartRange("GPU reset_fmm_multipoles_taylor", color=1)!blue
+       call nvtxStartRange("GPU reset_fmm_multipoles_taylor", color=0)!green
        call fmm_reset_multipole_taylor<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>( &
             & multipole_fmm, taylor_fmm, head_idx, num_octs)
        call nvtxEndRange()
@@ -3171,7 +3240,7 @@ contains
     num_threads = 128
     num_blocks = (num_octs + num_threads - 1) / num_threads
     if (num_octs > 0) then
-       call nvtxStartRange("GPU fmm_multipole_amr2fmm", color=1)!blue
+       call nvtxStartRange("GPU fmm_multipole_amr2fmm", color=0)!green
        call fmm_multipole_amr2fmm<<<num_blocks, num_threads>>>(grid, rho, multipole_fmm, father_fmm, &
             & head_idx, 1, num_octs, dx_loc, vol_loc, skip1, skip2, skip3)
        call nvtxEndRange()
@@ -3204,7 +3273,7 @@ contains
     num_threads = 128
     num_blocks = (num_octs + num_threads - 1) / num_threads
     if (num_octs > 0) then
-       call nvtxStartRange("GPU fmm_multipole_fmm2fmm", color=1)!blue
+       call nvtxStartRange("GPU fmm_multipole_fmm2fmm", color=0)!green
        call fmm_multipole_fmm2fmm<<<num_blocks, num_threads>>>(grid_fmm, multipole_fmm, &
             & father_fmm(fmm_father_grid_offset+1), head_idx, num_octs)
        call nvtxEndRange()
@@ -3250,7 +3319,7 @@ contains
     threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
     if (num_octs > 0) then
-       call nvtxStartRange("GPU fmm_multipole_shift_downward", color=1)!blue
+       call nvtxStartRange("GPU fmm_multipole_shift_downward", color=0)!green
        call fmm_multipole_shift_downward<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>( &
             & grid_fmm, multipole_fmm, head_idx, num_octs, dx_loc, skip1, skip2, skip3)
        call nvtxEndRange()
@@ -3294,7 +3363,7 @@ contains
        if (num_octs > 0) then
           hash_offset = fmm_hash_offset(target_slot)
           hash_capacity = fmm_hash_capacity_slot(target_slot)
-          call nvtxStartRange("GPU fmm_downward", color=1)!blue
+          call nvtxStartRange("GPU fmm_downward", color=0)!green
           call fmm_downward_kernel<<<num_blocks, num_threads>>>(grid_fmm, taylor_fmm, &
                & father_fmm(fmm_father_grid_offset+1), grid_fmm, multipole_fmm, taylor_fmm, &
                & nbor_fmm, source_parent_fmm, hash_key_fmm(hash_offset+1), hash_val_fmm(hash_offset+1), &
@@ -3314,7 +3383,7 @@ contains
           hash_offset = fmm_hash_offset(source_slot)
           hash_capacity = fmm_hash_capacity_slot(source_slot)
           call gpu_refresh_fmm_source_parent_level(sim, ilev, flev, source_slot)
-          call nvtxStartRange("GPU fmm_downward", color=1)!blue
+          call nvtxStartRange("GPU fmm_downward", color=0)!green
           call fmm_downward_kernel<<<num_blocks, num_threads>>>(grid_fmm, taylor_fmm, &
                & father_fmm(fmm_father_grid_offset+1), grid_fmm, multipole_fmm, taylor_fmm, &
                & nbor_fmm, source_parent_fmm, hash_key_fmm(hash_offset+1), hash_val_fmm(hash_offset+1), &
@@ -3347,7 +3416,6 @@ contains
     logical :: reset_phi, same_tree
 
 #ifdef FMM
-    call gpu_assert_fmm_to_amr_one(sim)
     call gpu_select_fmm_interaction_tree(sim, jlev, use_merged, tree_slot)
 
     head_idx = sim%m%head(ilev)
@@ -3361,7 +3429,7 @@ contains
        hash_offset = fmm_hash_offset(tree_slot)
        hash_capacity = fmm_hash_capacity_slot(tree_slot)
        call gpu_refresh_amr_fmm_father_level(sim, ilev, tree_slot)
-       call nvtxStartRange("GPU fmm_amr_intermediate", color=1)!blue
+       call nvtxStartRange("GPU fmm_amr_intermediate", color=0)!green
        call fmm_amr_intermediate_kernel<<<num_blocks, num_threads>>>(grid, phi, father_fmm, grid_fmm, &
             & multipole_fmm, taylor_fmm, nbor_fmm, box_ckey_min, box_ckey_max, &
             & hash_key_fmm(hash_offset+1), hash_val_fmm(hash_offset+1), hash_capacity, ckey_max, key_off, periodic, &
@@ -3398,7 +3466,7 @@ contains
     num_blocks = (num_octs + num_threads - 1) / num_threads
     if (num_octs > 0) then
        t_gpu = wallclock()
-       call nvtxStartRange("GPU fmm_fill_phi", color=1)!blue
+       call nvtxStartRange("GPU fmm_fill_phi", color=0)!green
        call fmm_fill_phi_kernel<<<num_blocks, num_threads>>>(grid, phi, hash_key, hash_val, &
             & sim%m%hash_size, ckey_max, key_off, head_idx, num_octs, ilevel)
        call nvtxEndRange()
@@ -3426,7 +3494,6 @@ contains
     external :: m_timer_add
 
 #ifdef FMM
-    call gpu_assert_fmm_to_amr_one(sim)
     t_gpu = wallclock()
     call gpu_refresh_amr_nbor_level(sim, ilev)
     call m_timer_add('fmm direct nbor', wallclock() - t_gpu)
@@ -3439,7 +3506,7 @@ contains
     num_blocks = (num_octs + num_threads - 1) / num_threads
     if (num_octs > 0) then
        t_gpu = wallclock()
-       call nvtxStartRange("GPU fmm_amr_direct", color=1)!blue
+       call nvtxStartRange("GPU fmm_amr_direct", color=0)!green
        call fmm_amr_direct_kernel<<<num_blocks, num_threads>>>(grid, rho, phi, nbor, hash_key, hash_val, &
             & sim%m%hash_size, ckey_max, key_off, head_idx, num_octs, ilev, dx_loc, dxn)
        call nvtxEndRange()
@@ -3471,7 +3538,6 @@ contains
     external :: m_timer_add
 
 #ifdef FMM
-    call gpu_assert_fmm_to_amr_one(sim)
     call gpu_select_fmm_interaction_tree(sim, jlev, use_merged, tree_slot)
 
     head_idx = sim%m%head(ilev)
@@ -3486,7 +3552,7 @@ contains
        call gpu_refresh_amr_fmm_grid_level(sim, ilev, tree_slot)
        call m_timer_add('fmm direct map', wallclock() - t_gpu)
        t_gpu = wallclock()
-       call nvtxStartRange("GPU fmm_amr_direct_taylor", color=1)!blue
+       call nvtxStartRange("GPU fmm_amr_direct_taylor", color=0)!green
        call fmm_amr_direct_taylor_kernel<<<num_blocks, num_threads>>>(grid, phi, source_grid_fmm, grid_fmm, &
             & multipole_fmm, nbor_fmm, hash_key_fmm(hash_offset+1), hash_val_fmm(hash_offset+1), hash_capacity, &
             & ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, head_idx, num_octs, dx_loc)
@@ -3516,7 +3582,6 @@ contains
     external :: m_timer_add
 
 #ifdef FMM
-    call gpu_assert_fmm_to_amr_one(sim)
     t_gpu = wallclock()
     call gpu_refresh_amr_father_level(sim, ilev)
     call gpu_refresh_amr_nbor_level(sim, ilev-1)
@@ -3530,7 +3595,7 @@ contains
     num_blocks = (num_octs + num_threads - 1) / num_threads
     if (num_octs > 0) then
        t_gpu = wallclock()
-       call nvtxStartRange("GPU fmm_combined_direct", color=1)!blue
+       call nvtxStartRange("GPU fmm_combined_direct", color=0)!green
        call fmm_combined_direct_kernel<<<num_blocks, num_threads>>>(grid, rho, phi, father, nbor, &
             & box_ckey_min, box_ckey_max, head_idx, num_octs, ilev, dx_loc, vol_loc)
        call nvtxEndRange()

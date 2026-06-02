@@ -580,6 +580,28 @@ contains
   ! =========================================================================
 
   ! =========================================================================
+  attributes(global) subroutine fmm_accumulate_global_multipole(multipole_fmm, multipole_out, source_head, num_source)
+    real(kind=dp), device :: multipole_fmm(1:twotondim,1:multipole_size,*)
+    real(kind=dp), device :: multipole_out(*)
+    integer(kind=4), value :: source_head, num_source
+
+    integer(kind=4) :: thread_idx, source_idx
+    integer :: icell, q
+    real(kind=dp) :: info
+
+    thread_idx = threadIdx%x - 1 + (blockIdx%x - 1) * blockDim%x
+    if (thread_idx >= num_source * twotondim) return
+
+    source_idx = source_head + thread_idx / twotondim
+    icell = 1 + mod(thread_idx, twotondim)
+    do q = 1, multipole_size
+       info = atomicadd(multipole_out(q), multipole_fmm(icell, q, source_idx))
+    end do
+
+  end subroutine fmm_accumulate_global_multipole
+  ! =========================================================================
+
+  ! =========================================================================
   attributes(device) function fmm_lookup_grid_by_ckey(ckey, ilevel, hash_key, hash_val, hash_size, &
        & ckey_max, key_off) result(igrid)
     implicit none
