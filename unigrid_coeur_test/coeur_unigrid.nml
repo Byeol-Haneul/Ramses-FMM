@@ -1,0 +1,83 @@
+This is a short particle-free unigrid Coeur collapse smoke test.
+Compile with:
+
+make COMPILER=NVHPC NDIM=3 MPI=0 GRAV=1 HYDRO=1 UNITS=COEUR INIT=COEUR FMM=0
+make COMPILER=NVHPC NDIM=3 MPI=0 GRAV=1 HYDRO=1 UNITS=COEUR INIT=COEUR FMM=1
+
+&RUN_PARAMS
+hydro=.true.
+poisson=.true.
+pic=.false.
+ncontrol=1
+nsubcycle=1,1,10*2,
+nrestart=0
+nstepmax=5
+nsuperoct=0
+verbose=.false.
+/
+
+&AMR_PARAMS
+levelmin=7
+levelmax=7
+ngridmax=300000
+nexpand=10*6
+boxlen=1.0
+npartmax=0
+nparttot=0
+/
+
+&BOUNDARY_PARAMS
+bound_levelmin = 3
+box_size = 1.0
+box_xmin = 1
+box_ymin = 1
+box_zmin = 1
+box_xmax = -1
+box_ymax = -1
+box_zmax = -1
+nbound = 6
+periodic = .false., .false., .false.
+bound_dir   = 1, 1, 2, 2, 3, 3
+bound_shift = 1, -1, 1, -1, 1, -1
+bound_type  = 1, 1, 1, 1, 1, 1
+bound_xmin =  0, -1,  0,  0,  0,  0
+bound_xmax =  1,  0,  0,  0,  0,  0
+bound_ymin =  1,  1,  0, -1,  0,  0
+bound_ymax = -1, -1,  1,  0,  0,  0
+bound_zmin =  1,  1,  1,  1,  0, -1
+bound_zmax = -1, -1, -1, -1,  1,  0
+/
+
+&INIT_PARAMS
+/
+
+&OUTPUT_PARAMS
+delta_tout = 0.01
+tend = 0.01
+/
+
+&HYDRO_PARAMS
+gamma=1.6666667
+courant_factor=0.8
+slope_type=1
+riemann='hllc'
+/
+
+&COOLING_PARAMS
+isothermal=.true.
+eos_type=3
+eos_T2=4.29
+eos_nH=1d10
+eos_index=2.0
+/
+
+&POISSON_PARAMS
+gravity_type=0
+epsilon=1.d-4
+fast_solver=.true.
+level_fmm_to_amr=1
+/
+
+&MOVIE_PARAMS
+movie=.false.
+/

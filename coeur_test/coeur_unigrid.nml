@@ -1,0 +1,62 @@
+This is the RAMSES parameter file for 3D core collapse test.
+Compile the code for the CPU with:
+module load openmpi/gcc/4.1.8
+make NDIM=3 MPI=1 GRAV=1 HYDRO=1 UNITS=COEUR INIT=COEUR
+Compile the code for the GPU with:
+module load nvhpc/25.5
+make NDIM=3 COMPILER=NVHPC GRAV=1 HYDRO=1 UNITS=COEUR INIT=COEUR
+
+&RUN_PARAMS 
+hydro=.true.
+pic=.false.
+poisson=.true.
+ncontrol=1
+nsubcycle=1,1,10*2,
+nrestart=0
+nsuperoct=0
+verbose=.false.
+/
+
+&AMR_PARAMS
+levelmin=8
+levelmax=8
+ngridmax=8000000
+ncachemax=2000000
+nexpand=10*6
+boxlen=1.0
+/
+
+&INIT_PARAMS
+/
+
+&OUTPUT_PARAMS
+delta_tout = 10.0
+tend = 100.0
+/
+
+&HYDRO_PARAMS
+gamma=1.6666667
+courant_factor=0.8
+slope_type=1
+riemann='hllc'
+/
+
+&COOLING_PARAMS
+isothermal=.true.
+eos_type=3
+eos_T2=4.29
+eos_nH=1d10
+eos_index=2.0
+/
+
+&REFINE_PARAMS
+jeans_refine=10*6.
+interpol_var=0
+interpol_type=0
+/
+
+&POISSON_PARAMS
+gravity_type=0
+epsilon=1.d-4
+fast_solver=.true.
+/

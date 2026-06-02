@@ -776,6 +776,8 @@ contains
     end do
     ! End loop over levels
 
+    if (ilevel == sim%r%levelmin) call gpu_reset_hash(sim)
+
   end subroutine gpu_refine
 
   !> @brief
@@ -916,7 +918,6 @@ contains
        threadsX_per_block = 8
        threadsY_per_block = 16
        num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
-
        if(num_octs > 0)then
           call nvtxStartRange("GPU user_flag", color=2)!yellow
           call hydro_flag_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(flag1, grid, nbor, uold, &
@@ -1483,7 +1484,7 @@ contains
   !>
   subroutine gpu_init_phi(sim, ilevel, icount)
     use nvtx
-    use mg_device, only: reset_phi, make_initial_phi, make_initial_phi_isolated
+    use mg_device, only: reset_phi, make_initial_phi
     use ramses_commons, only: ramses_t
     type(ramses_t), intent(inout) :: sim
     integer, intent(in) :: ilevel
@@ -1491,7 +1492,7 @@ contains
 
     integer(kind=4) :: head_idx, num_octs
     integer :: threadsX_per_block, threadsY_per_block, num_threads, num_blocks
-    real(kind=8) :: tfrac, dx
+    real(kind=8) :: tfrac
 
     ! Compute fraction of time steps for interpolation
     if (sim%g%dtold(ilevel-1)>0.0)then
@@ -1499,7 +1500,6 @@ contains
     else
        tfrac = 0.0
     end if
-    dx = sim%r%boxlen/2**ilevel
 
     ! Initial guess for inner domain
     head_idx = sim%m%head(ilevel)
@@ -1517,16 +1517,16 @@ contains
     endif
 
     ! Match CPU make_initial_phi: isolated base level starts from phiana.
-    if (ilevel == sim%r%levelmin .and. any(.not. sim%r%periodic(1:ndim))) then
-       gravity_multipole = 0.0d0
-       gravity_multipole(1:size(sim%g%multipole%q)) = sim%g%multipole%q
-       if (num_octs > 0) then
-          call nvtxStartRange("GPU init_phi_isolated", color=1)!blue
-          call make_initial_phi_isolated<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(grid, phi, f, &
-               & gravity_multipole, head_idx, num_octs, ilevel, dx, sim%m%skip(1), sim%m%skip(2), sim%m%skip(3))
-          call nvtxEndRange()
-       endif
-    endif
+    !if (ilevel == sim%r%levelmin .and. any(.not. sim%r%periodic(1:ndim))) then
+    !   gravity_multipole = 0.0d0
+    !   gravity_multipole(1:size(sim%g%multipole%q)) = sim%g%multipole%q
+    !   if (num_octs > 0) then
+    !      call nvtxStartRange("GPU init_phi_isolated", color=1)!blue
+    !      call make_initial_phi_isolated<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(grid, phi, f, &
+    !           & gravity_multipole, head_idx, num_octs, ilevel, dx, sim%m%skip(1), sim%m%skip(2), sim%m%skip(3))
+    !      call nvtxEndRange()
+    !   endif
+    !endif
 
     ! Interpolate phi from coarser level
     if (ilevel > sim%r%levelmin) then
@@ -1646,15 +1646,8 @@ contains
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
     if (num_octs > 0) then
        call nvtxStartRange("GPU make_rhs", color=1)!blue
-#ifdef FMM
-       call reset_rhs_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(grid, phi, phi_old, &
-            & rho, f, nbor, hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, box_ckey_min, box_ckey_max, &
-            & periodic, gravity_multipole, head_idx, num_octs, sim%m%ngridmax, sim%r%levelmin, ilevel, &
-            & fourpi, offset, oneoverdx2, tfrac, dx, sim%m%skip(1), sim%m%skip(2), sim%m%skip(3))
-#else
        call reset_rhs_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(phi, rho, f, nbor, &
             & head_idx, num_octs, sim%m%ngridmax, fourpi, offset, oneoverdx2)
-#endif
        call nvtxEndRange()
     end if
 
@@ -1705,7 +1698,7 @@ contains
     head_mg = sim%m_mg%head(ifine-1)
 
     ! Init prefix sum (count new parent octs)
-    call nvtxStartRange("GPU build_mg", color=1)!blue
+    call nvtxStartRange("GPU build_mg", color=2)!yellow
     if (ifine == ilevel) then
        call init_prefix_sum_mg<<<num_blocks, num_threads>>>(grid, prefix_sum, head_idx, num_octs)
     else
@@ -1714,7 +1707,7 @@ contains
     call nvtxEndRange()
 
     ! Compute prefix sums
-    call nvtxStartRange("GPU build_mg", color=1)!blue
+    call nvtxStartRange("GPU build_mg", color=2)!yellow
     call gpu_scan(head_idx, num_octs, new_noct_d)
     new_noct = new_noct_d
     call nvtxEndRange()
@@ -1732,23 +1725,23 @@ contains
        endif
 
        ! Compute MG father swap table
-       call nvtxStartRange("GPU build_mg", color=1)!blue
+       call nvtxStartRange("GPU build_mg", color=2)!yellow
        call compute_father_swap_table<<<num_blocks, num_threads>>>(swap_local, prefix_sum, head_idx, num_octs)
        call nvtxEndRange()
 
        ! Make new MG octs
-       call nvtxStartRange("GPU build_mg", color=1)!blue
+       call nvtxStartRange("GPU build_mg", color=2)!yellow
        if (ifine == ilevel) then
-          call make_father_octs<<<num_blocks_2, num_threads_2>>>(grid, grid_mg, f_mg, phi_mg, swap_local, &
+          call make_father_octs<<<num_blocks_2, num_threads_2>>>(grid, grid_mg, phi_mg, f_mg, swap_local, &
                & head_mg, new_noct)
        else
-          call make_father_octs<<<num_blocks_2, num_threads_2>>>(grid_mg, grid_mg, f_mg, phi_mg, swap_local, &
+          call make_father_octs<<<num_blocks_2, num_threads_2>>>(grid_mg, grid_mg, phi_mg, f_mg, swap_local, &
                & head_mg, new_noct)
        endif
        call nvtxEndRange()
 
        ! Insert new octs in hash table
-       call nvtxStartRange("GPU build_mg", color=1)!blue
+       call nvtxStartRange("GPU build_mg", color=2)!yellow
        call insert_hash_kernel<<<num_blocks_2, num_threads_2>>>(grid_mg, hash_key_mg, hash_val_mg, &
             & sim%m_mg%hash_size, ckey_max, key_off, head_mg, new_noct)
        call nvtxEndRange()
@@ -1757,13 +1750,13 @@ contains
 
     ! Compute final father array
     if (ifine == ilevel) then
-       call nvtxStartRange("GPU build_mg", color=1)!blue
+       call nvtxStartRange("GPU build_mg", color=2)!yellow
        call update_father_array<<<num_blocks, num_threads>>>(father_mg, grid, grid_mg, &
             & hash_key_mg, hash_val_mg, sim%m_mg%hash_size, &
             & ckey_max, key_off, head_idx, head_father, num_octs)
        call nvtxEndRange()
     else
-       call nvtxStartRange("GPU build_mg", color=1)!blue
+       call nvtxStartRange("GPU build_mg", color=2)!yellow
        call update_father_array<<<num_blocks, num_threads>>>(father_mg, grid_mg, grid_mg, &
             & hash_key_mg, hash_val_mg, sim%m_mg%hash_size, &
             & ckey_max, key_off, head_idx, head_father, num_octs)
@@ -1783,7 +1776,7 @@ contains
     num_blocks = (num_octs + num_threads - 1) / num_threads
 
     if (num_octs > 0) then
-       call nvtxStartRange("GPU build_mg", color=1)!blue
+       call nvtxStartRange("GPU build_mg", color=2)!yellow
        call update_nbor_array_mg<<<num_blocks, num_threads>>>(nbor_mg, grid_mg, hash_key_mg, hash_val_mg, &
             & sim%m_mg%hash_size, ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, head_idx, num_octs)
        call nvtxEndRange()
@@ -1806,7 +1799,7 @@ contains
     implicit none
     type(ramses_t), intent(inout) :: sim
     !
-    call nvtxStartRange("GPU clean_mg", color=1)!blue
+    call nvtxStartRange("GPU clean_mg", color=2)!yellow
     hash_key_mg=0
     hash_val_mg=0
     call nvtxEndRange()
@@ -2001,6 +1994,8 @@ contains
     real(kind=8) :: fourpi, offset, dx, oneoverdx2
 
     fourpi = 4.D0*ACOS(-1.0D0)
+    if (sim%r%cosmo) fourpi = 1.5D0 * sim%g%omega_m * sim%g%aexp
+
     dx  = sim%r%boxlen/2**ifine
     oneoverdx2 = 1.0d0/(dx*dx)
     offset = sim%g%rho_tot
@@ -2193,7 +2188,7 @@ contains
        head_father = sim%m%noct(ilevel) + sim%m_mg%head(ifine)
     endif
     threadsX_per_block = 8
-    threadsY_per_block = 16
+    threadsY_per_block = nthreads_y
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
 
     if (num_octs > 0) then
@@ -2227,7 +2222,7 @@ contains
     integer, intent(in) :: ilevel
     real(kind=8), intent(out) :: norm
     !
-    integer(kind=4) :: head_idx
+    integer(kind=4) :: head_idx, head_mg, head_father
     integer(kind=4) :: num_octs, num_blocks, num_threads
     real(kind=8), device :: norm_tot
     real(kind=8) :: norm_tot_host
@@ -2275,9 +2270,7 @@ contains
     integer(kind=4) :: head_idx
     integer(kind=4) :: num_octs, num_blocks
     integer :: threadsX_per_block, threadsY_per_block
-    real(kind=8) :: dx, tfrac, t_gpu
-    real(kind=8), external :: wallclock
-    external :: m_timer_add
+    real(kind=8) :: dx, tfrac
 
     dx  = sim%r%boxlen/2**ilevel
 #ifdef FMM
@@ -2289,16 +2282,12 @@ contains
     gravity_multipole = 0.0d0
     gravity_multipole(1:size(sim%g%multipole%q)) = sim%g%multipole%q
 
-    t_gpu = wallclock()
 #if defined(FMM) && defined(WITHOUTMPI)
     call gpu_reset_hash_main(sim)
 #else
     call gpu_reset_hash(sim)
 #endif
     call gpu_refresh_amr_nbor_level(sim, ilevel)
-#ifdef FMM
-    call m_timer_add('fmm grad nbor', wallclock() - t_gpu)
-#endif
 #endif
 
     head_idx = sim%m%head(ilevel)
@@ -2307,23 +2296,10 @@ contains
     threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
     if (num_octs > 0) then
-#ifdef FMM
-       t_gpu = wallclock()
-#endif
        call nvtxStartRange("GPU gradient_phi", color=1)!blue
-#ifdef FMM
-       call gradient_phi<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(grid, phi, phi_old, f, nbor, &
-            & hash_key, hash_val, sim%m%hash_size, ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, &
-            & gravity_multipole, head_idx, num_octs, sim%r%levelmin, ilevel, sim%m%ngridmax, dx, tfrac, &
-            & sim%m%skip(1), sim%m%skip(2), sim%m%skip(3))
-#else
        call gradient_phi<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(phi, f, nbor, &
             & head_idx, num_octs, dx)
-#endif
        call nvtxEndRange()
-#ifdef FMM
-       call m_timer_add('fmm grad kernel', wallclock() - t_gpu)
-#endif
     end if
 
   end subroutine gpu_gradient_phi
@@ -3345,9 +3321,6 @@ contains
     integer(kind=4) :: target_grid_offset
     integer(kind=4) :: hash_offset, hash_capacity
     real(kind=dp) :: dx_loc
-    real(kind=8) :: t_gpu
-    real(kind=8), external :: wallclock
-    external :: m_timer_add
 
 #ifdef FMM
     call gpu_select_fmm_tree(sim, ilev, target_slot)
@@ -3452,9 +3425,6 @@ contains
     integer, intent(in) :: ilevel
 
     integer(kind=4) :: head_idx, num_octs, num_threads, num_blocks
-    real(kind=8) :: t_gpu
-    real(kind=8), external :: wallclock
-    external :: m_timer_add
 
 #ifdef FMM
     if (ilevel >= sim%r%nlevelmax) return
@@ -3464,12 +3434,10 @@ contains
     num_threads = 128
     num_blocks = (num_octs + num_threads - 1) / num_threads
     if (num_octs > 0) then
-       t_gpu = wallclock()
        call nvtxStartRange("GPU fmm_fill_phi", color=0)!green
        call fmm_fill_phi_kernel<<<num_blocks, num_threads>>>(grid, phi, hash_key, hash_val, &
             & sim%m%hash_size, ckey_max, key_off, head_idx, num_octs, ilevel)
        call nvtxEndRange()
-       call m_timer_add('fmm fill phi', wallclock() - t_gpu)
     end if
 #endif
 
@@ -3488,14 +3456,9 @@ contains
 
     integer(kind=4) :: head_idx, num_octs, num_threads, num_blocks
     real(kind=dp) :: dx_loc, dxn
-    real(kind=8) :: t_gpu
-    real(kind=8), external :: wallclock
-    external :: m_timer_add
 
 #ifdef FMM
-    t_gpu = wallclock()
     call gpu_refresh_amr_nbor_level(sim, ilev)
-    call m_timer_add('fmm direct nbor', wallclock() - t_gpu)
 
     head_idx = sim%m%head(ilev)
     num_octs = sim%m%noct(ilev)
@@ -3504,12 +3467,10 @@ contains
     num_threads = 128
     num_blocks = (num_octs + num_threads - 1) / num_threads
     if (num_octs > 0) then
-       t_gpu = wallclock()
        call nvtxStartRange("GPU fmm_amr_direct", color=0)!green
        call fmm_amr_direct_kernel<<<num_blocks, num_threads>>>(grid, rho, phi, nbor, hash_key, hash_val, &
             & sim%m%hash_size, ckey_max, key_off, head_idx, num_octs, ilev, dx_loc, dxn)
        call nvtxEndRange()
-       call m_timer_add('fmm direct kernel', wallclock() - t_gpu)
     end if
 
 #endif
@@ -3532,9 +3493,6 @@ contains
     integer(kind=4) :: tree_slot
     integer(kind=4) :: hash_offset, hash_capacity
     real(kind=dp) :: dx_loc
-    real(kind=8) :: t_gpu
-    real(kind=8), external :: wallclock
-    external :: m_timer_add
 
 #ifdef FMM
     call gpu_select_fmm_interaction_tree(sim, jlev, use_merged, tree_slot)
@@ -3547,16 +3505,12 @@ contains
     if (num_octs > 0) then
        hash_offset = fmm_hash_offset(tree_slot)
        hash_capacity = fmm_hash_capacity_slot(tree_slot)
-       t_gpu = wallclock()
        call gpu_refresh_amr_fmm_grid_level(sim, ilev, tree_slot)
-       call m_timer_add('fmm direct map', wallclock() - t_gpu)
-       t_gpu = wallclock()
        call nvtxStartRange("GPU fmm_amr_direct_taylor", color=0)!green
        call fmm_amr_direct_taylor_kernel<<<num_blocks, num_threads>>>(grid, phi, source_grid_fmm, grid_fmm, &
             & multipole_fmm, nbor_fmm, hash_key_fmm(hash_offset+1), hash_val_fmm(hash_offset+1), hash_capacity, &
             & ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, head_idx, num_octs, dx_loc)
        call nvtxEndRange()
-       call m_timer_add('fmm direct kernel', wallclock() - t_gpu)
     end if
 
 #endif
@@ -3576,15 +3530,10 @@ contains
 
     integer(kind=4) :: head_idx, num_octs, num_threads, num_blocks
     real(kind=dp) :: dx_loc, vol_loc
-    real(kind=8) :: t_gpu
-    real(kind=8), external :: wallclock
-    external :: m_timer_add
 
 #ifdef FMM
-    t_gpu = wallclock()
     call gpu_refresh_amr_father_level(sim, ilev)
     call gpu_refresh_amr_nbor_level(sim, ilev-1)
-    call m_timer_add('fmm direct nbor', wallclock() - t_gpu)
 
     head_idx = sim%m%head(ilev)
     num_octs = sim%m%noct(ilev)
@@ -3593,12 +3542,10 @@ contains
     num_threads = 128
     num_blocks = (num_octs + num_threads - 1) / num_threads
     if (num_octs > 0) then
-       t_gpu = wallclock()
        call nvtxStartRange("GPU fmm_combined_direct", color=0)!green
        call fmm_combined_direct_kernel<<<num_blocks, num_threads>>>(grid, rho, phi, father, nbor, &
             & box_ckey_min, box_ckey_max, head_idx, num_octs, ilev, dx_loc, vol_loc)
        call nvtxEndRange()
-       call m_timer_add('fmm direct kernel', wallclock() - t_gpu)
     end if
 
 #endif

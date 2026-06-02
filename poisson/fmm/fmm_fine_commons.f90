@@ -39,9 +39,6 @@ subroutine fmm(pst,ilev,icount)
   type(double_level_t)::double_level
   type(downward_level_t)::downward_levels
   type(fmm_level_t)::fmm_levels
-  real(kind=8) :: t_fmm
-  real(kind=8), external :: wallclock
-  external :: m_timer_add
 
   if(pst%s%r%gravity_type>0)return
   if(pst%s%m%noct_tot(ilev)==0)return
@@ -59,15 +56,12 @@ subroutine fmm(pst,ilev,icount)
     end if
 
     !cleanup FMM trees
-    t_fmm = wallclock()
     if (ilev > pst%s%r%levelmin) then
      do jlev=ilev,pst%s%r%nlevelmax
        call r_cleanup_fmm(pst, jlev, 1)
      end do
     end if
-    call m_timer_add('fmm cleanup', wallclock() - t_fmm)
 
-    t_fmm = wallclock()
     do jlev=ilev,pst%s%r%nlevelmax
       if(pst%s%r%verbose) print '(A,I2)','[Build FMM] ', jlev
       call r_init_fmm(pst, jlev, 1)
@@ -78,21 +72,15 @@ subroutine fmm(pst,ilev,icount)
         call r_build_fmm(pst,double_level,storage_size(double_level)/32)
       end do
     end do
-    call m_timer_add('fmm build', wallclock() - t_fmm)
 
     if(pst%s%r%verbose) print '(A)','FMM Hierarchy done '
 
-    t_fmm = wallclock()
     do jlev=ilev,pst%s%r%nlevelmax
       call m_fmm_multipoles(pst, jlev) ! do upward pass !
     end do
-    call m_timer_add('fmm multipoles', wallclock() - t_fmm)
 
-    t_fmm = wallclock()
     call sync_fmm_global_multipole(pst)
-    call m_timer_add('fmm global mp', wallclock() - t_fmm)
 
-    t_fmm = wallclock()
     do jlev=ilev,pst%s%r%nlevelmax
       if(pst%s%r%verbose) print *, "[M2M] LEVEL: ", jlev
       fmm_levels%ilev = jlev
@@ -103,10 +91,8 @@ subroutine fmm(pst,ilev,icount)
         call r_fmm_multipole_shift_downward(pst,fmm_levels,storage_size(fmm_levels)/32)
       end do
     end do
-    call m_timer_add('fmm shift', wallclock() - t_fmm)
   end if
 
-  t_fmm = wallclock()
   if (ilev < pst%s%r%nlevelmax) then
     if (associated(pst%s%m_fmm_merged)) call r_cleanup_fmm_merge(pst)
     double_level%ilevel=ilev+1
@@ -115,7 +101,6 @@ subroutine fmm(pst,ilev,icount)
     call r_build_fmm(pst,double_level,storage_size(double_level)/32)
     call merge_multipoles(pst,ilev+1)
   end if
-  call m_timer_add('fmm merge build', wallclock() - t_fmm)
   use_merged = associated(pst%s%m_fmm_merged) .and. (ilev < pst%s%r%nlevelmax)
 
    ! ---------------------------------------------------------------------
@@ -128,7 +113,6 @@ subroutine fmm(pst,ilev,icount)
    
    if(pst%s%r%verbose) print *, "[M2L & L2L] LEVEL: ", ilev
    downward_levels%mode = FMM_TREE_SOURCE_STANDARD
-   t_fmm = wallclock()
    do flev = pst%s%r%bound_levelmin+1, ilev-1
       downward_levels%flev=flev
       do jlev = max(pst%s%r%levelmin, flev-1), min(ilev, pst%s%r%nlevelmax)
@@ -144,7 +128,6 @@ subroutine fmm(pst,ilev,icount)
          downward_levels%mode = FMM_TREE_SOURCE_STANDARD
       end if
    end do
-   call m_timer_add('fmm down', wallclock() - t_fmm)
 
    ! ---------------------------------------------------------------------
    ! Project FMM fields from grids to AMR cells
@@ -156,7 +139,6 @@ subroutine fmm(pst,ilev,icount)
    if(pst%s%r%verbose) print *, "[L2P & M2P] LEVEL: ", ilev
    downward_levels%mode=FMM_TREE_SOURCE_STANDARD
    downward_levels%jlev=ilev
-   t_fmm = wallclock()
    call r_fmm_amr_intermediate(pst, downward_levels, input_size)
    if(pst%s%r%verbose) print *,'     <AMR Intermediate> (ilev, jlev)', ilev, ilev
    if (use_merged) then
@@ -172,7 +154,6 @@ subroutine fmm(pst,ilev,icount)
          if(pst%s%r%verbose) print *,'     <AMR Intermediate> (ilev, jlev)', ilev, jlev
       end do
    end if
-   call m_timer_add('fmm l2p m2p', wallclock() - t_fmm)
 
    ! ---------------------------------------------------------------------
    ! Direct near-field correction on AMR cells
@@ -183,7 +164,6 @@ subroutine fmm(pst,ilev,icount)
    if(pst%s%r%verbose) print *, "[P2P] LEVEL: ", ilev
    downward_levels%mode=FMM_TREE_SOURCE_STANDARD
    jlev_max_amr_direct = min(pst%s%r%nlevelmax, ilev)
-   t_fmm = wallclock()
    do jlev = max(pst%s%r%levelmin, ilev-1), jlev_max_amr_direct
       downward_levels%jlev=jlev
       call r_fmm_amr_direct(pst, downward_levels, input_size)
@@ -204,11 +184,8 @@ subroutine fmm(pst,ilev,icount)
          if(pst%s%r%verbose) print *,'     <Direct Force> (ilev, jlev)', ilev, jlev
       end do
    end if
-   call m_timer_add('fmm direct', wallclock() - t_fmm)
 
-   t_fmm = wallclock()
    if (use_merged) call r_cleanup_fmm_merge(pst)
-   call m_timer_add('fmm cleanup', wallclock() - t_fmm)
 end subroutine fmm
 !###########################################################
 !###########################################################

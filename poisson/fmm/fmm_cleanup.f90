@@ -5,6 +5,9 @@ recursive subroutine r_cleanup_fmm(pst,ilevel,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
+#if defined(_CUDA) && defined(WITHOUTMPI)
+  use gpu_runner, only: gpu_clean_fmm, gpu_clean_fmm_merged
+#endif
   implicit none
   type(pst_t)::pst
   integer::ilevel
@@ -16,6 +19,16 @@ recursive subroutine r_cleanup_fmm(pst,ilevel,input_size)
      call r_cleanup_fmm(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
+#if defined(_CUDA) && defined(WITHOUTMPI)
+     if (pst%s%m%data_on_device) then
+        if (ilevel > 0) then
+           call gpu_clean_fmm(pst%s, ilevel)
+        else
+           call gpu_clean_fmm_merged(pst%s)
+        end if
+        return
+     end if
+#endif
      if (ilevel > 0) then
         call m_cleanup_fmm(pst%s%m_fmm_list(ilevel))
      else

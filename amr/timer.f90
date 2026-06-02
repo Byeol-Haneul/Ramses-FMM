@@ -9,15 +9,15 @@ real(kind=8) function wallclock()
 #endif
   implicit none
 #ifdef WITHOUTMPI
-  integer,      save :: tstart
-  integer            :: tcur
-  integer            :: count_rate
+  integer(kind=8), save :: tstart
+  integer(kind=8)       :: tcur
+  integer(kind=8)       :: count_rate
 #else
   real(kind=8), save :: tstart
   real(kind=8)       :: tcur
 #endif
   logical,      save :: first_call=.true.
-  real(kind=8), save :: norm, offset=0.
+  real(kind=8), save :: norm
   !---------------------------------------------------------------------
   if (first_call) then
 #ifdef WITHOUTMPI
@@ -34,11 +34,7 @@ real(kind=8) function wallclock()
 #else
   tcur = MPI_Wtime()
 #endif
-  wallclock = (tcur-tstart)*norm + offset
-  if (wallclock < 0.) then
-     offset = offset + 24d0*3600d0
-     wallclock = wallclock + 24d0*3600d0
-  end if
+  wallclock = (tcur-tstart)*norm
 end function wallclock
 !################################################################
 !################################################################
@@ -88,21 +84,6 @@ end subroutine m_timer
 !################################################################
 !################################################################
 !################################################################
-subroutine m_timer_add(label,elapsed)
-  use timer_module
-  implicit none
-  character(len=*) label
-  real(kind=8), intent(in) :: elapsed
-  integer :: active_timer
-  active_timer = itimer
-  call findit(label)
-  time(itimer) = time(itimer) + elapsed
-  itimer = active_timer
-end subroutine m_timer_add
-!################################################################
-!################################################################
-!################################################################
-!################################################################
 subroutine m_output_timer(write_file,filename)
   use amr_parameters, only: flen
   use mdl_module
@@ -123,10 +104,7 @@ subroutine m_output_timer(write_file,filename)
   write (ilun,'(/a,i7,a)') '     seconds         %    STEP'
   total = 1e-9
   do itimer = 1,ntimer
-     ! FMM/MG phase labels are diagnostic sub-timers nested inside poisson.
-     if (len_trim(labels(itimer)) < 4 .or. &
-          (labels(itimer)(1:4) /= 'fmm ' .and. labels(itimer)(1:3) /= 'mg ')) &
-          total = total + time(itimer)
+     total = total + time(itimer)
   end do
   do itimer = 1,ntimer
      if (time(itimer)/total >= 0.001) write (ilun,'(f12.3,4x,f6.1,4x,a24)') &
@@ -140,11 +118,3 @@ end subroutine m_output_timer
 !################################################################
 !################################################################
 !################################################################
-
-
-  
-
-
-
-
-

@@ -39,6 +39,10 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
+#ifdef _CUDA
+  use part_device, only: gpu_kick_drift_part
+  use pm_parameters, only: PART_TYPE
+#endif
   implicit none
   type(pst_t)::pst
   integer,VALUE::input_size
@@ -57,6 +61,33 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
   else
      ilevel=input_array(1)
      action_part=input_array(2)
+#ifdef _CUDA
+     if(pst%s%m%data_on_device)then
+        if(pst%s%r%part)then
+           ! TODO: implement the CPU gravana fallback for non-periodic
+           ! levelmin-1 particles before using this path as fully general.
+           if(pst%s%p%type/=PART_TYPE)then
+              write(*,*)'r_kick_drift_part: GPU path supports DM PART_TYPE only.'
+              call abort
+           endif
+           if(pst%s%p%static)then
+              write(*,*)'r_kick_drift_part: static particles are not supported on GPU.'
+              call abort
+           endif
+           if(pst%s%r%part_force_interpolation_scheme/=1)then
+              write(*,*)'r_kick_drift_part: GPU path supports CIC interpolation only.'
+              call abort
+           endif
+           call gpu_kick_drift_part(pst%s, ilevel, action_part)
+        endif
+        if(pst%s%r%star .or. pst%s%r%sink .or. pst%s%r%tree .or. &
+           pst%s%r%trac .or. pst%s%r%dust)then
+           write(*,*)'r_kick_drift_part: star/sink/tree/trac/dust not supported on GPU.'
+           call abort
+        endif
+        return
+     endif
+#endif
      ! Force interpolation for various components (DM particles, star, sink, tree)
      ! based on their respective deposition schemes (CIC 1, TSC 2 or PCS 3)
      if(pst%s%r%part)then

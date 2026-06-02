@@ -61,9 +61,6 @@ subroutine multigrid(pst,ilevel,icount)
   type(double_level_t)::double_level
   type(level_count_t)::level_count
   type(gs_step_t)::gs_step
-  real(kind=8) :: t_mg
-  real(kind=8), external :: wallclock
-  external :: m_timer_add
 
   if(pst%s%r%gravity_type>0)return
   if(pst%s%m%noct_tot(ilevel)==0)return
@@ -75,41 +72,34 @@ subroutine multigrid(pst,ilevel,icount)
   ! ---------------------------------------------------------------------
   level_count%ilevel=ilevel
   level_count%icount=icount
-  t_mg = wallclock()
   call r_make_initial_phi(pst,level_count,storage_size(level_count)/32) ! Initial guess
   call r_make_mask(pst,ilevel,1) ! Fill the fine level mask
   call r_make_bc_rhs(pst,level_count,storage_size(level_count)/32) ! Fill BC-modified RHS
-  call m_timer_add('mg fine prep', wallclock() - t_mg)
 
   if(pst%s%r%verbose) print '(A)','Initial guess done '
 
   ! ---------------------------------------------------------------------
   ! Initialize Domain Decomposition and Hash Table for Multigrid
   ! ---------------------------------------------------------------------
-  t_mg = wallclock()
   call r_init_mg(pst,ilevel,1)
-  call m_timer_add('mg init', wallclock() - t_mg)
 
   if(pst%s%r%verbose) print '(A)','Multigrid init done '
 
   ! ---------------------------------------------------------------------
   ! Build Multigrid hierarchy in memory
   ! ---------------------------------------------------------------------
-  t_mg = wallclock()
   double_level%ilevel=ilevel
   do ifine=ilevel,pst%s%r%bound_levelmin+1,-1
      double_level%ifine=ifine
      if(pst%s%r%verbose) print '(A,I2)','Build MG ',ifine
      call r_build_mg(pst,double_level,storage_size(double_level)/32)
   end do
-  call m_timer_add('mg build', wallclock() - t_mg)
 
   if(pst%s%r%verbose) print '(A)','Multigrid hierarchy done '
 
   ! ---------------------------------------------------------------------
   ! Restrict mask up
   ! ---------------------------------------------------------------------
-  t_mg = wallclock()
   pst%s%g%levelmin_mg=pst%s%r%bound_levelmin
   double_level%ilevel=ilevel
   do ifine=ilevel,pst%s%r%bound_levelmin+1,-1
@@ -121,20 +111,17 @@ subroutine multigrid(pst,ilevel,icount)
         exit
      end if
   end do
-  call m_timer_add('mg restrict mask', wallclock() - t_mg)
 
   if(pst%s%r%verbose) print '(A)','Restrict mask up done '
 
   ! ---------------------------------------------------------------------
   ! Set scan flag (for optimisation)
   ! ---------------------------------------------------------------------
-  t_mg = wallclock()
   double_level%ilevel=ilevel
   do ifine=ilevel,pst%s%g%levelmin_mg,-1
      double_level%ifine=ifine
      call r_set_scan_flag(pst,double_level,storage_size(double_level)/32)
   end do
-  call m_timer_add('mg scan flag', wallclock() - t_mg)
 
   if(pst%s%r%verbose) print '(A)','Mask and scan done '
 
@@ -144,7 +131,6 @@ subroutine multigrid(pst,ilevel,icount)
 
   iter = 0
   err = 1.0d0
-  t_mg = wallclock()
   main_iteration_loop: do
 
      iter=iter+1
@@ -219,7 +205,6 @@ subroutine multigrid(pst,ilevel,icount)
      end if
 
   end do main_iteration_loop
-  call m_timer_add('mg solve', wallclock() - t_mg)
 
   print '(A,I5,A,I5,A,1pE10.3)','   ==> Level=',ilevel,' Step=',iter,' Error=',err
   if(iter==MAXITER) print *,'WARN: Fine multigrid Poisson failed to converge...'
@@ -227,9 +212,7 @@ subroutine multigrid(pst,ilevel,icount)
   ! ---------------------------------------------------------------------
   ! Cleanup MG levels after solve complete
   ! ---------------------------------------------------------------------
-  t_mg = wallclock()
   call r_cleanup_mg(pst)
-  call m_timer_add('mg cleanup', wallclock() - t_mg)
 
 end subroutine multigrid
 
@@ -454,7 +437,6 @@ subroutine build_mg(s,m,ifinelevel)
      hash_key(1:ndim)=m%grid(igrid)%ckey(1:ndim)
 
      ! Gather twotondim neighboring father grids
-     ! I don't need this loop. only "the father grid"
      do inbor=1,twotondim
 
 #ifndef WITHOUTMPI
@@ -465,21 +447,18 @@ subroutine build_mg(s,m,ifinelevel)
         endif
         mdl%mail_counter=mdl%mail_counter+1
 #endif
-! Get neighboring grid
-hash_nbor(1:ndim)=hash_key(1:ndim)+shift_oct(1:ndim,inbor)
+        ! Get neighboring grid
+        hash_nbor(1:ndim)=hash_key(1:ndim)+shift_oct(1:ndim,inbor)
 
-! Periodic boundary conditions
-do idim=1,ndim
-    if(r%periodic(idim))then
-      if(hash_nbor(idim)< m%box_ckey_min(idim,ifinelevel))hash_nbor(idim)=m%box_ckey_max(idim,ifinelevel)-1
-      if(hash_nbor(idim)>=m%box_ckey_max(idim,ifinelevel))hash_nbor(idim)=m%box_ckey_min(idim,ifinelevel)
-    endif
-enddo
-
-        !only this
+        ! Periodic boundary conditions
+        do idim=1,ndim
+           if(r%periodic(idim))then
+              if(hash_nbor(idim)< m%box_ckey_min(idim,ifinelevel))hash_nbor(idim)=m%box_ckey_max(idim,ifinelevel)-1
+              if(hash_nbor(idim)>=m%box_ckey_max(idim,ifinelevel))hash_nbor(idim)=m%box_ckey_min(idim,ifinelevel)
+           endif
+        enddo
         hash_father(1:ndim)=hash_nbor(1:ndim)/2
 
-        ! prob not worry
         in_domain = .true.
         do idim = 1, ndim
            in_domain = in_domain .and. hash_father(idim) .ge. m_mg%box_ckey_min(idim,icoarselevel) &
