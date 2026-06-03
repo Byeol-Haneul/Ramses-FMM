@@ -1,7 +1,8 @@
 module fmm_fine_commons
 #if defined(_CUDA) && defined(WITHOUTMPI)
   use gpu_runner, only: gpu_fmm_downward, gpu_fmm_amr_intermediate, gpu_fmm_amr_direct, &
-       & gpu_fmm_amr_direct_taylor, gpu_fmm_combined_direct, gpu_fmm_fill_phi
+       & gpu_fmm_amr_direct_taylor, gpu_fmm_combined_direct, gpu_fmm_fill_phi, &
+       & gpu_prepare_fmm_amr_lookup
 #endif
   implicit none
 contains
@@ -48,6 +49,10 @@ subroutine fmm(pst,ilev,icount)
   rebuild_standard = (ilev == pst%s%r%levelmin .or. icount > 1)
 
   if (rebuild_standard) then
+#if defined(_CUDA) && defined(WITHOUTMPI)
+    call gpu_prepare_fmm_amr_lookup(pst%s)
+#endif
+
     if (ilev == pst%s%r%levelmin) then
       pst%s%g%multipole_fmm_raw%q(1:multipole_size) = 0.0d0
       do jlev=pst%s%r%levelmin,pst%s%r%nlevelmax
