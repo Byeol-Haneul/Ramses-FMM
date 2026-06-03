@@ -3286,7 +3286,7 @@ contains
   !>
   subroutine gpu_fmm_downward(sim, ilev, jlev, flev, use_merged)
     use nvtx
-    use fmm_device, only: fmm_downward_kernel
+    use fmm_device, only: fmm_downward_kernel, fmm_init_distance_tables_kernel
     use ramses_commons, only: ramses_t
     implicit none
     type(ramses_t), intent(inout) :: sim
@@ -3314,6 +3314,10 @@ contains
           hash_offset = fmm_hash_offset(target_slot)
           hash_capacity = fmm_hash_capacity_slot(target_slot)
           call nvtxStartRange("GPU fmm_downward", color=0)!green
+          if (.not. fmm_distance_tables_initialized) then
+             call fmm_init_distance_tables_kernel<<<32, 128>>>()
+             fmm_distance_tables_initialized = .true.
+          end if
           call fmm_downward_kernel<<<num_blocks, dim3(threadsX_per_block, threadsY_per_block, 1)>>>(grid_fmm, taylor_fmm, &
                & father_fmm(fmm_father_grid_offset+1), grid_fmm, multipole_fmm, taylor_fmm, &
                & nbor_fmm, source_parent_fmm, hash_key_fmm(hash_offset+1), hash_val_fmm(hash_offset+1), &
@@ -3335,6 +3339,10 @@ contains
           hash_capacity = fmm_hash_capacity_slot(source_slot)
           call gpu_refresh_fmm_source_parent_level(sim, ilev, flev, source_slot)
           call nvtxStartRange("GPU fmm_downward", color=0)!green
+          if (.not. fmm_distance_tables_initialized) then
+             call fmm_init_distance_tables_kernel<<<32, 128>>>()
+             fmm_distance_tables_initialized = .true.
+          end if
           call fmm_downward_kernel<<<num_blocks, dim3(threadsX_per_block, threadsY_per_block, 1)>>>(grid_fmm, taylor_fmm, &
                & father_fmm(fmm_father_grid_offset+1), grid_fmm, multipole_fmm, taylor_fmm, &
                & nbor_fmm, source_parent_fmm, hash_key_fmm(hash_offset+1), hash_val_fmm(hash_offset+1), &
@@ -3383,7 +3391,7 @@ contains
        call gpu_refresh_amr_fmm_father_level(sim, ilev, tree_slot)
        call nvtxStartRange("GPU fmm_amr_intermediate", color=0)!green
        if (.not. fmm_distance_tables_initialized) then
-          call fmm_init_distance_tables_kernel<<<1, 1>>>()
+          call fmm_init_distance_tables_kernel<<<32, 128>>>()
           fmm_distance_tables_initialized = .true.
        end if
        call fmm_amr_intermediate_kernel<<<num_blocks, dim3(threadsX_per_block, threadsY_per_block, 1)>>>(grid, phi, father_fmm, grid_fmm, &
@@ -3452,7 +3460,7 @@ contains
     if (num_octs > 0) then
        call nvtxStartRange("GPU fmm_amr_direct", color=0)!green
        if (.not. fmm_distance_tables_initialized) then
-          call fmm_init_distance_tables_kernel<<<1, 1>>>()
+          call fmm_init_distance_tables_kernel<<<32, 128>>>()
           fmm_distance_tables_initialized = .true.
        end if
        call fmm_amr_direct_kernel<<<num_blocks, dim3(threadsX_per_block, threadsY_per_block, 1)>>>(grid, rho, phi, nbor, hash_key, hash_val, &
@@ -3469,7 +3477,7 @@ contains
   !>
   subroutine gpu_fmm_amr_direct_taylor(sim, ilev, jlev, use_merged)
     use nvtx
-    use fmm_device, only: fmm_amr_direct_taylor_kernel
+    use fmm_device, only: fmm_amr_direct_taylor_kernel, fmm_init_distance_tables_kernel
     use ramses_commons, only: ramses_t
     implicit none
     type(ramses_t), intent(inout) :: sim
@@ -3495,6 +3503,10 @@ contains
        hash_capacity = fmm_hash_capacity_slot(tree_slot)
        call gpu_refresh_amr_fmm_grid_level(sim, ilev, tree_slot)
        call nvtxStartRange("GPU fmm_amr_direct_taylor", color=0)!green
+       if (.not. fmm_distance_tables_initialized) then
+          call fmm_init_distance_tables_kernel<<<32, 128>>>()
+          fmm_distance_tables_initialized = .true.
+       end if
        call fmm_amr_direct_taylor_kernel<<<num_blocks, dim3(threadsX_per_block, threadsY_per_block, 1)>>>(grid, phi, source_grid_fmm, grid_fmm, &
             & multipole_fmm, nbor_fmm, hash_key_fmm(hash_offset+1), hash_val_fmm(hash_offset+1), hash_capacity, &
             & ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, head_idx, num_octs, dx_loc)
