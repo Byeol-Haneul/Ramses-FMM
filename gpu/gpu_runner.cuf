@@ -3293,7 +3293,7 @@ contains
     integer, intent(in) :: ilev, jlev, flev
     logical, intent(in) :: use_merged
 
-    integer(kind=4) :: head_idx, num_octs, num_threads, num_blocks
+    integer(kind=4) :: head_idx, num_octs, threadsX_per_block, threadsY_per_block, num_blocks
     integer(kind=4) :: target_slot, source_slot
     integer(kind=4) :: target_grid_offset
     integer(kind=4) :: hash_offset, hash_capacity
@@ -3307,13 +3307,14 @@ contains
        head_idx = target_grid_offset + sim%m_fmm_list(ilev)%head(flev)
        num_octs = sim%m_fmm_list(ilev)%noct(flev)
        dx_loc = real(sim%r%boxlen / 2.0D0**flev, kind=dp)
-       num_threads = 128
-       num_blocks = (num_octs + num_threads - 1) / num_threads
+       threadsX_per_block = twotondim
+       threadsY_per_block = 16
+       num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
        if (num_octs > 0) then
           hash_offset = fmm_hash_offset(target_slot)
           hash_capacity = fmm_hash_capacity_slot(target_slot)
           call nvtxStartRange("GPU fmm_downward", color=0)!green
-          call fmm_downward_kernel<<<num_blocks, num_threads>>>(grid_fmm, taylor_fmm, &
+          call fmm_downward_kernel<<<num_blocks, dim3(threadsX_per_block, threadsY_per_block, 1)>>>(grid_fmm, taylor_fmm, &
                & father_fmm(fmm_father_grid_offset+1), grid_fmm, multipole_fmm, taylor_fmm, &
                & nbor_fmm, source_parent_fmm, hash_key_fmm(hash_offset+1), hash_val_fmm(hash_offset+1), &
                & hash_capacity, ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, &
@@ -3326,14 +3327,15 @@ contains
        head_idx = target_grid_offset + sim%m_fmm_list(ilev)%head(flev)
        num_octs = sim%m_fmm_list(ilev)%noct(flev)
        dx_loc = real(sim%r%boxlen / 2.0D0**flev, kind=dp)
-       num_threads = 128
-       num_blocks = (num_octs + num_threads - 1) / num_threads
+       threadsX_per_block = twotondim
+       threadsY_per_block = 16
+       num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
        if (num_octs > 0) then
           hash_offset = fmm_hash_offset(source_slot)
           hash_capacity = fmm_hash_capacity_slot(source_slot)
           call gpu_refresh_fmm_source_parent_level(sim, ilev, flev, source_slot)
           call nvtxStartRange("GPU fmm_downward", color=0)!green
-          call fmm_downward_kernel<<<num_blocks, num_threads>>>(grid_fmm, taylor_fmm, &
+          call fmm_downward_kernel<<<num_blocks, dim3(threadsX_per_block, threadsY_per_block, 1)>>>(grid_fmm, taylor_fmm, &
                & father_fmm(fmm_father_grid_offset+1), grid_fmm, multipole_fmm, taylor_fmm, &
                & nbor_fmm, source_parent_fmm, hash_key_fmm(hash_offset+1), hash_val_fmm(hash_offset+1), &
                & hash_capacity, ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, &
@@ -3358,7 +3360,7 @@ contains
     integer, intent(in) :: ilev, jlev
     logical, intent(in) :: use_merged
 
-    integer(kind=4) :: head_idx, num_octs, num_threads, num_blocks
+    integer(kind=4) :: head_idx, num_octs, threadsX_per_block, threadsY_per_block, num_blocks
     integer(kind=4) :: tree_slot
     integer(kind=4) :: hash_offset, hash_capacity
     real(kind=dp) :: dx_loc
@@ -3372,8 +3374,9 @@ contains
     dx_loc = real(sim%r%boxlen / 2.0D0**ilev, kind=dp)
     reset_phi = (jlev == ilev)
     same_tree = (jlev == ilev .and. .not. use_merged)
-    num_threads = 128
-    num_blocks = (num_octs + num_threads - 1) / num_threads
+    threadsX_per_block = twotondim
+    threadsY_per_block = 16
+    num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
     if (num_octs > 0) then
        hash_offset = fmm_hash_offset(tree_slot)
        hash_capacity = fmm_hash_capacity_slot(tree_slot)
@@ -3383,7 +3386,7 @@ contains
           call fmm_init_distance_tables_kernel<<<1, 1>>>()
           fmm_distance_tables_initialized = .true.
        end if
-       call fmm_amr_intermediate_kernel<<<num_blocks, num_threads>>>(grid, phi, father_fmm, grid_fmm, &
+       call fmm_amr_intermediate_kernel<<<num_blocks, dim3(threadsX_per_block, threadsY_per_block, 1)>>>(grid, phi, father_fmm, grid_fmm, &
             & multipole_fmm, taylor_fmm, nbor_fmm, box_ckey_min, box_ckey_max, &
             & hash_key_fmm(hash_offset+1), hash_val_fmm(hash_offset+1), hash_capacity, ckey_max, key_off, periodic, &
             & head_idx, num_octs, ilev, dx_loc, reset_phi, same_tree)
@@ -3435,7 +3438,7 @@ contains
     type(ramses_t), intent(inout) :: sim
     integer, intent(in) :: ilev
 
-    integer(kind=4) :: head_idx, num_octs, num_threads, num_blocks
+    integer(kind=4) :: head_idx, num_octs, threadsX_per_block, threadsY_per_block, num_blocks
     real(kind=dp) :: dx_loc, dxn
 
 #ifdef FMM
@@ -3443,15 +3446,16 @@ contains
     num_octs = sim%m%noct(ilev)
     dx_loc = real(sim%r%boxlen / 2.0D0**ilev, kind=dp)
     dxn = dx_loc**ndim
-    num_threads = 128
-    num_blocks = (num_octs + num_threads - 1) / num_threads
+    threadsX_per_block = twotondim
+    threadsY_per_block = 16
+    num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
     if (num_octs > 0) then
        call nvtxStartRange("GPU fmm_amr_direct", color=0)!green
        if (.not. fmm_distance_tables_initialized) then
           call fmm_init_distance_tables_kernel<<<1, 1>>>()
           fmm_distance_tables_initialized = .true.
        end if
-       call fmm_amr_direct_kernel<<<num_blocks, num_threads>>>(grid, rho, phi, nbor, hash_key, hash_val, &
+       call fmm_amr_direct_kernel<<<num_blocks, dim3(threadsX_per_block, threadsY_per_block, 1)>>>(grid, rho, phi, nbor, hash_key, hash_val, &
             & sim%m%hash_size, ckey_max, key_off, head_idx, num_octs, ilev, dx_loc, dxn)
        call nvtxEndRange()
     end if
@@ -3472,7 +3476,7 @@ contains
     integer, intent(in) :: ilev, jlev
     logical, intent(in) :: use_merged
 
-    integer(kind=4) :: head_idx, num_octs, num_threads, num_blocks
+    integer(kind=4) :: head_idx, num_octs, threadsX_per_block, threadsY_per_block, num_blocks
     integer(kind=4) :: tree_slot
     integer(kind=4) :: hash_offset, hash_capacity
     real(kind=dp) :: dx_loc
@@ -3483,14 +3487,15 @@ contains
     head_idx = sim%m%head(ilev)
     num_octs = sim%m%noct(ilev)
     dx_loc = real(sim%r%boxlen / 2.0D0**ilev, kind=dp)
-    num_threads = 128
-    num_blocks = (num_octs + num_threads - 1) / num_threads
+    threadsX_per_block = twotondim
+    threadsY_per_block = 16
+    num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
     if (num_octs > 0) then
        hash_offset = fmm_hash_offset(tree_slot)
        hash_capacity = fmm_hash_capacity_slot(tree_slot)
        call gpu_refresh_amr_fmm_grid_level(sim, ilev, tree_slot)
        call nvtxStartRange("GPU fmm_amr_direct_taylor", color=0)!green
-       call fmm_amr_direct_taylor_kernel<<<num_blocks, num_threads>>>(grid, phi, source_grid_fmm, grid_fmm, &
+       call fmm_amr_direct_taylor_kernel<<<num_blocks, dim3(threadsX_per_block, threadsY_per_block, 1)>>>(grid, phi, source_grid_fmm, grid_fmm, &
             & multipole_fmm, nbor_fmm, hash_key_fmm(hash_offset+1), hash_val_fmm(hash_offset+1), hash_capacity, &
             & ckey_max, key_off, box_ckey_min, box_ckey_max, periodic, head_idx, num_octs, dx_loc)
        call nvtxEndRange()
@@ -3511,7 +3516,7 @@ contains
     type(ramses_t), intent(inout) :: sim
     integer, intent(in) :: ilev
 
-    integer(kind=4) :: head_idx, num_octs, num_threads, num_blocks
+    integer(kind=4) :: head_idx, num_octs, threadsX_per_block, threadsY_per_block, num_blocks
     real(kind=dp) :: dx_loc, vol_loc
 
 #ifdef FMM
@@ -3521,11 +3526,12 @@ contains
     num_octs = sim%m%noct(ilev)
     dx_loc = real(sim%r%boxlen / 2.0D0**ilev, kind=dp)
     vol_loc = dx_loc**ndim * real(twotondim, kind=dp)
-    num_threads = 128
-    num_blocks = (num_octs + num_threads - 1) / num_threads
+    threadsX_per_block = twotondim
+    threadsY_per_block = 16
+    num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
     if (num_octs > 0) then
        call nvtxStartRange("GPU fmm_combined_direct", color=0)!green
-       call fmm_combined_direct_kernel<<<num_blocks, num_threads>>>(grid, rho, phi, father, nbor, &
+       call fmm_combined_direct_kernel<<<num_blocks, dim3(threadsX_per_block, threadsY_per_block, 1)>>>(grid, rho, phi, father, nbor, &
             & box_ckey_min, box_ckey_max, head_idx, num_octs, ilev, dx_loc, vol_loc)
        call nvtxEndRange()
     end if
