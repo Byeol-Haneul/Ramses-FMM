@@ -86,6 +86,7 @@ module gpu_runner
   integer(kind=4) :: fmm_slot_levelmin = 0
   integer(kind=4) :: fmm_slot_levelmax = -1
   integer(kind=4) :: fmm_merged_slot = -1
+  logical :: fmm_distance_tables_initialized = .false.
 
   !> The Fortran array of hydro variables of ghost and halo octs on the host and on the device
   real(kind=dp), allocatable, dimension(:) :: uold_send_host, uold_recv_host
@@ -2326,9 +2327,14 @@ contains
     if (num_octs > 0) then
        call nvtxStartRange("GPU gradient_phi", color=1)!blue
 #ifdef FMM
-       call fmm_gradient_phi<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(grid, phi, f, nbor, &
-            & box_ckey_min, box_ckey_max, periodic, gravity_multipole, head_idx, num_octs, ilevel, sim%m%ngridmax, &
-            & dx, sim%m%skip(1), sim%m%skip(2), sim%m%skip(3))
+       if (any(.not. sim%r%periodic(1:ndim))) then
+          call fmm_gradient_phi<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(grid, phi, f, nbor, &
+               & box_ckey_min, box_ckey_max, periodic, gravity_multipole, head_idx, num_octs, ilevel, sim%m%ngridmax, &
+               & dx, sim%m%skip(1), sim%m%skip(2), sim%m%skip(3))
+       else
+          call gradient_phi<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(phi, f, nbor, &
+               & head_idx, num_octs, dx)
+       end if
 #else
        call gradient_phi<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(phi, f, nbor, &
             & head_idx, num_octs, dx)
@@ -3345,7 +3351,7 @@ contains
   !>
   subroutine gpu_fmm_amr_intermediate(sim, ilev, jlev, use_merged)
     use nvtx
-    use fmm_device, only: fmm_amr_intermediate_kernel
+    use fmm_device, only: fmm_amr_intermediate_kernel, fmm_init_distance_tables_kernel
     use ramses_commons, only: ramses_t
     implicit none
     type(ramses_t), intent(inout) :: sim
@@ -3373,6 +3379,10 @@ contains
        hash_capacity = fmm_hash_capacity_slot(tree_slot)
        call gpu_refresh_amr_fmm_father_level(sim, ilev, tree_slot)
        call nvtxStartRange("GPU fmm_amr_intermediate", color=0)!green
+       if (.not. fmm_distance_tables_initialized) then
+          call fmm_init_distance_tables_kernel<<<1, 1>>>()
+          fmm_distance_tables_initialized = .true.
+       end if
        call fmm_amr_intermediate_kernel<<<num_blocks, num_threads>>>(grid, phi, father_fmm, grid_fmm, &
             & multipole_fmm, taylor_fmm, nbor_fmm, box_ckey_min, box_ckey_max, &
             & hash_key_fmm(hash_offset+1), hash_val_fmm(hash_offset+1), hash_capacity, ckey_max, key_off, periodic, &
@@ -3419,7 +3429,7 @@ contains
   !>
   subroutine gpu_fmm_amr_direct(sim, ilev)
     use nvtx
-    use fmm_device, only: fmm_amr_direct_kernel
+    use fmm_device, only: fmm_amr_direct_kernel, fmm_init_distance_tables_kernel
     use ramses_commons, only: ramses_t
     implicit none
     type(ramses_t), intent(inout) :: sim
@@ -3437,6 +3447,10 @@ contains
     num_blocks = (num_octs + num_threads - 1) / num_threads
     if (num_octs > 0) then
        call nvtxStartRange("GPU fmm_amr_direct", color=0)!green
+       if (.not. fmm_distance_tables_initialized) then
+          call fmm_init_distance_tables_kernel<<<1, 1>>>()
+          fmm_distance_tables_initialized = .true.
+       end if
        call fmm_amr_direct_kernel<<<num_blocks, num_threads>>>(grid, rho, phi, nbor, hash_key, hash_val, &
             & sim%m%hash_size, ckey_max, key_off, head_idx, num_octs, ilev, dx_loc, dxn)
        call nvtxEndRange()

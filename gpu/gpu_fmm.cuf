@@ -40,10 +40,145 @@ module fmm_device
        &   1,2,3,4,5,6,7,8, &
        &   1,2,3,4,5,6,7,8/), (/8,3/))
 
+  ! Dimensionless AMR near-field Green tables.  They are initialized once on
+  ! device and scaled by 1/dx in the level kernels.
+  real(kind=dp), device, save :: fmm_direct_inv_dist_base(1:twotondim,1:threetondim,1:twotondim)
+  real(kind=dp), device, save :: fmm_direct_fine_inv_dist_base(1:twotondim,1:twotondim,1:threetondim,1:twotondim)
+  real(kind=dp), device, save :: fmm_intermediate_far_diff_base(1:3,1:twotondim,1:twotondim)
+  real(kind=dp), device, save :: fmm_intermediate_diff_base(1:3,1:twotondim,1:twotondim,1:twotondim,1:threetondim)
+  real(kind=dp), device, save :: fmm_intermediate_D0_base(1:twotondim,1:twotondim,1:twotondim,1:threetondim)
+  real(kind=dp), device, save :: fmm_intermediate_D1_base(1:twotondim,1:twotondim,1:twotondim,1:threetondim)
+  real(kind=dp), device, save :: fmm_intermediate_D2_base(1:twotondim,1:twotondim,1:twotondim,1:threetondim)
+  integer(kind=4), device, save :: fmm_intermediate_cell_diff_base(1:3,1:twotondim,1:twotondim,1:threetondim)
+
 contains
 
   include 'gpu_hash.cuf'
   include 'gpu_nbor.cuf'
+
+  ! =========================================================================
+  attributes(global) subroutine fmm_init_distance_tables_kernel()
+    integer :: idim, icell, inbor, jcell, jfinecell, igrid, nstride
+    integer(kind=4) :: offset(1:3), cc_icell(1:3), cc_jgrid(1:3), cc_jcell(1:3)
+    integer(kind=4) :: fmm_grid_center_offset(1:3), fmm_cell_center_offset(1:3)
+    integer(kind=4) :: target_cell_coord(1:3), offset_amr(1:3)
+    integer(kind=4) :: source_cell_coord(1:3), fine_cell_coord(1:3)
+    real(kind=dp) :: diff(1:3), fine_diff(1:3), dist
+
+    if (blockIdx%x /= 1 .or. threadIdx%x /= 1) return
+
+    do icell = 1, twotondim
+       cc_icell = 0
+       do idim = 1, ndim
+          nstride = 2**(idim-1)
+          cc_icell(idim) = mod((icell - 1) / nstride, 2)
+       end do
+
+       do inbor = 1, threetondim
+          offset = 0
+          cc_jgrid = 0
+          do idim = 1, ndim
+             offset(idim) = mod((inbor - 1) / 3**(idim-1), 3) - 1
+             cc_jgrid(idim) = offset(idim)
+          end do
+
+          do jcell = 1, twotondim
+             source_cell_coord = 0
+             cc_jcell = 0
+             diff = 0.0_dp
+             do idim = 1, ndim
+                nstride = 2**(idim-1)
+                source_cell_coord(idim) = mod((jcell - 1) / nstride, 2)
+                cc_jcell(idim) = 2 * cc_jgrid(idim) + source_cell_coord(idim)
+                diff(idim) = real(cc_icell(idim) - cc_jcell(idim), kind=dp)
+             end do
+
+             dist = sqrt(sum(diff(1:ndim)**2))
+             if (dist > 0.0_dp) then
+                fmm_direct_inv_dist_base(jcell, inbor, icell) = 1.0_dp / dist
+             else
+                fmm_direct_inv_dist_base(jcell, inbor, icell) = 1.0_dp
+             end if
+
+             do jfinecell = 1, twotondim
+                fine_cell_coord = 0
+                fine_diff = diff
+                do idim = 1, ndim
+                   nstride = 2**(idim-1)
+                   fine_cell_coord(idim) = mod((jfinecell - 1) / nstride, 2)
+                   fine_diff(idim) = fine_diff(idim) - &
+                        & 0.5_dp * (real(fine_cell_coord(idim), kind=dp) - 0.5_dp)
+                end do
+                dist = sqrt(sum(fine_diff(1:ndim)**2))
+                if (dist > 0.0_dp) then
+                   fmm_direct_fine_inv_dist_base(jfinecell, jcell, inbor, icell) = 1.0_dp / dist
+                else
+                   fmm_direct_fine_inv_dist_base(jfinecell, jcell, inbor, icell) = 0.0_dp
+                end if
+             end do
+          end do
+       end do
+    end do
+
+    do igrid = 1, twotondim
+       fmm_grid_center_offset = 0
+       fmm_cell_center_offset = 0
+       target_cell_coord = 0
+       do idim = 1, ndim
+          nstride = 2**(idim-1)
+          fmm_grid_center_offset(idim) = mod((igrid - 1) / nstride, 2) - 1
+          fmm_cell_center_offset(idim) = -1
+          target_cell_coord(idim) = fmm_grid_center_offset(idim) + 1
+       end do
+
+       do icell = 1, twotondim
+          do idim = 1, ndim
+             nstride = 2**(idim-1)
+             fmm_intermediate_far_diff_base(idim, icell, igrid) = &
+                  & real(fmm_cell_center_offset(idim), kind=dp) + &
+                  & real(mod((icell - 1) / nstride, 2), kind=dp) + 0.5_dp
+          end do
+       end do
+
+       do inbor = 1, threetondim
+          offset = 0
+          do idim = 1, ndim
+             offset(idim) = mod((inbor - 1) / 3**(idim-1), 3) - 1
+          end do
+
+          do jcell = 1, twotondim
+             source_cell_coord = 0
+             cc_jcell = 0
+             offset_amr = 0
+             do idim = 1, ndim
+                nstride = 2**(idim-1)
+                source_cell_coord(idim) = mod((jcell - 1) / nstride, 2)
+                cc_jcell(idim) = 2 * offset(idim) + source_cell_coord(idim)
+                offset_amr(idim) = 2 * cc_jcell(idim) + 1
+                fmm_intermediate_cell_diff_base(idim, jcell, igrid, inbor) = &
+                     & target_cell_coord(idim) - cc_jcell(idim)
+             end do
+
+             do icell = 1, twotondim
+                diff = 0.0_dp
+                do idim = 1, ndim
+                   nstride = 2**(idim-1)
+                   cc_icell(idim) = 2 * fmm_grid_center_offset(idim) + mod((icell - 1) / nstride, 2)
+                   diff(idim) = real(cc_icell(idim), kind=dp) + 0.5_dp - &
+                        & real(offset_amr(idim), kind=dp) + 2.0_dp
+                   fmm_intermediate_diff_base(idim, icell, igrid, jcell, inbor) = diff(idim)
+                end do
+                dist = sqrt(sum(diff(1:ndim)**2))
+                fmm_intermediate_D0_base(icell, igrid, jcell, inbor) = 1.0_dp / dist
+                fmm_intermediate_D1_base(icell, igrid, jcell, inbor) = -1.0_dp / dist**3
+                fmm_intermediate_D2_base(icell, igrid, jcell, inbor) = 3.0_dp / dist**5
+             end do
+          end do
+       end do
+    end do
+
+  end subroutine fmm_init_distance_tables_kernel
+  ! =========================================================================
 
   ! =========================================================================
   attributes(device) function fmm_phiana_multipole_cell(multipole_q, ckey, icell, ilevel, dx, skip) result(phi_b)
@@ -1299,7 +1434,8 @@ contains
     integer(kind=4) :: cc_jcell(1:3), cc_icell(1:3), cell_diff(1:3), cc_jcell_periodic(1:3)
     integer(kind=4) :: offset_grid(1:3), offset_amr(1:3), grid_nbors(1:threetondim)
     integer(kind=4) :: igrid, igrid_parent, igrid_nbor, pcell
-    real(kind=dp) :: far_diff(1:3), diff(1:3), dist, D0, D1, D2, phi_out
+    real(kind=dp) :: far_diff(1:3), diff(1:3), D0, D1, D2, phi_out
+    real(kind=dp) :: inv_dx, inv_dx3, inv_dx5
     real(kind=dp) :: parent_taylor(1:taylor_size), multipole(1:multipole_size)
     logical :: cycle_flag, direct_neighbor, nonzero_multipole
 
@@ -1307,6 +1443,9 @@ contains
     local_idx = thread_idx + (blockIdx%x - 1) * blockDim%x
     if (local_idx >= num_octs) return
     ioct = head_idx + local_idx
+    inv_dx = 1.0_dp / dx_loc
+    inv_dx3 = inv_dx**3
+    inv_dx5 = inv_dx**5
 
     if (reset_phi) phi_amr(1:twotondim, ioct) = 0.0_dp
     if (all(grid_amr(ioct)%refined(1:twotondim))) return
@@ -1340,11 +1479,8 @@ contains
 
        do icell = 1, twotondim
           if (grid_amr(ioct)%refined(icell)) cycle
-          far_diff = 0.0_dp
           do idim = 1, ndim
-             nstride = 2**(idim-1)
-             far_diff(idim) = (real(fmm_cell_center_offset(idim), kind=dp) + &
-                  & real(mod((icell-1)/nstride, 2), kind=dp) + 0.5_dp) * dx_loc
+             far_diff(idim) = fmm_intermediate_far_diff_base(idim, icell, igrid) * dx_loc
           end do
           call fmm_calc_phi(parent_taylor, far_diff, phi_out)
           phi_amr(icell, ioct) = phi_amr(icell, ioct) + phi_out
@@ -1382,10 +1518,8 @@ contains
           end do
 
           direct_neighbor = .true.
-          cell_diff = 0
           do idim = 1, ndim
-             target_cell_coord(idim) = (fmm_grid_center_offset(idim) + (nfine / 2)) / half_nfine
-             cell_diff(idim) = target_cell_coord(idim) - cc_jcell(idim)
+             cell_diff(idim) = fmm_intermediate_cell_diff_base(idim, jcell, igrid, inbor)
              if (abs(cell_diff(idim)) > 1) direct_neighbor = .false.
           end do
           if (direct_neighbor) cycle
@@ -1402,17 +1536,12 @@ contains
 
           do icell = 1, twotondim
              if (grid_amr(ioct)%refined(icell)) cycle
-             diff = 0.0_dp
              do idim = 1, ndim
-                nstride = 2**(idim-1)
-                cc_icell(idim) = 2 * fmm_grid_center_offset(idim) + mod((icell-1)/nstride, 2)
-                diff(idim) = (real(cc_icell(idim), kind=dp) + 0.5_dp - &
-                     & real(offset_amr(idim), kind=dp) + real(nfine, kind=dp)) * dx_loc
+                diff(idim) = fmm_intermediate_diff_base(idim, icell, igrid, jcell, inbor) * dx_loc
              end do
-             dist = sqrt(sum(diff(1:ndim)**2))
-             D0 = 1.0_dp / dist
-             D1 = -1.0_dp / dist**3
-             D2 = 3.0_dp / dist**5
+             D0 = fmm_intermediate_D0_base(icell, igrid, jcell, inbor) * inv_dx
+             D1 = fmm_intermediate_D1_base(icell, igrid, jcell, inbor) * inv_dx3
+             D2 = fmm_intermediate_D2_base(icell, igrid, jcell, inbor) * inv_dx5
              call fmm_calc_phi_from_multipole(diff, D0, D1, D2, multipole, phi_out)
              phi_amr(icell, ioct) = phi_amr(icell, ioct) + phi_out
           end do
@@ -1444,13 +1573,14 @@ contains
     integer(kind=4) :: cc_igrid(1:3), cc_jgrid(1:3), cc_icell(1:3), cc_jcell(1:3)
     integer(kind=4) :: grid_nbors(1:threetondim)
     integer(kind=4) :: igrid_nbor, igrid_fine
-    real(kind=dp) :: diff(1:3), fine_diff(1:3), dist, inv_dist, phi_accum
-    logical :: direct_neighbor, same_cell
+    real(kind=dp) :: inv_dx, phi_accum
+    logical :: direct_neighbor
 
     thread_idx = threadIdx%x - 1
     ioct = thread_idx + (blockIdx%x - 1) * blockDim%x
     if (ioct >= num_octs) return
     ioct = head_idx + ioct
+    inv_dx = 1.0_dp / dx_loc
 
     if (all(grid_amr(ioct)%refined(1:twotondim))) return
 
@@ -1492,16 +1622,12 @@ contains
              do jcell = 1, twotondim
                 source_cell_coord = 0
                 cc_jcell = 0
-                same_cell = .true.
                 direct_neighbor = .true.
-                diff = 0.0_dp
                 do idim = 1, ndim
                    nstride = 2**(idim-1)
                    source_cell_coord(idim) = mod((jcell-1)/nstride, 2)
                    cc_jcell(idim) = 2 * cc_jgrid(idim) + source_cell_coord(idim)
-                   same_cell = same_cell .and. cc_icell(idim) == cc_jcell(idim)
                    if (abs(cc_icell(idim) - cc_jcell(idim)) > 1) direct_neighbor = .false.
-                   diff(idim) = real(cc_icell(idim) - cc_jcell(idim), kind=dp) * dx_loc
                 end do
 
                 if (grid_amr(igrid_nbor)%refined(jcell)) then
@@ -1516,25 +1642,12 @@ contains
                    if (igrid_fine <= 0) cycle
 
                    do jfinecell = 1, twotondim
-                      fine_diff = diff
-                      do idim = 1, ndim
-                         nstride = 2**(idim-1)
-                         fine_cell_coord(idim) = mod((jfinecell-1)/nstride, 2)
-                         fine_diff(idim) = fine_diff(idim) - &
-                              & 0.5_dp * (real(fine_cell_coord(idim), kind=dp) - 0.5_dp) * dx_loc
-                      end do
-                      dist = sqrt(sum(fine_diff(1:ndim)**2))
-                      if (dist > 0.0_dp) then
-                         phi_accum = phi_accum - rho_amr(jfinecell, igrid_fine) * dxn / real(twotondim, kind=dp) / dist
-                      end if
+                      phi_accum = phi_accum - rho_amr(jfinecell, igrid_fine) * dxn / real(twotondim, kind=dp) * &
+                           & fmm_direct_fine_inv_dist_base(jfinecell, jcell, inbor, icell) * inv_dx
                    end do
                 else
-                   if (same_cell) then
-                      inv_dist = 1.0_dp / dx_loc
-                   else
-                      inv_dist = 1.0_dp / sqrt(sum(diff(1:ndim)**2))
-                   end if
-                   phi_accum = phi_accum - rho_amr(jcell, igrid_nbor) * dxn * inv_dist
+                   phi_accum = phi_accum - rho_amr(jcell, igrid_nbor) * dxn * &
+                        & fmm_direct_inv_dist_base(jcell, inbor, icell) * inv_dx
                 end if
              end do
           end do
