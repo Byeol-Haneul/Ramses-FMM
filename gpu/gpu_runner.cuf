@@ -1180,12 +1180,18 @@ contains
     integer(kind=4) :: head_idx, num_octs
     integer :: num_blocks, threads_per_block, ilev
 
-    if(allocated(hash_key))deallocate(hash_key)
-    if(allocated(hash_val))deallocate(hash_val)
-    allocate(hash_key(1:sim%m%hash_size))
-    allocate(hash_val(1:sim%m%hash_size))
+    call nvtxStartRange("GPU reset_hash_fmm_active_clear", color=2)!yellow
+    if (allocated(hash_key)) then
+       if (size(hash_key) /= sim%m%hash_size) deallocate(hash_key)
+    end if
+    if (allocated(hash_val)) then
+       if (size(hash_val) /= sim%m%hash_size) deallocate(hash_val)
+    end if
+    if (.not. allocated(hash_key)) allocate(hash_key(1:sim%m%hash_size))
+    if (.not. allocated(hash_val)) allocate(hash_val(1:sim%m%hash_size))
     hash_key = 0
     hash_val = 0
+    call nvtxEndRange()
 
     threads_per_block = 128
 
