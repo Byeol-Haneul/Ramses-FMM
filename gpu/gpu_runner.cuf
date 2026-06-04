@@ -2575,9 +2575,6 @@ contains
 
     num_threads = 128
 
-    father_fmm(fmm_father_grid_offset+grid_offset+1:fmm_father_grid_offset+grid_offset+grid_capacity) = 0
-    nbor_fmm(:,grid_offset+1:grid_offset+grid_capacity) = 0
-
     do flev = 1, size(m_fmm%head)
        head_idx = grid_offset + m_fmm%head(flev)
        num_octs = m_fmm%noct(flev)
@@ -2653,8 +2650,6 @@ contains
     if (ifine == ilevel) then
        hash_key_fmm(hash_start:hash_stop) = 0
        hash_val_fmm(hash_start:hash_stop) = 0
-       father_fmm(fmm_father_grid_offset+grid_offset+1:fmm_father_grid_offset+grid_offset+grid_capacity) = 0
-       nbor_fmm(:,grid_offset+1:grid_offset+grid_capacity) = 0
        multipole_fmm(:,:,grid_offset+1:grid_offset+grid_capacity) = 0.0_dp
        taylor_fmm(:,:,grid_offset+1:grid_offset+grid_capacity) = 0.0_dp
     end if
@@ -2768,8 +2763,6 @@ contains
 
     hash_key_fmm(hash_start:hash_stop) = 0
     hash_val_fmm(hash_start:hash_stop) = 0
-    father_fmm(fmm_father_grid_offset+grid_offset+1:fmm_father_grid_offset+grid_offset+grid_capacity) = 0
-    nbor_fmm(:,grid_offset+1:grid_offset+grid_capacity) = 0
     multipole_fmm(:,:,grid_offset+1:grid_offset+grid_capacity) = 0.0_dp
     taylor_fmm(:,:,grid_offset+1:grid_offset+grid_capacity) = 0.0_dp
 
@@ -2965,8 +2958,6 @@ contains
 
     hash_offset = fmm_hash_offset(tree_slot)
     hash_capacity = fmm_hash_capacity_slot(tree_slot)
-    father_fmm(1:min(num_octs, fmm_father_amr_capacity)) = 0
-
     num_threads = 128
     num_blocks = (num_octs + num_threads - 1) / num_threads
     call nvtxStartRange("GPU refresh_amr_fmm_father", color=5)!red
@@ -2999,8 +2990,6 @@ contains
 
     hash_offset = fmm_hash_offset(source_slot)
     hash_capacity = fmm_hash_capacity_slot(source_slot)
-    source_parent_fmm(1:min(num_octs, fmm_source_parent_capacity)) = 0
-
     num_threads = 128
     num_blocks = (num_octs + num_threads - 1) / num_threads
     call nvtxStartRange("GPU refresh_fmm_source_parent", color=5)!red
@@ -3032,8 +3021,6 @@ contains
 
     hash_offset = fmm_hash_offset(tree_slot)
     hash_capacity = fmm_hash_capacity_slot(tree_slot)
-    source_grid_fmm(1:min(num_octs, fmm_source_parent_capacity)) = 0
-
     num_threads = 128
     num_blocks = (num_octs + num_threads - 1) / num_threads
     call nvtxStartRange("GPU refresh_amr_fmm_grid", color=5)!red
@@ -3440,7 +3427,7 @@ contains
   !>
   subroutine gpu_fmm_amr_direct(sim, ilev)
     use nvtx
-    use fmm_device, only: fmm_amr_direct_kernel, fmm_init_distance_tables_kernel
+    use fmm_device, only: fmm_amr_direct_kernel, fmm_direct_nthreads_y, fmm_init_distance_tables_kernel
     use ramses_commons, only: ramses_t
     implicit none
     type(ramses_t), intent(inout) :: sim
@@ -3455,7 +3442,7 @@ contains
     dx_loc = real(sim%r%boxlen / 2.0D0**ilev, kind=dp)
     dxn = dx_loc**ndim
     threadsX_per_block = twotondim
-    threadsY_per_block = 16
+    threadsY_per_block = fmm_direct_nthreads_y
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
     if (num_octs > 0) then
        call nvtxStartRange("GPU fmm_amr_direct", color=0)!green
