@@ -2898,7 +2898,7 @@ contains
     hash_start = hash_offset + 1
     num_threads = 128
 
-    call nvtxStartRange("GPU fmm_merge_multipoles", color=0)!green
+    call nvtxStartRange("GPU fmm_merge_multipoles", color=1)!blue
     do ilevel = active_levelmin, sim%r%nlevelmax
        do flev = sim%r%bound_levelmin, ilevel - 1
           if (sim%m_fmm_list(ilevel)%tail(flev) < sim%m_fmm_list(ilevel)%head(flev)) cycle
@@ -3141,7 +3141,7 @@ contains
     fmm_global_multipole = 0.0_dp
     num_threads = 128
     num_blocks = (num_octs * twotondim + num_threads - 1) / num_threads
-    call nvtxStartRange("GPU reduce_fmm_global_multipole", color=0)!green
+    call nvtxStartRange("GPU reduce_fmm_global_multipole", color=1)!blue
     call fmm_accumulate_global_multipole<<<num_blocks, num_threads>>>(multipole_fmm, fmm_global_multipole, &
          & source_head, num_octs)
     multipole_h = fmm_global_multipole
@@ -3176,7 +3176,7 @@ contains
     threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
     if (num_octs > 0) then
-       call nvtxStartRange("GPU reset_fmm_multipoles_taylor", color=0)!green
+       call nvtxStartRange("GPU reset_fmm_multipoles_taylor", color=1)!blue
        call fmm_reset_multipole_taylor<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>( &
             & multipole_fmm, taylor_fmm, head_idx, num_octs)
        call nvtxEndRange()
@@ -3223,7 +3223,7 @@ contains
     num_threads = 128
     num_blocks = (num_octs + num_threads - 1) / num_threads
     if (num_octs > 0) then
-       call nvtxStartRange("GPU fmm_multipole_amr2fmm", color=0)!green
+       call nvtxStartRange("GPU fmm_multipole_amr2fmm", color=1)!blue
        call fmm_multipole_amr2fmm<<<num_blocks, num_threads>>>(grid, rho, multipole_fmm, father_fmm, &
             & head_idx, 1, num_octs, dx_loc, vol_loc, skip1, skip2, skip3)
        call nvtxEndRange()
@@ -3256,7 +3256,7 @@ contains
     num_threads = 128
     num_blocks = (num_octs + num_threads - 1) / num_threads
     if (num_octs > 0) then
-       call nvtxStartRange("GPU fmm_multipole_fmm2fmm", color=0)!green
+       call nvtxStartRange("GPU fmm_multipole_fmm2fmm", color=1)!blue
        call fmm_multipole_fmm2fmm<<<num_blocks, num_threads>>>(grid_fmm, multipole_fmm, &
             & father_fmm(fmm_father_grid_offset+1), head_idx, num_octs)
        call nvtxEndRange()
@@ -3302,7 +3302,7 @@ contains
     threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
     if (num_octs > 0) then
-       call nvtxStartRange("GPU fmm_multipole_shift_downward", color=0)!green
+       call nvtxStartRange("GPU fmm_multipole_shift_downward", color=1)!blue
        call fmm_multipole_shift_downward<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>( &
             & grid_fmm, multipole_fmm, head_idx, num_octs, dx_loc, skip1, skip2, skip3)
        call nvtxEndRange()
@@ -3344,7 +3344,7 @@ contains
        if (num_octs > 0) then
           hash_offset = fmm_hash_offset(target_slot)
           hash_capacity = fmm_hash_capacity_slot(target_slot)
-          call nvtxStartRange("GPU fmm_downward", color=0)!green
+          call nvtxStartRange("GPU fmm_downward", color=1)!blue
           if (.not. fmm_distance_tables_initialized) then
              call fmm_init_distance_tables_kernel<<<32, 128>>>()
              fmm_distance_tables_initialized = .true.
@@ -3369,7 +3369,7 @@ contains
           hash_offset = fmm_hash_offset(source_slot)
           hash_capacity = fmm_hash_capacity_slot(source_slot)
           call gpu_refresh_fmm_source_parent_level(sim, ilev, flev, source_slot)
-          call nvtxStartRange("GPU fmm_downward", color=0)!green
+          call nvtxStartRange("GPU fmm_downward", color=1)!blue
           if (.not. fmm_distance_tables_initialized) then
              call fmm_init_distance_tables_kernel<<<32, 128>>>()
              fmm_distance_tables_initialized = .true.
@@ -3420,7 +3420,7 @@ contains
        hash_offset = fmm_hash_offset(tree_slot)
        hash_capacity = fmm_hash_capacity_slot(tree_slot)
        call gpu_refresh_amr_fmm_father_level(sim, ilev, tree_slot)
-       call nvtxStartRange("GPU fmm_amr_intermediate", color=0)!green
+       call nvtxStartRange("GPU fmm_amr_intermediate", color=1)!blue
        if (.not. fmm_distance_tables_initialized) then
           call fmm_init_distance_tables_kernel<<<32, 128>>>()
           fmm_distance_tables_initialized = .true.
@@ -3457,7 +3457,7 @@ contains
     num_threads = 128
     num_blocks = (num_octs + num_threads - 1) / num_threads
     if (num_octs > 0) then
-       call nvtxStartRange("GPU fmm_fill_phi", color=0)!green
+       call nvtxStartRange("GPU fmm_fill_phi", color=1)!blue
        call fmm_fill_phi_kernel<<<num_blocks, num_threads>>>(grid, phi, hash_key, hash_val, &
             & sim%m%hash_size, ckey_max, key_off, head_idx, num_octs, ilevel)
        call nvtxEndRange()
@@ -3489,7 +3489,7 @@ contains
     threadsY_per_block = fmm_direct_nthreads_y
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
     if (num_octs > 0) then
-       call nvtxStartRange("GPU fmm_amr_direct", color=0)!green
+       call nvtxStartRange("GPU fmm_amr_direct", color=1)!blue
        if (.not. fmm_distance_tables_initialized) then
           call fmm_init_distance_tables_kernel<<<32, 128>>>()
           fmm_distance_tables_initialized = .true.
@@ -3533,7 +3533,7 @@ contains
        hash_offset = fmm_hash_offset(tree_slot)
        hash_capacity = fmm_hash_capacity_slot(tree_slot)
        call gpu_refresh_amr_fmm_grid_level(sim, ilev, tree_slot)
-       call nvtxStartRange("GPU fmm_amr_direct_taylor", color=0)!green
+       call nvtxStartRange("GPU fmm_amr_direct_taylor", color=1)!blue
        if (.not. fmm_distance_tables_initialized) then
           call fmm_init_distance_tables_kernel<<<32, 128>>>()
           fmm_distance_tables_initialized = .true.
@@ -3573,7 +3573,7 @@ contains
     threadsY_per_block = 16
     num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
     if (num_octs > 0) then
-       call nvtxStartRange("GPU fmm_combined_direct", color=0)!green
+       call nvtxStartRange("GPU fmm_combined_direct", color=1)!blue
        call fmm_combined_direct_kernel<<<num_blocks, dim3(threadsX_per_block, threadsY_per_block, 1)>>>(grid, rho, phi, father, nbor, &
             & box_ckey_min, box_ckey_max, head_idx, num_octs, ilev, dx_loc, vol_loc)
        call nvtxEndRange()
