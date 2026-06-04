@@ -1514,6 +1514,36 @@ contains
   end subroutine gpu_save_phi_old
 
   !> @brief
+  !> Reset AMR gravitational potential for the GPU FMM solve.
+  !>
+  subroutine gpu_reset_phi_fmm(sim, ilevel_start)
+    use nvtx
+    use mg_device, only: reset_phi_kernel
+    use ramses_commons, only: ramses_t
+    type(ramses_t), intent(inout) :: sim
+    integer, intent(in) :: ilevel_start
+
+    integer(kind=4) :: head_idx, num_octs
+    integer :: ilevel, threadsX_per_block, threadsY_per_block, num_blocks
+
+    threadsX_per_block = 8
+    threadsY_per_block = 16
+
+    do ilevel = max(ilevel_start, sim%r%levelmin), sim%r%nlevelmax
+       head_idx = sim%m%head(ilevel)
+       num_octs = sim%m%noct(ilevel)
+       num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
+       if (num_octs > 0) then
+          call nvtxStartRange("GPU reset_phi_fmm", color=1)!blue
+          call reset_phi_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(phi, &
+               & head_idx, num_octs, 0.0d0)
+          call nvtxEndRange()
+       end if
+    end do
+
+  end subroutine gpu_reset_phi_fmm
+
+  !> @brief
   !> Initialize potential using interoplation from coarse level.
   !>
   !> @detail

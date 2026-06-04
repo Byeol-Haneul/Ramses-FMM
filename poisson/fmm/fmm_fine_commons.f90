@@ -2,7 +2,7 @@ module fmm_fine_commons
 #if defined(_CUDA) && defined(WITHOUTMPI)
   use gpu_runner, only: gpu_fmm_downward, gpu_fmm_amr_intermediate, gpu_fmm_amr_direct, &
        & gpu_fmm_amr_direct_taylor, gpu_fmm_combined_direct, gpu_fmm_fill_phi, &
-       & gpu_prepare_fmm_amr_lookup
+       & gpu_prepare_fmm_amr_lookup, gpu_reset_phi_fmm
 #endif
   implicit none
 contains
@@ -205,6 +205,9 @@ subroutine reset_phi_fmm(s,ilevel_start)
 
   integer :: ilevel, ioct
 
+#if defined(_CUDA) && defined(WITHOUTMPI)
+  call gpu_reset_phi_fmm(s, ilevel_start)
+#else
   associate(r=>s%r, m=>s%m)
   do ilevel=max(ilevel_start,r%levelmin),r%nlevelmax
      if(m%noct_tot(ilevel)<=0) cycle
@@ -217,6 +220,7 @@ subroutine reset_phi_fmm(s,ilevel_start)
      end do
   end do
   end associate
+#endif
 end subroutine reset_phi_fmm
 !###########################################################
 !###########################################################
