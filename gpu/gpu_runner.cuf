@@ -87,6 +87,7 @@ module gpu_runner
   integer(kind=4) :: fmm_slot_levelmax = -1
   integer(kind=4) :: fmm_merged_slot = -1
   logical :: fmm_distance_tables_initialized = .false.
+  logical :: fmm_amr_lookup_valid = .false.
 
   !> The Fortran array of hydro variables of ghost and halo octs on the host and on the device
   real(kind=dp), allocatable, dimension(:) :: uold_send_host, uold_recv_host
@@ -777,6 +778,7 @@ contains
     end do
     ! End loop over levels
 
+    fmm_amr_lookup_valid = .false.
     if (ilevel == sim%r%levelmin) call gpu_reset_hash(sim)
 
   end subroutine gpu_refine
@@ -1161,6 +1163,8 @@ contains
        call nvtxEndRange()
     endif
 
+    fmm_amr_lookup_valid = .false.
+
   end subroutine gpu_reset_hash
 
   !> @brief
@@ -1257,8 +1261,12 @@ contains
     use ramses_commons, only: ramses_t
     type(ramses_t), intent(inout)::sim
 
+    if (sim%r%levelmin == sim%r%nlevelmax) return
+    if (fmm_amr_lookup_valid) return
+
     call gpu_reset_hash_fmm_active(sim)
     call gpu_refresh_amr_nbor_fmm_active(sim)
+    fmm_amr_lookup_valid = .true.
 
   end subroutine gpu_prepare_fmm_amr_lookup
 
