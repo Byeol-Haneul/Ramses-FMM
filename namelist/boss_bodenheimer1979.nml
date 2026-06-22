@@ -1,0 +1,111 @@
+!This namelist contains various input parameters for RAMSES runs
+
+&RUN_PARAMS
+cosmo=.false.
+hydro=.true.
+poisson=.true.
+nrestart=0
+ncontrol=10
+nremap=1
+nsubcycle=2*1,35*2
+verbose=.false.
+/
+
+&AMR_PARAMS
+levelmin=5
+levelmax=20
+ngridtot=800000
+nexpand=30*2
+boxlen=0.191405298315250E-01 ! to be changed is alpha_dense_core changes in order to always have in code units the cloud radius r0=boxlen/4
+/
+
+&BOUNDARY_PARAMS
+bound_levelmin = 3
+box_size = 0.191405298315250E-01
+box_xmin = 1
+box_ymin = 1
+box_zmin = 1
+box_xmax = -1
+box_ymax = -1
+box_zmax = -1
+nbound = 6
+periodic = .false., .false., .false.
+bound_dir   = 1, 1, 2, 2, 3, 3
+bound_shift = 1, -1, 1, -1, 1, -1
+bound_type  = 1, 1, 1, 1, 1, 1
+bound_xmin =  0, -1,  0,  0,  0,  0
+bound_xmax =  1,  0,  0,  0,  0,  0
+bound_ymin =  1,  1,  0, -1,  0,  0
+bound_ymax = -1, -1,  1,  0,  0,  0
+bound_zmin =  1,  1,  1,  1,  0, -1
+bound_zmax = -1, -1, -1, -1,  1,  0
+/
+
+&INIT_PARAMS
+condinit_kind ='collapse'
+alpha_dense_core=0.1
+beta_dense_core=0.01d0
+crit_dense_core=0.08
+delta_rho=0.1d0
+/
+
+&OUTPUT_PARAMS
+noutput=1
+!foutput=25
+tout=9.2e-05
+tend=3.0
+/
+
+&POISSON_PARAMS
+gravity_type=0
+epsilon=1.d-6
+level_fmm_to_amr=1
+/
+
+&HYDRO_PARAMS
+gamma=1.666667
+courant_factor=0.6
+slope_type=1
+scheme='muscl'
+riemann='llf'
+riemann2d='llf'
+pressure_fix=.true.
+/
+
+
+&UNITS_PARAMS
+units_density=0.383460000000000E-23
+units_time=0.197732040946880E+16
+units_length=3.0857d18
+/
+
+&COOLING_PARAMS
+isothermal=.true.
+eos_type=5
+eos_T2=4.29
+eos_nH=1d10   ! overrided by 3.866301516d-15,3.866301516d-10,3.866301516d-5  * X/mH
+eos_index=2.0 ! overrided by  0.4,-0.3,0.56667
+/
+
+&REFINE_PARAMS
+jeans_refine=30*8.
+interpol_var=0
+interpol_type=1
+/
+
+&MOVIE_PARAMS
+movie=.true.
+tendmov=3.02
+imovout=1000
+nw_frame=512
+nh_frame=512
+levelmax_frame=20
+xcentre_frame=0.5,0.,0.,0.
+ycentre_frame=0.5,0.,0.,0.
+zcentre_frame=0.5,0.,0.,0.
+deltax_frame=0.01,0.
+deltay_frame=0.01,0.
+deltaz_frame=0.01,0.
+proj_axis='z'
+movie_vars_txt='dens','vx'
+/

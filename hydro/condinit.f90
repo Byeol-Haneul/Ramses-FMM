@@ -7,6 +7,7 @@ subroutine condinit(r,g,x,q,dx,nn)
   use hydro_parameters, only: nvar, nener
   use amr_commons, only: run_t, global_t
   use input_hydro_condinit_module, only: region_condinit
+  use constants, only: kB, mH, M_sun, factG_in_cgs
   implicit none
   type(run_t)::r
   type(global_t)::g
@@ -40,6 +41,7 @@ subroutine condinit(r,g,x,q,dx,nn)
 #define RTZEQM 8
 #define PANCAKE 9
 #define ALFVENWAVE 10
+#define COLLAPSE 11
 
   integer::i
 #if INIT==COEUR
@@ -68,6 +70,20 @@ subroutine condinit(r,g,x,q,dx,nn)
 #elif INIT==ALFVENWAVE
   real(kind=8)::pi,del_ini
   real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v,scale_m
+#elif INIT==COLLAPSE
+  real(kind=8)::x0,y0,z0,xx,yy,zz,rc,rs,phi
+  real(kind=8)::r0,d0,p0,omega0,B0,mass_c_cu,scale_m
+  real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
+  real(kind=8),parameter::pi=3.14159265358979323846d0
+  real(kind=8),parameter::delta_rho=0.0d0
+  real(kind=8),parameter::alpha_dense_core=0.54d0
+  real(kind=8),parameter::beta_dense_core=0.08d0
+  real(kind=8),parameter::crit_dense_core=0.0d0
+  real(kind=8),parameter::theta_mag=0.0d0
+  real(kind=8),parameter::mass_c=1.0d0
+  real(kind=8),parameter::Mach=0.0d0
+  real(kind=8),parameter::T_eos=10.0d0
+  real(kind=8),parameter::mu_gas=2.31d0
 #else
   ! Call built-in initial condition generator
   call region_condinit(r,g,x,q,dx,nn)
@@ -310,6 +326,86 @@ subroutine condinit(r,g,x,q,dx,nn)
      q(i,5) = 0.1 ! Pressure
      q(i,6) = 0.1*SIN(2.0d0*pi*x(i,1)) ! By
      q(i,7) = 0.1*COS(2.0d0*pi*x(i,1)) ! Bz
+  end do
+#endif
+
+#if INIT==COLLAPSE
+  if(abs(theta_mag)>0.0d0)then
+     write(*,*)'COLLAPSE condinit currently supports theta_mag=0 only'
+     stop
+  endif
+  if(abs(Mach)>0.0d0)then
+     write(*,*)'COLLAPSE condinit currently supports Mach=0 only'
+     stop
+  endif
+
+  x0=0.5d0*r%boxlen
+  y0=0.5d0*r%boxlen
+  z0=0.5d0*r%boxlen
+
+  call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
+  scale_m=scale_d*scale_l**ndim
+  mass_c_cu=mass_c*(M_sun/scale_m)
+
+  r0=alpha_dense_core*2.0d0*factG_in_cgs*mass_c_cu*scale_m*mu_gas*mH &
+       & /(5.0d0*kB*T_eos)/scale_l
+  d0=3.0d0*mass_c_cu/(4.0d0*pi*r0**3)
+  omega0=sqrt(beta_dense_core*4.0d0*pi*d0)
+  p0=alpha_dense_core*d0*d0*r0*r0*8.0d0*pi/15.0d0
+  B0=sqrt(4.0d0*pi/5.0d0)/0.53d0*crit_dense_core*d0*r0
+
+#ifdef MHD
+#if NDIM==3
+  r%A_ave=0.0d0
+  r%B_ave=0.0d0
+  r%C_ave=B0
+#endif
+#endif
+
+  do i=1,nn
+     xx=x(i,1)-x0
+#if NDIM>1
+     yy=x(i,2)-y0
+#else
+     yy=0.0d0
+#endif
+#if NDIM>2
+     zz=x(i,3)-z0
+#else
+     zz=0.0d0
+#endif
+     rc=sqrt(xx**2+yy**2)
+     rs=sqrt(xx**2+yy**2+zz**2)
+
+     if(rc>0.0d0)then
+        phi=atan2(yy,xx)
+     else
+        phi=0.0d0
+     endif
+
+     if(rs<=r0)then
+        q(i,1)=d0*(1.0d0+delta_rho*cos(2.0d0*phi))
+        q(i,2)= omega0*yy
+        q(i,3)=-omega0*xx
+        q(i,4)=0.0d0
+        q(i,5)=p0
+     else
+        q(i,1)=d0/100.0d0
+        q(i,2)=0.0d0
+        q(i,3)=0.0d0
+        q(i,4)=0.0d0
+        q(i,5)=p0/100.0d0
+     endif
+
+#ifdef MHD
+#if NDIM==1
+     q(i,nvar+1)=0.0d0
+     q(i,nvar+2)=B0
+#endif
+#if NDIM==2
+     q(i,nvar+1)=B0
+#endif
+#endif
   end do
 #endif
 

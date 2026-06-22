@@ -66,6 +66,7 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
   integer,dimension(1:nvector)::ind_leaf
   real(kind=8),dimension(1:nvector)::nH,T2,delta_T2,ekk,err,emag
   real(kind=8),dimension(1:nvector)::T2min,Zsolar,boost
+  real(kind=8)::factor1, factor2, factor3
 !  logical,dimension(1:nvector)::cooling_on=.true.
 #ifdef RTZ
   real(kind=8),dimension(1:n_elements, 1:n_elements, 1:nvector):: xion
@@ -283,6 +284,13 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
               else
                  T2min(i) = r%eos_T2*(nH(i)/nH_eos)**(r%eos_index-1.0d0)
               endif
+           end do
+        else if(r%eos_type==5)then ! '2nd_collapse'
+           do i=1,nleaf
+            factor1 = sqrt(1 + (nH(i)/(3.866301516d-15*c%X/mH))**(2*0.4))
+            factor2 = (1 + (nH(i)/(3.866301516d-10*c%X/mH)))**(-0.3)
+            factor3 = (1 + (nH(i)/(3.866301516d-5*c%X/mH)))**0.56667
+            T2min(i) = r%eos_T2 * factor1 * factor2 * factor3
            end do
         endif
 
